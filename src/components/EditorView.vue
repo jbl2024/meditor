@@ -658,13 +658,23 @@ async function openLinkedTokenAtCaret() {
 
   const wikilinkMatch = token.match(/^\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]$/)
   if (wikilinkMatch) {
-    await props.openLinkTarget(wikilinkMatch[1].trim())
+    await openLinkTargetWithAutosave(wikilinkMatch[1].trim())
     return
   }
 
   const dateMatch = token.match(/^\d{4}-\d{2}-\d{2}$/)
   if (!dateMatch) return
-  await props.openLinkTarget(dateMatch[0])
+  await openLinkTargetWithAutosave(dateMatch[0])
+}
+
+async function openLinkTargetWithAutosave(target: string) {
+  const path = currentPath.value
+  if (path && dirtyByPath.value[path]) {
+    clearAutosaveTimer()
+    await saveCurrentFile(false)
+    if (dirtyByPath.value[path]) return
+  }
+  await props.openLinkTarget(target)
 }
 
 async function syncWikilinkMenuFromCaret() {
@@ -903,7 +913,7 @@ function onEditorClick(event: MouseEvent) {
   if (anchor && wikilinkTarget) {
     event.preventDefault()
     event.stopPropagation()
-    void props.openLinkTarget(wikilinkTarget)
+    void openLinkTargetWithAutosave(wikilinkTarget)
     return
   }
   collapseClosedWikilinkNearCaret()
