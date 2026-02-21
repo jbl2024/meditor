@@ -252,11 +252,32 @@ function readWikilinkQueryAtCaret(): string | null {
 
 function createWikilinkAnchor(target: string): HTMLAnchorElement {
   const anchor = document.createElement('a')
-  anchor.href = '#'
+  anchor.href = `wikilink:${encodeURIComponent(target)}`
   anchor.dataset.wikilinkTarget = target
   anchor.textContent = target
   anchor.className = 'md-wikilink'
   return anchor
+}
+
+function readWikilinkTargetFromAnchor(anchor: HTMLAnchorElement): string {
+  const dataTarget = anchor.dataset.wikilinkTarget?.trim()
+  if (dataTarget) return dataTarget
+
+  const href = anchor.getAttribute('href')?.trim() ?? ''
+  if (href.toLowerCase().startsWith('wikilink:')) {
+    try {
+      const decoded = decodeURIComponent(href.slice('wikilink:'.length)).trim()
+      if (decoded) return decoded
+    } catch {
+      return ''
+    }
+  }
+
+  if (href === '#') {
+    return anchor.textContent?.trim() ?? ''
+  }
+
+  return ''
 }
 
 function replaceActiveWikilinkQuery(target: string) {
@@ -288,7 +309,7 @@ function replaceActiveWikilinkQuery(target: string) {
 }
 
 function tokenForAnchor(anchor: HTMLAnchorElement): string {
-  const target = anchor.dataset.wikilinkTarget?.trim() ?? ''
+  const target = readWikilinkTargetFromAnchor(anchor)
   return target ? `[[${target}]]` : ''
 }
 
@@ -296,8 +317,8 @@ function nodeToWikilinkAnchor(node: Node | null): HTMLAnchorElement | null {
   if (!node || node.nodeType !== Node.ELEMENT_NODE) return null
   const element = node as HTMLElement
   if (element.tagName.toLowerCase() !== 'a') return null
-  if (!element.dataset.wikilinkTarget) return null
-  return element as HTMLAnchorElement
+  const anchor = element as HTMLAnchorElement
+  return readWikilinkTargetFromAnchor(anchor) ? anchor : null
 }
 
 function adjacentWikilinkAnchor(selection: Selection, direction: 'left' | 'right'): HTMLAnchorElement | null {
@@ -307,9 +328,9 @@ function adjacentWikilinkAnchor(selection: Selection, direction: 'left' | 'right
     node.nodeType === Node.ELEMENT_NODE
       ? (node as HTMLElement)
       : (node.parentElement as HTMLElement | null)
-  const ownerAnchor = ownerElement?.closest('a[data-wikilink-target]') as HTMLAnchorElement | null
+  const ownerAnchor = ownerElement?.closest('a') as HTMLAnchorElement | null
   if (ownerAnchor) {
-    return ownerAnchor
+    return readWikilinkTargetFromAnchor(ownerAnchor) ? ownerAnchor : null
   }
 
   if (node.nodeType === Node.TEXT_NODE) {
@@ -629,11 +650,12 @@ function onEditorClick(event: MouseEvent) {
   if (!target?.closest('.ce-block')) {
     return
   }
-  const anchor = target.closest('a[data-wikilink-target]') as HTMLAnchorElement | null
-  if (anchor?.dataset.wikilinkTarget) {
+  const anchor = target.closest('a') as HTMLAnchorElement | null
+  const wikilinkTarget = anchor ? readWikilinkTargetFromAnchor(anchor) : ''
+  if (anchor && wikilinkTarget) {
     event.preventDefault()
     event.stopPropagation()
-    void props.openLinkTarget(anchor.dataset.wikilinkTarget)
+    void props.openLinkTarget(wikilinkTarget)
     return
   }
   syncWikilinkMenuFromCaret()

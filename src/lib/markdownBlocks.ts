@@ -59,7 +59,8 @@ function inlineMarkdownToHtml(value: string): string {
       if (!target) {
         html += escapeHtml(full)
       } else {
-        html += `<a href="#" data-wikilink-target="${escapeHtml(target)}">${escapeHtml(label)}</a>`
+        const href = `wikilink:${encodeURIComponent(target)}`
+        html += `<a href="${escapeHtml(href)}" data-wikilink-target="${escapeHtml(target)}">${escapeHtml(label)}</a>`
       }
     } else {
       const text = match[3]
@@ -97,7 +98,23 @@ function elementToMarkdown(node: Node): string {
   if (tag === 'code') return `\`${children.replace(/`/g, '\\`')}\``
 
   if (tag === 'a') {
-    const wikilinkTarget = element.getAttribute('data-wikilink-target')?.trim()
+    const href = element.getAttribute('href')?.trim() ?? ''
+    const wikilinkTarget = (() => {
+      const dataTarget = element.getAttribute('data-wikilink-target')?.trim()
+      if (dataTarget) return dataTarget
+      if (href.toLowerCase().startsWith('wikilink:')) {
+        try {
+          return decodeURIComponent(href.slice('wikilink:'.length)).trim()
+        } catch {
+          return ''
+        }
+      }
+      if (href === '#') {
+        return children.trim()
+      }
+      return ''
+    })()
+
     if (wikilinkTarget) {
       const label = children.trim()
       if (label && label !== wikilinkTarget) {
@@ -106,7 +123,6 @@ function elementToMarkdown(node: Node): string {
       return `[[${wikilinkTarget}]]`
     }
 
-    const href = element.getAttribute('href')?.trim()
     if (href) return `[${children}](${href})`
   }
 
