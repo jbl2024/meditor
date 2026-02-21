@@ -18,6 +18,7 @@ const hits = ref<Array<{ path: string; snippet: string; score: number }>>([])
 
 type ThemePreference = 'light' | 'dark' | 'system'
 const THEME_STORAGE_KEY = 'meditor.theme.preference'
+const WORKING_FOLDER_STORAGE_KEY = 'meditor.working-folder.path'
 const themePreference = ref<ThemePreference>('light')
 
 const systemPrefersDark = () =>
@@ -74,16 +75,24 @@ async function onSelectWorkingFolder() {
   errorMessage.value = ''
   const path = await selectWorkingFolder()
   if (!path) return
+  await loadWorkingFolder(path)
+}
 
+async function loadWorkingFolder(path: string) {
   try {
     workingFolderPath.value = path
     await initDb(path)
     treeNodes.value = await listTree(path)
     hits.value = []
+    window.localStorage.setItem(WORKING_FOLDER_STORAGE_KEY, path)
     if (!treeContainsPath(treeNodes.value, currentPath.value)) {
       currentPath.value = ''
     }
   } catch (err) {
+    workingFolderPath.value = ''
+    treeNodes.value = []
+    hits.value = []
+    window.localStorage.removeItem(WORKING_FOLDER_STORAGE_KEY)
     errorMessage.value = err instanceof Error ? err.message : 'Could not open working folder.'
   }
 }
@@ -121,6 +130,10 @@ onMounted(() => {
   loadThemePreference()
   applyTheme()
   mediaQuery?.addEventListener('change', onSystemThemeChanged)
+  const savedFolder = window.localStorage.getItem(WORKING_FOLDER_STORAGE_KEY)
+  if (savedFolder) {
+    void loadWorkingFolder(savedFolder)
+  }
 })
 
 onBeforeUnmount(() => {
