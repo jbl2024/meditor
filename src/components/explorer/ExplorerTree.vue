@@ -144,8 +144,19 @@ function getAncestorDirs(path: string): string[] {
   return dirs
 }
 
+function errorMessage(err: unknown): string | null {
+  if (err instanceof Error) return err.message
+  if (typeof err === 'string') return err
+  if (err && typeof err === 'object' && 'message' in err) {
+    const message = (err as { message?: unknown }).message
+    if (typeof message === 'string') return message
+  }
+  return null
+}
+
 function isConflictError(err: unknown): boolean {
-  return err instanceof Error && /already exists/i.test(err.message)
+  const message = errorMessage(err)
+  return Boolean(message && /already exists/i.test(message))
 }
 
 function persistExpandedState() {
@@ -301,7 +312,7 @@ async function runWithConflictModal(
       await resolveConflictAndRetry(title, detail, action)
       return
     }
-    emitError(err instanceof Error ? err.message : 'Operation failed.')
+    emitError(errorMessage(err) ?? 'Operation failed.')
   }
 }
 
@@ -407,7 +418,7 @@ async function executeDelete(paths: string[]) {
     try {
       await trashEntry(props.folderPath, path)
     } catch (err) {
-      emitError(err instanceof Error ? err.message : 'Delete failed.')
+      emitError(errorMessage(err) ?? 'Delete failed.')
     }
   }
 
@@ -864,7 +875,7 @@ async function resolveConflict(strategy: ConflictStrategy) {
   try {
     await pending(strategy)
   } catch (err) {
-    emitError(err instanceof Error ? err.message : 'Operation failed.')
+    emitError(errorMessage(err) ?? 'Operation failed.')
   }
 }
 
