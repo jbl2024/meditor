@@ -19,6 +19,10 @@ export async function listChildren(folderPath: string, dirPath: string): Promise
   return await invoke('list_children', { folderPath, dirPath })
 }
 
+export async function listMarkdownFiles(folderPath: string): Promise<string[]> {
+  return await invoke('list_markdown_files', { folderPath })
+}
+
 export async function pathExists(folderPath: string, path: string): Promise<boolean> {
   return await invoke('path_exists', { folderPath, path })
 }

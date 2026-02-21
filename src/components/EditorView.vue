@@ -37,7 +37,7 @@ const props = defineProps<{
   path: string
   openFile: (path: string) => Promise<string>
   saveFile: (path: string, text: string, options: { explicit: boolean }) => Promise<{ persisted: boolean }>
-  linkTargets: string[]
+  loadLinkTargets: () => Promise<string[]>
   openLinkTarget: (target: string) => Promise<boolean>
 }>()
 
@@ -68,10 +68,12 @@ const wikilinkIndex = ref(0)
 const wikilinkLeft = ref(0)
 const wikilinkTop = ref(0)
 const wikilinkQuery = ref('')
+const wikilinkTargets = ref<string[]>([])
+let wikilinkLoadToken = 0
 
 const wikilinkResults = computed(() => {
   const query = wikilinkQuery.value.trim().toLowerCase()
-  const base = props.linkTargets
+  const base = wikilinkTargets.value
     .filter((path) => !query || path.toLowerCase().includes(query))
     .slice(0, 12)
     .map((path) => ({ id: `existing:${path}`, label: path, target: path, isCreate: false }))
@@ -163,6 +165,19 @@ function closeWikilinkMenu() {
   wikilinkOpen.value = false
   wikilinkIndex.value = 0
   wikilinkQuery.value = ''
+  wikilinkLoadToken += 1
+}
+
+async function refreshWikilinkTargets() {
+  const token = ++wikilinkLoadToken
+  try {
+    const paths = await props.loadLinkTargets()
+    if (token !== wikilinkLoadToken) return
+    wikilinkTargets.value = paths
+  } catch {
+    if (token !== wikilinkLoadToken) return
+    wikilinkTargets.value = []
+  }
 }
 
 function getCurrentBlock() {
@@ -510,11 +525,14 @@ async function openLinkedTokenAtCaret() {
   await props.openLinkTarget(dateMatch[0])
 }
 
-function syncWikilinkMenuFromCaret() {
+async function syncWikilinkMenuFromCaret() {
   const query = readWikilinkQueryAtCaret()
   if (query === null) {
     closeWikilinkMenu()
     return
+  }
+  if (!wikilinkOpen.value) {
+    await refreshWikilinkTargets()
   }
   openWikilinkMenuAtCaret(query, true)
 }
@@ -662,7 +680,9 @@ function onEditorKeydown(event: KeyboardEvent) {
   if (!block) return
 
   if (event.key === '[' && !event.metaKey && !event.ctrlKey && !event.altKey) {
-    window.setTimeout(syncWikilinkMenuFromCaret, 0)
+    window.setTimeout(() => {
+      void syncWikilinkMenuFromCaret()
+    }, 0)
   }
 
   if (event.key === '/' && block.name === 'paragraph' && isCurrentBlockEmpty()) {
@@ -715,7 +735,7 @@ function onEditorKeyup(event: KeyboardEvent) {
   }
 
   collapseClosedWikilinkNearCaret()
-  syncWikilinkMenuFromCaret()
+  void syncWikilinkMenuFromCaret()
 }
 
 function onEditorClick(event: MouseEvent) {
@@ -732,7 +752,7 @@ function onEditorClick(event: MouseEvent) {
     return
   }
   collapseClosedWikilinkNearCaret()
-  syncWikilinkMenuFromCaret()
+  void syncWikilinkMenuFromCaret()
   void openLinkedTokenAtCaret()
 }
 

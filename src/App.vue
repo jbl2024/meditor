@@ -9,6 +9,7 @@ import {
   createEntry,
   ftsSearch,
   initDb,
+  listMarkdownFiles,
   listChildren,
   pathExists,
   readTextFile,
@@ -617,18 +618,16 @@ async function openWikilinkTarget(target: string) {
     return await openDailyNote(normalized)
   }
 
-  if (!allWorkspaceFiles.value.length) {
-    await loadAllFiles()
-  }
+  const markdownFiles = await loadWikilinkTargets()
 
   const withoutExtension = normalized.replace(/\.(md|markdown)$/i, '').toLowerCase()
-  const existing = allWorkspaceFiles.value.find((path) => {
-    const rel = toRelativePath(path).replace(/\.(md|markdown)$/i, '').toLowerCase()
+  const existing = markdownFiles.find((path) => {
+    const rel = path.replace(/\.(md|markdown)$/i, '').toLowerCase()
     return rel === withoutExtension
   })
 
   if (existing) {
-    workspace.openTab(existing)
+    workspace.openTab(`${root}/${existing}`)
     await nextTick()
     editorRef.value?.focusEditor()
     return true
@@ -638,6 +637,17 @@ async function openWikilinkTarget(target: string) {
   const fullPath = `${root}/${withExtension}`
   const title = noteTitleFromPath(fullPath)
   return await openOrPrepareMarkdown(fullPath, `# ${title}`)
+}
+
+async function loadWikilinkTargets(): Promise<string[]> {
+  const root = filesystem.workingFolderPath.value
+  if (!root) return []
+  try {
+    return await listMarkdownFiles(root)
+  } catch (err) {
+    filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not load wikilink targets.'
+    return []
+  }
 }
 
 async function loadAllFiles() {
@@ -1128,7 +1138,7 @@ onBeforeUnmount(() => {
               :path="activeFilePath"
               :openFile="openFile"
               :saveFile="saveFile"
-              :linkTargets="allWorkspaceFiles.map((path) => toRelativePath(path))"
+              :loadLinkTargets="loadWikilinkTargets"
               :openLinkTarget="openWikilinkTarget"
               @status="onEditorStatus"
               @outline="onEditorOutline"

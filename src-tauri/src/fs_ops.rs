@@ -261,6 +261,32 @@ fn collect_children(dir: &Path) -> Result<Vec<TreeNode>> {
   Ok(directories)
 }
 
+fn collect_markdown_files_recursive(root: &Path, dir: &Path, out: &mut Vec<String>) -> Result<()> {
+  for entry in fs::read_dir(dir)? {
+    let entry = entry?;
+    let path = entry.path();
+    let name = entry.file_name().to_string_lossy().to_string();
+
+    if name == TRASH_DIR_NAME {
+      continue;
+    }
+
+    if path.is_dir() {
+      collect_markdown_files_recursive(root, &path, out)?;
+      continue;
+    }
+
+    if should_skip_file(&path) || !is_markdown_file(&path) {
+      continue;
+    }
+
+    let relative = path.strip_prefix(root).map_err(|_| AppError::InvalidPath)?;
+    out.push(relative.to_string_lossy().replace('\\', "/"));
+  }
+
+  Ok(())
+}
+
 #[tauri::command]
 pub fn select_working_folder() -> Result<Option<String>> {
   Ok(
@@ -276,6 +302,16 @@ pub fn list_children(folder_path: String, dir_path: String) -> Result<Vec<TreeNo
   let dir = normalize_existing_dir(&dir_path)?;
   ensure_within_root(&root, &dir)?;
   collect_children(&dir)
+}
+
+#[tauri::command]
+pub fn list_markdown_files(folder_path: String) -> Result<Vec<String>> {
+  let root = normalize_existing_dir(&folder_path)?;
+  let root_canonical = fs::canonicalize(&root)?;
+  let mut out = Vec::new();
+  collect_markdown_files_recursive(&root_canonical, &root_canonical, &mut out)?;
+  out.sort_by_key(|path| path.to_ascii_lowercase());
+  Ok(out)
 }
 
 #[tauri::command]
@@ -548,8 +584,8 @@ mod tests {
   };
 
   use super::{
-    copy_entry, create_entry, duplicate_entry, list_children, move_entry, read_text_file,
-    rename_entry, trash_entry, ConflictStrategy, EntryKind,
+    copy_entry, create_entry, duplicate_entry, list_children, list_markdown_files, move_entry,
+    read_text_file, rename_entry, trash_entry, ConflictStrategy, EntryKind,
   };
 
   fn make_temp_dir() -> PathBuf {
@@ -663,6 +699,21 @@ mod tests {
     .expect("list tree");
     assert_eq!(tree.len(), 1);
     assert_eq!(tree[0].name, "doc.md");
+    fs::remove_dir_all(dir).expect("cleanup");
+  }
+
+  #[test]
+  fn list_markdown_files_is_recursive() {
+    let dir = make_temp_dir();
+    let root = dir.as_path();
+    let nested = root.join("docs");
+    fs::create_dir_all(&nested).expect("mkdir");
+    fs::write(root.join("a.md"), "x").expect("write a");
+    fs::write(nested.join("b.markdown"), "x").expect("write b");
+    fs::write(nested.join("c.txt"), "x").expect("write c");
+
+    let files = list_markdown_files(root.to_string_lossy().to_string()).expect("list markdown");
+    assert_eq!(files, vec!["a.md".to_string(), "docs/b.markdown".to_string()]);
     fs::remove_dir_all(dir).expect("cleanup");
   }
 
