@@ -18,6 +18,9 @@ use fs_ops::{
   select_working_folder, trash_entry, write_text_file,
 };
 
+const INTERNAL_DIR_NAME: &str = ".meditor";
+const DB_FILE_NAME: &str = "meditor.sqlite";
+
 #[derive(Debug, Error)]
 enum AppError {
   #[error("File operation failed.")]
@@ -52,14 +55,13 @@ fn normalize_existing_dir(path: &str) -> Result<PathBuf> {
   Ok(pb)
 }
 
-fn db_path(folder_path: &str) -> Result<PathBuf> {
-  let folder = normalize_existing_dir(folder_path)?;
-  Ok(folder.join("meditor.sqlite"))
-}
-
 fn open_db(folder_path: &str) -> Result<Connection> {
-  let p = db_path(folder_path)?;
-  Ok(Connection::open(p)?)
+  let root = normalize_existing_dir(folder_path)?;
+  let db_dir = root.join(INTERNAL_DIR_NAME);
+  fs::create_dir_all(&db_dir)?;
+
+  let db_path = db_dir.join(DB_FILE_NAME);
+  Ok(Connection::open(db_path)?)
 }
 
 fn normalize_existing_file(path: &str) -> Result<PathBuf> {

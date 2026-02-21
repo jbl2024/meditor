@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use crate::{AppError, Result};
 
 const TRASH_DIR_NAME: &str = ".meditor-trash";
+const INTERNAL_DIR_NAME: &str = ".meditor";
 const DB_FILE_NAME: &str = "meditor.sqlite";
 
 #[derive(Debug, Clone, Serialize)]
@@ -50,6 +51,10 @@ fn should_skip_file(path: &Path) -> bool {
   };
 
   file_name == DB_FILE_NAME || file_name.starts_with("meditor.sqlite-")
+}
+
+fn should_skip_dir_name(name: &str) -> bool {
+  name == TRASH_DIR_NAME || name == INTERNAL_DIR_NAME
 }
 
 fn normalize_existing_dir(path: &str) -> Result<PathBuf> {
@@ -249,7 +254,7 @@ fn directory_has_visible_children(dir: &Path) -> Result<bool> {
     let entry = entry?;
     let path = entry.path();
     let name = entry.file_name().to_string_lossy().to_string();
-    if name == TRASH_DIR_NAME {
+    if should_skip_dir_name(&name) {
       continue;
     }
     if path.is_dir() {
@@ -271,7 +276,7 @@ fn collect_children(dir: &Path) -> Result<Vec<TreeNode>> {
     let path = entry.path();
     let name = entry.file_name().to_string_lossy().to_string();
 
-    if name == TRASH_DIR_NAME {
+    if should_skip_dir_name(&name) {
       continue;
     }
 
@@ -311,7 +316,7 @@ fn collect_markdown_files_recursive(root: &Path, dir: &Path, out: &mut Vec<Strin
     let path = entry.path();
     let name = entry.file_name().to_string_lossy().to_string();
 
-    if name == TRASH_DIR_NAME {
+    if should_skip_dir_name(&name) {
       continue;
     }
 
@@ -733,7 +738,9 @@ mod tests {
     let dir = make_temp_dir();
     let root = dir.as_path();
     fs::write(root.join("doc.md"), "x").expect("write md");
-    fs::write(root.join("meditor.sqlite"), "db").expect("write db");
+    fs::write(root.join("meditor.sqlite"), "legacy db").expect("write legacy db");
+    fs::create_dir_all(root.join(".meditor")).expect("internal dir");
+    fs::write(root.join(".meditor").join("meditor.sqlite"), "db").expect("write db");
     fs::create_dir_all(root.join(".meditor-trash")).expect("trash dir");
 
     let tree = list_children(
@@ -755,6 +762,8 @@ mod tests {
     fs::write(root.join("a.md"), "x").expect("write a");
     fs::write(nested.join("b.markdown"), "x").expect("write b");
     fs::write(nested.join("c.txt"), "x").expect("write c");
+    fs::create_dir_all(root.join(".meditor")).expect("internal dir");
+    fs::write(root.join(".meditor").join("hidden.md"), "x").expect("write hidden");
 
     let files = list_markdown_files(root.to_string_lossy().to_string()).expect("list markdown");
     assert_eq!(files, vec!["a.md".to_string(), "docs/b.markdown".to_string()]);
