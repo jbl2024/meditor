@@ -141,6 +141,8 @@ const paletteActions = computed<PaletteAction[]>(() => [
   { id: 'open-yesterday', label: 'Open Yesterday', run: () => openYesterdayNote() },
   { id: 'open-specific-date', label: 'Open Specific Date', run: () => openSpecificDateNote() },
   { id: 'create-new-file', label: 'New Note', run: () => createNewFileFromPalette() },
+  { id: 'close-all-tabs', label: 'Close All Tabs', run: () => closeAllTabsFromPalette() },
+  { id: 'close-other-tabs', label: 'Close Other Tabs', run: () => closeOtherTabsFromPalette() },
   { id: 'open-file', label: 'Open File', run: () => (quickOpenQuery.value = '', false) },
   { id: 'reveal-in-explorer', label: 'Reveal in Explorer', run: () => revealActiveInExplorer() }
 ])
@@ -895,6 +897,19 @@ async function createNewFileFromPalette() {
     filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not create file.'
     return false
   }
+}
+
+function closeAllTabsFromPalette() {
+  workspace.closeAllTabs()
+  editorState.setActiveOutline([])
+  return true
+}
+
+function closeOtherTabsFromPalette() {
+  const active = workspace.activeTabPath.value
+  if (!active) return false
+  workspace.closeOtherTabs(active)
+  return true
 }
 
 function onQuickOpenEnter() {
