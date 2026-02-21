@@ -1,18 +1,21 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import EditorView from './components/EditorView.vue'
+import FileTreeNode from './components/FileTreeNode.vue'
 import UiButton from './components/ui/UiButton.vue'
 import UiInput from './components/ui/UiInput.vue'
 import UiPanel from './components/ui/UiPanel.vue'
 import UiThemeSwitcher from './components/ui/UiThemeSwitcher.vue'
-import { listDir, readTextFile, writeTextFile, initDb, ftsSearch } from './lib/api'
+import { ftsSearch, initDb, listTree, readTextFile, selectWorkingFolder, writeTextFile } from './lib/api'
+import type { TreeNode } from './lib/api'
 
-const vaultPath = ref<string>('')
-const files = ref<string[]>([])
+const workingFolderPath = ref<string>('')
+const treeNodes = ref<TreeNode[]>([])
 const currentPath = ref<string>('')
-const status = ref<string>('Ready')
 const query = ref<string>('')
+const errorMessage = ref<string>('')
 const hits = ref<Array<{ path: string; snippet: string; score: number }>>([])
+
 type ThemePreference = 'light' | 'dark' | 'system'
 const THEME_STORAGE_KEY = 'meditor.theme.preference'
 const themePreference = ref<ThemePreference>('light')
@@ -52,48 +55,61 @@ function onSystemThemeChanged() {
     applyTheme()
   }
 }
+
 const selectedFileName = computed(() => {
   if (!currentPath.value) return 'None'
   const parts = currentPath.value.split('/')
   return parts[parts.length - 1] || currentPath.value
 })
 
-async function onPickVault() {
-  // Keep this simple: ask for a path; a native dialog can be wired in later.
-  const p = window.prompt('Vault path (folder):', vaultPath.value || '')
-  if (!p) return
-  vaultPath.value = p
-  status.value = 'Listing...'
-  files.value = await listDir(p)
-  status.value = `OK, ${files.value.length} items`
+function treeContainsPath(nodes: TreeNode[], path: string): boolean {
+  for (const node of nodes) {
+    if (!node.is_dir && node.path === path) return true
+    if (node.is_dir && treeContainsPath(node.children, path)) return true
+  }
+  return false
+}
+
+async function onSelectWorkingFolder() {
+  errorMessage.value = ''
+  const path = await selectWorkingFolder()
+  if (!path) return
+
+  try {
+    workingFolderPath.value = path
+    await initDb(path)
+    treeNodes.value = await listTree(path)
+    hits.value = []
+    if (!treeContainsPath(treeNodes.value, currentPath.value)) {
+      currentPath.value = ''
+    }
+  } catch (err) {
+    errorMessage.value = err instanceof Error ? err.message : 'Could not open working folder.'
+  }
+}
+
+function onSelectFile(path: string) {
+  currentPath.value = path
 }
 
 async function openFile(path: string) {
-  currentPath.value = path
-  status.value = 'Reading...'
-  const txt = await readTextFile(path)
-  status.value = 'OK'
-  return txt
+  return await readTextFile(path)
 }
 
 async function saveFile(path: string, txt: string) {
-  status.value = 'Writing...'
   await writeTextFile(path, txt)
-  status.value = 'OK'
-}
-
-async function onInitDb() {
-  status.value = 'Init DB...'
-  await initDb()
-  status.value = 'DB OK'
 }
 
 async function onSearch() {
   const q = query.value.trim()
-  if (!q) return
-  status.value = 'Searching...'
-  hits.value = await ftsSearch(q)
-  status.value = `OK, ${hits.value.length} results`
+  if (!q || !workingFolderPath.value) return
+
+  errorMessage.value = ''
+  try {
+    hits.value = await ftsSearch(workingFolderPath.value, q)
+  } catch (err) {
+    errorMessage.value = err instanceof Error ? err.message : 'Search failed.'
+  }
 }
 
 watch(themePreference, (next) => {
@@ -124,8 +140,7 @@ onBeforeUnmount(() => {
           </div>
           <div class="flex flex-wrap items-center gap-2">
             <UiThemeSwitcher v-model="themePreference" />
-            <UiButton variant="primary" @click="onPickVault">Choose vault</UiButton>
-            <UiButton variant="secondary" @click="onInitDb">Init DB</UiButton>
+            <UiButton variant="primary" @click="onSelectWorkingFolder">Select working folder</UiButton>
           </div>
         </div>
       </header>
@@ -134,25 +149,24 @@ onBeforeUnmount(() => {
         <UiPanel className="min-h-0 overflow-y-auto">
           <div class="space-y-4">
             <div class="rounded-xl border border-slate-200/80 bg-slate-50/75 p-3 dark:border-slate-700/80 dark:bg-slate-950/55">
-              <p class="text-[11px] uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Vault</p>
-              <p class="mt-1 truncate text-sm text-slate-900 dark:text-slate-100" :title="vaultPath || 'Not set'">
-                {{ vaultPath || 'Not set' }}
+              <p class="text-[11px] uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Working folder</p>
+              <p class="mt-1 truncate text-sm text-slate-900 dark:text-slate-100" :title="workingFolderPath || 'Not set'">
+                {{ workingFolderPath || 'Not set' }}
               </p>
             </div>
-            <div class="rounded-xl border border-slate-200/80 bg-slate-50/75 p-3 dark:border-slate-700/80 dark:bg-slate-950/55">
-              <p class="text-[11px] uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Status</p>
-              <p class="mt-1 text-sm text-emerald-700 dark:text-emerald-300">{{ status }}</p>
-            </div>
+
             <div class="space-y-2">
               <p class="text-[11px] uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Search</p>
               <div class="flex gap-2">
                 <UiInput
                   v-model="query"
+                  :disabled="!workingFolderPath"
                   placeholder="FTS5 BM25, ex: kubernetes OR proxmox"
                 />
-                <UiButton size="sm" @click="onSearch">Go</UiButton>
+                <UiButton size="sm" :disabled="!workingFolderPath" @click="onSearch">Go</UiButton>
               </div>
             </div>
+
             <div v-if="hits.length" class="space-y-2">
               <p class="text-[11px] uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Results</p>
               <article
@@ -165,21 +179,25 @@ onBeforeUnmount(() => {
                 <p class="mt-2 text-[11px] text-slate-500 dark:text-slate-500">score: {{ h.score.toFixed(3) }}</p>
               </article>
             </div>
+
             <div class="space-y-2">
-              <p class="text-[11px] uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Files</p>
-              <div class="space-y-1">
-                <UiButton
-                  v-for="f in files"
-                  :key="f"
-                  variant="ghost"
-                  className="w-full justify-start truncate px-2"
-                  :title="f"
-                  @click="() => (currentPath = f)"
-                >
-                  {{ f }}
-                </UiButton>
-              </div>
+              <p class="text-[11px] uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Folder tree</p>
+              <p v-if="!workingFolderPath" class="text-xs text-slate-500 dark:text-slate-500">Select a working folder to load files.</p>
+              <p v-else-if="!treeNodes.length" class="text-xs text-slate-500 dark:text-slate-500">No markdown files found in this folder.</p>
+              <ul v-else class="space-y-0.5">
+                <FileTreeNode
+                  v-for="node in treeNodes"
+                  :key="node.path"
+                  :node="node"
+                  :selected-path="currentPath"
+                  @select="onSelectFile"
+                />
+              </ul>
             </div>
+
+            <p v-if="errorMessage" class="rounded-lg border border-rose-300/80 bg-rose-50/80 px-2 py-1 text-xs text-rose-700 dark:border-rose-900/80 dark:bg-rose-950/40 dark:text-rose-300">
+              {{ errorMessage }}
+            </p>
           </div>
         </UiPanel>
 

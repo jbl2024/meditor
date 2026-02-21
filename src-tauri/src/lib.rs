@@ -1,11 +1,11 @@
 use std::{
   fs,
-  path::PathBuf,
+  path::{Path, PathBuf},
 };
 
+use rfd::FileDialog;
 use rusqlite::{params, Connection};
 use serde::Serialize;
-use tauri::Manager;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -16,8 +16,6 @@ enum AppError {
   Sqlite(#[from] rusqlite::Error),
   #[error("invalid path")]
   InvalidPath,
-  #[error("app data dir not available")]
-  NoAppDataDir,
 }
 
 type Result<T> = std::result::Result<T, AppError>;
@@ -36,23 +34,73 @@ fn normalize_path(p: &str) -> Result<PathBuf> {
   Ok(pb)
 }
 
-#[tauri::command]
-fn list_dir(path: String) -> Result<Vec<String>> {
-  let pb = normalize_path(&path)?;
-  let mut out = Vec::new();
-  for entry in fs::read_dir(pb)? {
+fn is_markdown_file(path: &Path) -> bool {
+  path
+    .extension()
+    .and_then(|e| e.to_str())
+    .map(|ext| ext.eq_ignore_ascii_case("md") || ext.eq_ignore_ascii_case("markdown"))
+    .unwrap_or(false)
+}
+
+#[derive(Serialize)]
+struct TreeNode {
+  name: String,
+  path: String,
+  is_dir: bool,
+  children: Vec<TreeNode>,
+}
+
+fn collect_tree(dir: &Path) -> Result<Vec<TreeNode>> {
+  let mut dirs = Vec::new();
+  let mut files = Vec::new();
+
+  for entry in fs::read_dir(dir)? {
     let entry = entry?;
-    let p = entry.path();
-    if p.is_file() {
-      if let Some(ext) = p.extension().and_then(|e| e.to_str()) {
-        if ext.eq_ignore_ascii_case("md") || ext.eq_ignore_ascii_case("markdown") {
-          out.push(p.to_string_lossy().to_string());
-        }
+    let path = entry.path();
+    let file_name = entry.file_name().to_string_lossy().to_string();
+
+    if path.is_dir() {
+      let children = collect_tree(&path)?;
+      if !children.is_empty() {
+        dirs.push(TreeNode {
+          name: file_name,
+          path: path.to_string_lossy().to_string(),
+          is_dir: true,
+          children,
+        });
       }
+    } else if path.is_file() && is_markdown_file(&path) {
+      files.push(TreeNode {
+        name: file_name,
+        path: path.to_string_lossy().to_string(),
+        is_dir: false,
+        children: Vec::new(),
+      });
     }
   }
-  out.sort();
-  Ok(out)
+
+  dirs.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+  files.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+  dirs.extend(files);
+  Ok(dirs)
+}
+
+#[tauri::command]
+fn select_working_folder() -> Result<Option<String>> {
+  Ok(
+    FileDialog::new()
+      .pick_folder()
+      .map(|path| path.to_string_lossy().to_string()),
+  )
+}
+
+#[tauri::command]
+fn list_tree(path: String) -> Result<Vec<TreeNode>> {
+  let pb = normalize_path(&path)?;
+  if !pb.is_dir() {
+    return Err(AppError::InvalidPath);
+  }
+  collect_tree(&pb)
 }
 
 #[tauri::command]
@@ -68,20 +116,22 @@ fn write_text_file(path: String, content: String) -> Result<()> {
   Ok(())
 }
 
-fn db_path(app: &tauri::AppHandle) -> Result<PathBuf> {
-  let data_dir = app.path().app_data_dir().map_err(|_| AppError::NoAppDataDir)?;
-  fs::create_dir_all(&data_dir)?;
-  Ok(data_dir.join("index.sqlite"))
+fn db_path(folder_path: &str) -> Result<PathBuf> {
+  let folder = normalize_path(folder_path)?;
+  if !folder.is_dir() {
+    return Err(AppError::InvalidPath);
+  }
+  Ok(folder.join("meditor.sqlite"))
 }
 
-fn open_db(app: &tauri::AppHandle) -> Result<Connection> {
-  let p = db_path(app)?;
+fn open_db(folder_path: &str) -> Result<Connection> {
+  let p = db_path(folder_path)?;
   Ok(Connection::open(p)?)
 }
 
 #[tauri::command]
-fn init_db(app: tauri::AppHandle) -> Result<()> {
-  let conn = open_db(&app)?;
+fn init_db(folder_path: String) -> Result<()> {
+  let conn = open_db(&folder_path)?;
 
   conn.execute_batch(
     r#"
@@ -96,7 +146,7 @@ fn init_db(app: tauri::AppHandle) -> Result<()> {
       mtime INTEGER NOT NULL DEFAULT 0
     );
 
-    -- FTS5, avec bm25() disponible.
+    -- FTS5, with bm25() available.
     CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
       path,
       anchor,
@@ -116,7 +166,7 @@ fn init_db(app: tauri::AppHandle) -> Result<()> {
       INSERT INTO chunks_fts(rowid, path, anchor, text) VALUES (new.id, new.path, new.anchor, new.text);
     END;
 
-    -- Table embeddings: stockage simple en BLOB float32.
+    -- Embeddings table: simple float32 blob storage.
     CREATE TABLE IF NOT EXISTS embeddings (
       chunk_id INTEGER PRIMARY KEY,
       model TEXT NOT NULL,
@@ -138,15 +188,15 @@ struct Hit {
 }
 
 #[tauri::command]
-fn fts_search(app: tauri::AppHandle, query: String) -> Result<Vec<Hit>> {
-  let conn = open_db(&app)?;
+fn fts_search(folder_path: String, query: String) -> Result<Vec<Hit>> {
+  let conn = open_db(&folder_path)?;
   let q = query.trim();
   if q.is_empty() {
     return Ok(vec![]);
   }
 
-  // snippet() et bm25() sont fournis par FTS5.
-  // Important: score plus petit = meilleur.
+  // snippet() and bm25() are provided by FTS5.
+  // Important: lower score is better.
   let mut stmt = conn.prepare(
     r#"
     SELECT path,
@@ -177,7 +227,8 @@ pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_opener::init())
     .invoke_handler(tauri::generate_handler![
-      list_dir,
+      select_working_folder,
+      list_tree,
       read_text_file,
       write_text_file,
       init_db,

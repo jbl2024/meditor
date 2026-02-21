@@ -3,7 +3,7 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import EditorJS from '@editorjs/editorjs'
 import UiButton from './ui/UiButton.vue'
 
-// Props: on passe les fonctions IO depuis App.vue pour garder le composant neutre
+// IO functions are passed from App.vue so this component stays UI-focused.
 const props = defineProps<{
   path: string
   openFile: (path: string) => Promise<string>
@@ -15,8 +15,7 @@ let editor: EditorJS | null = null
 const loadedText = ref<string>('')
 
 function markdownToBlocks(md: string) {
-  // Conversion minimale pour bootstrap: tout dans un bloc paragraph.
-  // Tu raffineras ensuite: headings, listes, code, etc.
+  // Minimal bootstrap conversion: keep all content in one paragraph block.
   const text = md.trim()
   return {
     time: Date.now(),
@@ -28,8 +27,7 @@ function markdownToBlocks(md: string) {
 }
 
 function blocksToMarkdown(data: any) {
-  // Conversion minimale: concat des paragraphes en texte.
-  // Tu remplaceras par un convertisseur plus serieux quand tu voudras.
+  // Minimal conversion: merge paragraph blocks as plain text.
   const parts: string[] = []
   for (const b of (data?.blocks ?? [])) {
     if (b.type === 'paragraph') {
@@ -51,10 +49,9 @@ async function ensureEditor() {
   editor = new EditorJS({
     holder: holder.value,
     autofocus: true,
-    placeholder: 'Ecris ici...',
+    placeholder: 'Write here...',
     tools: {
-      // Bootstrap volontairement minimal.
-      // Tu ajouteras Header, List, Code, etc.
+      // Intentionally minimal bootstrap.
     }
   })
 }
@@ -99,9 +96,9 @@ onBeforeUnmount(async () => {
 <template>
   <div class="flex h-full min-h-0 flex-col gap-3">
     <div class="flex items-center gap-2">
-      <UiButton :disabled="!path" size="sm" @click="loadCurrentFile">Recharger</UiButton>
-      <UiButton :disabled="!path" size="sm" variant="primary" @click="saveCurrentFile">Sauvegarder</UiButton>
-      <span v-if="!path" class="text-xs text-slate-500 dark:text-slate-500">Selectionne un fichier</span>
+      <UiButton :disabled="!path" size="sm" @click="loadCurrentFile">Reload</UiButton>
+      <UiButton :disabled="!path" size="sm" variant="primary" @click="saveCurrentFile">Save</UiButton>
+      <span v-if="!path" class="text-xs text-slate-500 dark:text-slate-500">Select a file</span>
     </div>
     <div
       ref="holder"
