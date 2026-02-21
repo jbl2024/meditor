@@ -1000,6 +1000,31 @@ function parseOutlineFromDom(): HeadingNode[] {
   return out
 }
 
+function getOutlineHeaderByIndex(index: number): HTMLElement | null {
+  if (!holder.value || index < 0) return null
+  const headers = Array.from(holder.value.querySelectorAll('.ce-header')) as HTMLElement[]
+  let visibleIndex = 0
+
+  for (const header of headers) {
+    const block = header.closest('.ce-block') as HTMLElement | null
+    if (block?.dataset.id === VIRTUAL_TITLE_BLOCK_ID) continue
+    const text = header.innerText.trim()
+    if (!text) continue
+    if (visibleIndex === index) return header
+    visibleIndex += 1
+  }
+
+  return null
+}
+
+async function revealOutlineHeading(index: number) {
+  if (!holder.value) return
+  await nextTick()
+  const target = getOutlineHeaderByIndex(index)
+  if (!target) return
+  target.scrollIntoView({ block: 'center', behavior: 'smooth' })
+}
+
 function emitOutlineSoon() {
   clearOutlineTimer()
   outlineTimer = setTimeout(() => {
@@ -1255,7 +1280,8 @@ defineExpose({
     await loadCurrentFile(currentPath.value)
   },
   focusEditor,
-  revealSnippet
+  revealSnippet,
+  revealOutlineHeading
 })
 </script>
 

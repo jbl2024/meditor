@@ -30,6 +30,7 @@ type EditorViewExposed = {
   reloadCurrent: () => Promise<void>
   focusEditor: () => void
   revealSnippet: (snippet: string) => Promise<void>
+  revealOutlineHeading: (index: number) => Promise<void>
 }
 
 type SaveFileOptions = {
@@ -659,6 +660,10 @@ function onEditorStatus(payload: { path: string; dirty: boolean; saving: boolean
 
 function onEditorOutline(payload: Array<{ level: 1 | 2 | 3; text: string }>) {
   editorState.setActiveOutline(payload)
+}
+
+async function onOutlineHeadingClick(index: number) {
+  await editorRef.value?.revealOutlineHeading(index)
 }
 
 function setSidebarMode(mode: SidebarMode) {
@@ -1393,6 +1398,7 @@ onBeforeUnmount(() => {
                 type="button"
                 class="outline-row"
                 :style="{ paddingLeft: `${(heading.level - 1) * 12 + 8}px` }"
+                @click="onOutlineHeadingClick(idx)"
               >
                 {{ heading.text }}
               </button>
