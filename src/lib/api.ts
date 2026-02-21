@@ -107,3 +107,11 @@ export async function ftsSearch(folderPath: string, query: string): Promise<Arra
 export async function backlinksForPath(folderPath: string, path: string): Promise<Array<{ path: string }>> {
   return await invoke('backlinks_for_path', { folderPath, path })
 }
+
+export async function updateWikilinksForRename(
+  folderPath: string,
+  oldPath: string,
+  newPath: string
+): Promise<{ updated_files: number }> {
+  return await invoke('update_wikilinks_for_rename', { folderPath, oldPath, newPath })
+}

@@ -45,7 +45,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   status: [payload: { path: string; dirty: boolean; saving: boolean; saveError: string }]
-  pathRenamed: [payload: { from: string; to: string }]
+  'path-renamed': [payload: { from: string; to: string; manual: boolean }]
   outline: [payload: HeadingNode[]]
 }>()
 
@@ -1203,7 +1203,7 @@ async function saveCurrentFile(manual = true) {
 
     if (savePath !== initialPath) {
       movePathState(initialPath, savePath)
-      emit('pathRenamed', { from: initialPath, to: savePath })
+      emit('path-renamed', { from: initialPath, to: savePath, manual })
     }
 
     if (normalized.changed) {

@@ -16,6 +16,7 @@ import {
   reindexMarkdownFile,
   revealInFileManager,
   selectWorkingFolder,
+  updateWikilinksForRename,
   writeTextFile
 } from './lib/api'
 import { useEditorState } from './composables/useEditorState'
@@ -77,6 +78,13 @@ const backlinks = ref<string[]>([])
 const backlinksLoading = ref(false)
 const virtualDocs = ref<Record<string, VirtualDoc>>({})
 const overflowMenuOpen = ref(false)
+const wikilinkRewritePrompt = ref<{ fromPath: string; toPath: string } | null>(null)
+const wikilinkRewriteQueue: Array<{
+  fromPath: string
+  toPath: string
+  resolve: (approved: boolean) => void
+}> = []
+let wikilinkRewriteResolver: ((approved: boolean) => void) | null = null
 
 const resizeState = ref<{
   side: 'left' | 'right'
@@ -448,7 +456,7 @@ function sanitizeTitleForFileName(raw: string): string {
   return base
 }
 
-function onEditorPathRenamed(payload: { from: string; to: string }) {
+function applyPathRenameLocally(payload: { from: string; to: string }) {
   const fromPath = payload.from
   const toPath = payload.to
   if (!fromPath || !toPath || fromPath === toPath) return
@@ -472,6 +480,74 @@ function onEditorPathRenamed(payload: { from: string; to: string }) {
   }
 
   backlinks.value = backlinks.value.map((path) => (path === fromPath ? toPath : path))
+}
+
+function openNextWikilinkRewritePrompt() {
+  if (wikilinkRewritePrompt.value || wikilinkRewriteQueue.length === 0) return
+  const next = wikilinkRewriteQueue.shift()
+  if (!next) return
+  wikilinkRewritePrompt.value = {
+    fromPath: next.fromPath,
+    toPath: next.toPath
+  }
+  wikilinkRewriteResolver = next.resolve
+}
+
+function promptWikilinkRewritePermission(fromPath: string, toPath: string): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    wikilinkRewriteQueue.push({
+      fromPath,
+      toPath,
+      resolve
+    })
+    openNextWikilinkRewritePrompt()
+  })
+}
+
+function resolveWikilinkRewritePrompt(approved: boolean) {
+  const resolve = wikilinkRewriteResolver
+  wikilinkRewriteResolver = null
+  wikilinkRewritePrompt.value = null
+  resolve?.(approved)
+  openNextWikilinkRewritePrompt()
+}
+
+function clearWikilinkRewritePromptQueue() {
+  if (wikilinkRewriteResolver) {
+    wikilinkRewriteResolver(false)
+    wikilinkRewriteResolver = null
+  }
+  wikilinkRewritePrompt.value = null
+  while (wikilinkRewriteQueue.length) {
+    const pending = wikilinkRewriteQueue.shift()
+    pending?.resolve(false)
+  }
+}
+
+async function maybeRewriteWikilinksForRename(fromPath: string, toPath: string) {
+  const root = filesystem.workingFolderPath.value
+  if (!root || fromPath === toPath) return
+  const shouldRewrite = await promptWikilinkRewritePermission(fromPath, toPath)
+  if (!shouldRewrite) return
+  filesystem.indexingState.value = 'indexing'
+  try {
+    await updateWikilinksForRename(root, fromPath, toPath)
+    await refreshBacklinks()
+  } catch (err) {
+    filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not update wikilinks.'
+  } finally {
+    filesystem.indexingState.value = 'idle'
+  }
+}
+
+function onEditorPathRenamed(payload: { from: string; to: string; manual: boolean }) {
+  applyPathRenameLocally(payload)
+  void maybeRewriteWikilinksForRename(payload.from, payload.to)
+}
+
+function onExplorerPathRenamed(payload: { from: string; to: string }) {
+  applyPathRenameLocally(payload)
+  void maybeRewriteWikilinksForRename(payload.from, payload.to)
 }
 
 async function renameFileFromTitle(path: string, rawTitle: string): Promise<RenameFromTitleResult> {
@@ -991,6 +1067,14 @@ async function saveActiveTab() {
 }
 
 function onWindowKeydown(event: KeyboardEvent) {
+  const isEscape = event.key === 'Escape' || event.key === 'Esc' || event.code === 'Escape'
+  if (isEscape && wikilinkRewritePrompt.value) {
+    event.preventDefault()
+    event.stopPropagation()
+    resolveWikilinkRewritePrompt(false)
+    return
+  }
+
   if (quickOpenVisible.value) {
     if (event.key === 'ArrowDown') {
       event.preventDefault()
@@ -1017,7 +1101,6 @@ function onWindowKeydown(event: KeyboardEvent) {
     }
   }
 
-  const isEscape = event.key === 'Escape' || event.key === 'Esc' || event.code === 'Escape'
   if (isEscape) {
     if (overflowMenuOpen.value) {
       event.preventDefault()
@@ -1186,6 +1269,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  clearWikilinkRewritePromptQueue()
   mediaQuery?.removeEventListener('change', onSystemThemeChanged)
   window.removeEventListener('keydown', onWindowKeydown, true)
   window.removeEventListener('mousedown', onOverflowMenuPointerDown, true)
@@ -1252,6 +1336,7 @@ onBeforeUnmount(() => {
               :folder-path="filesystem.workingFolderPath.value"
               :active-path="activeFilePath"
               @open="onExplorerOpen"
+              @path-renamed="onExplorerPathRenamed"
               @select="onExplorerSelection"
               @error="onExplorerError"
             />
@@ -1414,7 +1499,7 @@ onBeforeUnmount(() => {
               :loadLinkTargets="loadWikilinkTargets"
               :openLinkTarget="openWikilinkTarget"
               @status="onEditorStatus"
-              @pathRenamed="onEditorPathRenamed"
+              @path-renamed="onEditorPathRenamed"
               @outline="onEditorOutline"
             />
           </main>
@@ -1520,6 +1605,19 @@ onBeforeUnmount(() => {
           <div v-else-if="!quickOpenIsActionMode && !quickOpenResults.length" class="placeholder">
             {{ quickOpenQuery.trim() ? 'No matching files' : 'Type to search files' }}
           </div>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="wikilinkRewritePrompt" class="modal-overlay" @click.self="resolveWikilinkRewritePrompt(false)">
+      <div class="modal confirm-modal">
+        <h3 class="confirm-title">Update wikilinks?</h3>
+        <p class="confirm-text">The file was renamed. Do you want to rewrite matching wikilinks across the workspace?</p>
+        <p class="confirm-path"><strong>From:</strong> {{ toRelativePath(wikilinkRewritePrompt.fromPath) }}</p>
+        <p class="confirm-path"><strong>To:</strong> {{ toRelativePath(wikilinkRewritePrompt.toPath) }}</p>
+        <div class="confirm-actions">
+          <UiButton size="sm" variant="ghost" @click="resolveWikilinkRewritePrompt(false)">Keep links</UiButton>
+          <UiButton size="sm" @click="resolveWikilinkRewritePrompt(true)">Update links</UiButton>
         </div>
       </div>
     </div>
@@ -2177,6 +2275,48 @@ onBeforeUnmount(() => {
 .ide-root.dark .modal-item.active {
   border-color: #475569;
   background: #1e293b;
+}
+
+.confirm-modal {
+  width: min(560px, calc(100vw - 32px));
+}
+
+.confirm-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.ide-root.dark .confirm-title {
+  color: #f8fafc;
+}
+
+.confirm-text {
+  margin: 10px 0 12px;
+  font-size: 13px;
+  color: #475569;
+}
+
+.ide-root.dark .confirm-text {
+  color: #94a3b8;
+}
+
+.confirm-path {
+  margin: 4px 0;
+  font-size: 12px;
+  color: #334155;
+}
+
+.ide-root.dark .confirm-path {
+  color: #cbd5e1;
+}
+
+.confirm-actions {
+  margin-top: 14px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .placeholder {

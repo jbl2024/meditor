@@ -178,6 +178,44 @@ fn normalize_note_key(root: &Path, path: &Path) -> Result<String> {
   Ok(key.to_lowercase())
 }
 
+fn note_link_target(root: &Path, path: &Path) -> Result<String> {
+  let relative = path.strip_prefix(root).map_err(|_| AppError::InvalidPath)?;
+  let normalized = strip_markdown_extension(relative);
+  let mut target = normalized.to_string_lossy().replace('\\', "/").trim().to_string();
+  while target.starts_with("./") {
+    target = target[2..].to_string();
+  }
+  if target.is_empty() {
+    return Err(AppError::InvalidPath);
+  }
+  Ok(target)
+}
+
+fn normalize_workspace_path(root: &Path, raw: &str) -> Result<PathBuf> {
+  let mut path = PathBuf::from(raw);
+  if path.as_os_str().is_empty() {
+    return Err(AppError::InvalidPath);
+  }
+  if !path.is_absolute() {
+    path = root.join(path);
+  }
+
+  if path.exists() {
+    let canonical = fs::canonicalize(path)?;
+    ensure_within_root(root, &canonical)?;
+    return Ok(canonical);
+  }
+
+  let parent = path.parent().ok_or(AppError::InvalidPath)?;
+  let parent_canonical = fs::canonicalize(parent)?;
+  let root_canonical = fs::canonicalize(root)?;
+  if !parent_canonical.starts_with(root_canonical) {
+    return Err(AppError::InvalidPath);
+  }
+
+  Ok(path)
+}
+
 fn normalize_wikilink_target(raw: &str) -> Option<String> {
   let mut target = raw.trim().replace('\\', "/");
   if target.is_empty() {
@@ -199,10 +237,11 @@ fn normalize_wikilink_target(raw: &str) -> Option<String> {
     return None;
   }
 
-  if let Some(stripped) = target.strip_suffix(".md") {
-    target = stripped.to_string();
-  } else if let Some(stripped) = target.strip_suffix(".markdown") {
-    target = stripped.to_string();
+  let target_lower = target.to_ascii_lowercase();
+  if target_lower.ends_with(".markdown") {
+    target.truncate(target.len().saturating_sub(".markdown".len()));
+  } else if target_lower.ends_with(".md") {
+    target.truncate(target.len().saturating_sub(".md".len()));
   }
 
   let key = target.trim_matches('/').to_lowercase();
@@ -293,6 +332,66 @@ fn parse_note_targets(markdown: &str) -> Vec<String> {
   }
 
   targets.into_iter().collect()
+}
+
+fn split_wikilink_target_suffix(content: &str) -> (&str, &str) {
+  let pipe_idx = content.find('|');
+  let heading_idx = content.find('#');
+
+  match (pipe_idx, heading_idx) {
+    (Some(pipe), Some(heading)) => {
+      let idx = pipe.min(heading);
+      (&content[..idx], &content[idx..])
+    }
+    (Some(idx), None) | (None, Some(idx)) => (&content[..idx], &content[idx..]),
+    (None, None) => (content, ""),
+  }
+}
+
+fn rewrite_wikilinks_for_note(markdown: &str, old_target_key: &str, new_target: &str) -> (String, bool) {
+  let mut output = String::with_capacity(markdown.len());
+  let mut offset = 0usize;
+  let mut changed = false;
+
+  while let Some(start_rel) = markdown[offset..].find("[[") {
+    let start = offset + start_rel;
+    let content_start = start + 2;
+    output.push_str(&markdown[offset..content_start]);
+
+    let Some(end_rel) = markdown[content_start..].find("]]") else {
+      output.push_str(&markdown[content_start..]);
+      offset = markdown.len();
+      break;
+    };
+
+    let content_end = content_start + end_rel;
+    let content = &markdown[content_start..content_end];
+    let (target_part, suffix) = split_wikilink_target_suffix(content);
+
+    let should_replace =
+      normalize_wikilink_target(target_part).is_some_and(|key| key == old_target_key);
+
+    if should_replace {
+      output.push_str(new_target);
+      output.push_str(suffix);
+      changed = true;
+    } else {
+      output.push_str(content);
+    }
+
+    output.push_str("]]");
+    offset = content_end + 2;
+  }
+
+  if offset < markdown.len() {
+    output.push_str(&markdown[offset..]);
+  }
+
+  if changed {
+    (output, true)
+  } else {
+    (markdown.to_string(), false)
+  }
 }
 
 #[tauri::command]
@@ -448,6 +547,11 @@ struct Backlink {
   path: String,
 }
 
+#[derive(Serialize)]
+struct WikilinkRewriteResult {
+  updated_files: usize,
+}
+
 fn list_markdown_files_via_find(root: &Path) -> Result<Vec<PathBuf>> {
   let output = Command::new("find")
     .arg(root)
@@ -528,6 +632,56 @@ fn backlinks_for_path(folder_path: String, path: String) -> Result<Vec<Backlink>
   Ok(out)
 }
 
+#[tauri::command]
+fn update_wikilinks_for_rename(
+  folder_path: String,
+  old_path: String,
+  new_path: String,
+) -> Result<WikilinkRewriteResult> {
+  let root = normalize_existing_dir(&folder_path)?;
+  let root_canonical = fs::canonicalize(&root)?;
+  let old_note_path = normalize_workspace_path(&root_canonical, &old_path)?;
+  let new_note_path = normalize_workspace_path(&root_canonical, &new_path)?;
+
+  let old_target_key = normalize_note_key(&root_canonical, &old_note_path)?;
+  let new_target = note_link_target(&root_canonical, &new_note_path)?;
+  if old_target_key.is_empty() || old_target_key == normalize_note_key(&root_canonical, &new_note_path)? {
+    return Ok(WikilinkRewriteResult { updated_files: 0 });
+  }
+
+  let markdown_files = list_markdown_files_via_find(&root_canonical)?;
+  let mut changed_files = 0usize;
+
+  for candidate in markdown_files {
+    let canonical_candidate = match fs::canonicalize(&candidate) {
+      Ok(value) => value,
+      Err(_) => continue,
+    };
+
+    let markdown = match fs::read_to_string(&canonical_candidate) {
+      Ok(value) => value,
+      Err(_) => continue,
+    };
+
+    let (updated_markdown, changed) =
+      rewrite_wikilinks_for_note(&markdown, &old_target_key, &new_target);
+    if !changed {
+      continue;
+    }
+
+    fs::write(&canonical_candidate, updated_markdown)?;
+    reindex_markdown_file(
+      folder_path.clone(),
+      canonical_candidate.to_string_lossy().to_string(),
+    )?;
+    changed_files += 1;
+  }
+
+  Ok(WikilinkRewriteResult {
+    updated_files: changed_files,
+  })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -550,8 +704,46 @@ pub fn run() {
       init_db,
       reindex_markdown_file,
       fts_search,
-      backlinks_for_path
+      backlinks_for_path,
+      update_wikilinks_for_rename
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn rewrite_wikilinks_replaces_matching_target() {
+    let input = "See [[notes/old]].";
+    let (output, changed) = rewrite_wikilinks_for_note(input, "notes/old", "notes/new");
+    assert!(changed);
+    assert_eq!(output, "See [[notes/new]].");
+  }
+
+  #[test]
+  fn rewrite_wikilinks_preserves_alias_and_heading() {
+    let input = "[[notes/old|Alias]] and [[notes/old#section]].";
+    let (output, changed) = rewrite_wikilinks_for_note(input, "notes/old", "notes/new");
+    assert!(changed);
+    assert_eq!(output, "[[notes/new|Alias]] and [[notes/new#section]].");
+  }
+
+  #[test]
+  fn rewrite_wikilinks_keeps_non_matching_targets() {
+    let input = "[[notes/old-stuff]] [[notes/other]].";
+    let (output, changed) = rewrite_wikilinks_for_note(input, "notes/old", "notes/new");
+    assert!(!changed);
+    assert_eq!(output, input);
+  }
+
+  #[test]
+  fn rewrite_wikilinks_matches_case_and_extensions() {
+    let input = "[[Notes/Old.MD]] [[notes/old.markdown]].";
+    let (output, changed) = rewrite_wikilinks_for_note(input, "notes/old", "notes/new");
+    assert!(changed);
+    assert_eq!(output, "[[notes/new]] [[notes/new]].");
+  }
 }

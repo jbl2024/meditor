@@ -35,6 +35,7 @@ const emit = defineEmits<{
   open: [path: string]
   select: [paths: string[]]
   error: [message: string]
+  'path-renamed': [payload: { from: string; to: string }]
 }>()
 
 type VisibleRow =
@@ -351,6 +352,7 @@ async function confirmRename() {
   const path = editingPath.value
   if (!path || !props.folderPath) return
 
+  const wasMarkdown = /\.(md|markdown)$/i.test(path)
   const newName = editingValue.value.trim()
   if (!newName) {
     emitError('Name cannot be empty.')
@@ -371,6 +373,9 @@ async function confirmRename() {
         focusedPath.value = renamedPath
       }
       emit('select', selectionManager.selectedPaths.value)
+      if (wasMarkdown && /\.(md|markdown)$/i.test(renamedPath) && path !== renamedPath) {
+        emit('path-renamed', { from: path, to: renamedPath })
+      }
     },
     'File or folder already exists',
     'Choose how to proceed.'
