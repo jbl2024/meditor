@@ -3,7 +3,6 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import EditorView from './components/EditorView.vue'
 import ExplorerTree from './components/explorer/ExplorerTree.vue'
 import UiButton from './components/ui/UiButton.vue'
-import UiThemeSwitcher from './components/ui/UiThemeSwitcher.vue'
 import {
   backlinksForPath,
   createEntry,
@@ -66,9 +65,11 @@ const allWorkspaceFiles = ref<string[]>([])
 const loadingAllFiles = ref(false)
 const editorRef = ref<EditorViewExposed | null>(null)
 const tabScrollRef = ref<HTMLElement | null>(null)
+const overflowMenuRef = ref<HTMLElement | null>(null)
 const backlinks = ref<string[]>([])
 const backlinksLoading = ref(false)
 const virtualDocs = ref<Record<string, VirtualDoc>>({})
+const overflowMenuOpen = ref(false)
 
 const resizeState = ref<{
   side: 'left' | 'right'
@@ -272,6 +273,27 @@ function onSystemThemeChanged() {
   if (themePreference.value === 'system') {
     applyTheme()
   }
+}
+
+function toggleOverflowMenu() {
+  overflowMenuOpen.value = !overflowMenuOpen.value
+}
+
+function closeOverflowMenu() {
+  overflowMenuOpen.value = false
+}
+
+function onOverflowMenuPointerDown(event: MouseEvent) {
+  if (!overflowMenuOpen.value) return
+  const target = event.target as Node | null
+  if (!target) return
+  if (overflowMenuRef.value?.contains(target)) return
+  closeOverflowMenu()
+}
+
+function setThemeFromOverflow(next: ThemePreference) {
+  themePreference.value = next
+  closeOverflowMenu()
 }
 
 function beginResize(side: 'left' | 'right', event: MouseEvent) {
@@ -542,10 +564,15 @@ function onEditorOutline(payload: Array<{ level: 1 | 2 | 3; text: string }>) {
 }
 
 function setSidebarMode(mode: SidebarMode) {
+  if (workspace.sidebarMode.value === mode) {
+    workspace.toggleSidebar()
+    return
+  }
   workspace.setSidebarMode(mode)
 }
 
 function openSearchPanel() {
+  closeOverflowMenu()
   workspace.setSidebarMode('search')
   nextTick(() => {
     document.querySelector<HTMLInputElement>('[data-search-input=\"true\"]')?.focus()
@@ -718,6 +745,7 @@ function openQuickResult(item: QuickOpenResult) {
 }
 
 function openCommandPalette() {
+  closeOverflowMenu()
   void openQuickOpen('>')
 }
 
@@ -849,6 +877,12 @@ function onWindowKeydown(event: KeyboardEvent) {
 
   const isEscape = event.key === 'Escape' || event.key === 'Esc' || event.code === 'Escape'
   if (isEscape) {
+    if (overflowMenuOpen.value) {
+      event.preventDefault()
+      event.stopPropagation()
+      closeOverflowMenu()
+      return
+    }
     if (quickOpenVisible.value) {
       event.preventDefault()
       event.stopPropagation()
@@ -995,6 +1029,7 @@ onMounted(() => {
   applyTheme()
   mediaQuery?.addEventListener('change', onSystemThemeChanged)
   window.addEventListener('keydown', onWindowKeydown, true)
+  window.addEventListener('mousedown', onOverflowMenuPointerDown, true)
   window.addEventListener('mousemove', onPointerMove)
   window.addEventListener('mouseup', stopResize)
 
@@ -1011,6 +1046,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   mediaQuery?.removeEventListener('change', onSystemThemeChanged)
   window.removeEventListener('keydown', onWindowKeydown, true)
+  window.removeEventListener('mousedown', onOverflowMenuPointerDown, true)
   window.removeEventListener('mousemove', onPointerMove)
   window.removeEventListener('mouseup', stopResize)
 })
@@ -1145,11 +1181,54 @@ onBeforeUnmount(() => {
           </div>
 
           <div class="global-actions">
-            <UiThemeSwitcher v-model="themePreference" />
-            <UiButton size="sm" variant="ghost" @click="onSelectWorkingFolder">Workspace</UiButton>
             <UiButton size="sm" variant="ghost" title="Global search" @click="openSearchPanel">Search</UiButton>
             <UiButton size="sm" variant="ghost" title="Command palette" @click="openCommandPalette">Cmd</UiButton>
-            <UiButton size="sm" variant="ghost" title="Toggle context pane" @click="workspace.toggleRightPane()">Pane</UiButton>
+            <div ref="overflowMenuRef" class="overflow-wrap">
+              <UiButton
+                size="sm"
+                variant="ghost"
+                title="View options"
+                aria-label="View options"
+                :aria-expanded="overflowMenuOpen"
+                @click="toggleOverflowMenu"
+              >
+                ...
+              </UiButton>
+              <div v-if="overflowMenuOpen" class="overflow-menu">
+                <button type="button" class="overflow-item" @click="onSelectWorkingFolder(); closeOverflowMenu()">
+                  Workspace
+                </button>
+                <button type="button" class="overflow-item" @click="workspace.toggleRightPane(); closeOverflowMenu()">
+                  {{ workspace.rightPaneVisible.value ? 'Hide Pane' : 'Show Pane' }}
+                </button>
+                <div class="overflow-divider"></div>
+                <div class="overflow-label">Theme</div>
+                <button
+                  type="button"
+                  class="overflow-item"
+                  :class="{ active: themePreference === 'light' }"
+                  @click="setThemeFromOverflow('light')"
+                >
+                  Light
+                </button>
+                <button
+                  type="button"
+                  class="overflow-item"
+                  :class="{ active: themePreference === 'dark' }"
+                  @click="setThemeFromOverflow('dark')"
+                >
+                  Dark
+                </button>
+                <button
+                  type="button"
+                  class="overflow-item"
+                  :class="{ active: themePreference === 'system' }"
+                  @click="setThemeFromOverflow('system')"
+                >
+                  System
+                </button>
+              </div>
+            </div>
           </div>
         </header>
 
@@ -1391,6 +1470,89 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 6px;
   padding: 0 8px;
+  position: relative;
+}
+
+.overflow-wrap {
+  position: relative;
+}
+
+.overflow-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  min-width: 160px;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ide-root.dark .overflow-menu {
+  border-color: #334155;
+  background: #0b1220;
+  box-shadow: 0 12px 28px rgba(2, 6, 23, 0.5);
+}
+
+.overflow-item {
+  border: 0;
+  background: transparent;
+  color: #334155;
+  border-radius: 8px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 7px 10px;
+}
+
+.overflow-item:hover {
+  background: #f1f5f9;
+}
+
+.overflow-item.active {
+  background: #e2e8f0;
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.ide-root.dark .overflow-item {
+  color: #cbd5e1;
+}
+
+.ide-root.dark .overflow-item:hover {
+  background: #1e293b;
+}
+
+.ide-root.dark .overflow-item.active {
+  background: #334155;
+  color: #f8fafc;
+}
+
+.overflow-divider {
+  height: 1px;
+  background: #e2e8f0;
+  margin: 4px 0;
+}
+
+.ide-root.dark .overflow-divider {
+  background: #334155;
+}
+
+.overflow-label {
+  padding: 2px 10px 4px;
+  font-size: 11px;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.ide-root.dark .overflow-label {
+  color: #94a3b8;
 }
 
 .body-row {
@@ -1756,17 +1918,9 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 980px) {
-  .global-actions :deep(.inline-flex) {
-    display: none;
-  }
-
-  .global-actions :deep(.inline-flex:nth-child(1)) {
-    display: inline-flex;
+  .global-actions {
+    gap: 4px;
+    padding-right: 4px;
   }
 }
 </style>
-  if (key === 'd') {
-    event.preventDefault()
-    void openTodayNote()
-    return
-  }

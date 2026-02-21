@@ -2,6 +2,13 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import ExplorerContextMenu, { type MenuAction } from './ExplorerContextMenu.vue'
 import ExplorerItem from './ExplorerItem.vue'
+import {
+  ArrowPathIcon,
+  ChevronDoubleDownIcon,
+  ChevronDoubleUpIcon,
+  DocumentPlusIcon,
+  FolderPlusIcon
+} from '@heroicons/vue/20/solid'
 import { useSelectionManager } from './composables/useSelectionManager'
 import {
   copyEntry,
@@ -194,6 +201,36 @@ async function refreshLoadedDirs() {
       // Skip transient refresh errors.
     }
   }
+}
+
+async function expandAllDirs() {
+  if (!props.folderPath) return
+
+  const allDirs = new Set<string>()
+  const queue: string[] = [props.folderPath]
+  const visited = new Set<string>()
+
+  while (queue.length) {
+    const dir = queue.shift()
+    if (!dir || visited.has(dir)) continue
+    visited.add(dir)
+    await loadChildren(dir)
+
+    const children = childrenByDir.value[dir] ?? []
+    for (const child of children) {
+      if (!child.is_dir) continue
+      allDirs.add(child.path)
+      queue.push(child.path)
+    }
+  }
+
+  expandedPaths.value = allDirs
+  persistExpandedState()
+}
+
+function collapseAllDirs() {
+  expandedPaths.value = new Set()
+  persistExpandedState()
 }
 
 function currentContextTarget(): string | null {
@@ -471,16 +508,18 @@ function handleRowClick(event: MouseEvent, node: TreeNode) {
   focusedPath.value = node.path
   emit('select', selectionManager.selectedPaths.value)
 
+  if (node.is_dir && !event.shiftKey && !isToggle) {
+    void toggleExpand(node.path)
+    return
+  }
+
   if (!node.is_dir && node.is_markdown && !event.shiftKey && !isToggle) {
     emit('open', node.path)
   }
 }
 
 function handleDoubleClick(node: TreeNode) {
-  if (node.is_dir) {
-    toggleExpand(node.path)
-    return
-  }
+  if (node.is_dir) return
   if (node.is_markdown) {
     emit('open', node.path)
   } else {
@@ -880,17 +919,55 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="space-y-2">
+  <div class="flex h-full min-h-0 flex-col gap-2">
     <div class="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2 dark:border-slate-800">
-      <UiButton size="sm" :disabled="!folderPath" @click="beginCreate(folderPath, 'file')">New file</UiButton>
-      <UiButton size="sm" :disabled="!folderPath" @click="beginCreate(folderPath, 'folder')">New folder</UiButton>
-      <UiButton size="sm" variant="ghost" :disabled="!folderPath" @click="refreshLoadedDirs">Refresh</UiButton>
+      <UiButton size="sm" class-name="h-7 rounded-lg px-2.5 text-[12px]" :disabled="!folderPath" @click="beginCreate(folderPath, 'file')">
+        <DocumentPlusIcon class="h-5 w-5" />
+        New file
+      </UiButton>
+      <UiButton size="sm" class-name="h-7 rounded-lg px-2.5 text-[12px]" :disabled="!folderPath" @click="beginCreate(folderPath, 'folder')">
+        <FolderPlusIcon class="h-5 w-5" />
+        New folder
+      </UiButton>
+      <UiButton
+        size="sm"
+        variant="ghost"
+        class-name="h-6 w-6 rounded-md px-0"
+        title="Expand all folders"
+        aria-label="Expand all folders"
+        :disabled="!folderPath"
+        @click="expandAllDirs"
+      >
+        <ChevronDoubleDownIcon class="h-4 w-4" />
+      </UiButton>
+      <UiButton
+        size="sm"
+        variant="ghost"
+        class-name="h-6 w-6 rounded-md px-0"
+        title="Collapse all folders"
+        aria-label="Collapse all folders"
+        :disabled="!folderPath"
+        @click="collapseAllDirs"
+      >
+        <ChevronDoubleUpIcon class="h-4 w-4" />
+      </UiButton>
+      <UiButton
+        size="sm"
+        variant="ghost"
+        class-name="h-6 w-6 rounded-md px-0"
+        title="Refresh explorer"
+        aria-label="Refresh explorer"
+        :disabled="!folderPath"
+        @click="refreshLoadedDirs"
+      >
+        <ArrowPathIcon class="h-4 w-4" />
+      </UiButton>
     </div>
 
     <div
       ref="treeRef"
       tabindex="0"
-      class="min-h-[220px] rounded-md border border-slate-200 bg-white p-2 outline-none focus-visible:ring-1 focus-visible:ring-slate-500 dark:border-slate-800 dark:bg-slate-950"
+      class="min-h-0 flex-1 overflow-auto rounded-md border border-slate-200 bg-white p-2 outline-none focus-visible:ring-1 focus-visible:ring-slate-500 dark:border-slate-800 dark:bg-slate-950"
       @keydown="onTreeKeydown"
       @contextmenu.prevent="onTreeContextMenu"
       @click="clearSelectionIfBackground"
