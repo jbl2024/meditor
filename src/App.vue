@@ -802,10 +802,37 @@ async function saveActiveTab() {
 }
 
 function onWindowKeydown(event: KeyboardEvent) {
+  if (quickOpenVisible.value) {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      event.stopPropagation()
+      moveQuickOpenSelection(1)
+      return
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      event.stopPropagation()
+      moveQuickOpenSelection(-1)
+      return
+    }
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      event.preventDefault()
+      event.stopPropagation()
+      return
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      event.stopPropagation()
+      onQuickOpenEnter()
+      return
+    }
+  }
+
   const isEscape = event.key === 'Escape' || event.key === 'Esc' || event.code === 'Escape'
   if (isEscape) {
     if (quickOpenVisible.value) {
       event.preventDefault()
+      event.stopPropagation()
       closeQuickOpen()
       return
     }
