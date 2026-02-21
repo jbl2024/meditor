@@ -32,6 +32,7 @@ const searchHits = ref<SearchHit[]>([])
 const searchLoading = ref(false)
 const quickOpenVisible = ref(false)
 const quickOpenQuery = ref('')
+const quickOpenActiveIndex = ref(0)
 const leftPaneWidth = ref(300)
 const rightPaneWidth = ref(300)
 const allWorkspaceFiles = ref<string[]>([])
@@ -132,6 +133,10 @@ const quickOpenActionResults = computed(() => {
   if (!q) return paletteActions.value
   return paletteActions.value.filter((item) => item.label.toLowerCase().includes(q))
 })
+
+const quickOpenItemCount = computed(() =>
+  quickOpenIsActionMode.value ? quickOpenActionResults.value.length : quickOpenResults.value.length
+)
 
 const metadataRows = computed(() => {
   if (!activeFilePath.value) return []
@@ -399,6 +404,7 @@ async function loadAllFiles() {
 async function openQuickOpen(initialQuery = '') {
   quickOpenVisible.value = true
   quickOpenQuery.value = initialQuery
+  quickOpenActiveIndex.value = 0
   if (!allWorkspaceFiles.value.length) {
     await loadAllFiles()
   }
@@ -409,6 +415,7 @@ async function openQuickOpen(initialQuery = '') {
 function closeQuickOpen() {
   quickOpenVisible.value = false
   quickOpenQuery.value = ''
+  quickOpenActiveIndex.value = 0
 }
 
 function openQuickFile(path: string) {
@@ -476,17 +483,44 @@ async function createNewFileFromPalette() {
 
 function onQuickOpenEnter() {
   if (quickOpenIsActionMode.value) {
-    const firstAction = quickOpenActionResults.value[0]
-    if (firstAction) {
-      void runQuickOpenAction(firstAction.id)
+    const action = quickOpenActionResults.value[quickOpenActiveIndex.value]
+    if (action) {
+      void runQuickOpenAction(action.id)
     }
     return
   }
 
-  const firstFile = quickOpenResults.value[0]
-  if (firstFile) {
-    openQuickFile(firstFile)
+  const path = quickOpenResults.value[quickOpenActiveIndex.value]
+  if (path) {
+    openQuickFile(path)
   }
+}
+
+function onQuickOpenInputKeydown(event: KeyboardEvent) {
+  if (event.key === 'ArrowDown') {
+    event.preventDefault()
+    moveQuickOpenSelection(1)
+    return
+  }
+  if (event.key === 'ArrowUp') {
+    event.preventDefault()
+    moveQuickOpenSelection(-1)
+    return
+  }
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    onQuickOpenEnter()
+  }
+}
+
+function moveQuickOpenSelection(delta: number) {
+  const count = quickOpenItemCount.value
+  if (!count) return
+  quickOpenActiveIndex.value = (quickOpenActiveIndex.value + delta + count) % count
+}
+
+function setQuickOpenActiveIndex(index: number) {
+  quickOpenActiveIndex.value = index
 }
 
 async function saveActiveTab() {
@@ -565,6 +599,20 @@ function onWindowKeydown(event: KeyboardEvent) {
 watch(themePreference, (next) => {
   window.localStorage.setItem(THEME_STORAGE_KEY, next)
   applyTheme()
+})
+
+watch(quickOpenQuery, () => {
+  quickOpenActiveIndex.value = 0
+})
+
+watch(quickOpenItemCount, (count) => {
+  if (count <= 0) {
+    quickOpenActiveIndex.value = 0
+    return
+  }
+  if (quickOpenActiveIndex.value >= count) {
+    quickOpenActiveIndex.value = count - 1
+  }
 })
 
 watch(
@@ -824,24 +872,28 @@ onBeforeUnmount(() => {
           data-quick-open-input="true"
           class="tool-input"
           placeholder="Type file name, or start with > for actions"
-          @keydown.enter.prevent="onQuickOpenEnter"
+          @keydown="onQuickOpenInputKeydown"
         />
         <div class="modal-list">
           <button
-            v-for="item in quickOpenActionResults"
+            v-for="(item, index) in quickOpenActionResults"
             :key="item.id"
             type="button"
             class="modal-item"
+            :class="{ active: quickOpenActiveIndex === index }"
             @click="runQuickOpenAction(item.id)"
+            @mousemove="setQuickOpenActiveIndex(index)"
           >
             {{ item.label }}
           </button>
           <button
-            v-for="path in quickOpenResults"
+            v-for="(path, index) in quickOpenResults"
             :key="path"
             type="button"
             class="modal-item"
+            :class="{ active: quickOpenActiveIndex === index }"
             @click="openQuickFile(path)"
+            @mousemove="setQuickOpenActiveIndex(index)"
           >
             {{ toRelativePath(path) }}
           </button>
@@ -1280,10 +1332,20 @@ onBeforeUnmount(() => {
   font-size: 12px;
 }
 
+.modal-item.active {
+  border-color: #93c5fd;
+  background: #dbeafe;
+}
+
 :global(.dark) .modal-item {
   border-color: #1e293b;
   background: #0b1220;
   color: #cbd5e1;
+}
+
+:global(.dark) .modal-item.active {
+  border-color: #475569;
+  background: #1e293b;
 }
 
 .placeholder {
