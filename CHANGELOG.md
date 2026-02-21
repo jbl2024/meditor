@@ -18,6 +18,13 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.1.1] - 2026-02-21
+
+### Changed
+- chore: ci (2d840fe)
+- chore: changelog (698da3e)
+- add MIT LICENSE (4ad9049)
+
 ## [0.1.0] - 2026-02-21
 
 ### Added
