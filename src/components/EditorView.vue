@@ -71,6 +71,7 @@ let titleLockTimer: ReturnType<typeof setTimeout> | null = null
 let suppressOnChange = false
 let suppressCollapseOnNextArrowKeyup = false
 let arrowLinkContext: ArrowLinkContext | null = null
+let expandedLinkContext: ArrowLinkContext | null = null
 
 const loadedTextByPath = ref<Record<string, string>>({})
 const dirtyByPath = ref<Record<string, boolean>>({})
@@ -609,6 +610,7 @@ function expandAdjacentLinkForEditing(direction: 'left' | 'right'): boolean {
   range.collapse(true)
   selection.removeAllRanges()
   selection.addRange(range)
+  expandedLinkContext = { textNode, range: { start: 0, end: token.length } }
   arrowLinkContext = null
   suppressCollapseOnNextArrowKeyup = true
   return true
@@ -639,6 +641,14 @@ function replaceTokenRangeWithAnchor(textNode: Text, start: number, end: number,
   next.collapse(true)
   selection.removeAllRanges()
   selection.addRange(next)
+  if (
+    expandedLinkContext &&
+    expandedLinkContext.textNode === textNode &&
+    expandedLinkContext.range.start === start &&
+    expandedLinkContext.range.end === end
+  ) {
+    expandedLinkContext = null
+  }
   return true
 }
 
@@ -713,6 +723,27 @@ function collapseTrackedArrowLinkIfExited(): boolean {
 
   const place = relation === 'before' ? 'before' : 'after'
   return replaceTokenRangeWithAnchor(context.textNode, context.range.start, context.range.end, place)
+}
+
+function collapseExpandedLinkIfCaretOutside(): boolean {
+  if (!expandedLinkContext) return false
+
+  const context = expandedLinkContext
+  const selection = window.getSelection()
+  if (!selection || !selection.rangeCount || !selection.isCollapsed) {
+    expandedLinkContext = null
+    return false
+  }
+
+  const relation = caretRelationToTokenRange(selection, context)
+  if (relation === 'inside') return false
+
+  const place = relation === 'before' ? 'before' : 'after'
+  const collapsed = replaceTokenRangeWithAnchor(context.textNode, context.range.start, context.range.end, place)
+  if (!collapsed) {
+    expandedLinkContext = null
+  }
+  return collapsed
 }
 
 function findMarkdownLinkRangeEndingAt(
@@ -1067,6 +1098,9 @@ function onEditorKeyup(event: KeyboardEvent) {
     if (collapseTrackedArrowLinkIfExited()) {
       return
     }
+    if (collapseExpandedLinkIfCaretOutside()) {
+      return
+    }
     collapseClosedLinkNearCaret()
     return
   }
@@ -1084,6 +1118,7 @@ function onEditorClick(event: MouseEvent) {
   if (!target?.closest('.ce-block')) {
     return
   }
+  collapseExpandedLinkIfCaretOutside()
   const anchor = target.closest('a') as HTMLAnchorElement | null
   const wikilinkTarget = anchor ? readWikilinkTargetFromAnchor(anchor) : ''
   if (anchor && wikilinkTarget) {
