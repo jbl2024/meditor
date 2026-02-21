@@ -1101,7 +1101,6 @@ onBeforeUnmount(() => {
       >
         <div class="panel-header">
           <h2 class="panel-title">{{ workspace.sidebarMode.value }}</h2>
-          <UiButton size="sm" variant="ghost" @click="workspace.toggleSidebar()">Hide</UiButton>
         </div>
 
         <div class="panel-body">
@@ -1650,7 +1649,7 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid #e2e8f0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   padding: 0 8px;
 }
 
