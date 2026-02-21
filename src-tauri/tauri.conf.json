@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "sampletauri",
+  "productName": "meditor",
   "version": "0.1.0",
-  "identifier": "com.sampletauri.app",
+  "identifier": "com.meditor.app",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "sampletauri",
+        "title": "meditor",
         "maximized": true,
         "decorations": true,
         "titleBarStyle": "Overlay",
