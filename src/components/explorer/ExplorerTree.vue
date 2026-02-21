@@ -460,6 +460,11 @@ function handleRowClick(event: MouseEvent, node: TreeNode) {
 
   focusedPath.value = node.path
   emit('select', selectionManager.selectedPaths.value)
+
+  // Open markdown files on single click for primary selection only.
+  if (!node.is_dir && node.is_markdown && !event.shiftKey && !isToggle) {
+    emit('open', node.path)
+  }
 }
 
 function handleDoubleClick(node: TreeNode) {
