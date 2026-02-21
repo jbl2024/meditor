@@ -979,43 +979,6 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="ide-root" :class="{ dark: resolvedTheme === 'dark' }">
-    <header class="topbar">
-      <div class="tabs-row">
-        <div class="tab-scroll">
-          <div
-            v-for="(tab, index) in tabView"
-            :key="tab.path"
-            role="button"
-            tabindex="0"
-            class="tab-item"
-            :class="{ active: activeFilePath === tab.path }"
-            draggable="true"
-            @click="onTabClick(tab.path)"
-            @auxclick="onTabAuxClick($event, tab.path)"
-            @keydown.enter.prevent="onTabClick(tab.path)"
-            @keydown.space.prevent="onTabClick(tab.path)"
-            @dragstart="onTabDragStart(index, $event)"
-            @dragover.prevent
-            @drop="onTabDrop(index, $event)"
-          >
-            <span class="tab-name">{{ tab.title }}</span>
-            <span v-if="tab.saving" class="tab-state" title="Saving">~</span>
-            <span v-else-if="tab.dirty" class="tab-state" title="Unsaved">•</span>
-            <button class="tab-close" type="button" @click.stop="onTabClose(tab.path)">x</button>
-          </div>
-          <div v-if="!tabView.length" class="tab-empty">No open files</div>
-        </div>
-      </div>
-
-      <div class="global-actions">
-        <UiThemeSwitcher v-model="themePreference" />
-        <UiButton size="sm" variant="ghost" @click="onSelectWorkingFolder">Workspace</UiButton>
-        <UiButton size="sm" variant="ghost" title="Global search" @click="openSearchPanel">Search</UiButton>
-        <UiButton size="sm" variant="ghost" title="Command palette" @click="openCommandPalette">Cmd</UiButton>
-        <UiButton size="sm" variant="ghost" title="Toggle context pane" @click="workspace.toggleRightPane()">Pane</UiButton>
-      </div>
-    </header>
-
     <div class="body-row">
       <aside class="activity-bar">
         <button
@@ -1119,69 +1082,110 @@ onBeforeUnmount(() => {
         @mousedown="beginResize('left', $event)"
       ></div>
 
-      <main class="center-area">
-        <EditorView
-          ref="editorRef"
-          :path="activeFilePath"
-          :openFile="openFile"
-          :saveFile="saveFile"
-          :linkTargets="allWorkspaceFiles.map((path) => toRelativePath(path))"
-          :openLinkTarget="openWikilinkTarget"
-          @status="onEditorStatus"
-          @outline="onEditorOutline"
-        />
-      </main>
-
-      <div
-        v-if="workspace.rightPaneVisible.value"
-        class="splitter"
-        @mousedown="beginResize('right', $event)"
-      ></div>
-
-      <aside
-        v-if="workspace.rightPaneVisible.value"
-        class="right-pane"
-        :style="{ width: `${rightPaneWidth}px` }"
-      >
-        <div class="pane-section">
-          <h3>Outline</h3>
-          <div v-if="!editorState.activeOutline.value.length" class="placeholder">No headings</div>
-          <button
-            v-for="(heading, idx) in editorState.activeOutline.value"
-            :key="`${heading.text}-${idx}`"
-            type="button"
-            class="outline-row"
-            :style="{ paddingLeft: `${(heading.level - 1) * 12 + 8}px` }"
-          >
-            {{ heading.text }}
-          </button>
-        </div>
-
-        <div class="pane-section">
-          <h3>Backlinks</h3>
-          <div v-if="backlinksLoading" class="placeholder">Loading...</div>
-          <div v-else-if="!backlinks.length" class="placeholder">No backlinks</div>
-          <button
-            v-for="path in backlinks"
-            :key="path"
-            type="button"
-            class="outline-row"
-            @click="workspace.openTab(path)"
-          >
-            {{ toRelativePath(path) }}
-          </button>
-        </div>
-
-        <div class="pane-section">
-          <h3>Metadata</h3>
-          <div class="metadata-grid">
-            <div v-for="row in metadataRows" :key="row.label" class="meta-row">
-              <span>{{ row.label }}</span>
-              <span :title="row.value">{{ row.value }}</span>
+      <section class="workspace-column">
+        <header class="topbar">
+          <div class="tabs-row">
+            <div class="tab-scroll">
+              <div
+                v-for="(tab, index) in tabView"
+                :key="tab.path"
+                role="button"
+                tabindex="0"
+                class="tab-item"
+                :class="{ active: activeFilePath === tab.path }"
+                draggable="true"
+                @click="onTabClick(tab.path)"
+                @auxclick="onTabAuxClick($event, tab.path)"
+                @keydown.enter.prevent="onTabClick(tab.path)"
+                @keydown.space.prevent="onTabClick(tab.path)"
+                @dragstart="onTabDragStart(index, $event)"
+                @dragover.prevent
+                @drop="onTabDrop(index, $event)"
+              >
+                <span class="tab-name">{{ tab.title }}</span>
+                <span v-if="tab.saving" class="tab-state" title="Saving">~</span>
+                <span v-else-if="tab.dirty" class="tab-state" title="Unsaved">•</span>
+                <button class="tab-close" type="button" @click.stop="onTabClose(tab.path)">x</button>
+              </div>
+              <div v-if="!tabView.length" class="tab-empty">No open files</div>
             </div>
           </div>
+
+          <div class="global-actions">
+            <UiThemeSwitcher v-model="themePreference" />
+            <UiButton size="sm" variant="ghost" @click="onSelectWorkingFolder">Workspace</UiButton>
+            <UiButton size="sm" variant="ghost" title="Global search" @click="openSearchPanel">Search</UiButton>
+            <UiButton size="sm" variant="ghost" title="Command palette" @click="openCommandPalette">Cmd</UiButton>
+            <UiButton size="sm" variant="ghost" title="Toggle context pane" @click="workspace.toggleRightPane()">Pane</UiButton>
+          </div>
+        </header>
+
+        <div class="workspace-row">
+          <main class="center-area">
+            <EditorView
+              ref="editorRef"
+              :path="activeFilePath"
+              :openFile="openFile"
+              :saveFile="saveFile"
+              :linkTargets="allWorkspaceFiles.map((path) => toRelativePath(path))"
+              :openLinkTarget="openWikilinkTarget"
+              @status="onEditorStatus"
+              @outline="onEditorOutline"
+            />
+          </main>
+
+          <div
+            v-if="workspace.rightPaneVisible.value"
+            class="splitter"
+            @mousedown="beginResize('right', $event)"
+          ></div>
+
+          <aside
+            v-if="workspace.rightPaneVisible.value"
+            class="right-pane"
+            :style="{ width: `${rightPaneWidth}px` }"
+          >
+            <div class="pane-section">
+              <h3>Outline</h3>
+              <div v-if="!editorState.activeOutline.value.length" class="placeholder">No headings</div>
+              <button
+                v-for="(heading, idx) in editorState.activeOutline.value"
+                :key="`${heading.text}-${idx}`"
+                type="button"
+                class="outline-row"
+                :style="{ paddingLeft: `${(heading.level - 1) * 12 + 8}px` }"
+              >
+                {{ heading.text }}
+              </button>
+            </div>
+
+            <div class="pane-section">
+              <h3>Backlinks</h3>
+              <div v-if="backlinksLoading" class="placeholder">Loading...</div>
+              <div v-else-if="!backlinks.length" class="placeholder">No backlinks</div>
+              <button
+                v-for="path in backlinks"
+                :key="path"
+                type="button"
+                class="outline-row"
+                @click="workspace.openTab(path)"
+              >
+                {{ toRelativePath(path) }}
+              </button>
+            </div>
+
+            <div class="pane-section">
+              <h3>Metadata</h3>
+              <div class="metadata-grid">
+                <div v-for="row in metadataRows" :key="row.label" class="meta-row">
+                  <span>{{ row.label }}</span>
+                  <span :title="row.value">{{ row.value }}</span>
+                </div>
+              </div>
+            </div>
+          </aside>
         </div>
-      </aside>
+      </section>
     </div>
 
     <footer class="status-bar">
@@ -1348,6 +1352,22 @@ onBeforeUnmount(() => {
 
 .body-row {
   flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+.workspace-column {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.workspace-row {
+  flex: 1;
+  min-width: 0;
   min-height: 0;
   display: flex;
 }
