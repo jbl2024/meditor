@@ -18,6 +18,12 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.1.4] - 2026-02-21
+
+### Changed
+- ci(release): install xdg-utils for linux arm64 appimage bundling (94bd0ce)
+- chore: bump version (18ffd9c)
+
 ## [0.1.3] - 2026-02-21
 
 ### Changed
