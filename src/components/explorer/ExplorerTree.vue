@@ -201,12 +201,16 @@ function effectiveSelection(targetPath?: string | null): string[] {
   return selected
 }
 
-function openContextMenu(event: MouseEvent, targetPath: string | null) {
+function openContextMenuAt(x: number, y: number, targetPath: string | null) {
   contextMenu.value = {
-    x: event.clientX,
-    y: event.clientY,
+    x,
+    y,
     targetPath
   }
+}
+
+function openContextMenu(event: MouseEvent, targetPath: string | null) {
+  openContextMenuAt(event.clientX + 2, event.clientY + 2, targetPath)
 }
 
 function closeContextMenu() {
@@ -483,6 +487,17 @@ async function toggleExpand(path: string) {
 }
 
 function onRowAction(payload: { event: MouseEvent; node: TreeNode }) {
+  const target = payload.event.currentTarget as HTMLElement | null
+  if (target) {
+    const rect = target.getBoundingClientRect()
+    openContextMenuAt(rect.right + 6, rect.bottom + 6, payload.node.path)
+    return
+  }
+
+  openContextMenu(payload.event, payload.node.path)
+}
+
+function onNodeContextMenu(payload: { event: MouseEvent; node: TreeNode }) {
   openContextMenu(payload.event, payload.node.path)
 }
 
@@ -910,7 +925,7 @@ onBeforeUnmount(() => {
             @toggle="toggleExpand"
             @click="handleRowClick"
             @doubleclick="handleDoubleClick"
-            @contextmenu="openContextMenu($event.event, $event.node.path)"
+            @contextmenu="onNodeContextMenu"
             @dragstart="onDragStart"
             @dragover="onDragOver"
             @dragleave="onDragLeave"

@@ -80,10 +80,12 @@ function iconForNode(node: TreeNode): string {
 
     <button
       type="button"
-      class="invisible rounded-md px-1 text-[11px] text-slate-500 transition hover:bg-slate-200/70 group-hover:visible dark:text-slate-400 dark:hover:bg-slate-700/70"
+      class="rounded-md px-1.5 text-sm leading-none text-slate-500 opacity-35 transition hover:bg-slate-200/70 hover:opacity-100 group-hover:opacity-100 dark:text-slate-300 dark:hover:bg-slate-700/70"
+      :class="selected ? 'opacity-100' : ''"
+      title="Actions"
       @click.stop="emit('rowaction', { event: $event, node })"
     >
-      ...
+      ⋯
     </button>
   </div>
 </template>
