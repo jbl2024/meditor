@@ -36,6 +36,70 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;')
 }
 
+function extractCodeSpans(value: string): { text: string; tokens: string[] } {
+  const tokens: string[] = []
+  let out = ''
+  let i = 0
+
+  while (i < value.length) {
+    if (value[i] !== '`') {
+      out += value[i]
+      i += 1
+      continue
+    }
+
+    let markerLength = 1
+    while (i + markerLength < value.length && value[i + markerLength] === '`') {
+      markerLength += 1
+    }
+
+    const marker = '`'.repeat(markerLength)
+    const closeIndex = value.indexOf(marker, i + markerLength)
+    if (closeIndex === -1) {
+      out += marker
+      i += markerLength
+      continue
+    }
+
+    const content = value.slice(i + markerLength, closeIndex)
+    const token = `@@MD_CODE_${tokens.length}@@`
+    tokens.push(`<code>${escapeHtml(content)}</code>`)
+    out += token
+    i = closeIndex + markerLength
+  }
+
+  return { text: out, tokens }
+}
+
+function parseInlineSegment(value: string): string {
+  if (!value) return ''
+
+  const escapes: string[] = []
+  const escapedValue = value.replace(/\\([\\`*_~[\](){}#+\-.!|])/g, (_, ch: string) => {
+    const token = `@@MD_ESC_${escapes.length}@@`
+    escapes.push(escapeHtml(ch))
+    return token
+  })
+
+  const { text, tokens: codeTokens } = extractCodeSpans(escapedValue)
+  let html = escapeHtml(text)
+
+  html = html.replace(/~~(?=\S)([\s\S]*?\S)~~/g, '<s>$1</s>')
+  html = html.replace(/\*\*(?=\S)([\s\S]*?\S)\*\*/g, '<strong>$1</strong>')
+  html = html.replace(/__(?=\S)([\s\S]*?\S)__/g, '<strong>$1</strong>')
+  html = html.replace(/(^|[^*])\*(?=\S)([\s\S]*?\S)\*(?!\*)/g, '$1<em>$2</em>')
+  html = html.replace(/(^|[^_])_(?=\S)([\s\S]*?\S)_(?!_)/g, '$1<em>$2</em>')
+
+  codeTokens.forEach((tokenHtml, index) => {
+    html = html.split(`@@MD_CODE_${index}@@`).join(tokenHtml)
+  })
+  escapes.forEach((escapedChar, index) => {
+    html = html.split(`@@MD_ESC_${index}@@`).join(escapedChar)
+  })
+
+  return html
+}
+
 function inlineMarkdownToHtml(value: string): string {
   const tokenRe = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]|\[([^\]]+)\]\(([^)\s]+)\)/g
   let html = ''
@@ -51,26 +115,26 @@ function inlineMarkdownToHtml(value: string): string {
       continue
     }
 
-    html += escapeHtml(value.slice(lastIndex, index))
+    html += parseInlineSegment(value.slice(lastIndex, index))
     if (match[1]) {
       const target = match[1].trim()
       const alias = (match[2] ?? '').trim()
       const label = alias || target
       if (!target) {
-        html += escapeHtml(full)
+        html += parseInlineSegment(full)
       } else {
         const href = `wikilink:${encodeURIComponent(target)}`
-        html += `<a href="${escapeHtml(href)}" data-wikilink-target="${escapeHtml(target)}">${escapeHtml(label)}</a>`
+        html += `<a href="${escapeHtml(href)}" data-wikilink-target="${escapeHtml(target)}">${parseInlineSegment(label)}</a>`
       }
     } else {
       const text = match[3]
       const href = match[4]
-      html += `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(text)}</a>`
+      html += `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${parseInlineSegment(text)}</a>`
     }
     lastIndex = index + full.length
   }
 
-  html += escapeHtml(value.slice(lastIndex))
+  html += parseInlineSegment(value.slice(lastIndex))
   return html
 }
 
