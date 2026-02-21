@@ -62,7 +62,7 @@ function extractCodeSpans(value: string): { text: string; tokens: string[] } {
     }
 
     const content = value.slice(i + markerLength, closeIndex)
-    const token = `@@MD_CODE_${tokens.length}@@`
+    const token = `\u0000MDCODE${tokens.length}\u0000`
     tokens.push(`<code>${escapeHtml(content)}</code>`)
     out += token
     i = closeIndex + markerLength
@@ -76,7 +76,7 @@ function parseInlineSegment(value: string): string {
 
   const escapes: string[] = []
   const escapedValue = value.replace(/\\([\\`*_~[\](){}#+\-.!|])/g, (_, ch: string) => {
-    const token = `@@MD_ESC_${escapes.length}@@`
+    const token = `\u0000MDESC${escapes.length}\u0000`
     escapes.push(escapeHtml(ch))
     return token
   })
@@ -91,10 +91,10 @@ function parseInlineSegment(value: string): string {
   html = html.replace(/(^|[^_])_(?=\S)([\s\S]*?\S)_(?!_)/g, '$1<em>$2</em>')
 
   codeTokens.forEach((tokenHtml, index) => {
-    html = html.split(`@@MD_CODE_${index}@@`).join(tokenHtml)
+    html = html.split(`\u0000MDCODE${index}\u0000`).join(tokenHtml)
   })
   escapes.forEach((escapedChar, index) => {
-    html = html.split(`@@MD_ESC_${index}@@`).join(escapedChar)
+    html = html.split(`\u0000MDESC${index}\u0000`).join(escapedChar)
   })
 
   return html
@@ -306,11 +306,14 @@ export function markdownToEditorData(markdown: string): EditorDocument {
     }
 
     if (ORDERED_LIST_RE.test(line)) {
-      const items: string[] = []
+      const items: RichListItem[] = []
       while (i < lines.length) {
         const match = lines[i].match(ORDERED_LIST_RE)
         if (!match) break
-        items.push(match[1].trim())
+        items.push({
+          content: blockTextToHtml(match[1].trim()),
+          items: []
+        })
         i += 1
       }
       blocks.push({ type: 'list', data: { style: 'ordered', items } })
@@ -324,7 +327,7 @@ export function markdownToEditorData(markdown: string): EditorDocument {
         if (!match) break
 
         items.push({
-          content: match[2].trim(),
+          content: blockTextToHtml(match[2].trim()),
           meta: { checked: match[1].toLowerCase() === 'x' },
           items: []
         })
@@ -335,13 +338,16 @@ export function markdownToEditorData(markdown: string): EditorDocument {
     }
 
     if (UNORDERED_LIST_RE.test(line) && !TASK_LIST_RE.test(line)) {
-      const items: string[] = []
+      const items: RichListItem[] = []
       while (i < lines.length) {
         const current = lines[i]
         if (TASK_LIST_RE.test(current)) break
         const match = current.match(UNORDERED_LIST_RE)
         if (!match) break
-        items.push(match[1].trim())
+        items.push({
+          content: blockTextToHtml(match[1].trim()),
+          items: []
+        })
         i += 1
       }
       blocks.push({ type: 'list', data: { style: 'unordered', items } })
