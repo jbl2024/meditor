@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.1.3] - 2026-02-21
+
+### Changed
+- ci(release): add linux arm64 release build alongside amd64 (7ba5edb)
+
 ## [0.1.2] - 2026-02-21
 
 ### Added
