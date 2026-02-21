@@ -23,6 +23,7 @@ type SlashCommand = {
 const SLASH_COMMANDS: SlashCommand[] = [
   { id: 'heading', label: 'Heading', type: 'header', data: { text: '', level: 2 } },
   { id: 'bullet', label: 'List', type: 'list', data: { style: 'unordered', items: [] } },
+  { id: 'checklist', label: 'Checklist', type: 'list', data: { style: 'checklist', items: [] } },
   { id: 'code', label: 'Code', type: 'code', data: { code: '' } },
   { id: 'quote', label: 'Quote', type: 'quote', data: { text: '', caption: '', alignment: 'left' } },
   { id: 'divider', label: 'Divider', type: 'delimiter', data: {} }
@@ -141,6 +142,17 @@ async function replaceCurrentBlock(type: string, data: Record<string, unknown>) 
 }
 
 function applyMarkdownShortcut(marker: string) {
+  const checklistMatch = marker.match(/^(-\s*)?\[([ xX]?)\]$/)
+  if (checklistMatch) {
+    return {
+      type: 'list',
+      data: {
+        style: 'checklist',
+        items: [{ content: '', meta: { checked: checklistMatch[2].toLowerCase() === 'x' }, items: [] }]
+      }
+    }
+  }
+
   switch (marker) {
     case '-':
     case '*':

@@ -13,12 +13,13 @@ export type EditorDocument = {
 const HEADING_RE = /^(#{1,6})\s+(.*)$/
 const ORDERED_LIST_RE = /^\s*\d+\.\s+(.+)$/
 const UNORDERED_LIST_RE = /^\s*[-*+]\s+(.+)$/
-const TASK_LIST_RE = /^\s*[-*+]\s+\[[ xX]\]\s+(.+)$/
+const TASK_LIST_RE = /^\s*[-*+]\s+\[([ xX])\]\s*(.*)$/
 const HR_RE = /^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/
 const FENCE_START_RE = /^```\s*([^`]*)$/
 
 type RichListItem = {
   content?: string
+  meta?: { checked?: boolean }
   items?: RichListItem[]
 }
 
@@ -92,7 +93,6 @@ function isRawFallbackStart(line: string): boolean {
   const trimmed = line.trimStart()
   if (line.startsWith('    ') || line.startsWith('\t')) return true
   if (trimmed.startsWith('|') || trimmed.startsWith('<')) return true
-  if (TASK_LIST_RE.test(line)) return true
   return false
 }
 
@@ -191,6 +191,23 @@ export function markdownToEditorData(markdown: string): EditorDocument {
       continue
     }
 
+    if (TASK_LIST_RE.test(line)) {
+      const items: RichListItem[] = []
+      while (i < lines.length) {
+        const match = lines[i].match(TASK_LIST_RE)
+        if (!match) break
+
+        items.push({
+          content: match[2].trim(),
+          meta: { checked: match[1].toLowerCase() === 'x' },
+          items: []
+        })
+        i += 1
+      }
+      blocks.push({ type: 'list', data: { style: 'checklist', items } })
+      continue
+    }
+
     if (UNORDERED_LIST_RE.test(line) && !TASK_LIST_RE.test(line)) {
       const items: string[] = []
       while (i < lines.length) {
@@ -237,15 +254,23 @@ function oldListItemsToStrings(items: unknown[]): string[] {
     .filter(Boolean)
 }
 
-function flattenRichList(items: RichListItem[], depth: number, marker: 'ordered' | 'unordered'): string[] {
+function flattenRichList(
+  items: RichListItem[],
+  depth: number,
+  marker: 'ordered' | 'unordered' | 'checklist'
+): string[] {
   const lines: string[] = []
 
   items.forEach((item, index) => {
     const content = normalizeParagraphMarkdown(item.content ?? '')
-    if (content) {
-      const prefix = marker === 'ordered' ? `${index + 1}. ` : '- '
-      lines.push(`${'  '.repeat(depth)}${prefix}${content}`)
-    }
+    const prefix =
+      marker === 'ordered'
+        ? `${index + 1}. `
+        : marker === 'checklist'
+          ? `- [${item.meta?.checked ? 'x' : ' '}] `
+          : '- '
+    lines.push(`${'  '.repeat(depth)}${prefix}${content}`)
+
     if (Array.isArray(item.items) && item.items.length) {
       lines.push(...flattenRichList(item.items, depth + 1, marker))
     }
@@ -255,13 +280,24 @@ function flattenRichList(items: RichListItem[], depth: number, marker: 'ordered'
 }
 
 function listToMarkdown(data: Record<string, unknown>): string {
-  const style = data.style === 'ordered' ? 'ordered' : 'unordered'
+  const style =
+    data.style === 'ordered'
+      ? 'ordered'
+      : data.style === 'checklist'
+        ? 'checklist'
+        : 'unordered'
   const items = Array.isArray(data.items) ? data.items : []
   if (!items.length) return ''
 
   if (typeof items[0] === 'string') {
     const old = oldListItemsToStrings(items as unknown[])
-    return old.map((item, index) => (style === 'ordered' ? `${index + 1}. ${item}` : `- ${item}`)).join('\n')
+    return old
+      .map((item, index) => {
+        if (style === 'ordered') return `${index + 1}. ${item}`
+        if (style === 'checklist') return `- [ ] ${item}`
+        return `- ${item}`
+      })
+      .join('\n')
   }
 
   return flattenRichList(items as RichListItem[], 0, style).join('\n')

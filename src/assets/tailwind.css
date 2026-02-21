@@ -93,18 +93,34 @@
     line-height: 1.35;
     color: #0f172a;
     margin: 0.15rem 0;
+    font-weight: 650;
   }
 
-  .editor-holder .ce-header[data-level='1'] {
+  .editor-holder h1.ce-header {
     font-size: 2rem;
+    font-weight: 760;
   }
 
-  .editor-holder .ce-header[data-level='2'] {
+  .editor-holder h2.ce-header {
     font-size: 1.6rem;
+    font-weight: 700;
   }
 
-  .editor-holder .ce-header[data-level='3'] {
+  .editor-holder h3.ce-header {
     font-size: 1.35rem;
+    font-weight: 680;
+  }
+
+  .editor-holder h4.ce-header {
+    font-size: 1.16rem;
+  }
+
+  .editor-holder h5.ce-header {
+    font-size: 1.04rem;
+  }
+
+  .editor-holder h6.ce-header {
+    font-size: 0.96rem;
   }
 
   .editor-holder .cdx-quote {
