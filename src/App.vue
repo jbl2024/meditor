@@ -65,6 +65,7 @@ const rightPaneWidth = ref(300)
 const allWorkspaceFiles = ref<string[]>([])
 const loadingAllFiles = ref(false)
 const editorRef = ref<EditorViewExposed | null>(null)
+const tabScrollRef = ref<HTMLElement | null>(null)
 const backlinks = ref<string[]>([])
 const backlinksLoading = ref(false)
 const virtualDocs = ref<Record<string, VirtualDoc>>({})
@@ -521,6 +522,13 @@ function onTabDrop(index: number, event: DragEvent) {
   workspace.moveTab(from, index)
 }
 
+function scrollActiveTabIntoView() {
+  const container = tabScrollRef.value
+  if (!container) return
+  const activeTab = container.querySelector<HTMLElement>('.tab-item.active')
+  activeTab?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'auto' })
+}
+
 function onEditorStatus(payload: { path: string; dirty: boolean; saving: boolean; saveError: string }) {
   editorState.updateStatus(payload.path, {
     dirty: payload.dirty,
@@ -944,6 +952,22 @@ watch(
 
 watch(
   () => workspace.activeTabPath.value,
+  async () => {
+    await nextTick()
+    scrollActiveTabIntoView()
+  }
+)
+
+watch(
+  () => tabView.value.length,
+  async () => {
+    await nextTick()
+    scrollActiveTabIntoView()
+  }
+)
+
+watch(
+  () => workspace.activeTabPath.value,
   async (path) => {
     if (!path) {
       editorState.setActiveOutline([])
@@ -978,6 +1002,10 @@ onMounted(() => {
   if (savedFolder) {
     void loadWorkingFolder(savedFolder)
   }
+
+  void nextTick(() => {
+    scrollActiveTabIntoView()
+  })
 })
 
 onBeforeUnmount(() => {
@@ -1090,7 +1118,7 @@ onBeforeUnmount(() => {
       <section class="workspace-column">
         <header class="topbar">
           <div class="tabs-row">
-            <div class="tab-scroll">
+            <div ref="tabScrollRef" class="tab-scroll">
               <div
                 v-for="(tab, index) in tabView"
                 :key="tab.path"
@@ -1320,6 +1348,10 @@ onBeforeUnmount(() => {
 .ide-root.dark .tab-item.active {
   background: #020617;
   color: #e2e8f0;
+}
+
+.tab-item.active .tab-name {
+  font-weight: 700;
 }
 
 .tab-name {
