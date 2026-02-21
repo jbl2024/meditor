@@ -52,5 +52,8 @@ This file defines repository-wide agent behavior for `/Users/jbl2024/jbl42/medit
 - After each completed change set, provide exactly one suggested commit message.
 
 ## Commit Message Requirement
-- Required format for suggested messages: `chore: fix: <short description>`.
-- Example: `chore: fix: add tauri AppError to InvokeError conversion`.
+- Use [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/).
+- Required format: `<type>[optional scope]: <short description>`.
+- Supported types include: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`.
+- Use `!` before `:` or add a `BREAKING CHANGE:` footer when applicable.
+- Example: `fix(theme): add system-aware light/dark switcher`.

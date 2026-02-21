@@ -101,11 +101,11 @@ onBeforeUnmount(async () => {
     <div class="flex items-center gap-2">
       <UiButton :disabled="!path" size="sm" @click="loadCurrentFile">Recharger</UiButton>
       <UiButton :disabled="!path" size="sm" variant="primary" @click="saveCurrentFile">Sauvegarder</UiButton>
-      <span v-if="!path" class="text-xs text-slate-500">Selectionne un fichier</span>
+      <span v-if="!path" class="text-xs text-slate-500 dark:text-slate-500">Selectionne un fichier</span>
     </div>
     <div
       ref="holder"
-      class="editor-holder min-h-0 flex-1 overflow-y-auto rounded-2xl border border-slate-700/70 bg-slate-950/65 p-3"
+      class="editor-holder min-h-0 flex-1 overflow-y-auto rounded-2xl border border-slate-200/80 bg-white/85 p-3 dark:border-slate-700/70 dark:bg-slate-950/65"
     ></div>
   </div>
 </template>
