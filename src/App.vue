@@ -398,9 +398,49 @@ function onExplorerSelection(paths: string[]) {
   filesystem.selectedCount.value = paths.length
 }
 
-function onExplorerOpen(path: string) {
-  workspace.openTab(path)
-  nextTick(() => editorRef.value?.focusEditor())
+async function ensureActiveTabSavedBeforeSwitch(targetPath: string): Promise<boolean> {
+  const target = targetPath.trim()
+  const current = workspace.activeTabPath.value
+  if (!target || !current || current === target) return true
+
+  const status = editorState.getStatus(current)
+  if (!status.dirty) return true
+
+  await editorRef.value?.saveNow()
+
+  const activeAfterSave = workspace.activeTabPath.value || current
+  const statusAfterSave = editorState.getStatus(activeAfterSave)
+  if (statusAfterSave.dirty) {
+    filesystem.errorMessage.value = statusAfterSave.saveError || 'Could not save current note before switching tabs.'
+    return false
+  }
+
+  return true
+}
+
+async function openTabWithAutosave(path: string): Promise<boolean> {
+  const target = path.trim()
+  if (!target) return false
+  const canSwitch = await ensureActiveTabSavedBeforeSwitch(target)
+  if (!canSwitch) return false
+  workspace.openTab(target)
+  return true
+}
+
+async function setActiveTabWithAutosave(path: string): Promise<boolean> {
+  const target = path.trim()
+  if (!target) return false
+  const canSwitch = await ensureActiveTabSavedBeforeSwitch(target)
+  if (!canSwitch) return false
+  workspace.setActiveTab(target)
+  return true
+}
+
+async function onExplorerOpen(path: string) {
+  const opened = await openTabWithAutosave(path)
+  if (!opened) return
+  await nextTick()
+  editorRef.value?.focusEditor()
 }
 
 async function openFile(path: string) {
@@ -620,14 +660,16 @@ async function openOrPrepareMarkdown(path: string, titleLine: string) {
     const nextVirtual = { ...virtualDocs.value }
     delete nextVirtual[path]
     virtualDocs.value = nextVirtual
-    workspace.openTab(path)
+    const opened = await openTabWithAutosave(path)
+    if (!opened) return false
     await nextTick()
     editorRef.value?.focusEditor()
     return true
   }
 
   await ensureVirtualMarkdown(path, titleLine)
-  workspace.openTab(path)
+  const opened = await openTabWithAutosave(path)
+  if (!opened) return false
   await nextTick()
   editorRef.value?.focusEditor()
   return true
@@ -701,7 +743,8 @@ async function runGlobalSearch() {
 }
 
 async function onSearchResultOpen(hit: SearchHit) {
-  workspace.openTab(hit.path)
+  const opened = await openTabWithAutosave(hit.path)
+  if (!opened) return
   editorState.setRevealSnippet(hit.path, hit.snippet)
 
   await nextTick()
@@ -709,7 +752,24 @@ async function onSearchResultOpen(hit: SearchHit) {
 }
 
 function onTabClick(path: string) {
-  workspace.setActiveTab(path)
+  void setActiveTabWithAutosave(path)
+}
+
+async function openNextTabWithAutosave() {
+  const tabs = workspace.openTabs.value
+  if (!tabs.length) return
+  const currentIndex = workspace.activeTabIndex.value
+  const nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % tabs.length
+  const nextPath = tabs[nextIndex]?.path
+  if (!nextPath) return
+  await setActiveTabWithAutosave(nextPath)
+}
+
+async function onBacklinkOpen(path: string) {
+  const opened = await openTabWithAutosave(path)
+  if (!opened) return
+  await nextTick()
+  editorRef.value?.focusEditor()
 }
 
 function onTabAuxClick(event: MouseEvent, path: string) {
@@ -858,7 +918,8 @@ async function openWikilinkTarget(target: string) {
   })
 
   if (existing) {
-    workspace.openTab(`${root}/${existing}`)
+    const opened = await openTabWithAutosave(`${root}/${existing}`)
+    if (!opened) return false
     await nextTick()
     editorRef.value?.focusEditor()
     return true
@@ -927,9 +988,10 @@ function closeQuickOpen() {
   quickOpenActiveIndex.value = 0
 }
 
-function openQuickResult(item: QuickOpenResult) {
+async function openQuickResult(item: QuickOpenResult) {
   if (item.kind === 'file') {
-    workspace.openTab(item.path)
+    const opened = await openTabWithAutosave(item.path)
+    if (!opened) return
     closeQuickOpen()
     nextTick(() => editorRef.value?.focusEditor())
     return
@@ -985,7 +1047,8 @@ async function createNewFileFromPalette() {
 
   try {
     const created = await createEntry(root, parentPath, name, 'file', 'fail')
-    workspace.openTab(created)
+    const opened = await openTabWithAutosave(created)
+    if (!opened) return false
     if (/\.(md|markdown)$/i.test(created) && !allWorkspaceFiles.value.includes(created)) {
       allWorkspaceFiles.value = [...allWorkspaceFiles.value, created].sort((a, b) => a.localeCompare(b))
     }
@@ -1031,7 +1094,7 @@ function onQuickOpenEnter() {
 
   const item = quickOpenResults.value[quickOpenActiveIndex.value]
   if (item) {
-    openQuickResult(item)
+    void openQuickResult(item)
   }
 }
 
@@ -1147,7 +1210,7 @@ function onWindowKeydown(event: KeyboardEvent) {
 
   if (key === 'tab') {
     event.preventDefault()
-    workspace.nextTab()
+    void openNextTabWithAutosave()
     return
   }
 
@@ -1539,7 +1602,7 @@ onBeforeUnmount(() => {
                 :key="path"
                 type="button"
                 class="outline-row"
-                @click="workspace.openTab(path)"
+                @click="void onBacklinkOpen(path)"
               >
                 {{ toRelativePath(path) }}
               </button>
