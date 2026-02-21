@@ -51,6 +51,7 @@ let editor: EditorJS | null = null
 let autosaveTimer: ReturnType<typeof setTimeout> | null = null
 let outlineTimer: ReturnType<typeof setTimeout> | null = null
 let suppressOnChange = false
+let suppressCollapseOnNextArrowKeyup = false
 
 const loadedTextByPath = ref<Record<string, string>>({})
 const dirtyByPath = ref<Record<string, boolean>>({})
@@ -244,17 +245,32 @@ function readWikilinkQueryAtCaret(): string | null {
   const uptoCaret = text.slice(0, offset)
   const start = uptoCaret.lastIndexOf('[[')
   if (start < 0) return null
+  const closeFromStart = text.indexOf(']]', start + 2)
+  if (closeFromStart >= 0 && offset >= closeFromStart + 2) return null
   if (uptoCaret.slice(start + 2).includes(']]')) return null
-  const query = uptoCaret.slice(start + 2)
+  const queryEnd = closeFromStart >= 0 ? Math.min(offset, closeFromStart) : offset
+  const query = text.slice(start + 2, queryEnd)
   if (query.includes('\n')) return null
+  if (query.includes('[') || query.includes(']')) return null
   return query
 }
 
-function createWikilinkAnchor(target: string): HTMLAnchorElement {
+function parseWikilinkToken(token: string): { target: string; label: string } | null {
+  if (!token.startsWith('[[') || !token.endsWith(']]')) return null
+  const inner = token.slice(2, -2).trim()
+  if (!inner) return null
+  const [targetRaw, aliasRaw] = inner.split('|', 2)
+  const target = targetRaw.trim()
+  if (!target || target.includes('\n')) return null
+  const label = (aliasRaw ?? '').trim() || target
+  return { target, label }
+}
+
+function createWikilinkAnchor(target: string, label = target): HTMLAnchorElement {
   const anchor = document.createElement('a')
   anchor.href = `wikilink:${encodeURIComponent(target)}`
   anchor.dataset.wikilinkTarget = target
-  anchor.textContent = target
+  anchor.textContent = label
   anchor.className = 'md-wikilink'
   return anchor
 }
@@ -297,7 +313,7 @@ function replaceActiveWikilinkQuery(target: string) {
   range.setEnd(textNode, offset)
   range.deleteContents()
 
-  const inserted = createWikilinkAnchor(target)
+  const inserted = createWikilinkAnchor(target, target)
   range.insertNode(inserted)
 
   const nextRange = document.createRange()
@@ -380,7 +396,66 @@ function expandAdjacentWikilinkForEditing(direction: 'left' | 'right'): boolean 
   range.collapse(true)
   selection.removeAllRanges()
   selection.addRange(range)
+  suppressCollapseOnNextArrowKeyup = true
   return true
+}
+
+function replaceTokenRangeWithAnchor(textNode: Text, start: number, end: number, place: 'before' | 'after'): boolean {
+  const token = textNode.data.slice(start, end)
+  const parsed = parseWikilinkToken(token)
+  if (!parsed) return false
+
+  const selection = window.getSelection()
+  if (!selection) return false
+
+  const range = document.createRange()
+  range.setStart(textNode, start)
+  range.setEnd(textNode, end)
+  range.deleteContents()
+
+  const anchor = createWikilinkAnchor(parsed.target, parsed.label)
+  range.insertNode(anchor)
+
+  const next = document.createRange()
+  if (place === 'before') {
+    next.setStartBefore(anchor)
+  } else {
+    next.setStartAfter(anchor)
+  }
+  next.collapse(true)
+  selection.removeAllRanges()
+  selection.addRange(next)
+  return true
+}
+
+function collapseClosedWikilinkNearCaret(): boolean {
+  const selection = window.getSelection()
+  if (!selection || !selection.rangeCount || !selection.isCollapsed) return false
+
+  const node = selection.focusNode
+  if (!node || node.nodeType !== Node.TEXT_NODE) return false
+  const textNode = node as Text
+  const text = textNode.data
+  const offset = selection.focusOffset
+
+  if (offset >= 2 && text.slice(offset - 2, offset) === ']]') {
+    const start = text.lastIndexOf('[[', offset - 2)
+    if (start >= 0) {
+      const close = text.indexOf(']]', start + 2)
+      if (close >= 0 && close + 2 === offset) {
+        return replaceTokenRangeWithAnchor(textNode, start, offset, 'after')
+      }
+    }
+  }
+
+  if (text.slice(offset, offset + 2) === '[[') {
+    const close = text.indexOf(']]', offset + 2)
+    if (close >= 0) {
+      return replaceTokenRangeWithAnchor(textNode, offset, close + 2, 'before')
+    }
+  }
+
+  return false
 }
 
 async function applyWikilinkSelection(target: string) {
@@ -639,9 +714,21 @@ function onEditorKeydown(event: KeyboardEvent) {
 }
 
 function onEditorKeyup(event: KeyboardEvent) {
-  if (wikilinkOpen.value && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', 'Tab', 'Escape'].includes(event.key)) {
+  if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight') && suppressCollapseOnNextArrowKeyup) {
+    suppressCollapseOnNextArrowKeyup = false
     return
   }
+
+  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+    collapseClosedWikilinkNearCaret()
+    return
+  }
+
+  if (['ArrowUp', 'ArrowDown', 'Enter', 'Tab', 'Escape'].includes(event.key)) {
+    return
+  }
+
+  collapseClosedWikilinkNearCaret()
   syncWikilinkMenuFromCaret()
 }
 
@@ -658,6 +745,7 @@ function onEditorClick(event: MouseEvent) {
     void props.openLinkTarget(wikilinkTarget)
     return
   }
+  collapseClosedWikilinkNearCaret()
   syncWikilinkMenuFromCaret()
   void openLinkedTokenAtCaret()
 }
