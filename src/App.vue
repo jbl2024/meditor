@@ -4,7 +4,7 @@ import EditorView from './components/EditorView.vue'
 import ExplorerTree from './components/explorer/ExplorerTree.vue'
 import UiButton from './components/ui/UiButton.vue'
 import UiThemeSwitcher from './components/ui/UiThemeSwitcher.vue'
-import { ftsSearch, initDb, listChildren, readTextFile, reindexMarkdownFile, selectWorkingFolder, writeTextFile } from './lib/api'
+import { createEntry, ftsSearch, initDb, listChildren, readTextFile, reindexMarkdownFile, selectWorkingFolder, writeTextFile } from './lib/api'
 import { useEditorState } from './composables/useEditorState'
 import { useFilesystemState } from './composables/useFilesystemState'
 import { useWorkspaceState, type SidebarMode } from './composables/useWorkspaceState'
@@ -32,7 +32,6 @@ const searchHits = ref<SearchHit[]>([])
 const searchLoading = ref(false)
 const quickOpenVisible = ref(false)
 const quickOpenQuery = ref('')
-const commandPaletteVisible = ref(false)
 const leftPaneWidth = ref(300)
 const rightPaneWidth = ref(300)
 const allWorkspaceFiles = ref<string[]>([])
@@ -87,13 +86,51 @@ const groupedSearchResults = computed(() => {
   return groups
 })
 
+type PaletteAction = {
+  id: string
+  label: string
+  run: () => boolean | Promise<boolean>
+}
+
+const paletteActions = computed<PaletteAction[]>(() => [
+  { id: 'close-all-tabs', label: 'Close All Tabs', run: () => (workspace.closeAllTabs(), true) },
+  {
+    id: 'close-other-tabs',
+    label: 'Close All But Current Tab',
+    run: () => {
+      if (!workspace.activeTabPath.value) return false
+      workspace.closeOtherTabs(workspace.activeTabPath.value)
+      return true
+    }
+  },
+  { id: 'create-new-file', label: 'Create New File', run: () => createNewFileFromPalette() },
+  { id: 'toggle-sidebar', label: 'Toggle Sidebar', run: () => (workspace.toggleSidebar(), true) },
+  { id: 'toggle-right-pane', label: 'Toggle Context Pane', run: () => (workspace.toggleRightPane(), true) },
+  { id: 'open-search', label: 'Open Global Search', run: () => (openSearchPanel(), true) },
+  { id: 'open-folder', label: 'Select Working Folder', run: () => (void onSelectWorkingFolder(), true) },
+  { id: 'theme-light', label: 'Theme: Light', run: () => ((themePreference.value = 'light'), true) },
+  { id: 'theme-dark', label: 'Theme: Dark', run: () => ((themePreference.value = 'dark'), true) },
+  { id: 'theme-system', label: 'Theme: System', run: () => ((themePreference.value = 'system'), true) }
+])
+
+const quickOpenIsActionMode = computed(() => quickOpenQuery.value.trimStart().startsWith('>'))
+const quickOpenActionQuery = computed(() => quickOpenQuery.value.trimStart().slice(1).trim().toLowerCase())
+
 const quickOpenResults = computed(() => {
+  if (quickOpenIsActionMode.value) return []
   const q = quickOpenQuery.value.trim().toLowerCase()
   const files = allWorkspaceFiles.value
-  if (!q) return files.slice(0, 80)
+  if (!q) return []
   return files
     .filter((path) => path.toLowerCase().includes(q) || toRelativePath(path).toLowerCase().includes(q))
     .slice(0, 80)
+})
+
+const quickOpenActionResults = computed(() => {
+  if (!quickOpenIsActionMode.value) return []
+  const q = quickOpenActionQuery.value
+  if (!q) return paletteActions.value
+  return paletteActions.value.filter((item) => item.label.toLowerCase().includes(q))
 })
 
 const metadataRows = computed(() => {
@@ -105,16 +142,6 @@ const metadataRows = computed(() => {
     { label: 'Workspace', value: toRelativePath(filesystem.workingFolderPath.value) || filesystem.workingFolderPath.value }
   ]
 })
-
-const commandItems = computed(() => [
-  { id: 'toggle-sidebar', label: 'Toggle Sidebar', run: () => workspace.toggleSidebar() },
-  { id: 'toggle-right-pane', label: 'Toggle Context Pane', run: () => workspace.toggleRightPane() },
-  { id: 'open-search', label: 'Open Global Search', run: () => openSearchPanel() },
-  { id: 'open-folder', label: 'Select Working Folder', run: () => void onSelectWorkingFolder() },
-  { id: 'theme-light', label: 'Theme: Light', run: () => (themePreference.value = 'light') },
-  { id: 'theme-dark', label: 'Theme: Dark', run: () => (themePreference.value = 'dark') },
-  { id: 'theme-system', label: 'Theme: System', run: () => (themePreference.value = 'system') }
-])
 
 const mediaQuery = typeof window !== 'undefined'
   ? window.matchMedia('(prefers-color-scheme: dark)')
@@ -369,9 +396,9 @@ async function loadAllFiles() {
   }
 }
 
-async function openQuickOpen() {
+async function openQuickOpen(initialQuery = '') {
   quickOpenVisible.value = true
-  commandPaletteVisible.value = false
+  quickOpenQuery.value = initialQuery
   if (!allWorkspaceFiles.value.length) {
     await loadAllFiles()
   }
@@ -391,19 +418,75 @@ function openQuickFile(path: string) {
 }
 
 function openCommandPalette() {
-  commandPaletteVisible.value = true
-  quickOpenVisible.value = false
+  void openQuickOpen('>')
 }
 
-function closeCommandPalette() {
-  commandPaletteVisible.value = false
+async function runQuickOpenAction(id: string) {
+  const action = quickOpenActionResults.value.find((item) => item.id === id)
+  if (!action) return
+  const shouldClose = await action.run()
+  if (!shouldClose) return
+  closeQuickOpen()
+  nextTick(() => editorRef.value?.focusEditor())
 }
 
-function runCommand(id: string) {
-  const command = commandItems.value.find((item) => item.id === id)
-  if (!command) return
-  command.run()
-  closeCommandPalette()
+async function createNewFileFromPalette() {
+  const root = filesystem.workingFolderPath.value
+  if (!root) {
+    filesystem.errorMessage.value = 'Working folder is not set.'
+    return false
+  }
+
+  const raw = window.prompt('New file path (relative to workspace):', 'untitled.md')
+  if (!raw) return false
+
+  const normalized = raw
+    .trim()
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '')
+    .replace(/\/+/g, '/')
+
+  if (!normalized || normalized.endsWith('/')) {
+    filesystem.errorMessage.value = 'Invalid file path.'
+    return false
+  }
+
+  const parts = normalized.split('/').filter(Boolean)
+  if (parts.some((part) => part === '.' || part === '..')) {
+    filesystem.errorMessage.value = 'Path cannot include . or .. segments.'
+    return false
+  }
+
+  const name = parts[parts.length - 1]
+  const parentPath = parts.length > 1 ? `${root}/${parts.slice(0, -1).join('/')}` : root
+
+  try {
+    const created = await createEntry(root, parentPath, name, 'file', 'fail')
+    workspace.openTab(created)
+    if (/\.(md|markdown)$/i.test(created) && !allWorkspaceFiles.value.includes(created)) {
+      allWorkspaceFiles.value = [...allWorkspaceFiles.value, created].sort((a, b) => a.localeCompare(b))
+    }
+    nextTick(() => editorRef.value?.focusEditor())
+    return true
+  } catch (err) {
+    filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not create file.'
+    return false
+  }
+}
+
+function onQuickOpenEnter() {
+  if (quickOpenIsActionMode.value) {
+    const firstAction = quickOpenActionResults.value[0]
+    if (firstAction) {
+      void runQuickOpenAction(firstAction.id)
+    }
+    return
+  }
+
+  const firstFile = quickOpenResults.value[0]
+  if (firstFile) {
+    openQuickFile(firstFile)
+  }
 }
 
 async function saveActiveTab() {
@@ -413,11 +496,6 @@ async function saveActiveTab() {
 function onWindowKeydown(event: KeyboardEvent) {
   const isEscape = event.key === 'Escape' || event.key === 'Esc' || event.code === 'Escape'
   if (isEscape) {
-    if (commandPaletteVisible.value) {
-      event.preventDefault()
-      closeCommandPalette()
-      return
-    }
     if (quickOpenVisible.value) {
       event.preventDefault()
       closeQuickOpen()
@@ -745,9 +823,19 @@ onBeforeUnmount(() => {
           v-model="quickOpenQuery"
           data-quick-open-input="true"
           class="tool-input"
-          placeholder="Quick open file"
+          placeholder="Type file name, or start with > for actions"
+          @keydown.enter.prevent="onQuickOpenEnter"
         />
         <div class="modal-list">
+          <button
+            v-for="item in quickOpenActionResults"
+            :key="item.id"
+            type="button"
+            class="modal-item"
+            @click="runQuickOpenAction(item.id)"
+          >
+            {{ item.label }}
+          </button>
           <button
             v-for="path in quickOpenResults"
             :key="path"
@@ -757,24 +845,10 @@ onBeforeUnmount(() => {
           >
             {{ toRelativePath(path) }}
           </button>
-          <div v-if="!quickOpenResults.length" class="placeholder">No matching files</div>
-        </div>
-      </div>
-    </div>
-
-    <div v-if="commandPaletteVisible" class="modal-overlay" @click.self="closeCommandPalette">
-      <div class="modal command-palette">
-        <h3>Command Palette</h3>
-        <div class="modal-list">
-          <button
-            v-for="item in commandItems"
-            :key="item.id"
-            type="button"
-            class="modal-item"
-            @click="runCommand(item.id)"
-          >
-            {{ item.label }}
-          </button>
+          <div v-if="quickOpenIsActionMode && !quickOpenActionResults.length" class="placeholder">No matching actions</div>
+          <div v-else-if="!quickOpenIsActionMode && !quickOpenResults.length" class="placeholder">
+            {{ quickOpenQuery.trim() ? 'No matching files' : 'Type to search files' }}
+          </div>
         </div>
       </div>
     </div>
