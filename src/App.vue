@@ -1235,12 +1235,17 @@ onBeforeUnmount(() => {
         <div class="panel-body">
           <div v-if="workspace.sidebarMode.value === 'explorer'" class="panel-fill">
             <ExplorerTree
+              v-if="filesystem.hasWorkspace.value"
               :folder-path="filesystem.workingFolderPath.value"
               :active-path="activeFilePath"
               @open="onExplorerOpen"
               @select="onExplorerSelection"
               @error="onExplorerError"
             />
+            <div v-else class="placeholder empty-explorer">
+              <span>No workspace selected.</span>
+              <button type="button" class="inline-link-btn" @click="onSelectWorkingFolder">Open folder</button>
+            </div>
           </div>
 
           <div v-else-if="workspace.sidebarMode.value === 'search'" class="panel-fill search-panel">
@@ -1312,18 +1317,6 @@ onBeforeUnmount(() => {
             <button
               type="button"
               class="toolbar-icon-btn"
-              title="Open workspace"
-              aria-label="Open workspace"
-              @click="onSelectWorkingFolder"
-            >
-              <svg viewBox="0 0 16 16" aria-hidden="true">
-                <path d="M2 6V4.5A1.5 1.5 0 0 1 3.5 3H6l1.5 2H12.5A1.5 1.5 0 0 1 14 6v.5" />
-                <path d="M1.75 6.5h11.6a1.25 1.25 0 0 1 1.2 1.58l-.95 3.25A1.5 1.5 0 0 1 12.16 12.4H4.05a1.5 1.5 0 0 1-1.44-1.1L1.45 7.95A1.25 1.25 0 0 1 2.65 6.5" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              class="toolbar-icon-btn"
               :class="{ active: workspace.rightPaneVisible.value }"
               :title="workspace.rightPaneVisible.value ? 'Hide right pane' : 'Show right pane'"
               :aria-label="workspace.rightPaneVisible.value ? 'Hide right pane' : 'Show right pane'"
@@ -1354,6 +1347,10 @@ onBeforeUnmount(() => {
                   :disabled="!filesystem.hasWorkspace.value"
                   @click="closeWorkspace"
                 >
+                  <svg class="overflow-item-icon" viewBox="0 0 16 16" aria-hidden="true">
+                    <line x1="4" y1="4" x2="12" y2="12" />
+                    <line x1="12" y1="4" x2="4" y2="12" />
+                  </svg>
                   Close workspace
                 </button>
                 <div class="overflow-divider"></div>
@@ -1709,6 +1706,9 @@ onBeforeUnmount(() => {
   background: transparent;
   color: #334155;
   border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   text-align: left;
   font-size: 12px;
   font-weight: 500;
@@ -1745,6 +1745,15 @@ onBeforeUnmount(() => {
 .ide-root.dark .overflow-item.active {
   background: #334155;
   color: #f8fafc;
+}
+
+.overflow-item-icon {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  flex: 0 0 auto;
 }
 
 .overflow-divider {
@@ -1891,6 +1900,36 @@ onBeforeUnmount(() => {
 .panel-fill {
   height: 100%;
   min-height: 0;
+}
+
+.empty-explorer {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.inline-link-btn {
+  border: 0;
+  background: transparent;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.inline-link-btn:hover {
+  color: #1d4ed8;
+}
+
+.ide-root.dark .inline-link-btn {
+  color: #60a5fa;
+}
+
+.ide-root.dark .inline-link-btn:hover {
+  color: #93c5fd;
 }
 
 .search-panel {
