@@ -42,8 +42,6 @@
     color: #89a9c8;
   }
 
-  .editor-holder .ce-toolbar__plus,
-  .editor-holder .ce-toolbar__settings-btn,
   .editor-holder .ce-inline-toolbar,
   .editor-holder .ce-popover,
   .editor-holder .cdx-search-field {
@@ -52,8 +50,6 @@
     border-color: #cbd5e1;
   }
 
-  html.dark .editor-holder .ce-toolbar__plus,
-  html.dark .editor-holder .ce-toolbar__settings-btn,
   html.dark .editor-holder .ce-inline-toolbar,
   html.dark .editor-holder .ce-popover,
   html.dark .editor-holder .cdx-search-field {
@@ -62,17 +58,90 @@
     border-color: #334155;
   }
 
+  .editor-holder .ce-toolbar__plus,
+  .editor-holder .ce-toolbar__settings-btn {
+    opacity: 1;
+    pointer-events: auto;
+    color: #64748b;
+    background: transparent;
+    border: 0;
+  }
+
   .editor-holder .ce-block__content,
   .editor-holder .ce-toolbar__content {
-    max-width: 100%;
+    max-width: 760px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .editor-holder .ce-block {
+    padding: 0.18rem 0;
+  }
+
+  .editor-holder .ce-block--selected .ce-block__content {
+    background: transparent;
   }
 
   .editor-holder .ce-paragraph {
+    font-size: 1.05rem;
     color: #0f172a;
-    line-height: 1.7;
+    line-height: 1.8;
+    padding: 0;
+  }
+
+  .editor-holder .ce-header {
+    line-height: 1.35;
+    color: #0f172a;
+    margin: 0.15rem 0;
+  }
+
+  .editor-holder .ce-header[data-level='1'] {
+    font-size: 2rem;
+  }
+
+  .editor-holder .ce-header[data-level='2'] {
+    font-size: 1.6rem;
+  }
+
+  .editor-holder .ce-header[data-level='3'] {
+    font-size: 1.35rem;
+  }
+
+  .editor-holder .cdx-quote {
+    border-left: 3px solid #94a3b8;
+    padding-left: 1rem;
+  }
+
+  .editor-holder .ce-code__textarea {
+    min-height: 180px;
+    border-radius: 0.85rem;
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    font-family: var(--font-mono);
+    font-size: 0.86rem;
+    line-height: 1.6;
+    padding: 0.95rem;
+  }
+
+  .editor-holder .ce-delimiter {
+    line-height: 1.4;
   }
 
   html.dark .editor-holder .ce-paragraph {
+    color: #e2e8f0;
+  }
+
+  html.dark .editor-holder .ce-header {
+    color: #f1f5f9;
+  }
+
+  html.dark .editor-holder .cdx-quote {
+    border-left-color: #475569;
+  }
+
+  html.dark .editor-holder .ce-code__textarea {
+    border-color: #334155;
+    background: #0f172a;
     color: #e2e8f0;
   }
 }

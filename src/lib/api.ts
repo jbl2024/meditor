@@ -31,6 +31,10 @@ export async function writeTextFile(folderPath: string, path: string, content: s
   await invoke('write_text_file', { folderPath, path, content })
 }
 
+export async function reindexMarkdownFile(folderPath: string, path: string): Promise<void> {
+  await invoke('reindex_markdown_file', { folderPath, path })
+}
+
 export async function createEntry(
   folderPath: string,
   parentPath: string,

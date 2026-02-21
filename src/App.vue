@@ -6,7 +6,7 @@ import UiButton from './components/ui/UiButton.vue'
 import UiInput from './components/ui/UiInput.vue'
 import UiPanel from './components/ui/UiPanel.vue'
 import UiThemeSwitcher from './components/ui/UiThemeSwitcher.vue'
-import { ftsSearch, initDb, readTextFile, selectWorkingFolder, writeTextFile } from './lib/api'
+import { ftsSearch, initDb, readTextFile, reindexMarkdownFile, selectWorkingFolder, writeTextFile } from './lib/api'
 
 const workingFolderPath = ref<string>('')
 const currentPath = ref<string>('')
@@ -112,6 +112,7 @@ async function saveFile(path: string, txt: string) {
     throw new Error('Working folder is not set.')
   }
   await writeTextFile(workingFolderPath.value, path, txt)
+  await reindexMarkdownFile(workingFolderPath.value, path)
 }
 
 async function onSearch() {

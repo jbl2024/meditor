@@ -1,6 +1,10 @@
 mod fs_ops;
 
-use std::path::PathBuf;
+use std::{
+  fs,
+  path::{Path, PathBuf},
+  time::{SystemTime, UNIX_EPOCH},
+};
 
 use rusqlite::{params, Connection};
 use serde::Serialize;
@@ -56,6 +60,101 @@ fn open_db(folder_path: &str) -> Result<Connection> {
   Ok(Connection::open(p)?)
 }
 
+fn normalize_existing_file(path: &str) -> Result<PathBuf> {
+  let pb = PathBuf::from(path);
+  if pb.as_os_str().is_empty() || !pb.is_file() {
+    return Err(AppError::InvalidPath);
+  }
+  Ok(pb)
+}
+
+fn ensure_within_root(root: &Path, path: &Path) -> Result<()> {
+  let root_canonical = fs::canonicalize(root)?;
+  let path_canonical = fs::canonicalize(path)?;
+
+  if !path_canonical.starts_with(&root_canonical) {
+    return Err(AppError::InvalidPath);
+  }
+
+  Ok(())
+}
+
+fn heading_anchor(text: &str) -> String {
+  let mut out = String::with_capacity(text.len());
+  let mut previous_dash = false;
+
+  for ch in text.chars().flat_map(char::to_lowercase) {
+    if ch.is_ascii_alphanumeric() {
+      out.push(ch);
+      previous_dash = false;
+      continue;
+    }
+
+    if !previous_dash {
+      out.push('-');
+      previous_dash = true;
+    }
+  }
+
+  out.trim_matches('-').to_string()
+}
+
+fn chunk_markdown(markdown: &str) -> Vec<(String, String)> {
+  let mut chunks: Vec<(String, String)> = Vec::new();
+  let mut current_anchor = String::new();
+  let mut current_lines: Vec<String> = Vec::new();
+
+  for raw_line in markdown.replace("\r\n", "\n").replace('\r', "\n").lines() {
+    let line = raw_line.trim_end().to_string();
+
+    let heading_data = {
+      let level = line.chars().take_while(|ch| *ch == '#').count();
+      if !(1..=6).contains(&level) {
+        None
+      } else {
+        let title = line[level..].trim();
+        if title.is_empty() {
+          None
+        } else {
+          Some((heading_anchor(title), title.to_string()))
+        }
+      }
+    };
+
+    if let Some((anchor, title)) = heading_data {
+      if !current_lines.is_empty() {
+        let text = current_lines.join("\n").trim().to_string();
+        if !text.is_empty() {
+          chunks.push((current_anchor.clone(), text));
+        }
+      }
+
+      current_anchor = anchor;
+      current_lines.clear();
+      current_lines.push(title);
+      continue;
+    }
+
+    current_lines.push(line);
+  }
+
+  if !current_lines.is_empty() {
+    let text = current_lines.join("\n").trim().to_string();
+    if !text.is_empty() {
+      chunks.push((current_anchor, text));
+    }
+  }
+
+  if chunks.is_empty() {
+    let fallback = markdown.trim();
+    if !fallback.is_empty() {
+      chunks.push((String::new(), fallback.to_string()));
+    }
+  }
+
+  chunks
+}
+
 #[tauri::command]
 fn init_db(folder_path: String) -> Result<()> {
   let conn = open_db(&folder_path)?;
@@ -102,6 +201,44 @@ fn init_db(folder_path: String) -> Result<()> {
   "#,
   )?;
 
+  Ok(())
+}
+
+#[tauri::command]
+fn reindex_markdown_file(folder_path: String, path: String) -> Result<()> {
+  let root = normalize_existing_dir(&folder_path)?;
+  let file_path = normalize_existing_file(&path)?;
+  ensure_within_root(&root, &file_path)?;
+
+  let normalized_path = fs::canonicalize(&file_path)?;
+  let markdown = fs::read_to_string(&normalized_path)?;
+  let chunks = chunk_markdown(&markdown);
+  let mtime = fs::metadata(&normalized_path)
+    .and_then(|meta| meta.modified())
+    .ok()
+    .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
+    .map(|duration| duration.as_secs() as i64)
+    .unwrap_or_else(|| {
+      SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs() as i64)
+        .unwrap_or(0)
+    });
+
+  let conn = open_db(&folder_path)?;
+  let tx = conn.unchecked_transaction()?;
+  let path_for_db = normalized_path.to_string_lossy().to_string();
+
+  tx.execute("DELETE FROM chunks WHERE path = ?1", params![path_for_db.clone()])?;
+
+  for (anchor, text) in chunks {
+    tx.execute(
+      "INSERT INTO chunks(path, anchor, text, mtime) VALUES (?1, ?2, ?3, ?4)",
+      params![path_for_db, anchor, text, mtime],
+    )?;
+  }
+
+  tx.commit()?;
   Ok(())
 }
 
@@ -164,6 +301,7 @@ pub fn run() {
       open_path_external,
       reveal_in_file_manager,
       init_db,
+      reindex_markdown_file,
       fts_search
     ])
     .run(tauri::generate_context!())

@@ -12,7 +12,15 @@
     "tauri:build": "tauri build"
   },
   "dependencies": {
+    "@editorjs/code": "^2.9.4",
+    "@editorjs/delimiter": "^1.4.2",
     "@editorjs/editorjs": "^2.31.3",
+    "@editorjs/header": "^2.8.8",
+    "@editorjs/inline-code": "^1.5.2",
+    "@editorjs/link": "^2.6.2",
+    "@editorjs/list": "^2.0.9",
+    "@editorjs/paragraph": "^2.11.7",
+    "@editorjs/quote": "^2.7.6",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
     "vue": "^3.5.13"
