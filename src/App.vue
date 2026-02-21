@@ -50,6 +50,7 @@ const WORKING_FOLDER_STORAGE_KEY = 'meditor.working-folder.path'
 const workspace = useWorkspaceState()
 const editorState = useEditorState()
 const filesystem = useFilesystemState()
+const isMacOs = typeof navigator !== 'undefined' && /(Mac|iPhone|iPad|iPod)/i.test(navigator.platform || navigator.userAgent)
 
 const themePreference = ref<ThemePreference>('system')
 const searchQuery = ref('')
@@ -978,7 +979,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="ide-root" :class="{ dark: resolvedTheme === 'dark' }">
+  <div class="ide-root" :class="{ dark: resolvedTheme === 'dark', 'macos-overlay': isMacOs }">
     <div class="body-row">
       <aside class="activity-bar">
         <button
@@ -1076,12 +1077,6 @@ onBeforeUnmount(() => {
         </div>
       </aside>
 
-      <div
-        v-if="workspace.sidebarVisible.value"
-        class="splitter"
-        @mousedown="beginResize('left', $event)"
-      ></div>
-
       <section class="workspace-column">
         <header class="topbar">
           <div class="tabs-row">
@@ -1121,6 +1116,12 @@ onBeforeUnmount(() => {
         </header>
 
         <div class="workspace-row">
+          <div
+            v-if="workspace.sidebarVisible.value"
+            class="splitter"
+            @mousedown="beginResize('left', $event)"
+          ></div>
+
           <main class="center-area">
             <EditorView
               ref="editorRef"
@@ -1383,6 +1384,10 @@ onBeforeUnmount(() => {
   gap: 6px;
 }
 
+.ide-root.macos-overlay .activity-bar {
+  padding-top: 38px;
+}
+
 .ide-root.dark .activity-bar {
   border-right-color: #1e293b;
   background: #0f172a;
@@ -1418,6 +1423,11 @@ onBeforeUnmount(() => {
   border-right: 1px solid #e2e8f0;
   display: flex;
   flex-direction: column;
+}
+
+.ide-root.macos-overlay .left-sidebar {
+  box-sizing: border-box;
+  padding-top: 28px;
 }
 
 .right-pane {

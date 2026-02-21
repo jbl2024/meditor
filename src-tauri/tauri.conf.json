@@ -14,6 +14,13 @@
       {
         "title": "sampletauri",
         "maximized": true,
+        "decorations": true,
+        "titleBarStyle": "overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": {
+          "x": 14,
+          "y": 14
+        },
         "width": 800,
         "height": 600
       }
