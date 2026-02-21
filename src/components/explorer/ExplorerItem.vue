@@ -131,13 +131,12 @@ function iconForNode(node: TreeNode): string {
         @confirm="emit('renameConfirm')"
         @cancel="emit('renameCancel')"
       />
-      <span v-else class="truncate" :title="node.path">{{ node.name }}</span>
+      <span v-else class="block truncate" :title="node.path">{{ node.name }}</span>
     </div>
 
     <button
       type="button"
-      class="rounded-md px-1.5 text-sm leading-none text-slate-500 opacity-35 transition hover:bg-slate-200/70 hover:opacity-100 group-hover:opacity-100 dark:text-slate-300 dark:hover:bg-slate-700/70"
-      :class="selected ? 'opacity-100' : ''"
+      class="rounded-md px-1.5 text-sm leading-none text-slate-500 opacity-0 transition hover:bg-slate-200/70 hover:opacity-100 focus-visible:opacity-100 group-hover:opacity-100 dark:text-slate-300 dark:hover:bg-slate-700/70"
       title="Actions"
       @click.stop="emit('rowaction', { event: $event, node })"
     >
