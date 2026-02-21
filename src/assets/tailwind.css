@@ -24,6 +24,17 @@
     background: #020617;
     color: #e2e8f0;
   }
+
+  button,
+  a,
+  [role="button"] {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
 }
 
 @layer components {
