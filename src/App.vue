@@ -309,6 +309,20 @@ function setThemeFromOverflow(next: ThemePreference) {
   closeOverflowMenu()
 }
 
+function closeWorkspace() {
+  if (!filesystem.hasWorkspace.value) return
+  workspace.closeAllTabs()
+  editorState.setActiveOutline([])
+  searchHits.value = []
+  allWorkspaceFiles.value = []
+  backlinks.value = []
+  backlinksLoading.value = false
+  filesystem.selectedCount.value = 0
+  filesystem.clearWorkspacePath()
+  window.localStorage.removeItem(WORKING_FOLDER_STORAGE_KEY)
+  closeOverflowMenu()
+}
+
 function beginResize(side: 'left' | 'right', event: MouseEvent) {
   event.preventDefault()
   resizeState.value = {
@@ -1298,6 +1312,18 @@ onBeforeUnmount(() => {
             <button
               type="button"
               class="toolbar-icon-btn"
+              title="Open workspace"
+              aria-label="Open workspace"
+              @click="onSelectWorkingFolder"
+            >
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M2 6V4.5A1.5 1.5 0 0 1 3.5 3H6l1.5 2H12.5A1.5 1.5 0 0 1 14 6v.5" />
+                <path d="M1.75 6.5h11.6a1.25 1.25 0 0 1 1.2 1.58l-.95 3.25A1.5 1.5 0 0 1 12.16 12.4H4.05a1.5 1.5 0 0 1-1.44-1.1L1.45 7.95A1.25 1.25 0 0 1 2.65 6.5" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              class="toolbar-icon-btn"
               :class="{ active: workspace.rightPaneVisible.value }"
               :title="workspace.rightPaneVisible.value ? 'Hide right pane' : 'Show right pane'"
               :aria-label="workspace.rightPaneVisible.value ? 'Hide right pane' : 'Show right pane'"
@@ -1322,8 +1348,13 @@ onBeforeUnmount(() => {
                 ...
               </UiButton>
               <div v-if="overflowMenuOpen" class="overflow-menu">
-                <button type="button" class="overflow-item" @click="onSelectWorkingFolder(); closeOverflowMenu()">
-                  Workspace
+                <button
+                  type="button"
+                  class="overflow-item"
+                  :disabled="!filesystem.hasWorkspace.value"
+                  @click="closeWorkspace"
+                >
+                  Close workspace
                 </button>
                 <div class="overflow-divider"></div>
                 <div class="overflow-label">Theme</div>
@@ -1688,6 +1719,11 @@ onBeforeUnmount(() => {
   background: #f1f5f9;
 }
 
+.overflow-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .overflow-item.active {
   background: #e2e8f0;
   color: #0f172a;
@@ -1700,6 +1736,10 @@ onBeforeUnmount(() => {
 
 .ide-root.dark .overflow-item:hover {
   background: #1e293b;
+}
+
+.ide-root.dark .overflow-item:disabled {
+  opacity: 0.45;
 }
 
 .ide-root.dark .overflow-item.active {
