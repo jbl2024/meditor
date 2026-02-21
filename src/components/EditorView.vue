@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import EditorJS from '@editorjs/editorjs'
+import UiButton from './ui/UiButton.vue'
 
 // Props: on passe les fonctions IO depuis App.vue pour garder le composant neutre
 const props = defineProps<{
@@ -96,19 +97,15 @@ onBeforeUnmount(async () => {
 </script>
 
 <template>
-  <div class="wrap">
-    <div class="toolbar">
-      <button :disabled="!path" @click="loadCurrentFile">Recharger</button>
-      <button :disabled="!path" @click="saveCurrentFile">Sauvegarder</button>
-      <span class="muted" v-if="!path">Selectionne un fichier</span>
+  <div class="flex h-full min-h-0 flex-col gap-3">
+    <div class="flex items-center gap-2">
+      <UiButton :disabled="!path" size="sm" @click="loadCurrentFile">Recharger</UiButton>
+      <UiButton :disabled="!path" size="sm" variant="primary" @click="saveCurrentFile">Sauvegarder</UiButton>
+      <span v-if="!path" class="text-xs text-slate-500">Selectionne un fichier</span>
     </div>
-    <div ref="holder" class="holder"></div>
+    <div
+      ref="holder"
+      class="editor-holder min-h-0 flex-1 overflow-y-auto rounded-2xl border border-slate-700/70 bg-slate-950/65 p-3"
+    ></div>
   </div>
 </template>
-
-<style scoped>
-.wrap { display: flex; flex-direction: column; gap: 8px; height: 100%; }
-.toolbar { display: flex; align-items: center; gap: 8px; }
-.muted { color: #666; font-size: 12px; }
-.holder { flex: 1; border: 1px solid #eee; border-radius: 10px; padding: 12px; overflow: auto; }
-</style>

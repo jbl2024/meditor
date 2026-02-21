@@ -1,6 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import EditorView from './components/EditorView.vue'
+import UiButton from './components/ui/UiButton.vue'
+import UiInput from './components/ui/UiInput.vue'
+import UiPanel from './components/ui/UiPanel.vue'
 import { listDir, readTextFile, writeTextFile, initDb, ftsSearch } from './lib/api'
 
 const vaultPath = ref<string>('')
@@ -9,6 +12,11 @@ const currentPath = ref<string>('')
 const status = ref<string>('Pret')
 const query = ref<string>('')
 const hits = ref<Array<{ path: string; snippet: string; score: number }>>([])
+const selectedFileName = computed(() => {
+  if (!currentPath.value) return 'Aucun'
+  const parts = currentPath.value.split('/')
+  return parts[parts.length - 1] || currentPath.value
+})
 
 async function onPickVault() {
   // Pour rester simple: tu saisis un chemin. Tu peux brancher ensuite un dialog plugin si tu veux.
@@ -50,95 +58,94 @@ async function onSearch() {
 </script>
 
 <template>
-  <div class="wrap">
-    <header class="top">
-      <div class="left">
-        <h1>md-localfirst</h1>
-        <p class="muted">Tauri 2, Vue 3, Editor.js, SQLite FTS5 (BM25)</p>
-      </div>
-      <div class="right">
-        <button @click="onPickVault">Choisir vault</button>
-        <button @click="onInitDb">Init DB</button>
-      </div>
-    </header>
-
-    <section class="grid">
-      <aside class="panel">
-        <div class="row">
-          <div class="label">Vault</div>
-          <div class="value">{{ vaultPath || 'Non defini' }}</div>
-        </div>
-        <div class="row">
-          <div class="label">Status</div>
-          <div class="value">{{ status }}</div>
-        </div>
-
-        <div class="search">
-          <input v-model="query" placeholder="Recherche FTS5 (BM25), ex: 'kubernetes OR proxmox'" />
-          <button @click="onSearch">Chercher</button>
-        </div>
-
-        <div class="hits" v-if="hits.length">
-          <div class="hit" v-for="h in hits" :key="h.path + h.score">
-            <div class="hit-path">{{ h.path }}</div>
-            <div class="hit-snippet" v-html="h.snippet"></div>
-            <div class="hit-score">score: {{ h.score.toFixed(3) }}</div>
+  <div class="min-h-screen text-slate-100">
+    <div class="mx-auto flex h-screen max-w-[1800px] flex-col p-4 lg:p-5">
+      <header class="rounded-2xl border border-slate-700/70 bg-slate-900/65 p-4 shadow-[0_14px_35px_rgba(2,6,23,0.45)] backdrop-blur-sm">
+        <div class="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+          <div>
+            <p class="text-xs uppercase tracking-[0.22em] text-cyan-300/85">Local-first markdown</p>
+            <h1 class="mt-1 text-2xl font-semibold tracking-tight text-white">meditor workspace</h1>
+            <p class="mt-1 text-sm text-slate-400">Tauri 2, Vue 3, Editor.js, SQLite FTS5 BM25</p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <UiButton variant="primary" @click="onPickVault">Choisir vault</UiButton>
+            <UiButton variant="secondary" @click="onInitDb">Init DB</UiButton>
           </div>
         </div>
+      </header>
 
-        <h2>Fichiers</h2>
-        <div class="list">
-          <button
-            class="item"
-            v-for="f in files"
-            :key="f"
-            @click="() => (currentPath = f)"
-            :title="f"
-          >
-            {{ f }}
-          </button>
-        </div>
-      </aside>
+      <section class="mt-4 grid min-h-0 flex-1 gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+        <UiPanel className="min-h-0 overflow-y-auto">
+          <div class="space-y-4">
+            <div class="rounded-xl border border-slate-700/80 bg-slate-950/55 p-3">
+              <p class="text-[11px] uppercase tracking-[0.2em] text-slate-400">Vault</p>
+              <p class="mt-1 truncate text-sm text-slate-100" :title="vaultPath || 'Non defini'">
+                {{ vaultPath || 'Non defini' }}
+              </p>
+            </div>
+            <div class="rounded-xl border border-slate-700/80 bg-slate-950/55 p-3">
+              <p class="text-[11px] uppercase tracking-[0.2em] text-slate-400">Status</p>
+              <p class="mt-1 text-sm text-emerald-300">{{ status }}</p>
+            </div>
+            <div class="space-y-2">
+              <p class="text-[11px] uppercase tracking-[0.2em] text-slate-400">Recherche</p>
+              <div class="flex gap-2">
+                <UiInput
+                  v-model="query"
+                  placeholder="FTS5 BM25, ex: kubernetes OR proxmox"
+                />
+                <UiButton size="sm" @click="onSearch">Go</UiButton>
+              </div>
+            </div>
+            <div v-if="hits.length" class="space-y-2">
+              <p class="text-[11px] uppercase tracking-[0.2em] text-slate-400">Resultats</p>
+              <article
+                v-for="h in hits"
+                :key="h.path + h.score"
+                class="rounded-xl border border-slate-700/70 bg-slate-950/55 p-3"
+              >
+                <p class="truncate text-xs font-semibold text-cyan-200" :title="h.path">{{ h.path }}</p>
+                <p class="search-snippet mt-2 text-xs leading-relaxed text-slate-300" v-html="h.snippet"></p>
+                <p class="mt-2 text-[11px] text-slate-500">score: {{ h.score.toFixed(3) }}</p>
+              </article>
+            </div>
+            <div class="space-y-2">
+              <p class="text-[11px] uppercase tracking-[0.2em] text-slate-400">Fichiers</p>
+              <div class="space-y-1">
+                <UiButton
+                  v-for="f in files"
+                  :key="f"
+                  variant="ghost"
+                  className="w-full justify-start truncate px-2"
+                  :title="f"
+                  @click="() => (currentPath = f)"
+                >
+                  {{ f }}
+                </UiButton>
+              </div>
+            </div>
+          </div>
+        </UiPanel>
 
-      <main class="panel editor">
-        <div class="row">
-          <div class="label">Fichier</div>
-          <div class="value mono">{{ currentPath || 'Aucun' }}</div>
-        </div>
-
-        <EditorView
-          :path="currentPath"
-          :openFile="openFile"
-          :saveFile="saveFile"
-        />
-      </main>
-    </section>
+        <UiPanel className="min-h-0">
+          <div class="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-slate-700/75 bg-slate-950/55 p-3">
+            <p class="text-[11px] uppercase tracking-[0.2em] text-slate-400">Fichier</p>
+            <p class="font-mono text-xs text-slate-300">{{ selectedFileName }}</p>
+            <p
+              v-if="currentPath"
+              class="ml-auto max-w-full truncate rounded-lg border border-slate-700/80 bg-slate-900/80 px-2 py-1 font-mono text-[11px] text-slate-400"
+              :title="currentPath"
+            >
+              {{ currentPath }}
+            </p>
+          </div>
+          <EditorView
+            :path="currentPath"
+            :openFile="openFile"
+            :saveFile="saveFile"
+          />
+        </UiPanel>
+      </section>
+    </div>
   </div>
 </template>
-
-<style scoped>
-.wrap { padding: 16px; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, sans-serif; }
-.top { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
-h1 { margin: 0; font-size: 18px; }
-.muted { margin: 4px 0 0; color: #666; font-size: 12px; }
-.right button { margin-left: 8px; }
-.grid { display: grid; grid-template-columns: 320px 1fr; gap: 12px; height: calc(100vh - 90px); }
-.panel { border: 1px solid #ddd; border-radius: 10px; padding: 12px; overflow: auto; }
-.row { display: flex; gap: 8px; margin-bottom: 8px; }
-.label { width: 70px; color: #555; font-size: 12px; padding-top: 3px; }
-.value { flex: 1; font-size: 12px; }
-.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
-.search { display: flex; gap: 8px; margin: 10px 0; }
-.search input { flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 8px; }
-button { padding: 8px 10px; border-radius: 8px; border: 1px solid #ccc; background: #fff; cursor: pointer; }
-button:hover { background: #f6f6f6; }
-h2 { margin: 12px 0 8px; font-size: 13px; }
-.list { display: flex; flex-direction: column; gap: 6px; }
-.item { text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.editor { display: flex; flex-direction: column; }
-.hits { margin-top: 8px; padding-top: 8px; border-top: 1px solid #eee; }
-.hit { padding: 8px; border: 1px solid #eee; border-radius: 10px; margin-bottom: 8px; }
-.hit-path { font-size: 12px; font-weight: 600; }
-.hit-snippet { font-size: 12px; color: #333; margin-top: 6px; }
-.hit-score { font-size: 11px; color: #666; margin-top: 6px; }
-</style>

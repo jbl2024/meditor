@@ -1,0 +1,74 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Instrument Sans", "Avenir Next", "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", "Menlo", monospace;
+}
+
+@layer base {
+  html,
+  body,
+  #app {
+    min-height: 100%;
+  }
+
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    background:
+      radial-gradient(1200px 500px at 0% -10%, rgba(16, 185, 129, 0.16), transparent 60%),
+      radial-gradient(1000px 500px at 100% -10%, rgba(59, 130, 246, 0.14), transparent 60%),
+      #f8fafc;
+    color: #0f172a;
+  }
+
+  html.dark body {
+    background:
+      radial-gradient(1200px 500px at 0% -10%, rgba(16, 185, 129, 0.22), transparent 60%),
+      radial-gradient(1000px 500px at 100% -10%, rgba(59, 130, 246, 0.24), transparent 60%),
+      #020617;
+    color: #e2e8f0;
+  }
+}
+
+@layer components {
+  .search-snippet b {
+    color: #22d3ee;
+    font-weight: 700;
+  }
+
+  .editor-holder .ce-toolbar__plus,
+  .editor-holder .ce-toolbar__settings-btn,
+  .editor-holder .ce-inline-toolbar,
+  .editor-holder .ce-popover,
+  .editor-holder .cdx-search-field {
+    color: #0f172a;
+    background: #f8fafc;
+    border-color: #cbd5e1;
+  }
+
+  html.dark .editor-holder .ce-toolbar__plus,
+  html.dark .editor-holder .ce-toolbar__settings-btn,
+  html.dark .editor-holder .ce-inline-toolbar,
+  html.dark .editor-holder .ce-popover,
+  html.dark .editor-holder .cdx-search-field {
+    color: #e2e8f0;
+    background: #0f172a;
+    border-color: #334155;
+  }
+
+  .editor-holder .ce-block__content,
+  .editor-holder .ce-toolbar__content {
+    max-width: 100%;
+  }
+
+  .editor-holder .ce-paragraph {
+    color: #0f172a;
+    line-height: 1.7;
+  }
+
+  html.dark .editor-holder .ce-paragraph {
+    color: #e2e8f0;
+  }
+}
