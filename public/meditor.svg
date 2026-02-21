@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Muted Silk Background -->
+    <rect id="bg" width="512" height="512" rx="115" ry="115" fill="#FAF9F6" />
+  </defs>
+
+  <!-- macOS Style Squircle Base -->
+  <use href="#bg" />
+  <!-- Subtle Icon Border (creates a slight physical edge) -->
+  <rect width="512" height="512" rx="115" ry="115" fill="none" stroke="#E5E3DB" stroke-width="2" />
+
+  <!-- Logo Mark Group -->
+  <g id="monogram">
+    <!-- Hallmark / Framing Ring -->
+    <circle cx="256" cy="200" r="150" fill="none" stroke="#C5A059" stroke-width="2" opacity="0.3" />
+    
+    <!-- 1. BACK LAYER: Unified D Shape (Antique Gold) -->
+    <!-- Perfectly mitered corners at top-left and bottom-left -->
+    <path d="M 256 340 V 60 A 140 140 0 0 1 256 340 Z" fill="none" stroke="#C5A059" stroke-width="24" stroke-linejoin="miter" stroke-miterlimit="10" />
+    
+    <!-- 2. MASK LAYER: Erases the D arc on the right to let the M pass over -->
+    <!-- We draw over the background with the exact background color, slightly thicker -->
+    <path d="M 136 340 V 60 L 256 240 L 376 60 V 340" fill="none" stroke="#FAF9F6" stroke-width="48" stroke-linejoin="miter" stroke-miterlimit="10" stroke-linecap="butt" />
+    
+    <!-- 3. MIDDLE LAYER: The Letter M (Obsidian Black) -->
+    <!-- Broken into 3 precise strokes for flawless, flat geometric tops and bottoms -->
+    <line x1="136" y1="60" x2="136" y2="340" stroke="#141414" stroke-width="24" stroke-linecap="square" />
+    <line x1="376" y1="60" x2="376" y2="340" stroke="#141414" stroke-width="24" stroke-linecap="square" />
+    <path d="M 136 60 L 256 240 L 376 60" fill="none" stroke="#141414" stroke-width="24" stroke-linejoin="miter" stroke-miterlimit="10" stroke-linecap="butt" />
+    
+    <!-- 4. STEM MASK LAYER: Erases the center of the M so the D stem can pass over -->
+    <line x1="256" y1="180" x2="256" y2="280" stroke="#FAF9F6" stroke-width="48" stroke-linecap="butt" />
+    
+    <!-- 5. FRONT LAYER: The D Stem Bridge (Antique Gold) -->
+    <!-- Perfectly aligns with the Back Layer to recreate the D stem over the M -->
+    <line x1="256" y1="180" x2="256" y2="280" stroke="#C5A059" stroke-width="24" stroke-linecap="butt" />
+  </g>
+
+  <!-- Typography Group -->
+  <g id="typography">
+    <!-- Brand Name (Serif - Scaled up for readability) -->
+    <text x="256" y="424" font-family="'Didot', 'Bodoni MT', 'Times New Roman', serif" font-size="32" font-weight="bold" fill="#141414" letter-spacing="0.3em" text-anchor="middle">MARKDOWN</text>
+    
+    <!-- Secondary / Location Text (Sans-Serif) -->
+    <text x="256" y="464" font-family="'Helvetica Neue', 'Arial', sans-serif" font-size="14" fill="#C5A059" letter-spacing="0.6em" text-anchor="middle">EDITOR</text>
+  </g>
+</svg>
