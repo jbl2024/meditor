@@ -36,7 +36,9 @@ const SLASH_COMMANDS: SlashCommand[] = [
 const props = defineProps<{
   path: string
   openFile: (path: string) => Promise<string>
-  saveFile: (path: string, text: string) => Promise<void>
+  saveFile: (path: string, text: string, options: { explicit: boolean }) => Promise<{ persisted: boolean }>
+  linkTargets: string[]
+  openLinkTarget: (target: string) => Promise<boolean>
 }>()
 
 const emit = defineEmits<{
@@ -60,6 +62,31 @@ const slashOpen = ref(false)
 const slashIndex = ref(0)
 const slashLeft = ref(0)
 const slashTop = ref(0)
+const wikilinkOpen = ref(false)
+const wikilinkIndex = ref(0)
+const wikilinkLeft = ref(0)
+const wikilinkTop = ref(0)
+const wikilinkQuery = ref('')
+
+const wikilinkResults = computed(() => {
+  const query = wikilinkQuery.value.trim().toLowerCase()
+  const base = props.linkTargets
+    .filter((path) => !query || path.toLowerCase().includes(query))
+    .slice(0, 12)
+    .map((path) => ({ id: `existing:${path}`, label: path, target: path, isCreate: false }))
+
+  const exact = base.some((item) => item.target.toLowerCase() === query)
+  if (query && !exact) {
+    base.unshift({
+      id: `create:${query}`,
+      label: `Create "${wikilinkQuery.value.trim()}"`,
+      target: wikilinkQuery.value.trim(),
+      isCreate: true
+    })
+  }
+
+  return base
+})
 
 const currentPath = computed(() => props.path?.trim() || '')
 const isDirty = computed(() => Boolean(dirtyByPath.value[currentPath.value]))
@@ -131,6 +158,12 @@ function closeSlashMenu() {
   slashIndex.value = 0
 }
 
+function closeWikilinkMenu() {
+  wikilinkOpen.value = false
+  wikilinkIndex.value = 0
+  wikilinkQuery.value = ''
+}
+
 function getCurrentBlock() {
   if (!editor) return null
   const index = editor.blocks.getCurrentBlockIndex()
@@ -176,6 +209,127 @@ function focusEditor() {
   if (!holder.value) return
   const editable = holder.value.querySelector('[contenteditable="true"]') as HTMLElement | null
   editable?.focus()
+}
+
+function openWikilinkMenuAtCaret(query: string) {
+  if (!holder.value) return
+  const selection = window.getSelection()
+  const range = selection?.rangeCount ? selection.getRangeAt(0) : null
+  const caretRect = range?.getBoundingClientRect()
+  const holderRect = holder.value.getBoundingClientRect()
+
+  wikilinkLeft.value = Math.max(8, (caretRect?.left ?? holderRect.left) - holderRect.left)
+  wikilinkTop.value = Math.max(8, (caretRect?.bottom ?? holderRect.top) - holderRect.top + 8)
+  wikilinkQuery.value = query
+  wikilinkIndex.value = 0
+  wikilinkOpen.value = true
+}
+
+function readWikilinkQueryAtCaret(): string | null {
+  const selection = window.getSelection()
+  if (!selection || !selection.rangeCount || !selection.isCollapsed) return null
+  const node = selection.focusNode
+  if (!node || node.nodeType !== Node.TEXT_NODE) return null
+  const text = node.textContent ?? ''
+  const offset = selection.focusOffset
+  if (offset < 2) return null
+
+  const uptoCaret = text.slice(0, offset)
+  const start = uptoCaret.lastIndexOf('[[')
+  if (start < 0) return null
+  if (uptoCaret.slice(start + 2).includes(']]')) return null
+  const query = uptoCaret.slice(start + 2)
+  if (query.includes('\n')) return null
+  return query
+}
+
+function replaceActiveWikilinkQuery(target: string) {
+  const selection = window.getSelection()
+  if (!selection || !selection.rangeCount || !selection.isCollapsed) return false
+  const node = selection.focusNode
+  if (!node || node.nodeType !== Node.TEXT_NODE) return false
+  const textNode = node as Text
+  const text = textNode.data
+  const offset = selection.focusOffset
+
+  const start = text.slice(0, offset).lastIndexOf('[[')
+  if (start < 0) return false
+
+  const range = document.createRange()
+  range.setStart(textNode, start)
+  range.setEnd(textNode, offset)
+  range.deleteContents()
+
+  const inserted = document.createTextNode(`[[${target}]]`)
+  range.insertNode(inserted)
+
+  const nextRange = document.createRange()
+  nextRange.setStart(inserted, inserted.length)
+  nextRange.collapse(true)
+  selection.removeAllRanges()
+  selection.addRange(nextRange)
+  return true
+}
+
+async function applyWikilinkSelection(target: string) {
+  const replaced = replaceActiveWikilinkQuery(target)
+  closeWikilinkMenu()
+  if (!replaced) return
+
+  const path = currentPath.value
+  if (path) {
+    setDirty(path, true)
+    setSaveError(path, '')
+    scheduleAutosave()
+  }
+  await nextTick()
+}
+
+function extractTokenAtCaret(): string {
+  const selection = window.getSelection()
+  if (!selection || !selection.rangeCount || !selection.isCollapsed) return ''
+  const node = selection.focusNode
+  if (!node || node.nodeType !== Node.TEXT_NODE) return ''
+
+  const text = node.textContent ?? ''
+  const offset = selection.focusOffset
+  const isBoundary = (value: string) => /[^\w\-\[\]\/|#]/.test(value)
+
+  let start = offset
+  while (start > 0 && !isBoundary(text[start - 1])) {
+    start -= 1
+  }
+
+  let end = offset
+  while (end < text.length && !isBoundary(text[end])) {
+    end += 1
+  }
+
+  return text.slice(start, end).trim()
+}
+
+async function openLinkedTokenAtCaret() {
+  const token = extractTokenAtCaret()
+  if (!token) return
+
+  const wikilinkMatch = token.match(/^\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]$/)
+  if (wikilinkMatch) {
+    await props.openLinkTarget(wikilinkMatch[1].trim())
+    return
+  }
+
+  const dateMatch = token.match(/^\d{4}-\d{2}-\d{2}$/)
+  if (!dateMatch) return
+  await props.openLinkTarget(dateMatch[0])
+}
+
+function syncWikilinkMenuFromCaret() {
+  const query = readWikilinkQueryAtCaret()
+  if (query === null) {
+    closeWikilinkMenu()
+    return
+  }
+  openWikilinkMenuAtCaret(query)
 }
 
 function openSlashMenuAtCaret() {
@@ -241,6 +395,35 @@ function applyMarkdownShortcut(marker: string) {
 function onEditorKeydown(event: KeyboardEvent) {
   if (!editor) return
 
+  if (wikilinkOpen.value) {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      if (wikilinkResults.value.length) {
+        wikilinkIndex.value = (wikilinkIndex.value + 1) % wikilinkResults.value.length
+      }
+      return
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      if (wikilinkResults.value.length) {
+        wikilinkIndex.value = (wikilinkIndex.value - 1 + wikilinkResults.value.length) % wikilinkResults.value.length
+      }
+      return
+    }
+    if (event.key === 'Enter' || event.key === 'Tab') {
+      const selected = wikilinkResults.value[wikilinkIndex.value]
+      if (!selected) return
+      event.preventDefault()
+      void applyWikilinkSelection(selected.target)
+      return
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      closeWikilinkMenu()
+      return
+    }
+  }
+
   if (slashOpen.value) {
     if (event.key === 'ArrowDown') {
       event.preventDefault()
@@ -268,6 +451,10 @@ function onEditorKeydown(event: KeyboardEvent) {
 
   const block = getCurrentBlock()
   if (!block) return
+
+  if (event.key === '[' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+    window.setTimeout(syncWikilinkMenuFromCaret, 0)
+  }
 
   if (event.key === '/' && block.name === 'paragraph' && isCurrentBlockEmpty()) {
     event.preventDefault()
@@ -301,6 +488,19 @@ function onEditorKeydown(event: KeyboardEvent) {
     closeSlashMenu()
     void replaceCurrentBlock('paragraph', { text: '' })
   }
+}
+
+function onEditorKeyup() {
+  syncWikilinkMenuFromCaret()
+}
+
+function onEditorClick(event: MouseEvent) {
+  const target = event.target as HTMLElement | null
+  if (!target?.closest('.ce-block')) {
+    return
+  }
+  syncWikilinkMenuFromCaret()
+  void openLinkedTokenAtCaret()
 }
 
 function looksLikeMarkdown(text: string): boolean {
@@ -461,15 +661,20 @@ async function ensureEditor() {
 
   await editor.isReady
   holder.value.addEventListener('keydown', onEditorKeydown)
+  holder.value.addEventListener('keyup', onEditorKeyup)
+  holder.value.addEventListener('click', onEditorClick, true)
   holder.value.addEventListener('paste', onEditorPaste, true)
 }
 
 async function destroyEditor() {
   clearAutosaveTimer()
   closeSlashMenu()
+  closeWikilinkMenu()
 
   if (holder.value) {
     holder.value.removeEventListener('keydown', onEditorKeydown)
+    holder.value.removeEventListener('keyup', onEditorKeyup)
+    holder.value.removeEventListener('click', onEditorClick, true)
     holder.value.removeEventListener('paste', onEditorPaste, true)
   }
 
@@ -486,6 +691,7 @@ async function loadCurrentFile(path: string) {
 
   clearAutosaveTimer()
   closeSlashMenu()
+  closeWikilinkMenu()
   setSaveError(path, '')
 
   try {
@@ -523,7 +729,7 @@ async function saveCurrentFile(manual = true) {
     const md = editorDataToMarkdown(data)
     const lastLoaded = loadedTextByPath.value[path] ?? ''
 
-    if (md === lastLoaded) {
+    if (!manual && md === lastLoaded) {
       setDirty(path, false)
       return
     }
@@ -533,7 +739,11 @@ async function saveCurrentFile(manual = true) {
       throw new Error('File changed on disk. Reload before saving to avoid overwrite.')
     }
 
-    await props.saveFile(path, md)
+    const result = await props.saveFile(path, md, { explicit: manual })
+    if (!result.persisted) {
+      setDirty(path, true)
+      return
+    }
 
     loadedTextByPath.value = {
       ...loadedTextByPath.value,
@@ -610,7 +820,7 @@ defineExpose({
       v-else
       ref="holder"
       class="editor-holder relative min-h-0 flex-1 overflow-y-auto bg-white px-8 py-6 dark:bg-slate-950"
-      @click="closeSlashMenu"
+      @click="closeSlashMenu(); closeWikilinkMenu()"
     >
 
       <div
@@ -629,6 +839,25 @@ defineExpose({
         >
           {{ command.label }}
         </button>
+      </div>
+
+      <div
+        v-if="wikilinkOpen"
+        class="absolute z-20 w-80 rounded-md border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-800 dark:bg-slate-900"
+        :style="{ left: `${wikilinkLeft}px`, top: `${wikilinkTop}px` }"
+      >
+        <button
+          v-for="(item, idx) in wikilinkResults"
+          :key="item.id"
+          type="button"
+          class="block w-full rounded px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+          :class="idx === wikilinkIndex ? 'bg-slate-100 dark:bg-slate-800' : ''"
+          @mousedown.prevent="wikilinkIndex = idx"
+          @click.prevent="applyWikilinkSelection(item.target)"
+        >
+          {{ item.label }}
+        </button>
+        <div v-if="!wikilinkResults.length" class="px-3 py-1.5 text-sm text-slate-500 dark:text-slate-400">No matches</div>
       </div>
     </div>
 

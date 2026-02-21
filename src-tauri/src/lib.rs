@@ -1,6 +1,7 @@
 mod fs_ops;
 
 use std::{
+  collections::HashSet,
   fs,
   path::{Path, PathBuf},
   time::{SystemTime, UNIX_EPOCH},
@@ -155,6 +156,142 @@ fn chunk_markdown(markdown: &str) -> Vec<(String, String)> {
   chunks
 }
 
+fn strip_markdown_extension(path: &Path) -> PathBuf {
+  let ext = path.extension().and_then(|value| value.to_str()).unwrap_or_default();
+  if ext.eq_ignore_ascii_case("md") || ext.eq_ignore_ascii_case("markdown") {
+    path.with_extension("")
+  } else {
+    path.to_path_buf()
+  }
+}
+
+fn normalize_note_key(root: &Path, path: &Path) -> Result<String> {
+  let relative = path.strip_prefix(root).map_err(|_| AppError::InvalidPath)?;
+  let normalized = strip_markdown_extension(relative);
+  let mut key = normalized.to_string_lossy().replace('\\', "/").trim().to_string();
+  while key.starts_with("./") {
+    key = key[2..].to_string();
+  }
+  Ok(key.to_lowercase())
+}
+
+fn normalize_wikilink_target(raw: &str) -> Option<String> {
+  let mut target = raw.trim().replace('\\', "/");
+  if target.is_empty() {
+    return None;
+  }
+
+  while target.starts_with('/') {
+    target.remove(0);
+  }
+
+  while target.starts_with("./") {
+    target = target[2..].to_string();
+  }
+
+  if target
+    .split('/')
+    .any(|segment| segment.is_empty() || segment == "." || segment == "..")
+  {
+    return None;
+  }
+
+  if let Some(stripped) = target.strip_suffix(".md") {
+    target = stripped.to_string();
+  } else if let Some(stripped) = target.strip_suffix(".markdown") {
+    target = stripped.to_string();
+  }
+
+  let key = target.trim_matches('/').to_lowercase();
+  if key.is_empty() {
+    return None;
+  }
+  Some(key)
+}
+
+fn parse_wikilink_targets(markdown: &str) -> Vec<String> {
+  let mut targets = Vec::new();
+  let mut offset = 0usize;
+
+  while let Some(start) = markdown[offset..].find("[[") {
+    let content_start = offset + start + 2;
+    let Some(end_rel) = markdown[content_start..].find("]]") else {
+      break;
+    };
+
+    let content_end = content_start + end_rel;
+    let content = &markdown[content_start..content_end];
+    let target = content
+      .split_once('|')
+      .map(|(left, _)| left)
+      .unwrap_or(content)
+      .split_once('#')
+      .map(|(left, _)| left)
+      .unwrap_or(content)
+      .trim();
+
+    if !target.is_empty() {
+      targets.push(target.to_string());
+    }
+
+    offset = content_end + 2;
+  }
+
+  targets
+}
+
+fn is_iso_date_token(input: &str) -> bool {
+  if input.len() != 10 {
+    return false;
+  }
+  let bytes = input.as_bytes();
+  for (idx, value) in bytes.iter().enumerate() {
+    if idx == 4 || idx == 7 {
+      if *value != b'-' {
+        return false;
+      }
+      continue;
+    }
+    if !value.is_ascii_digit() {
+      return false;
+    }
+  }
+
+  let year = input[0..4].parse::<u16>().ok().unwrap_or(0);
+  let month = input[5..7].parse::<u8>().ok().unwrap_or(0);
+  let day = input[8..10].parse::<u8>().ok().unwrap_or(0);
+  if year == 0 || !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+    return false;
+  }
+  true
+}
+
+fn parse_iso_date_targets(markdown: &str) -> Vec<String> {
+  let mut out = Vec::new();
+  for token in markdown.split(|ch: char| ch.is_whitespace() || ",.;:()[]{}<>!?\"'`".contains(ch)) {
+    if is_iso_date_token(token) {
+      out.push(format!("journal/{token}"));
+    }
+  }
+  out
+}
+
+fn parse_note_targets(markdown: &str) -> Vec<String> {
+  let mut targets = HashSet::new();
+
+  for target in parse_wikilink_targets(markdown) {
+    if let Some(normalized) = normalize_wikilink_target(&target) {
+      targets.insert(normalized);
+    }
+  }
+
+  for target in parse_iso_date_targets(markdown) {
+    targets.insert(target.to_lowercase());
+  }
+
+  targets.into_iter().collect()
+}
+
 #[tauri::command]
 fn init_db(folder_path: String) -> Result<()> {
   let conn = open_db(&folder_path)?;
@@ -198,6 +335,13 @@ fn init_db(folder_path: String) -> Result<()> {
       vector BLOB NOT NULL,
       FOREIGN KEY(chunk_id) REFERENCES chunks(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS note_links (
+      source_path TEXT NOT NULL,
+      target_key TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_note_links_source ON note_links(source_path);
+    CREATE INDEX IF NOT EXISTS idx_note_links_target ON note_links(target_key);
   "#,
   )?;
 
@@ -213,6 +357,7 @@ fn reindex_markdown_file(folder_path: String, path: String) -> Result<()> {
   let normalized_path = fs::canonicalize(&file_path)?;
   let markdown = fs::read_to_string(&normalized_path)?;
   let chunks = chunk_markdown(&markdown);
+  let targets = parse_note_targets(&markdown);
   let mtime = fs::metadata(&normalized_path)
     .and_then(|meta| meta.modified())
     .ok()
@@ -228,13 +373,26 @@ fn reindex_markdown_file(folder_path: String, path: String) -> Result<()> {
   let conn = open_db(&folder_path)?;
   let tx = conn.unchecked_transaction()?;
   let path_for_db = normalized_path.to_string_lossy().to_string();
+  let root_canonical = fs::canonicalize(&root)?;
+  let source_key = normalize_note_key(&root_canonical, &normalized_path)?;
 
   tx.execute("DELETE FROM chunks WHERE path = ?1", params![path_for_db.clone()])?;
+  tx.execute("DELETE FROM note_links WHERE source_path = ?1", params![path_for_db.clone()])?;
 
   for (anchor, text) in chunks {
     tx.execute(
       "INSERT INTO chunks(path, anchor, text, mtime) VALUES (?1, ?2, ?3, ?4)",
       params![path_for_db, anchor, text, mtime],
+    )?;
+  }
+
+  for target in targets {
+    if target == source_key {
+      continue;
+    }
+    tx.execute(
+      "INSERT INTO note_links(source_path, target_key) VALUES (?1, ?2)",
+      params![path_for_db, target],
     )?;
   }
 
@@ -282,6 +440,54 @@ fn fts_search(folder_path: String, query: String) -> Result<Vec<Hit>> {
   Ok(out)
 }
 
+#[derive(Serialize)]
+struct Backlink {
+  path: String,
+}
+
+#[tauri::command]
+fn backlinks_for_path(folder_path: String, path: String) -> Result<Vec<Backlink>> {
+  let root = normalize_existing_dir(&folder_path)?;
+  let root_canonical = fs::canonicalize(&root)?;
+  let mut path_buf = PathBuf::from(path);
+  if path_buf.as_os_str().is_empty() {
+    return Err(AppError::InvalidPath);
+  }
+  if !path_buf.is_absolute() {
+    path_buf = root_canonical.join(path_buf);
+  }
+  if path_buf.exists() {
+    path_buf = fs::canonicalize(path_buf)?;
+  }
+
+  let target_key = normalize_note_key(&root_canonical, &path_buf)?;
+  if target_key.is_empty() {
+    return Ok(vec![]);
+  }
+
+  let conn = open_db(&folder_path)?;
+  let mut stmt = conn.prepare(
+    r#"
+    SELECT DISTINCT source_path
+    FROM note_links
+    WHERE target_key = ?1
+    ORDER BY source_path COLLATE NOCASE;
+  "#,
+  )?;
+
+  let mut rows = stmt.query(params![target_key])?;
+  let mut out = Vec::new();
+  while let Some(row) = rows.next()? {
+    let source_path = row.get::<_, String>(0)?;
+    if !Path::new(&source_path).is_file() {
+      continue;
+    }
+    out.push(Backlink { path: source_path });
+  }
+
+  Ok(out)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -302,7 +508,8 @@ pub fn run() {
       reveal_in_file_manager,
       init_db,
       reindex_markdown_file,
-      fts_search
+      fts_search,
+      backlinks_for_path
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

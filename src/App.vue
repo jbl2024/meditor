@@ -4,7 +4,19 @@ import EditorView from './components/EditorView.vue'
 import ExplorerTree from './components/explorer/ExplorerTree.vue'
 import UiButton from './components/ui/UiButton.vue'
 import UiThemeSwitcher from './components/ui/UiThemeSwitcher.vue'
-import { createEntry, ftsSearch, initDb, listChildren, readTextFile, reindexMarkdownFile, selectWorkingFolder, writeTextFile } from './lib/api'
+import {
+  backlinksForPath,
+  createEntry,
+  ftsSearch,
+  initDb,
+  listChildren,
+  pathExists,
+  readTextFile,
+  reindexMarkdownFile,
+  revealInFileManager,
+  selectWorkingFolder,
+  writeTextFile
+} from './lib/api'
 import { useEditorState } from './composables/useEditorState'
 import { useFilesystemState } from './composables/useFilesystemState'
 import { useWorkspaceState, type SidebarMode } from './composables/useWorkspaceState'
@@ -17,6 +29,19 @@ type EditorViewExposed = {
   reloadCurrent: () => Promise<void>
   focusEditor: () => void
   revealSnippet: (snippet: string) => Promise<void>
+}
+
+type SaveFileOptions = {
+  explicit: boolean
+}
+
+type SaveFileResult = {
+  persisted: boolean
+}
+
+type VirtualDoc = {
+  content: string
+  titleLine: string
 }
 
 const THEME_STORAGE_KEY = 'meditor.theme.preference'
@@ -38,6 +63,9 @@ const rightPaneWidth = ref(300)
 const allWorkspaceFiles = ref<string[]>([])
 const loadingAllFiles = ref(false)
 const editorRef = ref<EditorViewExposed | null>(null)
+const backlinks = ref<string[]>([])
+const backlinksLoading = ref(false)
+const virtualDocs = ref<Record<string, VirtualDoc>>({})
 
 const resizeState = ref<{
   side: 'left' | 'right'
@@ -60,10 +88,11 @@ const resolvedTheme = computed<'light' | 'dark'>(() => {
 const tabView = computed(() =>
   workspace.openTabs.value.map((tab) => {
     const status = editorState.getStatus(tab.path)
+    const unsavedVirtual = Boolean(virtualDocs.value[tab.path])
     return {
       ...tab,
       title: fileName(tab.path),
-      dirty: status.dirty,
+      dirty: status.dirty || unsavedVirtual,
       saving: status.saving,
       saveError: status.saveError
     }
@@ -87,6 +116,10 @@ const groupedSearchResults = computed(() => {
   return groups
 })
 
+type QuickOpenResult =
+  | { kind: 'file'; path: string; label: string }
+  | { kind: 'daily'; date: string; path: string; label: string; exists: boolean }
+
 type PaletteAction = {
   id: string
   label: string
@@ -94,37 +127,42 @@ type PaletteAction = {
 }
 
 const paletteActions = computed<PaletteAction[]>(() => [
-  { id: 'close-all-tabs', label: 'Close All Tabs', run: () => (workspace.closeAllTabs(), true) },
-  {
-    id: 'close-other-tabs',
-    label: 'Close All But Current Tab',
-    run: () => {
-      if (!workspace.activeTabPath.value) return false
-      workspace.closeOtherTabs(workspace.activeTabPath.value)
-      return true
-    }
-  },
-  { id: 'create-new-file', label: 'Create New File', run: () => createNewFileFromPalette() },
-  { id: 'toggle-sidebar', label: 'Toggle Sidebar', run: () => (workspace.toggleSidebar(), true) },
-  { id: 'toggle-right-pane', label: 'Toggle Context Pane', run: () => (workspace.toggleRightPane(), true) },
-  { id: 'open-search', label: 'Open Global Search', run: () => (openSearchPanel(), true) },
-  { id: 'open-folder', label: 'Select Working Folder', run: () => (void onSelectWorkingFolder(), true) },
-  { id: 'theme-light', label: 'Theme: Light', run: () => ((themePreference.value = 'light'), true) },
-  { id: 'theme-dark', label: 'Theme: Dark', run: () => ((themePreference.value = 'dark'), true) },
-  { id: 'theme-system', label: 'Theme: System', run: () => ((themePreference.value = 'system'), true) }
+  { id: 'open-today', label: 'Open Today', run: () => openTodayNote() },
+  { id: 'open-yesterday', label: 'Open Yesterday', run: () => openYesterdayNote() },
+  { id: 'open-specific-date', label: 'Open Specific Date', run: () => openSpecificDateNote() },
+  { id: 'create-new-file', label: 'New Note', run: () => createNewFileFromPalette() },
+  { id: 'open-file', label: 'Open File', run: () => (quickOpenQuery.value = '', false) },
+  { id: 'reveal-in-explorer', label: 'Reveal in Explorer', run: () => revealActiveInExplorer() }
 ])
 
 const quickOpenIsActionMode = computed(() => quickOpenQuery.value.trimStart().startsWith('>'))
 const quickOpenActionQuery = computed(() => quickOpenQuery.value.trimStart().slice(1).trim().toLowerCase())
 
-const quickOpenResults = computed(() => {
+const quickOpenResults = computed<QuickOpenResult[]>(() => {
   if (quickOpenIsActionMode.value) return []
   const q = quickOpenQuery.value.trim().toLowerCase()
-  const files = allWorkspaceFiles.value
   if (!q) return []
-  return files
+
+  const fileResults = allWorkspaceFiles.value
     .filter((path) => path.toLowerCase().includes(q) || toRelativePath(path).toLowerCase().includes(q))
+    .map((path) => ({ kind: 'file' as const, path, label: toRelativePath(path) }))
     .slice(0, 80)
+
+  if (!isIsoDate(q) || !filesystem.workingFolderPath.value) {
+    return fileResults
+  }
+
+  const path = dailyNotePath(filesystem.workingFolderPath.value, q)
+  const exists = allWorkspaceFiles.value.some((item) => item.toLowerCase() === path.toLowerCase())
+  const dateResult: QuickOpenResult = {
+    kind: 'daily',
+    date: q,
+    path,
+    exists,
+    label: exists ? `Open daily note ${q}` : `Create daily note ${q}`
+  }
+
+  return [dateResult, ...fileResults]
 })
 
 const quickOpenActionResults = computed(() => {
@@ -141,9 +179,16 @@ const quickOpenItemCount = computed(() =>
 const metadataRows = computed(() => {
   if (!activeFilePath.value) return []
   const status = activeStatus.value
+  const state = status.saving
+    ? 'saving'
+    : virtualDocs.value[activeFilePath.value]
+      ? 'unsaved'
+      : status.dirty
+        ? 'editing'
+        : 'saved'
   return [
     { label: 'Path', value: toRelativePath(activeFilePath.value) },
-    { label: 'State', value: status.saving ? 'saving' : status.dirty ? 'editing' : 'saved' },
+    { label: 'State', value: state },
     { label: 'Workspace', value: toRelativePath(filesystem.workingFolderPath.value) || filesystem.workingFolderPath.value }
   ]
 })
@@ -180,6 +225,44 @@ function toRelativePath(path: string): string {
     return path.slice(root.length + 1)
   }
   return path
+}
+
+function normalizeDatePart(value: number): string {
+  return String(value).padStart(2, '0')
+}
+
+function formatIsoDate(date: Date): string {
+  return `${date.getFullYear()}-${normalizeDatePart(date.getMonth() + 1)}-${normalizeDatePart(date.getDate())}`
+}
+
+function isIsoDate(input: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input)) return false
+  const [yearRaw, monthRaw, dayRaw] = input.split('-')
+  const year = Number.parseInt(yearRaw, 10)
+  const month = Number.parseInt(monthRaw, 10)
+  const day = Number.parseInt(dayRaw, 10)
+  return year > 0 && month >= 1 && month <= 12 && day >= 1 && day <= 31
+}
+
+function dailyTitle(date: string): string {
+  return `# ${date}`
+}
+
+function dailyNotePath(root: string, date: string): string {
+  return `${root}/journal/${date}.md`
+}
+
+function sanitizeRelativePath(raw: string): string {
+  return raw
+    .trim()
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '')
+    .replace(/\/+/g, '/')
+}
+
+function isTitleOnlyContent(content: string, titleLine: string): boolean {
+  const normalized = content.replace(/\r\n/g, '\n').trim()
+  return normalized === titleLine
 }
 
 function onSystemThemeChanged() {
@@ -261,20 +344,108 @@ async function openFile(path: string) {
   if (!filesystem.workingFolderPath.value) {
     throw new Error('Working folder is not set.')
   }
+  const virtual = virtualDocs.value[path]
+  if (virtual) return virtual.content
   return await readTextFile(filesystem.workingFolderPath.value, path)
 }
 
-async function saveFile(path: string, txt: string) {
+async function ensureParentFolders(filePath: string) {
+  const root = filesystem.workingFolderPath.value
+  if (!root) throw new Error('Working folder is not set.')
+
+  const relative = toRelativePath(filePath)
+  const parts = relative.split('/').filter(Boolean)
+  if (parts.length <= 1) return
+
+  let current = root
+  for (const segment of parts.slice(0, -1)) {
+    const next = `${current}/${segment}`
+    const exists = await pathExists(root, next)
+    if (!exists) {
+      await createEntry(root, current, segment, 'folder', 'fail')
+    }
+    current = next
+  }
+}
+
+function noteTitleFromPath(path: string): string {
+  const filename = fileName(path).replace(/\.(md|markdown)$/i, '')
+  return filename || 'Untitled'
+}
+
+async function ensureVirtualMarkdown(path: string, titleLine: string) {
+  if (virtualDocs.value[path]) return
+  virtualDocs.value = {
+    ...virtualDocs.value,
+    [path]: {
+      content: `${titleLine}\n`,
+      titleLine
+    }
+  }
+}
+
+async function openOrPrepareMarkdown(path: string, titleLine: string) {
+  const root = filesystem.workingFolderPath.value
+  if (!root) {
+    filesystem.errorMessage.value = 'Working folder is not set.'
+    return false
+  }
+
+  let exists = false
+  try {
+    exists = await pathExists(root, path)
+  } catch {
+    // If parent folders do not exist yet (for example journal/), treat as non-existent
+    // and open a virtual buffer. Folder creation is deferred until first write.
+    exists = false
+  }
+  if (exists) {
+    const nextVirtual = { ...virtualDocs.value }
+    delete nextVirtual[path]
+    virtualDocs.value = nextVirtual
+    workspace.openTab(path)
+    await nextTick()
+    editorRef.value?.focusEditor()
+    return true
+  }
+
+  await ensureVirtualMarkdown(path, titleLine)
+  workspace.openTab(path)
+  await nextTick()
+  editorRef.value?.focusEditor()
+  return true
+}
+
+async function saveFile(path: string, txt: string, options: SaveFileOptions): Promise<SaveFileResult> {
   if (!filesystem.workingFolderPath.value) {
     throw new Error('Working folder is not set.')
   }
+  const virtual = virtualDocs.value[path]
+  if (virtual && !options.explicit && isTitleOnlyContent(txt, virtual.titleLine)) {
+    return { persisted: false }
+  }
+
+  await ensureParentFolders(path)
   await writeTextFile(filesystem.workingFolderPath.value, path, txt)
+
+  if (virtual) {
+    const nextVirtual = { ...virtualDocs.value }
+    delete nextVirtual[path]
+    virtualDocs.value = nextVirtual
+  }
+
+  if (/\.(md|markdown)$/i.test(path) && !allWorkspaceFiles.value.includes(path)) {
+    allWorkspaceFiles.value = [...allWorkspaceFiles.value, path].sort((a, b) => a.localeCompare(b))
+  }
+
   filesystem.indexingState.value = 'indexing'
   try {
     await reindexMarkdownFile(filesystem.workingFolderPath.value, path)
   } finally {
     filesystem.indexingState.value = 'idle'
   }
+  await refreshBacklinks()
+  return { persisted: true }
 }
 
 async function runGlobalSearch() {
@@ -371,6 +542,103 @@ function openSearchPanel() {
   })
 }
 
+async function refreshBacklinks() {
+  const root = filesystem.workingFolderPath.value
+  const path = workspace.activeTabPath.value
+  if (!root || !path) {
+    backlinks.value = []
+    return
+  }
+
+  backlinksLoading.value = true
+  try {
+    const results = await backlinksForPath(root, path)
+    backlinks.value = results.map((item) => item.path)
+  } catch {
+    backlinks.value = []
+  } finally {
+    backlinksLoading.value = false
+  }
+}
+
+async function openDailyNote(date: string) {
+  const root = filesystem.workingFolderPath.value
+  if (!root) {
+    filesystem.errorMessage.value = 'Working folder is not set.'
+    return false
+  }
+  if (!isIsoDate(date)) {
+    filesystem.errorMessage.value = 'Invalid date format. Use YYYY-MM-DD.'
+    return false
+  }
+  return await openOrPrepareMarkdown(dailyNotePath(root, date), dailyTitle(date))
+}
+
+async function openTodayNote() {
+  return await openDailyNote(formatIsoDate(new Date()))
+}
+
+async function openYesterdayNote() {
+  const value = new Date()
+  value.setDate(value.getDate() - 1)
+  return await openDailyNote(formatIsoDate(value))
+}
+
+async function openSpecificDateNote() {
+  const defaultDate = formatIsoDate(new Date())
+  const raw = window.prompt('Open daily note date (YYYY-MM-DD):', defaultDate)
+  if (!raw) return false
+  return await openDailyNote(raw.trim())
+}
+
+async function revealActiveInExplorer() {
+  if (!workspace.activeTabPath.value) return false
+  try {
+    await revealInFileManager(workspace.activeTabPath.value)
+    return true
+  } catch (err) {
+    filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not reveal file.'
+    return false
+  }
+}
+
+async function openWikilinkTarget(target: string) {
+  const root = filesystem.workingFolderPath.value
+  if (!root) return false
+  const normalized = sanitizeRelativePath(target)
+  if (!normalized) return false
+  if (normalized.split('/').some((segment) => segment === '.' || segment === '..')) {
+    filesystem.errorMessage.value = 'Invalid link target.'
+    return false
+  }
+
+  if (isIsoDate(normalized)) {
+    return await openDailyNote(normalized)
+  }
+
+  if (!allWorkspaceFiles.value.length) {
+    await loadAllFiles()
+  }
+
+  const withoutExtension = normalized.replace(/\.(md|markdown)$/i, '').toLowerCase()
+  const existing = allWorkspaceFiles.value.find((path) => {
+    const rel = toRelativePath(path).replace(/\.(md|markdown)$/i, '').toLowerCase()
+    return rel === withoutExtension
+  })
+
+  if (existing) {
+    workspace.openTab(existing)
+    await nextTick()
+    editorRef.value?.focusEditor()
+    return true
+  }
+
+  const withExtension = /\.(md|markdown)$/i.test(normalized) ? normalized : `${normalized}.md`
+  const fullPath = `${root}/${withExtension}`
+  const title = noteTitleFromPath(fullPath)
+  return await openOrPrepareMarkdown(fullPath, `# ${title}`)
+}
+
 async function loadAllFiles() {
   if (!filesystem.workingFolderPath.value || loadingAllFiles.value) return
   loadingAllFiles.value = true
@@ -418,10 +686,16 @@ function closeQuickOpen() {
   quickOpenActiveIndex.value = 0
 }
 
-function openQuickFile(path: string) {
-  workspace.openTab(path)
-  closeQuickOpen()
-  nextTick(() => editorRef.value?.focusEditor())
+function openQuickResult(item: QuickOpenResult) {
+  if (item.kind === 'file') {
+    workspace.openTab(item.path)
+    closeQuickOpen()
+    nextTick(() => editorRef.value?.focusEditor())
+    return
+  }
+  void openDailyNote(item.date).then((opened) => {
+    if (opened) closeQuickOpen()
+  })
 }
 
 function openCommandPalette() {
@@ -490,9 +764,9 @@ function onQuickOpenEnter() {
     return
   }
 
-  const path = quickOpenResults.value[quickOpenActiveIndex.value]
-  if (path) {
-    openQuickFile(path)
+  const item = quickOpenResults.value[quickOpenActiveIndex.value]
+  if (item) {
+    openQuickResult(item)
   }
 }
 
@@ -551,6 +825,12 @@ function onWindowKeydown(event: KeyboardEvent) {
   if (key === 'p' && event.shiftKey) {
     event.preventDefault()
     openCommandPalette()
+    return
+  }
+
+  if (key === 'd') {
+    event.preventDefault()
+    void openTodayNote()
     return
   }
 
@@ -619,6 +899,8 @@ watch(
   () => filesystem.workingFolderPath.value,
   () => {
     allWorkspaceFiles.value = []
+    backlinks.value = []
+    virtualDocs.value = {}
   }
 )
 
@@ -635,6 +917,14 @@ watch(
 
     await nextTick()
     await editorRef.value?.revealSnippet(snippet)
+    await refreshBacklinks()
+  }
+)
+
+watch(
+  () => workspace.activeTabPath.value,
+  () => {
+    void refreshBacklinks()
   }
 )
 
@@ -808,6 +1098,8 @@ onBeforeUnmount(() => {
           :path="activeFilePath"
           :openFile="openFile"
           :saveFile="saveFile"
+          :linkTargets="allWorkspaceFiles.map((path) => toRelativePath(path))"
+          :openLinkTarget="openWikilinkTarget"
           @status="onEditorStatus"
           @outline="onEditorOutline"
         />
@@ -840,7 +1132,17 @@ onBeforeUnmount(() => {
 
         <div class="pane-section">
           <h3>Backlinks</h3>
-          <div class="placeholder">Backlinks module placeholder</div>
+          <div v-if="backlinksLoading" class="placeholder">Loading...</div>
+          <div v-else-if="!backlinks.length" class="placeholder">No backlinks</div>
+          <button
+            v-for="path in backlinks"
+            :key="path"
+            type="button"
+            class="outline-row"
+            @click="workspace.openTab(path)"
+          >
+            {{ toRelativePath(path) }}
+          </button>
         </div>
 
         <div class="pane-section">
@@ -857,7 +1159,7 @@ onBeforeUnmount(() => {
 
     <footer class="status-bar">
       <span class="status-item">{{ activeFilePath ? toRelativePath(activeFilePath) : 'No file' }}</span>
-      <span class="status-item">{{ activeStatus.saving ? 'saving...' : activeStatus.dirty ? 'editing...' : 'saved' }}</span>
+      <span class="status-item">{{ activeStatus.saving ? 'saving...' : virtualDocs[activeFilePath] ? 'unsaved' : activeStatus.dirty ? 'editing...' : 'saved' }}</span>
       <span class="status-item">index: {{ filesystem.indexingState.value }}</span>
       <span class="status-item">embeddings: {{ filesystem.embeddingQueueState.value }}</span>
       <span class="status-item">workspace: {{ filesystem.workingFolderPath.value || 'none' }}</span>
@@ -887,15 +1189,15 @@ onBeforeUnmount(() => {
             {{ item.label }}
           </button>
           <button
-            v-for="(path, index) in quickOpenResults"
-            :key="path"
+            v-for="(item, index) in quickOpenResults"
+            :key="item.kind === 'file' ? item.path : `daily-${item.date}`"
             type="button"
             class="modal-item"
             :class="{ active: quickOpenActiveIndex === index }"
-            @click="openQuickFile(path)"
+            @click="openQuickResult(item)"
             @mousemove="setQuickOpenActiveIndex(index)"
           >
-            {{ toRelativePath(path) }}
+            {{ item.label }}
           </button>
           <div v-if="quickOpenIsActionMode && !quickOpenActionResults.length" class="placeholder">No matching actions</div>
           <div v-else-if="!quickOpenIsActionMode && !quickOpenResults.length" class="placeholder">
@@ -1364,3 +1666,8 @@ onBeforeUnmount(() => {
   }
 }
 </style>
+  if (key === 'd') {
+    event.preventDefault()
+    void openTodayNote()
+    return
+  }

@@ -99,3 +99,7 @@ export async function initDb(folderPath: string): Promise<void> {
 export async function ftsSearch(folderPath: string, query: string): Promise<Array<{ path: string; snippet: string; score: number }>> {
   return await invoke('fts_search', { folderPath, query })
 }
+
+export async function backlinksForPath(folderPath: string, path: string): Promise<Array<{ path: string }>> {
+  return await invoke('backlinks_for_path', { folderPath, path })
+}
