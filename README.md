@@ -1,32 +1,47 @@
-# md-localfirst (Tauri 2 + Vite + Vue 3 + Editor.js + SQLite FTS5)
+# Meditor
 
-Objectif: un editeur Markdown local-first qui charge une arborescence locale, lit/ecrit des fichiers, et maintient un index SQLite:
-- Recherche BM25 via SQLite FTS5
-- Embeddings vectoriels stockes dans SQLite (pipeline simplifie, rerank cote code)
+Meditor is a local-first desktop Markdown workspace built with Tauri 2, Vue 3, and Rust.
 
-## Prerequis
-- Node 20+ (ou 22+)
-- Rust toolchain stable
-- Sur macOS: Xcode Command Line Tools
-- Sur Linux: dependances Tauri (WebKit2GTK, etc.)
+At a high level, it provides:
+- Local folder-based notes and files
+- Markdown editing and navigation
+- Full-text search across your workspace
+- Daily-note and wiki-link workflows
+- Cross-platform desktop packaging through Tauri
 
-## Demarrage rapide
-1. Installe les deps JS:
-   - `npm install`
+## Requirements
+- Node.js 20+ (22+ recommended)
+- npm
+- Rust stable toolchain
+- Tauri system prerequisites for your OS
+  - macOS: Xcode Command Line Tools
+  - Linux: WebKitGTK and related Tauri dependencies
 
-2. Installe le CLI Tauri:
-   - `npm install -D @tauri-apps/cli`
+## Install
+```bash
+npm install
+```
 
-3. Lance en dev:
-   - `npm run tauri:dev`
+## Run
 
-## Notes
-- L'integration Editor.js est "a la main" (pas de wrapper).
-- Les commandes Tauri exposees: list_dir, read_text_file, write_text_file, init_db, fts_search.
-- Le schema SQLite est initialise dans le dossier data de l'app.
+Frontend only (web dev server):
+```bash
+npm run dev
+```
 
-## Structure
-- `src/` front Vue
-- `src-tauri/` backend Rust Tauri
-- `capabilities/` permissions Tauri v2 (lecture/ecriture fichiers via commandes Rust)
+Desktop app (Tauri dev):
+```bash
+npm run tauri:dev
+```
 
+## Build
+
+Frontend production bundle:
+```bash
+npm run build
+```
+
+Desktop app bundle/installers:
+```bash
+npm run tauri:build
+```
