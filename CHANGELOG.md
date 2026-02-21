@@ -23,6 +23,7 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 ### Added
 
 ### Changed
+First release
 
 ### Deprecated
 
