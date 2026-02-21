@@ -18,6 +18,18 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.1.5] - 2026-02-21
+
+### Changed
+- bug: click outside link compress it (bb0c310)
+
+### Fixed
+- fix(editor): unify markdown inline code with Editor.js inline-code style (61083ae)
+- fix(explorer): detect tauri string errors for conflict modal fallback (5404b47)
+- fix(editor): expand regular hyperlinks to markdown tokens during keyboard navigation (47838af)
+- fix(tabs): save dirty note before tab switches (4be17bc)
+- fix(editor): persist dirty note before wikilink navigation (405216c)
+
 ## [0.1.4] - 2026-02-21
 
 ### Changed
