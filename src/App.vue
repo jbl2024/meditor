@@ -1290,6 +1290,19 @@ onBeforeUnmount(() => {
           </div>
 
           <div class="global-actions">
+            <button
+              type="button"
+              class="toolbar-icon-btn"
+              :class="{ active: workspace.rightPaneVisible.value }"
+              :title="workspace.rightPaneVisible.value ? 'Hide right pane' : 'Show right pane'"
+              :aria-label="workspace.rightPaneVisible.value ? 'Hide right pane' : 'Show right pane'"
+              @click="workspace.toggleRightPane()"
+            >
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" ry="1.5" />
+                <line x1="10" y1="2.5" x2="10" y2="13.5" />
+              </svg>
+            </button>
             <UiButton size="sm" variant="ghost" title="Global search" @click="openSearchPanel">Search</UiButton>
             <UiButton size="sm" variant="ghost" title="Command palette" @click="openCommandPalette">Cmd</UiButton>
             <div ref="overflowMenuRef" class="overflow-wrap">
@@ -1306,9 +1319,6 @@ onBeforeUnmount(() => {
               <div v-if="overflowMenuOpen" class="overflow-menu">
                 <button type="button" class="overflow-item" @click="onSelectWorkingFolder(); closeOverflowMenu()">
                   Workspace
-                </button>
-                <button type="button" class="overflow-item" @click="workspace.toggleRightPane(); closeOverflowMenu()">
-                  {{ workspace.rightPaneVisible.value ? 'Hide Pane' : 'Show Pane' }}
                 </button>
                 <div class="overflow-divider"></div>
                 <div class="overflow-label">Theme</div>
@@ -1584,6 +1594,53 @@ onBeforeUnmount(() => {
   position: relative;
 }
 
+.toolbar-icon-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #64748b;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.toolbar-icon-btn:hover {
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.toolbar-icon-btn.active {
+  border-color: #cbd5e1;
+  background: #ffffff;
+  color: #0f172a;
+}
+
+.toolbar-icon-btn svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+}
+
+.ide-root.dark .toolbar-icon-btn {
+  color: #94a3b8;
+}
+
+.ide-root.dark .toolbar-icon-btn:hover {
+  background: #1e293b;
+  color: #cbd5e1;
+}
+
+.ide-root.dark .toolbar-icon-btn.active {
+  border-color: #334155;
+  background: #020617;
+  color: #e2e8f0;
+}
+
 .overflow-wrap {
   position: relative;
 }
@@ -1734,6 +1791,7 @@ onBeforeUnmount(() => {
 .left-sidebar,
 .right-pane {
   min-width: 0;
+  min-height: 0;
   background: #f8fafc;
   border-right: 1px solid #e2e8f0;
   display: flex;
@@ -1748,6 +1806,7 @@ onBeforeUnmount(() => {
 .right-pane {
   border-right: 0;
   border-left: 1px solid #e2e8f0;
+  overflow-y: auto;
 }
 
 .ide-root.dark .left-sidebar,

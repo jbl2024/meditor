@@ -4,6 +4,7 @@ use std::{
   collections::HashSet,
   fs,
   path::{Path, PathBuf},
+  process::Command,
   time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -445,6 +446,29 @@ struct Backlink {
   path: String,
 }
 
+fn list_markdown_files_via_find(root: &Path) -> Result<Vec<PathBuf>> {
+  let output = Command::new("find")
+    .arg(root)
+    .args(["-type", "f", "(", "-iname", "*.md", "-o", "-iname", "*.markdown", ")"])
+    .output()?;
+
+  if !output.status.success() {
+    return Err(AppError::OperationFailed);
+  }
+
+  let stdout = String::from_utf8_lossy(&output.stdout);
+  let mut files = Vec::new();
+  for line in stdout.lines() {
+    let trimmed = line.trim();
+    if trimmed.is_empty() {
+      continue;
+    }
+    files.push(PathBuf::from(trimmed));
+  }
+
+  Ok(files)
+}
+
 #[tauri::command]
 fn backlinks_for_path(folder_path: String, path: String) -> Result<Vec<Backlink>> {
   let root = normalize_existing_dir(&folder_path)?;
@@ -465,26 +489,40 @@ fn backlinks_for_path(folder_path: String, path: String) -> Result<Vec<Backlink>
     return Ok(vec![]);
   }
 
-  let conn = open_db(&folder_path)?;
-  let mut stmt = conn.prepare(
-    r#"
-    SELECT DISTINCT source_path
-    FROM note_links
-    WHERE target_key = ?1
-    ORDER BY source_path COLLATE NOCASE;
-  "#,
-  )?;
-
-  let mut rows = stmt.query(params![target_key])?;
+  let markdown_files = list_markdown_files_via_find(&root_canonical)?;
   let mut out = Vec::new();
-  while let Some(row) = rows.next()? {
-    let source_path = row.get::<_, String>(0)?;
-    if !Path::new(&source_path).is_file() {
+  let mut seen = HashSet::new();
+
+  for candidate in markdown_files {
+    let canonical_candidate = match fs::canonicalize(&candidate) {
+      Ok(value) => value,
+      Err(_) => continue,
+    };
+
+    let source_key = match normalize_note_key(&root_canonical, &canonical_candidate) {
+      Ok(value) => value,
+      Err(_) => continue,
+    };
+    if source_key == target_key {
       continue;
     }
-    out.push(Backlink { path: source_path });
+
+    let markdown = match fs::read_to_string(&canonical_candidate) {
+      Ok(value) => value,
+      Err(_) => continue,
+    };
+    let targets = parse_note_targets(&markdown);
+    if !targets.iter().any(|item| item == &target_key) {
+      continue;
+    }
+
+    let source_path = canonical_candidate.to_string_lossy().to_string();
+    if seen.insert(source_path.clone()) {
+      out.push(Backlink { path: source_path });
+    }
   }
 
+  out.sort_by(|a, b| a.path.to_lowercase().cmp(&b.path.to_lowercase()));
   Ok(out)
 }
 
