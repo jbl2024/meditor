@@ -22,6 +22,12 @@ enum AppError {
 
 type Result<T> = std::result::Result<T, AppError>;
 
+impl From<AppError> for tauri::ipc::InvokeError {
+  fn from(err: AppError) -> Self {
+    tauri::ipc::InvokeError::from(err.to_string())
+  }
+}
+
 fn normalize_path(p: &str) -> Result<PathBuf> {
   let pb = PathBuf::from(p);
   if pb.as_os_str().is_empty() {
