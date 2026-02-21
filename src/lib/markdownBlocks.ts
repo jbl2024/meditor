@@ -63,7 +63,7 @@ function extractCodeSpans(value: string): { text: string; tokens: string[] } {
 
     const content = value.slice(i + markerLength, closeIndex)
     const token = `\u0000MDCODE${tokens.length}\u0000`
-    tokens.push(`<code>${escapeHtml(content)}</code>`)
+    tokens.push(`<code class="inline-code">${escapeHtml(content)}</code>`)
     out += token
     i = closeIndex + markerLength
   }
