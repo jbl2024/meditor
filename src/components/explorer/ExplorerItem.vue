@@ -9,7 +9,6 @@ const props = defineProps<{
   selected: boolean
   active: boolean
   focused: boolean
-  dragTarget: boolean
   cutPending: boolean
   editing: boolean
   renameValue: string
@@ -20,10 +19,6 @@ const emit = defineEmits<{
   click: [event: MouseEvent, node: TreeNode]
   doubleclick: [node: TreeNode]
   contextmenu: [payload: { event: MouseEvent; node: TreeNode }]
-  dragstart: [payload: { event: DragEvent; node: TreeNode }]
-  dragover: [payload: { event: DragEvent; node: TreeNode }]
-  dragleave: [payload: { event: DragEvent; node: TreeNode }]
-  drop: [payload: { event: DragEvent; node: TreeNode }]
   rowaction: [payload: { event: MouseEvent; node: TreeNode }]
   renameUpdate: [value: string]
   renameConfirm: []
@@ -46,18 +41,12 @@ function iconForNode(node: TreeNode): string {
       selected ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-slate-100' : 'text-slate-700 dark:text-slate-300',
       active ? 'font-semibold text-slate-950 dark:text-white' : '',
       focused ? 'ring-1 ring-blue-500/70' : '',
-      dragTarget ? 'bg-emerald-100/90 dark:bg-emerald-900/35' : '',
       cutPending ? 'opacity-45' : 'opacity-100'
     ]"
     :style="{ paddingLeft: `${depth * 14 + 8}px` }"
-    draggable="true"
     @click="emit('click', $event, node)"
     @dblclick="emit('doubleclick', node)"
     @contextmenu.prevent="emit('contextmenu', { event: $event, node })"
-    @dragstart="emit('dragstart', { event: $event, node })"
-    @dragover.prevent="emit('dragover', { event: $event, node })"
-    @dragleave="emit('dragleave', { event: $event, node })"
-    @drop.prevent="emit('drop', { event: $event, node })"
   >
     <button
       type="button"

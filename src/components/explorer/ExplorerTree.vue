@@ -2,7 +2,6 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import ExplorerContextMenu, { type MenuAction } from './ExplorerContextMenu.vue'
 import ExplorerItem from './ExplorerItem.vue'
-import { useDragManager } from './composables/useDragManager'
 import { useSelectionManager } from './composables/useSelectionManager'
 import {
   copyEntry,
@@ -64,7 +63,6 @@ const confirmPrompt = ref<{
 
 const clipboard = ref<{ mode: 'copy' | 'cut'; paths: string[] } | null>(null)
 
-const dragManager = useDragManager()
 const selectionManager = useSelectionManager()
 
 const isMac = navigator.platform.toLowerCase().includes('mac')
@@ -140,12 +138,6 @@ function getAncestorDirs(path: string): string[] {
 
 function isConflictError(err: unknown): boolean {
   return err instanceof Error && /already exists/i.test(err.message)
-}
-
-function isDescendant(path: string, base: string): boolean {
-  const p = normalizePath(path)
-  const b = normalizePath(base)
-  return p === b || p.startsWith(`${b}/`)
 }
 
 function persistExpandedState() {
@@ -589,63 +581,6 @@ async function onContextAction(action: MenuAction) {
   closeContextMenu()
 }
 
-function onDragStart(payload: { event: DragEvent; node: TreeNode }) {
-  const selected = selectionManager.selectedPaths.value
-  const dragPaths = selected.includes(payload.node.path) ? selected : [payload.node.path]
-
-  dragManager.startDrag(dragPaths)
-  payload.event.dataTransfer?.setData('application/meditor-paths', JSON.stringify(dragPaths))
-  payload.event.dataTransfer?.setData('text/plain', dragPaths[0])
-}
-
-function onDragOver(payload: { event: DragEvent; node: TreeNode }) {
-  payload.event.preventDefault()
-  dragManager.setDragTarget(payload.node.path)
-}
-
-function onDragLeave() {
-  dragManager.clearDragTarget()
-}
-
-async function onDrop(payload: { event: DragEvent; node: TreeNode }) {
-  payload.event.preventDefault()
-
-  const raw = payload.event.dataTransfer?.getData('application/meditor-paths')
-  const dragPaths = raw ? (JSON.parse(raw) as string[]) : dragManager.draggingPaths.value
-  if (!dragPaths.length || !props.folderPath) return
-
-  const targetDir = payload.node.is_dir ? payload.node.path : getParentPath(payload.node.path)
-
-  if (dragPaths.some((path) => path === targetDir || isDescendant(targetDir, path))) {
-    emitError('Cannot move a folder into itself or its descendant.')
-    dragManager.endDrag()
-    return
-  }
-
-  const includesFolders = dragPaths.some((path) => nodeByPath.value[path]?.is_dir)
-  if (includesFolders) {
-    confirmPrompt.value = {
-      title: 'Move selected folders?',
-      detail: 'Moving folders can affect many files. Confirm this operation.',
-      intent: 'move_folders',
-      payload: dragPaths
-    }
-  } else {
-    await runWithConflictModal(
-      async (strategy) => {
-        for (const sourcePath of dragPaths) {
-          await moveEntry(props.folderPath, sourcePath, targetDir, strategy)
-        }
-        await refreshLoadedDirs()
-      },
-      'Name conflict while moving',
-      'Choose how to handle conflicts.'
-    )
-  }
-
-  dragManager.endDrag()
-}
-
 function ensureFocusedPath(defaultToFirst = true) {
   if (focusedPath.value && visibleNodePaths.value.includes(focusedPath.value)) {
     return focusedPath.value
@@ -660,6 +595,16 @@ function ensureFocusedPath(defaultToFirst = true) {
 }
 
 async function onTreeKeydown(event: KeyboardEvent) {
+  const target = event.target as HTMLElement | null
+  if (target) {
+    const tag = target.tagName.toLowerCase()
+    const isTextInput = tag === 'input' || tag === 'textarea'
+    const isEditable = target.isContentEditable
+    if (isTextInput || isEditable) {
+      return
+    }
+  }
+
   const ordered = visibleNodePaths.value
   if (!ordered.length) return
 
@@ -963,7 +908,6 @@ onBeforeUnmount(() => {
             :selected="selectionManager.isSelected(row.path)"
             :active="activePath === row.path"
             :focused="focusedPath === row.path"
-            :drag-target="dragManager.dragTargetPath.value === row.path"
             :cut-pending="Boolean(clipboard?.mode === 'cut' && clipboard.paths.includes(row.path))"
             :editing="editingPath === row.path"
             :rename-value="editingValue"
@@ -971,10 +915,6 @@ onBeforeUnmount(() => {
             @click="handleRowClick"
             @doubleclick="handleDoubleClick"
             @contextmenu="onNodeContextMenu"
-            @dragstart="onDragStart"
-            @dragover="onDragOver"
-            @dragleave="onDragLeave"
-            @drop="onDrop"
             @rowaction="onRowAction"
             @rename-update="editingValue = $event"
             @rename-confirm="confirmRename"
