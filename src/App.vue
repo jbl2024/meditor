@@ -1,16 +1,14 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import EditorView from './components/EditorView.vue'
-import FileTreeNode from './components/FileTreeNode.vue'
+import FileExplorerView from './components/explorer/FileExplorerView.vue'
 import UiButton from './components/ui/UiButton.vue'
 import UiInput from './components/ui/UiInput.vue'
 import UiPanel from './components/ui/UiPanel.vue'
 import UiThemeSwitcher from './components/ui/UiThemeSwitcher.vue'
-import { ftsSearch, initDb, listTree, readTextFile, selectWorkingFolder, writeTextFile } from './lib/api'
-import type { TreeNode } from './lib/api'
+import { ftsSearch, initDb, readTextFile, selectWorkingFolder, writeTextFile } from './lib/api'
 
 const workingFolderPath = ref<string>('')
-const treeNodes = ref<TreeNode[]>([])
 const currentPath = ref<string>('')
 const query = ref<string>('')
 const errorMessage = ref<string>('')
@@ -59,17 +57,9 @@ function onSystemThemeChanged() {
 
 const selectedFileName = computed(() => {
   if (!currentPath.value) return 'None'
-  const parts = currentPath.value.split('/')
+  const parts = currentPath.value.replace(/\\/g, '/').split('/')
   return parts[parts.length - 1] || currentPath.value
 })
-
-function treeContainsPath(nodes: TreeNode[], path: string): boolean {
-  for (const node of nodes) {
-    if (!node.is_dir && node.path === path) return true
-    if (node.is_dir && treeContainsPath(node.children, path)) return true
-  }
-  return false
-}
 
 async function onSelectWorkingFolder() {
   errorMessage.value = ''
@@ -82,31 +72,41 @@ async function loadWorkingFolder(path: string) {
   try {
     workingFolderPath.value = path
     await initDb(path)
-    treeNodes.value = await listTree(path)
     hits.value = []
     window.localStorage.setItem(WORKING_FOLDER_STORAGE_KEY, path)
-    if (!treeContainsPath(treeNodes.value, currentPath.value)) {
+
+    if (currentPath.value && !currentPath.value.startsWith(path)) {
       currentPath.value = ''
     }
   } catch (err) {
     workingFolderPath.value = ''
-    treeNodes.value = []
+    currentPath.value = ''
     hits.value = []
     window.localStorage.removeItem(WORKING_FOLDER_STORAGE_KEY)
     errorMessage.value = err instanceof Error ? err.message : 'Could not open working folder.'
   }
 }
 
-function onSelectFile(path: string) {
+function onExplorerSelect(path: string) {
   currentPath.value = path
 }
 
+function onExplorerError(message: string) {
+  errorMessage.value = message
+}
+
 async function openFile(path: string) {
-  return await readTextFile(path)
+  if (!workingFolderPath.value) {
+    throw new Error('Working folder is not set.')
+  }
+  return await readTextFile(workingFolderPath.value, path)
 }
 
 async function saveFile(path: string, txt: string) {
-  await writeTextFile(path, txt)
+  if (!workingFolderPath.value) {
+    throw new Error('Working folder is not set.')
+  }
+  await writeTextFile(workingFolderPath.value, path, txt)
 }
 
 async function onSearch() {
@@ -158,7 +158,7 @@ onBeforeUnmount(() => {
         </div>
       </header>
 
-      <section class="mt-4 grid min-h-0 flex-1 gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+      <section class="mt-4 grid min-h-0 flex-1 gap-4 xl:grid-cols-[420px_minmax(0,1fr)]">
         <UiPanel className="min-h-0 overflow-y-auto">
           <div class="space-y-4">
             <div class="rounded-xl border border-slate-200/80 bg-slate-50/75 p-3 dark:border-slate-700/80 dark:bg-slate-950/55">
@@ -194,18 +194,13 @@ onBeforeUnmount(() => {
             </div>
 
             <div class="space-y-2">
-              <p class="text-[11px] uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Folder tree</p>
-              <p v-if="!workingFolderPath" class="text-xs text-slate-500 dark:text-slate-500">Select a working folder to load files.</p>
-              <p v-else-if="!treeNodes.length" class="text-xs text-slate-500 dark:text-slate-500">No markdown files found in this folder.</p>
-              <ul v-else class="space-y-0.5">
-                <FileTreeNode
-                  v-for="node in treeNodes"
-                  :key="node.path"
-                  :node="node"
-                  :selected-path="currentPath"
-                  @select="onSelectFile"
-                />
-              </ul>
+              <p class="text-[11px] uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Explorer</p>
+              <FileExplorerView
+                :folder-path="workingFolderPath"
+                :selected-path="currentPath"
+                @select="onExplorerSelect"
+                @error="onExplorerError"
+              />
             </div>
 
             <p v-if="errorMessage" class="rounded-lg border border-rose-300/80 bg-rose-50/80 px-2 py-1 text-xs text-rose-700 dark:border-rose-900/80 dark:bg-rose-950/40 dark:text-rose-300">
