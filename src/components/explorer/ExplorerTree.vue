@@ -945,7 +945,7 @@ onBeforeUnmount(() => {
     <div
       ref="treeRef"
       tabindex="0"
-      class="min-h-[220px] rounded-md border border-slate-200 bg-white p-2 outline-none focus:ring-1 focus:ring-slate-500 dark:border-slate-800 dark:bg-slate-950"
+      class="min-h-[220px] rounded-md border border-slate-200 bg-white p-2 outline-none focus-visible:ring-1 focus-visible:ring-slate-500 dark:border-slate-800 dark:bg-slate-950"
       @keydown="onTreeKeydown"
       @contextmenu.prevent="onTreeContextMenu"
       @click="clearSelectionIfBackground"
