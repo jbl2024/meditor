@@ -464,6 +464,20 @@ async function ensureEditor() {
   holder.value.addEventListener('paste', onEditorPaste, true)
 }
 
+async function destroyEditor() {
+  clearAutosaveTimer()
+  closeSlashMenu()
+
+  if (holder.value) {
+    holder.value.removeEventListener('keydown', onEditorKeydown)
+    holder.value.removeEventListener('paste', onEditorPaste, true)
+  }
+
+  if (!editor) return
+  await editor.destroy()
+  editor = null
+}
+
 async function loadCurrentFile(path: string) {
   if (!path) return
 
@@ -545,35 +559,29 @@ watch(
     }
 
     const nextPath = next?.trim()
-    if (!nextPath || !editor) {
+    if (!nextPath) {
+      await destroyEditor()
       emit('outline', [])
       return
     }
 
+    await nextTick()
+    await ensureEditor()
+    if (!editor) return
     await loadCurrentFile(nextPath)
   }
 )
 
 onMounted(async () => {
-  await ensureEditor()
   if (currentPath.value) {
+    await ensureEditor()
     await loadCurrentFile(currentPath.value)
   }
 })
 
 onBeforeUnmount(async () => {
-  clearAutosaveTimer()
   clearOutlineTimer()
-
-  if (holder.value) {
-    holder.value.removeEventListener('keydown', onEditorKeydown)
-    holder.value.removeEventListener('paste', onEditorPaste, true)
-  }
-
-  if (editor) {
-    await editor.destroy()
-    editor = null
-  }
+  await destroyEditor()
 })
 
 defineExpose({
@@ -592,16 +600,18 @@ defineExpose({
 <template>
   <div class="flex h-full min-h-0 flex-col">
     <div
+      v-if="!path"
+      class="flex min-h-0 flex-1 items-center justify-center bg-white px-8 py-6 text-sm text-slate-500 dark:bg-slate-950 dark:text-slate-400"
+    >
+      Open a file to start editing
+    </div>
+
+    <div
+      v-else
       ref="holder"
       class="editor-holder relative min-h-0 flex-1 overflow-y-auto bg-white px-8 py-6 dark:bg-slate-950"
       @click="closeSlashMenu"
     >
-      <div
-        v-if="!path"
-        class="flex h-full items-center justify-center text-sm text-slate-500 dark:text-slate-400"
-      >
-        Open a file to start editing
-      </div>
 
       <div
         v-if="slashOpen"

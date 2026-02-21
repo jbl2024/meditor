@@ -525,15 +525,18 @@ onBeforeUnmount(() => {
     <header class="topbar">
       <div class="tabs-row">
         <div class="tab-scroll">
-          <button
+          <div
             v-for="(tab, index) in tabView"
             :key="tab.path"
-            type="button"
+            role="button"
+            tabindex="0"
             class="tab-item"
             :class="{ active: activeFilePath === tab.path }"
             draggable="true"
             @click="onTabClick(tab.path)"
             @auxclick="onTabAuxClick($event, tab.path)"
+            @keydown.enter.prevent="onTabClick(tab.path)"
+            @keydown.space.prevent="onTabClick(tab.path)"
             @dragstart="onTabDragStart(index, $event)"
             @dragover.prevent
             @drop="onTabDrop(index, $event)"
@@ -542,7 +545,7 @@ onBeforeUnmount(() => {
             <span v-if="tab.saving" class="tab-state" title="Saving">~</span>
             <span v-else-if="tab.dirty" class="tab-state" title="Unsaved">•</span>
             <button class="tab-close" type="button" @click.stop="onTabClose(tab.path)">x</button>
-          </button>
+          </div>
           <div v-if="!tabView.length" class="tab-empty">No open files</div>
         </div>
       </div>
