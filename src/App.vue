@@ -411,6 +411,20 @@ async function saveActiveTab() {
 }
 
 function onWindowKeydown(event: KeyboardEvent) {
+  const isEscape = event.key === 'Escape' || event.key === 'Esc' || event.code === 'Escape'
+  if (isEscape) {
+    if (commandPaletteVisible.value) {
+      event.preventDefault()
+      closeCommandPalette()
+      return
+    }
+    if (quickOpenVisible.value) {
+      event.preventDefault()
+      closeQuickOpen()
+      return
+    }
+  }
+
   const isMod = event.metaKey || event.ctrlKey
   if (!isMod) return
 
@@ -502,7 +516,7 @@ onMounted(() => {
   loadThemePreference()
   applyTheme()
   mediaQuery?.addEventListener('change', onSystemThemeChanged)
-  window.addEventListener('keydown', onWindowKeydown)
+  window.addEventListener('keydown', onWindowKeydown, true)
   window.addEventListener('mousemove', onPointerMove)
   window.addEventListener('mouseup', stopResize)
 
@@ -514,7 +528,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   mediaQuery?.removeEventListener('change', onSystemThemeChanged)
-  window.removeEventListener('keydown', onWindowKeydown)
+  window.removeEventListener('keydown', onWindowKeydown, true)
   window.removeEventListener('mousemove', onPointerMove)
   window.removeEventListener('mouseup', stopResize)
 })
