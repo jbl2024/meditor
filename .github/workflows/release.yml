@@ -25,19 +25,15 @@ jobs:
     runs-on: ${{ matrix.runs-on }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@stable
 
-      # Linux deps required by Tauri (WebKitGTK etc.)
       - name: Install Linux dependencies
         if: matrix.platform == 'linux'
         run: |
@@ -49,65 +45,44 @@ jobs:
             librsvg2-dev \
             patchelf
 
-      - name: Install JS deps
+      - name: Install deps
         run: npm ci
 
-      # Build
       - name: Build Tauri
         run: npm run tauri build
 
-      # Upload artifacts from Tauri bundle output.
-      # This directory usually contains:
-      # - macOS: dmg / app
-      # - linux: AppImage / deb
-      # - windows: msi / exe (depending on config)
-      - name: Upload build artifacts
+      # ⬇️ upload uniquement les vrais bundles
+      - name: Upload binaries only
         uses: actions/upload-artifact@v4
         with:
-          name: tauri-bundle-${{ matrix.platform }}
+          name: bundle-${{ matrix.platform }}
           path: |
-            src-tauri/target/release/bundle/**
-            !src-tauri/target/release/bundle/**/resources/**
+            src-tauri/target/release/bundle/**/*.dmg
+            src-tauri/target/release/bundle/**/*.appimage
+            src-tauri/target/release/bundle/**/*.deb
+            src-tauri/target/release/bundle/**/*.msi
+            src-tauri/target/release/bundle/**/*.exe
           if-no-files-found: error
 
   release:
     name: Create GitHub Release
     needs: build
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
 
     steps:
-      - name: Download artifacts (macos)
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
-          name: tauri-bundle-macos
-          path: artifacts/macos
+          path: artifacts
 
-      - name: Download artifacts (linux)
-        uses: actions/download-artifact@v4
-        with:
-          name: tauri-bundle-linux
-          path: artifacts/linux
-
-      - name: Download artifacts (windows)
-        uses: actions/download-artifact@v4
-        with:
-          name: tauri-bundle-windows
-          path: artifacts/windows
-
-      - name: List artifacts
-        run: |
-          echo "=== macos ==="
-          find artifacts/macos -maxdepth 4 -type f
-          echo "=== linux ==="
-          find artifacts/linux -maxdepth 4 -type f
-          echo "=== windows ==="
-          find artifacts/windows -maxdepth 4 -type f
+      - name: Show files
+        run: find artifacts -type f
 
       - name: Create Release + Upload Assets
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
-          files: |
-            artifacts/macos/**
-            artifacts/linux/**
-            artifacts/windows/**
+          files: artifacts/**/*
+          
