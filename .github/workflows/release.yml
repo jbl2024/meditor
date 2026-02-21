@@ -1,0 +1,113 @@
+name: Release (macOS, Linux, Windows)
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos
+            runs-on: macos-latest
+          - platform: linux
+            runs-on: ubuntu-22.04
+          - platform: windows
+            runs-on: windows-latest
+
+    runs-on: ${{ matrix.runs-on }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      # Linux deps required by Tauri (WebKitGTK etc.)
+      - name: Install Linux dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Install JS deps
+        run: npm ci
+
+      # Build
+      - name: Build Tauri
+        run: npm run tauri build
+
+      # Upload artifacts from Tauri bundle output.
+      # This directory usually contains:
+      # - macOS: dmg / app
+      # - linux: AppImage / deb
+      # - windows: msi / exe (depending on config)
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tauri-bundle-${{ matrix.platform }}
+          path: |
+            src-tauri/target/release/bundle/**
+            !src-tauri/target/release/bundle/**/resources/**
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Download artifacts (macos)
+        uses: actions/download-artifact@v4
+        with:
+          name: tauri-bundle-macos
+          path: artifacts/macos
+
+      - name: Download artifacts (linux)
+        uses: actions/download-artifact@v4
+        with:
+          name: tauri-bundle-linux
+          path: artifacts/linux
+
+      - name: Download artifacts (windows)
+        uses: actions/download-artifact@v4
+        with:
+          name: tauri-bundle-windows
+          path: artifacts/windows
+
+      - name: List artifacts
+        run: |
+          echo "=== macos ==="
+          find artifacts/macos -maxdepth 4 -type f
+          echo "=== linux ==="
+          find artifacts/linux -maxdepth 4 -type f
+          echo "=== windows ==="
+          find artifacts/windows -maxdepth 4 -type f
+
+      - name: Create Release + Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            artifacts/macos/**
+            artifacts/linux/**
+            artifacts/windows/**
