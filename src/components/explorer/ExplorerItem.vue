@@ -7,6 +7,7 @@ const props = defineProps<{
   depth: number
   expanded: boolean
   selected: boolean
+  active: boolean
   focused: boolean
   dragTarget: boolean
   cutPending: boolean
@@ -44,7 +45,8 @@ function iconForNode(node: TreeNode): string {
   <div
     class="group flex items-center gap-2 rounded-lg px-2 py-1 text-xs"
     :class="[
-      selected ? 'bg-blue-100/90 text-slate-900 dark:bg-blue-900/40 dark:text-slate-100' : 'text-slate-700 dark:text-slate-300',
+      selected ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-slate-100' : 'text-slate-700 dark:text-slate-300',
+      active ? 'font-semibold text-slate-950 dark:text-white' : '',
       focused ? 'ring-1 ring-blue-500/70' : '',
       dragTarget ? 'bg-emerald-100/90 dark:bg-emerald-900/35' : '',
       cutPending ? 'opacity-45' : 'opacity-100'

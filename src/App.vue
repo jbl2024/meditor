@@ -1,24 +1,49 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import EditorView from './components/EditorView.vue'
 import ExplorerTree from './components/explorer/ExplorerTree.vue'
 import UiButton from './components/ui/UiButton.vue'
-import UiInput from './components/ui/UiInput.vue'
-import UiPanel from './components/ui/UiPanel.vue'
 import UiThemeSwitcher from './components/ui/UiThemeSwitcher.vue'
-import { ftsSearch, initDb, readTextFile, reindexMarkdownFile, selectWorkingFolder, writeTextFile } from './lib/api'
-
-const workingFolderPath = ref<string>('')
-const currentPath = ref<string>('')
-const query = ref<string>('')
-const errorMessage = ref<string>('')
-const hits = ref<Array<{ path: string; snippet: string; score: number }>>([])
-const selectedCount = ref<number>(0)
+import { ftsSearch, initDb, listChildren, readTextFile, reindexMarkdownFile, selectWorkingFolder, writeTextFile } from './lib/api'
+import { useEditorState } from './composables/useEditorState'
+import { useFilesystemState } from './composables/useFilesystemState'
+import { useWorkspaceState, type SidebarMode } from './composables/useWorkspaceState'
 
 type ThemePreference = 'light' | 'dark' | 'system'
+type SearchHit = { path: string; snippet: string; score: number }
+
+type EditorViewExposed = {
+  saveNow: () => Promise<void>
+  reloadCurrent: () => Promise<void>
+  focusEditor: () => void
+  revealSnippet: (snippet: string) => Promise<void>
+}
+
 const THEME_STORAGE_KEY = 'meditor.theme.preference'
 const WORKING_FOLDER_STORAGE_KEY = 'meditor.working-folder.path'
-const themePreference = ref<ThemePreference>('light')
+
+const workspace = useWorkspaceState()
+const editorState = useEditorState()
+const filesystem = useFilesystemState()
+
+const themePreference = ref<ThemePreference>('system')
+const searchQuery = ref('')
+const searchHits = ref<SearchHit[]>([])
+const searchLoading = ref(false)
+const quickOpenVisible = ref(false)
+const quickOpenQuery = ref('')
+const commandPaletteVisible = ref(false)
+const leftPaneWidth = ref(300)
+const rightPaneWidth = ref(300)
+const allWorkspaceFiles = ref<string[]>([])
+const loadingAllFiles = ref(false)
+const editorRef = ref<EditorViewExposed | null>(null)
+
+const resizeState = ref<{
+  side: 'left' | 'right'
+  startX: number
+  startWidth: number
+} | null>(null)
 
 const systemPrefersDark = () =>
   typeof window !== 'undefined' &&
@@ -32,6 +57,75 @@ const resolvedTheme = computed<'light' | 'dark'>(() => {
   return themePreference.value
 })
 
+const tabView = computed(() =>
+  workspace.openTabs.value.map((tab) => {
+    const status = editorState.getStatus(tab.path)
+    return {
+      ...tab,
+      title: fileName(tab.path),
+      dirty: status.dirty,
+      saving: status.saving,
+      saveError: status.saveError
+    }
+  })
+)
+
+const activeFilePath = computed(() => workspace.activeTabPath.value)
+const activeStatus = computed(() => editorState.getStatus(activeFilePath.value))
+const groupedSearchResults = computed(() => {
+  const groups: Array<{ path: string; items: SearchHit[] }> = []
+  const byPath = new Map<string, SearchHit[]>()
+  for (const hit of searchHits.value) {
+    if (!byPath.has(hit.path)) {
+      byPath.set(hit.path, [])
+    }
+    byPath.get(hit.path)!.push(hit)
+  }
+  for (const [path, items] of byPath.entries()) {
+    groups.push({ path, items })
+  }
+  return groups
+})
+
+const quickOpenResults = computed(() => {
+  const q = quickOpenQuery.value.trim().toLowerCase()
+  const files = allWorkspaceFiles.value
+  if (!q) return files.slice(0, 80)
+  return files
+    .filter((path) => path.toLowerCase().includes(q) || toRelativePath(path).toLowerCase().includes(q))
+    .slice(0, 80)
+})
+
+const metadataRows = computed(() => {
+  if (!activeFilePath.value) return []
+  const status = activeStatus.value
+  return [
+    { label: 'Path', value: toRelativePath(activeFilePath.value) },
+    { label: 'State', value: status.saving ? 'saving' : status.dirty ? 'editing' : 'saved' },
+    { label: 'Workspace', value: toRelativePath(filesystem.workingFolderPath.value) || filesystem.workingFolderPath.value }
+  ]
+})
+
+const commandItems = computed(() => [
+  { id: 'toggle-sidebar', label: 'Toggle Sidebar', run: () => workspace.toggleSidebar() },
+  { id: 'toggle-right-pane', label: 'Toggle Context Pane', run: () => workspace.toggleRightPane() },
+  { id: 'open-search', label: 'Open Global Search', run: () => openSearchPanel() },
+  { id: 'open-folder', label: 'Select Working Folder', run: () => void onSelectWorkingFolder() },
+  { id: 'theme-light', label: 'Theme: Light', run: () => (themePreference.value = 'light') },
+  { id: 'theme-dark', label: 'Theme: Dark', run: () => (themePreference.value = 'dark') },
+  { id: 'theme-system', label: 'Theme: System', run: () => (themePreference.value = 'system') }
+])
+
+const mediaQuery = typeof window !== 'undefined'
+  ? window.matchMedia('(prefers-color-scheme: dark)')
+  : null
+
+function fileName(path: string): string {
+  const normalized = path.replace(/\\/g, '/')
+  const parts = normalized.split('/')
+  return parts[parts.length - 1] || path
+}
+
 function applyTheme() {
   const root = document.documentElement
   root.classList.toggle('dark', resolvedTheme.value === 'dark')
@@ -42,13 +136,19 @@ function loadThemePreference() {
   if (saved === 'light' || saved === 'dark' || saved === 'system') {
     themePreference.value = saved
   } else {
-    themePreference.value = 'light'
+    themePreference.value = 'system'
   }
 }
 
-const mediaQuery = typeof window !== 'undefined'
-  ? window.matchMedia('(prefers-color-scheme: dark)')
-  : null
+function toRelativePath(path: string): string {
+  const root = filesystem.workingFolderPath.value
+  if (!root) return path
+  if (path === root) return '.'
+  if (path.startsWith(`${root}/`)) {
+    return path.slice(root.length + 1)
+  }
+  return path
+}
 
 function onSystemThemeChanged() {
   if (themePreference.value === 'system') {
@@ -56,14 +156,33 @@ function onSystemThemeChanged() {
   }
 }
 
-const selectedFileName = computed(() => {
-  if (!currentPath.value) return 'None'
-  const parts = currentPath.value.replace(/\\/g, '/').split('/')
-  return parts[parts.length - 1] || currentPath.value
-})
+function beginResize(side: 'left' | 'right', event: MouseEvent) {
+  event.preventDefault()
+  resizeState.value = {
+    side,
+    startX: event.clientX,
+    startWidth: side === 'left' ? leftPaneWidth.value : rightPaneWidth.value
+  }
+}
+
+function onPointerMove(event: MouseEvent) {
+  if (!resizeState.value) return
+  const { side, startWidth, startX } = resizeState.value
+  const delta = event.clientX - startX
+
+  if (side === 'left') {
+    leftPaneWidth.value = Math.min(520, Math.max(220, startWidth + delta))
+    return
+  }
+  rightPaneWidth.value = Math.min(560, Math.max(220, startWidth - delta))
+}
+
+function stopResize() {
+  resizeState.value = null
+}
 
 async function onSelectWorkingFolder() {
-  errorMessage.value = ''
+  filesystem.errorMessage.value = ''
   const path = await selectWorkingFolder()
   if (!path) return
   await loadWorkingFolder(path)
@@ -71,59 +190,283 @@ async function onSelectWorkingFolder() {
 
 async function loadWorkingFolder(path: string) {
   try {
-    workingFolderPath.value = path
+    filesystem.setWorkspacePath(path)
+    filesystem.indexingState.value = 'indexing'
     await initDb(path)
-    hits.value = []
+    searchHits.value = []
+    allWorkspaceFiles.value = []
     window.localStorage.setItem(WORKING_FOLDER_STORAGE_KEY, path)
 
-    if (currentPath.value && !currentPath.value.startsWith(path)) {
-      currentPath.value = ''
+    if (workspace.activeTabPath.value && !workspace.activeTabPath.value.startsWith(path)) {
+      workspace.closeAllTabs()
+      editorState.setActiveOutline([])
     }
   } catch (err) {
-    workingFolderPath.value = ''
-    currentPath.value = ''
-    hits.value = []
+    filesystem.clearWorkspacePath()
+    workspace.closeAllTabs()
+    searchHits.value = []
     window.localStorage.removeItem(WORKING_FOLDER_STORAGE_KEY)
-    errorMessage.value = err instanceof Error ? err.message : 'Could not open working folder.'
+    filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not open working folder.'
+  } finally {
+    filesystem.indexingState.value = 'idle'
   }
 }
 
 function onExplorerError(message: string) {
-  errorMessage.value = message
+  filesystem.errorMessage.value = message
 }
 
 function onExplorerSelection(paths: string[]) {
-  selectedCount.value = paths.length
+  filesystem.selectedCount.value = paths.length
 }
 
 function onExplorerOpen(path: string) {
-  currentPath.value = path
+  workspace.openTab(path)
+  nextTick(() => editorRef.value?.focusEditor())
 }
 
 async function openFile(path: string) {
-  if (!workingFolderPath.value) {
+  if (!filesystem.workingFolderPath.value) {
     throw new Error('Working folder is not set.')
   }
-  return await readTextFile(workingFolderPath.value, path)
+  return await readTextFile(filesystem.workingFolderPath.value, path)
 }
 
 async function saveFile(path: string, txt: string) {
-  if (!workingFolderPath.value) {
+  if (!filesystem.workingFolderPath.value) {
     throw new Error('Working folder is not set.')
   }
-  await writeTextFile(workingFolderPath.value, path, txt)
-  await reindexMarkdownFile(workingFolderPath.value, path)
+  await writeTextFile(filesystem.workingFolderPath.value, path, txt)
+  filesystem.indexingState.value = 'indexing'
+  try {
+    await reindexMarkdownFile(filesystem.workingFolderPath.value, path)
+  } finally {
+    filesystem.indexingState.value = 'idle'
+  }
 }
 
-async function onSearch() {
-  const q = query.value.trim()
-  if (!q || !workingFolderPath.value) return
+async function runGlobalSearch() {
+  const q = searchQuery.value.trim()
+  if (!q || !filesystem.workingFolderPath.value) return
 
-  errorMessage.value = ''
+  filesystem.errorMessage.value = ''
+  searchLoading.value = true
   try {
-    hits.value = await ftsSearch(workingFolderPath.value, q)
+    if (!allWorkspaceFiles.value.length) {
+      await loadAllFiles()
+    }
+    const ftsHits = await ftsSearch(filesystem.workingFolderPath.value, q)
+    const qLower = q.toLowerCase()
+    const filenameHits = allWorkspaceFiles.value
+      .filter((path) => toRelativePath(path).toLowerCase().includes(qLower))
+      .map((path) => ({
+        path,
+        snippet: `filename: <b>${toRelativePath(path)}</b>`,
+        score: 0
+      }))
+
+    const merged = [...filenameHits, ...ftsHits]
+    const dedupe = new Set<string>()
+    searchHits.value = merged.filter((hit) => {
+      const key = `${hit.path}::${hit.snippet}`
+      if (dedupe.has(key)) return false
+      dedupe.add(key)
+      return true
+    })
   } catch (err) {
-    errorMessage.value = err instanceof Error ? err.message : 'Search failed.'
+    filesystem.errorMessage.value = err instanceof Error ? err.message : 'Search failed.'
+  } finally {
+    searchLoading.value = false
+  }
+}
+
+async function onSearchResultOpen(hit: SearchHit) {
+  workspace.openTab(hit.path)
+  editorState.setRevealSnippet(hit.path, hit.snippet)
+
+  await nextTick()
+  await editorRef.value?.revealSnippet(hit.snippet)
+}
+
+function onTabClick(path: string) {
+  workspace.setActiveTab(path)
+}
+
+function onTabAuxClick(event: MouseEvent, path: string) {
+  if (event.button !== 1) return
+  event.preventDefault()
+  workspace.closeTab(path)
+}
+
+function onTabClose(path: string) {
+  workspace.closeTab(path)
+  editorState.clearStatus(path)
+}
+
+function onTabDragStart(index: number, event: DragEvent) {
+  event.dataTransfer?.setData('text/tab-index', String(index))
+  event.dataTransfer!.effectAllowed = 'move'
+}
+
+function onTabDrop(index: number, event: DragEvent) {
+  const raw = event.dataTransfer?.getData('text/tab-index')
+  if (!raw) return
+  const from = Number.parseInt(raw, 10)
+  if (Number.isNaN(from)) return
+  workspace.moveTab(from, index)
+}
+
+function onEditorStatus(payload: { path: string; dirty: boolean; saving: boolean; saveError: string }) {
+  editorState.updateStatus(payload.path, {
+    dirty: payload.dirty,
+    saving: payload.saving,
+    saveError: payload.saveError
+  })
+}
+
+function onEditorOutline(payload: Array<{ level: 1 | 2 | 3; text: string }>) {
+  editorState.setActiveOutline(payload)
+}
+
+function setSidebarMode(mode: SidebarMode) {
+  workspace.setSidebarMode(mode)
+}
+
+function openSearchPanel() {
+  workspace.setSidebarMode('search')
+  nextTick(() => {
+    document.querySelector<HTMLInputElement>('[data-search-input=\"true\"]')?.focus()
+  })
+}
+
+async function loadAllFiles() {
+  if (!filesystem.workingFolderPath.value || loadingAllFiles.value) return
+  loadingAllFiles.value = true
+
+  try {
+    const files: string[] = []
+    const queue: string[] = [filesystem.workingFolderPath.value]
+
+    while (queue.length > 0) {
+      const dir = queue.shift()!
+      const children = await listChildren(filesystem.workingFolderPath.value, dir)
+      for (const child of children) {
+        if (child.is_dir) {
+          queue.push(child.path)
+          continue
+        }
+        if (child.is_markdown) {
+          files.push(child.path)
+        }
+      }
+    }
+
+    allWorkspaceFiles.value = files.sort((a, b) => a.localeCompare(b))
+  } catch (err) {
+    filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not load file list.'
+  } finally {
+    loadingAllFiles.value = false
+  }
+}
+
+async function openQuickOpen() {
+  quickOpenVisible.value = true
+  commandPaletteVisible.value = false
+  if (!allWorkspaceFiles.value.length) {
+    await loadAllFiles()
+  }
+  await nextTick()
+  document.querySelector<HTMLInputElement>('[data-quick-open-input=\"true\"]')?.focus()
+}
+
+function closeQuickOpen() {
+  quickOpenVisible.value = false
+  quickOpenQuery.value = ''
+}
+
+function openQuickFile(path: string) {
+  workspace.openTab(path)
+  closeQuickOpen()
+  nextTick(() => editorRef.value?.focusEditor())
+}
+
+function openCommandPalette() {
+  commandPaletteVisible.value = true
+  quickOpenVisible.value = false
+}
+
+function closeCommandPalette() {
+  commandPaletteVisible.value = false
+}
+
+function runCommand(id: string) {
+  const command = commandItems.value.find((item) => item.id === id)
+  if (!command) return
+  command.run()
+  closeCommandPalette()
+}
+
+async function saveActiveTab() {
+  await editorRef.value?.saveNow()
+}
+
+function onWindowKeydown(event: KeyboardEvent) {
+  const isMod = event.metaKey || event.ctrlKey
+  if (!isMod) return
+
+  const key = event.key.toLowerCase()
+
+  if (key === 'p' && !event.shiftKey) {
+    event.preventDefault()
+    void openQuickOpen()
+    return
+  }
+
+  if (key === 'p' && event.shiftKey) {
+    event.preventDefault()
+    openCommandPalette()
+    return
+  }
+
+  if (key === 'w') {
+    event.preventDefault()
+    workspace.closeCurrentTab()
+    return
+  }
+
+  if (key === 'tab') {
+    event.preventDefault()
+    workspace.nextTab()
+    return
+  }
+
+  if (key === 'f' && event.shiftKey) {
+    event.preventDefault()
+    openSearchPanel()
+    return
+  }
+
+  if (key === 'b') {
+    event.preventDefault()
+    workspace.toggleSidebar()
+    return
+  }
+
+  if (key === 'j') {
+    event.preventDefault()
+    workspace.toggleRightPane()
+    return
+  }
+
+  if (key === 's') {
+    event.preventDefault()
+    void saveActiveTab()
+    return
+  }
+
+  if (key === 'k') {
+    event.preventDefault()
+    openCommandPalette()
   }
 }
 
@@ -132,10 +475,37 @@ watch(themePreference, (next) => {
   applyTheme()
 })
 
+watch(
+  () => filesystem.workingFolderPath.value,
+  () => {
+    allWorkspaceFiles.value = []
+  }
+)
+
+watch(
+  () => workspace.activeTabPath.value,
+  async (path) => {
+    if (!path) {
+      editorState.setActiveOutline([])
+      return
+    }
+
+    const snippet = editorState.consumeRevealSnippet(path)
+    if (!snippet) return
+
+    await nextTick()
+    await editorRef.value?.revealSnippet(snippet)
+  }
+)
+
 onMounted(() => {
   loadThemePreference()
   applyTheme()
   mediaQuery?.addEventListener('change', onSystemThemeChanged)
+  window.addEventListener('keydown', onWindowKeydown)
+  window.addEventListener('mousemove', onPointerMove)
+  window.addEventListener('mouseup', stopResize)
+
   const savedFolder = window.localStorage.getItem(WORKING_FOLDER_STORAGE_KEY)
   if (savedFolder) {
     void loadWorkingFolder(savedFolder)
@@ -144,97 +514,700 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   mediaQuery?.removeEventListener('change', onSystemThemeChanged)
+  window.removeEventListener('keydown', onWindowKeydown)
+  window.removeEventListener('mousemove', onPointerMove)
+  window.removeEventListener('mouseup', stopResize)
 })
 </script>
 
 <template>
-  <div class="min-h-screen text-slate-900 dark:text-slate-100">
-    <div class="mx-auto flex h-screen max-w-[1800px] flex-col p-4 lg:p-5">
-      <header class="rounded-2xl border border-slate-200/80 bg-white/85 p-4 shadow-[0_14px_35px_rgba(148,163,184,0.25)] backdrop-blur-sm dark:border-slate-700/70 dark:bg-slate-900/65 dark:shadow-[0_14px_35px_rgba(2,6,23,0.45)]">
-        <div class="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-          <p class="max-w-[65vw] truncate rounded-lg border border-slate-300/80 bg-slate-100/70 px-3 py-2 font-mono text-xs text-slate-700 dark:border-slate-700/80 dark:bg-slate-900/70 dark:text-slate-300" :title="workingFolderPath || 'No folder selected'">
-            {{ workingFolderPath || 'No folder selected' }}
-          </p>
-          <div class="flex flex-wrap items-center gap-2">
-            <UiThemeSwitcher v-model="themePreference" />
-            <UiButton variant="primary" @click="onSelectWorkingFolder">Select working folder</UiButton>
+  <div class="ide-root">
+    <header class="topbar">
+      <div class="tabs-row">
+        <div class="tab-scroll">
+          <button
+            v-for="(tab, index) in tabView"
+            :key="tab.path"
+            type="button"
+            class="tab-item"
+            :class="{ active: activeFilePath === tab.path }"
+            draggable="true"
+            @click="onTabClick(tab.path)"
+            @auxclick="onTabAuxClick($event, tab.path)"
+            @dragstart="onTabDragStart(index, $event)"
+            @dragover.prevent
+            @drop="onTabDrop(index, $event)"
+          >
+            <span class="tab-name">{{ tab.title }}</span>
+            <span v-if="tab.saving" class="tab-state" title="Saving">~</span>
+            <span v-else-if="tab.dirty" class="tab-state" title="Unsaved">•</span>
+            <button class="tab-close" type="button" @click.stop="onTabClose(tab.path)">x</button>
+          </button>
+          <div v-if="!tabView.length" class="tab-empty">No open files</div>
+        </div>
+      </div>
+
+      <div class="global-actions">
+        <UiThemeSwitcher v-model="themePreference" />
+        <UiButton size="sm" variant="ghost" @click="onSelectWorkingFolder">Workspace</UiButton>
+        <UiButton size="sm" variant="ghost" title="Global search" @click="openSearchPanel">Search</UiButton>
+        <UiButton size="sm" variant="ghost" title="Command palette" @click="openCommandPalette">Cmd</UiButton>
+        <UiButton size="sm" variant="ghost" title="Toggle context pane" @click="workspace.toggleRightPane()">Pane</UiButton>
+      </div>
+    </header>
+
+    <div class="body-row">
+      <aside class="activity-bar">
+        <button
+          class="activity-btn"
+          :class="{ active: workspace.sidebarMode.value === 'explorer' && workspace.sidebarVisible.value }"
+          type="button"
+          title="Explorer"
+          @click="setSidebarMode('explorer')"
+        >
+          E
+        </button>
+        <button
+          class="activity-btn"
+          :class="{ active: workspace.sidebarMode.value === 'search' && workspace.sidebarVisible.value }"
+          type="button"
+          title="Search"
+          @click="setSidebarMode('search')"
+        >
+          S
+        </button>
+        <button
+          class="activity-btn"
+          :class="{ active: workspace.sidebarMode.value === 'backlinks' && workspace.sidebarVisible.value }"
+          type="button"
+          title="Backlinks"
+          @click="setSidebarMode('backlinks')"
+        >
+          B
+        </button>
+        <button
+          class="activity-btn"
+          :class="{ active: workspace.sidebarMode.value === 'favorites' && workspace.sidebarVisible.value }"
+          type="button"
+          title="Favorites"
+          @click="setSidebarMode('favorites')"
+        >
+          F
+        </button>
+      </aside>
+
+      <aside
+        v-if="workspace.sidebarVisible.value"
+        class="left-sidebar"
+        :style="{ width: `${leftPaneWidth}px` }"
+      >
+        <div class="panel-header">
+          <h2 class="panel-title">{{ workspace.sidebarMode.value }}</h2>
+          <UiButton size="sm" variant="ghost" @click="workspace.toggleSidebar()">Hide</UiButton>
+        </div>
+
+        <div class="panel-body">
+          <div v-if="workspace.sidebarMode.value === 'explorer'" class="panel-fill">
+            <ExplorerTree
+              :folder-path="filesystem.workingFolderPath.value"
+              :active-path="activeFilePath"
+              @open="onExplorerOpen"
+              @select="onExplorerSelection"
+              @error="onExplorerError"
+            />
+          </div>
+
+          <div v-else-if="workspace.sidebarMode.value === 'search'" class="panel-fill search-panel">
+            <div class="search-controls">
+              <input
+                v-model="searchQuery"
+                data-search-input="true"
+                :disabled="!filesystem.hasWorkspace.value"
+                class="tool-input"
+                placeholder="Search files and content"
+                @keydown.enter.prevent="runGlobalSearch"
+              />
+              <UiButton size="sm" :disabled="!filesystem.hasWorkspace.value || searchLoading" @click="runGlobalSearch">
+                {{ searchLoading ? '...' : 'Go' }}
+              </UiButton>
+            </div>
+
+            <div class="results-list">
+              <div v-if="!searchHits.length" class="placeholder">No results</div>
+              <section v-for="group in groupedSearchResults" :key="group.path" class="result-group">
+                <h3 class="result-file">{{ toRelativePath(group.path) }}</h3>
+                <button
+                  v-for="item in group.items"
+                  :key="`${group.path}-${item.score}-${item.snippet}`"
+                  type="button"
+                  class="result-item"
+                  @click="onSearchResultOpen(item)"
+                >
+                  <div class="result-snippet" v-html="item.snippet"></div>
+                </button>
+              </section>
+            </div>
+          </div>
+
+          <div v-else class="placeholder">Coming soon</div>
+        </div>
+      </aside>
+
+      <div
+        v-if="workspace.sidebarVisible.value"
+        class="splitter"
+        @mousedown="beginResize('left', $event)"
+      ></div>
+
+      <main class="center-area">
+        <EditorView
+          ref="editorRef"
+          :path="activeFilePath"
+          :openFile="openFile"
+          :saveFile="saveFile"
+          @status="onEditorStatus"
+          @outline="onEditorOutline"
+        />
+      </main>
+
+      <div
+        v-if="workspace.rightPaneVisible.value"
+        class="splitter"
+        @mousedown="beginResize('right', $event)"
+      ></div>
+
+      <aside
+        v-if="workspace.rightPaneVisible.value"
+        class="right-pane"
+        :style="{ width: `${rightPaneWidth}px` }"
+      >
+        <div class="pane-section">
+          <h3>Outline</h3>
+          <div v-if="!editorState.activeOutline.value.length" class="placeholder">No headings</div>
+          <button
+            v-for="(heading, idx) in editorState.activeOutline.value"
+            :key="`${heading.text}-${idx}`"
+            type="button"
+            class="outline-row"
+            :style="{ paddingLeft: `${(heading.level - 1) * 12 + 8}px` }"
+          >
+            {{ heading.text }}
+          </button>
+        </div>
+
+        <div class="pane-section">
+          <h3>Backlinks</h3>
+          <div class="placeholder">Backlinks module placeholder</div>
+        </div>
+
+        <div class="pane-section">
+          <h3>Metadata</h3>
+          <div class="metadata-grid">
+            <div v-for="row in metadataRows" :key="row.label" class="meta-row">
+              <span>{{ row.label }}</span>
+              <span :title="row.value">{{ row.value }}</span>
+            </div>
           </div>
         </div>
-      </header>
+      </aside>
+    </div>
 
-      <section class="mt-4 grid min-h-0 flex-1 gap-4 xl:grid-cols-[420px_minmax(0,1fr)]">
-        <UiPanel className="min-h-0 overflow-y-auto">
-          <div class="space-y-4">
-            <div class="rounded-xl border border-slate-200/80 bg-slate-50/75 p-3 dark:border-slate-700/80 dark:bg-slate-950/55">
-              <p class="text-[11px] uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Working folder</p>
-              <p class="mt-1 truncate text-sm text-slate-900 dark:text-slate-100" :title="workingFolderPath || 'Not set'">
-                {{ workingFolderPath || 'Not set' }}
-              </p>
-            </div>
+    <footer class="status-bar">
+      <span class="status-item">{{ activeFilePath ? toRelativePath(activeFilePath) : 'No file' }}</span>
+      <span class="status-item">{{ activeStatus.saving ? 'saving...' : activeStatus.dirty ? 'editing...' : 'saved' }}</span>
+      <span class="status-item">index: {{ filesystem.indexingState.value }}</span>
+      <span class="status-item">embeddings: {{ filesystem.embeddingQueueState.value }}</span>
+      <span class="status-item">workspace: {{ filesystem.workingFolderPath.value || 'none' }}</span>
+    </footer>
 
-            <div class="space-y-2">
-              <p class="text-[11px] uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Search</p>
-              <div class="flex gap-2">
-                <UiInput
-                  v-model="query"
-                  :disabled="!workingFolderPath"
-                  placeholder="FTS5 BM25, ex: kubernetes OR proxmox"
-                />
-                <UiButton size="sm" :disabled="!workingFolderPath" @click="onSearch">Go</UiButton>
-              </div>
-            </div>
+    <div v-if="filesystem.errorMessage.value" class="error-toast">{{ filesystem.errorMessage.value }}</div>
 
-            <div v-if="hits.length" class="space-y-2">
-              <p class="text-[11px] uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Results</p>
-              <article
-                v-for="h in hits"
-                :key="h.path + h.score"
-                class="rounded-xl border border-slate-200/80 bg-slate-50/75 p-3 dark:border-slate-700/70 dark:bg-slate-950/55"
-              >
-                <p class="truncate text-xs font-semibold text-[#003153] dark:text-[#89a9c8]" :title="h.path">{{ h.path }}</p>
-                <p class="search-snippet mt-2 text-xs leading-relaxed text-slate-700 dark:text-slate-300" v-html="h.snippet"></p>
-                <p class="mt-2 text-[11px] text-slate-500 dark:text-slate-500">score: {{ h.score.toFixed(3) }}</p>
-              </article>
-            </div>
+    <div v-if="quickOpenVisible" class="modal-overlay" @click.self="closeQuickOpen">
+      <div class="modal quick-open">
+        <input
+          v-model="quickOpenQuery"
+          data-quick-open-input="true"
+          class="tool-input"
+          placeholder="Quick open file"
+        />
+        <div class="modal-list">
+          <button
+            v-for="path in quickOpenResults"
+            :key="path"
+            type="button"
+            class="modal-item"
+            @click="openQuickFile(path)"
+          >
+            {{ toRelativePath(path) }}
+          </button>
+          <div v-if="!quickOpenResults.length" class="placeholder">No matching files</div>
+        </div>
+      </div>
+    </div>
 
-            <div class="space-y-2">
-              <p class="text-[11px] uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-                Explorer
-                <span class="ml-2 normal-case tracking-normal text-slate-400 dark:text-slate-500">{{ selectedCount }} selected</span>
-              </p>
-              <ExplorerTree
-                :folder-path="workingFolderPath"
-                @open="onExplorerOpen"
-                @select="onExplorerSelection"
-                @error="onExplorerError"
-              />
-            </div>
-
-            <p v-if="errorMessage" class="rounded-lg border border-rose-300/80 bg-rose-50/80 px-2 py-1 text-xs text-rose-700 dark:border-rose-900/80 dark:bg-rose-950/40 dark:text-rose-300">
-              {{ errorMessage }}
-            </p>
-          </div>
-        </UiPanel>
-
-        <UiPanel className="min-h-0">
-          <div class="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200/80 bg-slate-50/75 p-3 dark:border-slate-700/75 dark:bg-slate-950/55">
-            <p class="text-[11px] uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">File</p>
-            <p class="font-mono text-xs text-slate-700 dark:text-slate-300">{{ selectedFileName }}</p>
-            <p
-              v-if="currentPath"
-              class="ml-auto max-w-full truncate rounded-lg border border-slate-300/90 bg-white/90 px-2 py-1 font-mono text-[11px] text-slate-500 dark:border-slate-700/80 dark:bg-slate-900/80 dark:text-slate-400"
-              :title="currentPath"
-            >
-              {{ currentPath }}
-            </p>
-          </div>
-          <EditorView
-            :path="currentPath"
-            :openFile="openFile"
-            :saveFile="saveFile"
-          />
-        </UiPanel>
-      </section>
+    <div v-if="commandPaletteVisible" class="modal-overlay" @click.self="closeCommandPalette">
+      <div class="modal command-palette">
+        <h3>Command Palette</h3>
+        <div class="modal-list">
+          <button
+            v-for="item in commandItems"
+            :key="item.id"
+            type="button"
+            class="modal-item"
+            @click="runCommand(item.id)"
+          >
+            {{ item.label }}
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+.ide-root {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  color: #0f172a;
+}
+
+:global(.dark) .ide-root {
+  background: #020617;
+  color: #e2e8f0;
+}
+
+.topbar {
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+:global(.dark) .topbar {
+  border-bottom-color: #1e293b;
+  background: #0f172a;
+}
+
+.tabs-row {
+  min-width: 0;
+  flex: 1;
+  height: 100%;
+}
+
+.tab-scroll {
+  display: flex;
+  align-items: stretch;
+  overflow-x: auto;
+  height: 100%;
+}
+
+.tab-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-right: 1px solid #e2e8f0;
+  background: #f1f5f9;
+  color: #334155;
+  min-width: 140px;
+  max-width: 220px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+:global(.dark) .tab-item {
+  border-right-color: #1e293b;
+  background: #0b1220;
+  color: #94a3b8;
+}
+
+.tab-item.active {
+  background: #ffffff;
+  color: #0f172a;
+}
+
+:global(.dark) .tab-item.active {
+  background: #020617;
+  color: #e2e8f0;
+}
+
+.tab-name {
+  min-width: 0;
+  flex: 1;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tab-state {
+  width: 10px;
+  text-align: center;
+}
+
+.tab-close {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  width: 16px;
+  height: 16px;
+  font-size: 12px;
+}
+
+.tab-empty {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.global-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+}
+
+.body-row {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.activity-bar {
+  width: 44px;
+  border-right: 1px solid #e2e8f0;
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 8px;
+  gap: 6px;
+}
+
+:global(.dark) .activity-bar {
+  border-right-color: #1e293b;
+  background: #0f172a;
+}
+
+.activity-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.activity-btn.active {
+  color: #0f172a;
+  border-color: #cbd5e1;
+  background: #ffffff;
+}
+
+:global(.dark) .activity-btn.active {
+  color: #e2e8f0;
+  border-color: #334155;
+  background: #020617;
+}
+
+.left-sidebar,
+.right-pane {
+  min-width: 0;
+  background: #f8fafc;
+  border-right: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+}
+
+.right-pane {
+  border-right: 0;
+  border-left: 1px solid #e2e8f0;
+}
+
+:global(.dark) .left-sidebar,
+:global(.dark) .right-pane {
+  background: #0b1220;
+  border-color: #1e293b;
+}
+
+.panel-header {
+  height: 34px;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+}
+
+:global(.dark) .panel-header {
+  border-bottom-color: #1e293b;
+}
+
+.panel-title {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #475569;
+}
+
+.panel-body {
+  flex: 1;
+  min-height: 0;
+  padding: 8px;
+}
+
+.panel-fill {
+  height: 100%;
+  min-height: 0;
+}
+
+.search-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.search-controls {
+  display: flex;
+  gap: 6px;
+}
+
+.tool-input {
+  width: 100%;
+  height: 30px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #0f172a;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+:global(.dark) .tool-input {
+  border-color: #334155;
+  background: #020617;
+  color: #e2e8f0;
+}
+
+.results-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.result-group {
+  margin-bottom: 12px;
+}
+
+.result-file {
+  margin: 0 0 4px;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.result-item {
+  width: 100%;
+  text-align: left;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  border-radius: 4px;
+  padding: 6px;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+:global(.dark) .result-item {
+  border-color: #1e293b;
+  background: #020617;
+  color: #cbd5e1;
+}
+
+.result-snippet :deep(b) {
+  font-weight: 700;
+}
+
+.splitter {
+  width: 5px;
+  cursor: col-resize;
+  background: #e2e8f0;
+}
+
+:global(.dark) .splitter {
+  background: #1e293b;
+}
+
+.center-area {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  background: #ffffff;
+}
+
+:global(.dark) .center-area {
+  background: #020617;
+}
+
+.pane-section {
+  border-bottom: 1px solid #e2e8f0;
+  padding: 10px;
+}
+
+:global(.dark) .pane-section {
+  border-bottom-color: #1e293b;
+}
+
+.pane-section h3 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.outline-row {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding-top: 3px;
+  padding-bottom: 3px;
+  font-size: 12px;
+  color: inherit;
+}
+
+.metadata-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.meta-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.meta-row span:last-child {
+  color: #334155;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+:global(.dark) .meta-row span:last-child {
+  color: #cbd5e1;
+}
+
+.status-bar {
+  height: 24px;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+  font-size: 11px;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 8px;
+  overflow-x: auto;
+}
+
+:global(.dark) .status-bar {
+  border-top-color: #1e293b;
+  background: #0f172a;
+  color: #94a3b8;
+}
+
+.status-item {
+  white-space: nowrap;
+}
+
+.error-toast {
+  position: fixed;
+  right: 12px;
+  bottom: 34px;
+  border: 1px solid #fda4af;
+  background: #fff1f2;
+  color: #9f1239;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.45);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 80px;
+  z-index: 60;
+}
+
+.modal {
+  width: min(760px, calc(100vw - 32px));
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  border-radius: 6px;
+  padding: 10px;
+}
+
+:global(.dark) .modal {
+  border-color: #334155;
+  background: #020617;
+}
+
+.modal-list {
+  margin-top: 8px;
+  max-height: 360px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.modal-item {
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  border-radius: 4px;
+  padding: 6px;
+  text-align: left;
+  font-size: 12px;
+}
+
+:global(.dark) .modal-item {
+  border-color: #1e293b;
+  background: #0b1220;
+  color: #cbd5e1;
+}
+
+.placeholder {
+  color: #64748b;
+  font-size: 12px;
+  padding: 6px;
+}
+
+@media (max-width: 980px) {
+  .global-actions :deep(.inline-flex) {
+    display: none;
+  }
+
+  .global-actions :deep(.inline-flex:nth-child(1)) {
+    display: inline-flex;
+  }
+}
+</style>

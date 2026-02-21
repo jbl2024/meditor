@@ -16,18 +16,12 @@
   body {
     margin: 0;
     font-family: var(--font-sans);
-    background:
-      radial-gradient(1200px 500px at 0% -10%, rgba(0, 49, 83, 0.16), transparent 60%),
-      radial-gradient(1000px 500px at 100% -10%, rgba(23, 76, 114, 0.14), transparent 60%),
-      #f8fafc;
+    background: #fff;
     color: #0f172a;
   }
 
   html.dark body {
-    background:
-      radial-gradient(1200px 500px at 0% -10%, rgba(0, 49, 83, 0.26), transparent 60%),
-      radial-gradient(1000px 500px at 100% -10%, rgba(23, 76, 114, 0.26), transparent 60%),
-      #020617;
+    background: #020617;
     color: #e2e8f0;
   }
 }
@@ -75,7 +69,7 @@
   }
 
   .editor-holder .ce-block {
-    padding: 0.18rem 0;
+    padding: 0.1rem 0;
   }
 
   .editor-holder .ce-block--selected .ce-block__content {
@@ -83,9 +77,9 @@
   }
 
   .editor-holder .ce-paragraph {
-    font-size: 1.05rem;
+    font-size: 1rem;
     color: #0f172a;
-    line-height: 1.8;
+    line-height: 1.72;
     padding: 0;
   }
 

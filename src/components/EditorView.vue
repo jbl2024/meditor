@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import EditorJS, { type OutputBlockData } from '@editorjs/editorjs'
 import CodeTool from '@editorjs/code'
 import Delimiter from '@editorjs/delimiter'
@@ -9,15 +9,19 @@ import List from '@editorjs/list'
 import Paragraph from '@editorjs/paragraph'
 import Quote from '@editorjs/quote'
 import { editorDataToMarkdown, markdownToEditorData } from '../lib/markdownBlocks'
-import UiButton from './ui/UiButton.vue'
 
-const AUTOSAVE_IDLE_MS = 2500
+const AUTOSAVE_IDLE_MS = 1800
 
 type SlashCommand = {
   id: string
   label: string
   type: string
   data: Record<string, unknown>
+}
+
+type HeadingNode = {
+  level: 1 | 2 | 3
+  text: string
 }
 
 const SLASH_COMMANDS: SlashCommand[] = [
@@ -35,34 +39,84 @@ const props = defineProps<{
   saveFile: (path: string, text: string) => Promise<void>
 }>()
 
+const emit = defineEmits<{
+  status: [payload: { path: string; dirty: boolean; saving: boolean; saveError: string }]
+  outline: [payload: HeadingNode[]]
+}>()
+
 const holder = ref<HTMLDivElement | null>(null)
 let editor: EditorJS | null = null
 let autosaveTimer: ReturnType<typeof setTimeout> | null = null
+let outlineTimer: ReturnType<typeof setTimeout> | null = null
 let suppressOnChange = false
 
-const loadedText = ref('')
-const isDirty = ref(false)
-const isSaving = ref(false)
-const saveError = ref('')
+const loadedTextByPath = ref<Record<string, string>>({})
+const dirtyByPath = ref<Record<string, boolean>>({})
+const scrollTopByPath = ref<Record<string, number>>({})
+const savingByPath = ref<Record<string, boolean>>({})
+const saveErrorByPath = ref<Record<string, string>>({})
 
 const slashOpen = ref(false)
 const slashIndex = ref(0)
 const slashLeft = ref(0)
 const slashTop = ref(0)
 
-const saveLabel = computed(() => (isSaving.value ? 'Saving...' : 'Save'))
+const currentPath = computed(() => props.path?.trim() || '')
+const isDirty = computed(() => Boolean(dirtyByPath.value[currentPath.value]))
+const isSaving = computed(() => Boolean(savingByPath.value[currentPath.value]))
+const saveError = computed(() => saveErrorByPath.value[currentPath.value] ?? '')
 const statusText = computed(() => {
-  if (!props.path) return 'Select a file'
+  if (!currentPath.value) return 'Select a file'
   if (saveError.value) return saveError.value
-  if (isSaving.value) return 'Autosaving...'
-  if (isDirty.value) return 'Unsaved changes'
-  return 'All changes saved'
+  if (isSaving.value) return 'Saving...'
+  if (isDirty.value) return 'Editing'
+  return 'Saved'
 })
+
+function setDirty(path: string, dirty: boolean) {
+  dirtyByPath.value = {
+    ...dirtyByPath.value,
+    [path]: dirty
+  }
+  emitStatus(path)
+}
+
+function setSaving(path: string, saving: boolean) {
+  savingByPath.value = {
+    ...savingByPath.value,
+    [path]: saving
+  }
+  emitStatus(path)
+}
+
+function setSaveError(path: string, message: string) {
+  saveErrorByPath.value = {
+    ...saveErrorByPath.value,
+    [path]: message
+  }
+  emitStatus(path)
+}
+
+function emitStatus(path: string) {
+  if (!path) return
+  emit('status', {
+    path,
+    dirty: Boolean(dirtyByPath.value[path]),
+    saving: Boolean(savingByPath.value[path]),
+    saveError: saveErrorByPath.value[path] ?? ''
+  })
+}
 
 function clearAutosaveTimer() {
   if (!autosaveTimer) return
   clearTimeout(autosaveTimer)
   autosaveTimer = null
+}
+
+function clearOutlineTimer() {
+  if (!outlineTimer) return
+  clearTimeout(outlineTimer)
+  outlineTimer = null
 }
 
 function scheduleAutosave() {
@@ -116,6 +170,12 @@ function placeCaretInBlock(blockId: string) {
   range.collapse(true)
   selection.removeAllRanges()
   selection.addRange(range)
+}
+
+function focusEditor() {
+  if (!holder.value) return
+  const editable = holder.value.querySelector('[contenteditable="true"]') as HTMLElement | null
+  editable?.focus()
 }
 
 function openSlashMenuAtCaret() {
@@ -250,9 +310,6 @@ function looksLikeMarkdown(text: string): boolean {
 function isLikelyMarkdownPaste(plain: string, html: string): boolean {
   if (!plain.trim()) return false
   if (!looksLikeMarkdown(plain)) return false
-
-  // Even when HTML is present (many apps add it), prefer Markdown conversion
-  // if the plain-text payload strongly resembles markdown syntax.
   if (!html) return true
   return true
 }
@@ -307,12 +364,59 @@ function onEditorPaste(event: ClipboardEvent) {
   insertParsedMarkdownBlocks(parsed.blocks as OutputBlockData[])
 }
 
+function parseOutlineFromDom(): HeadingNode[] {
+  if (!holder.value) return []
+  const headers = Array.from(holder.value.querySelectorAll('.ce-header')) as HTMLElement[]
+  const out: HeadingNode[] = []
+
+  for (const header of headers) {
+    const text = header.innerText.trim()
+    if (!text) continue
+    const tag = header.tagName.toLowerCase()
+    const levelRaw = Number.parseInt(tag.replace('h', ''), 10)
+    const level = (levelRaw >= 1 && levelRaw <= 3 ? levelRaw : 3) as 1 | 2 | 3
+    out.push({ level, text })
+  }
+
+  return out
+}
+
+function emitOutlineSoon() {
+  clearOutlineTimer()
+  outlineTimer = setTimeout(() => {
+    emit('outline', parseOutlineFromDom())
+  }, 120)
+}
+
+function getVisibleText(input: string): string {
+  return input
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+async function revealSnippet(snippet: string) {
+  if (!holder.value || !snippet) return
+  await nextTick()
+
+  const targetSnippet = getVisibleText(snippet).toLowerCase()
+  if (!targetSnippet) return
+
+  const nodes = Array.from(holder.value.querySelectorAll('[contenteditable="true"], .ce-code__textarea')) as HTMLElement[]
+  const match = nodes.find((node) => getVisibleText(node.innerText).toLowerCase().includes(targetSnippet))
+  if (!match) return
+
+  match.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  match.focus()
+}
+
 async function ensureEditor() {
   if (!holder.value || editor) return
 
   editor = new EditorJS({
     holder: holder.value,
-    autofocus: true,
+    autofocus: false,
     defaultBlock: 'paragraph',
     inlineToolbar: ['bold', 'italic', 'link', 'inlineCode'],
     placeholder: 'Write here...',
@@ -346,10 +450,12 @@ async function ensureEditor() {
       inlineCode: InlineCode
     },
     async onChange() {
-      if (suppressOnChange || !props.path) return
-      isDirty.value = true
-      saveError.value = ''
+      const path = currentPath.value
+      if (suppressOnChange || !path) return
+      setDirty(path, true)
+      setSaveError(path, '')
       scheduleAutosave()
+      emitOutlineSoon()
     }
   })
 
@@ -358,87 +464,106 @@ async function ensureEditor() {
   holder.value.addEventListener('paste', onEditorPaste, true)
 }
 
-async function loadCurrentFile() {
-  const p = props.path?.trim()
-  if (!p) return
+async function loadCurrentFile(path: string) {
+  if (!path) return
 
   await ensureEditor()
   if (!editor) return
 
   clearAutosaveTimer()
   closeSlashMenu()
-  saveError.value = ''
+  setSaveError(path, '')
 
   try {
-    const txt = await props.openFile(p)
+    const txt = await props.openFile(path)
     suppressOnChange = true
-    loadedText.value = txt
+    loadedTextByPath.value = {
+      ...loadedTextByPath.value,
+      [path]: txt
+    }
     await editor.render(markdownToEditorData(txt))
-    isDirty.value = false
+    setDirty(path, false)
+
+    await nextTick()
+    const remembered = scrollTopByPath.value[path] ?? 0
+    if (holder.value) {
+      holder.value.scrollTop = remembered
+    }
+    emitOutlineSoon()
   } catch (err) {
-    saveError.value = err instanceof Error ? err.message : 'Could not read file.'
+    setSaveError(path, err instanceof Error ? err.message : 'Could not read file.')
   } finally {
     suppressOnChange = false
   }
 }
 
 async function saveCurrentFile(manual = true) {
-  const p = props.path?.trim()
-  if (!p || !editor || isSaving.value) return
+  const path = currentPath.value
+  if (!path || !editor || savingByPath.value[path]) return
 
-  isSaving.value = true
-  if (manual) saveError.value = ''
+  setSaving(path, true)
+  if (manual) setSaveError(path, '')
 
   try {
     const data = await editor.save()
     const md = editorDataToMarkdown(data)
+    const lastLoaded = loadedTextByPath.value[path] ?? ''
 
-    if (md === loadedText.value) {
-      isDirty.value = false
+    if (md === lastLoaded) {
+      setDirty(path, false)
       return
     }
 
-    const latestOnDisk = await props.openFile(p)
-    if (latestOnDisk !== loadedText.value) {
+    const latestOnDisk = await props.openFile(path)
+    if (latestOnDisk !== lastLoaded) {
       throw new Error('File changed on disk. Reload before saving to avoid overwrite.')
     }
 
-    await props.saveFile(p, md)
-    loadedText.value = md
-    isDirty.value = false
+    await props.saveFile(path, md)
+
+    loadedTextByPath.value = {
+      ...loadedTextByPath.value,
+      [path]: md
+    }
+    setDirty(path, false)
   } catch (err) {
-    saveError.value = err instanceof Error ? err.message : 'Could not save file.'
+    setSaveError(path, err instanceof Error ? err.message : 'Could not save file.')
   } finally {
-    isSaving.value = false
-  }
-}
-
-function onWindowKeydown(event: KeyboardEvent) {
-  const isMod = event.metaKey || event.ctrlKey
-  if (!isMod || event.key.toLowerCase() !== 's') return
-
-  event.preventDefault()
-  if (isDirty.value || isSaving.value) {
-    void saveCurrentFile(true)
+    setSaving(path, false)
+    emitOutlineSoon()
   }
 }
 
 watch(
   () => props.path,
-  async () => {
-    if (!props.path) return
-    await loadCurrentFile()
+  async (next, prev) => {
+    if (prev && holder.value) {
+      scrollTopByPath.value = {
+        ...scrollTopByPath.value,
+        [prev]: holder.value.scrollTop
+      }
+    }
+
+    const nextPath = next?.trim()
+    if (!nextPath || !editor) {
+      emit('outline', [])
+      return
+    }
+
+    await loadCurrentFile(nextPath)
   }
 )
 
 onMounted(async () => {
   await ensureEditor()
-  window.addEventListener('keydown', onWindowKeydown)
+  if (currentPath.value) {
+    await loadCurrentFile(currentPath.value)
+  }
 })
 
 onBeforeUnmount(async () => {
   clearAutosaveTimer()
-  window.removeEventListener('keydown', onWindowKeydown)
+  clearOutlineTimer()
 
   if (holder.value) {
     holder.value.removeEventListener('keydown', onEditorKeydown)
@@ -450,33 +575,44 @@ onBeforeUnmount(async () => {
     editor = null
   }
 })
+
+defineExpose({
+  saveNow: async () => {
+    await saveCurrentFile(true)
+  },
+  reloadCurrent: async () => {
+    if (!currentPath.value) return
+    await loadCurrentFile(currentPath.value)
+  },
+  focusEditor,
+  revealSnippet
+})
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 flex-col gap-3">
-    <div class="flex items-center gap-2">
-      <UiButton :disabled="!path" size="sm" @click="loadCurrentFile">Reload</UiButton>
-      <UiButton :disabled="!path || !isDirty || isSaving" size="sm" variant="primary" @click="saveCurrentFile(true)">{{ saveLabel }}</UiButton>
-      <span class="text-xs" :class="saveError ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500 dark:text-slate-500'">
-        {{ statusText }}
-      </span>
-    </div>
-
+  <div class="flex h-full min-h-0 flex-col">
     <div
       ref="holder"
-      class="editor-holder relative min-h-0 flex-1 overflow-y-auto rounded-2xl border border-slate-200/80 bg-white/85 p-6 dark:border-slate-700/70 dark:bg-slate-950/65"
+      class="editor-holder relative min-h-0 flex-1 overflow-y-auto bg-white px-8 py-6 dark:bg-slate-950"
       @click="closeSlashMenu"
     >
       <div
+        v-if="!path"
+        class="flex h-full items-center justify-center text-sm text-slate-500 dark:text-slate-400"
+      >
+        Open a file to start editing
+      </div>
+
+      <div
         v-if="slashOpen"
-        class="absolute z-20 w-52 rounded-xl border border-slate-200/90 bg-white/98 p-1 shadow-xl dark:border-slate-700/80 dark:bg-slate-900/95"
+        class="absolute z-20 w-52 rounded-md border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-800 dark:bg-slate-900"
         :style="{ left: `${slashLeft}px`, top: `${slashTop}px` }"
       >
         <button
           v-for="(command, idx) in SLASH_COMMANDS"
           :key="command.id"
           type="button"
-          class="block w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+          class="block w-full rounded px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
           :class="idx === slashIndex ? 'bg-slate-100 dark:bg-slate-800' : ''"
           @mousedown.prevent="slashIndex = idx"
           @click.prevent="closeSlashMenu(); replaceCurrentBlock(command.type, command.data)"
@@ -484,6 +620,10 @@ onBeforeUnmount(async () => {
           {{ command.label }}
         </button>
       </div>
+    </div>
+
+    <div class="flex h-7 items-center border-t border-slate-200 px-3 text-xs text-slate-600 dark:border-slate-800 dark:text-slate-400">
+      {{ statusText }}
     </div>
   </div>
 </template>

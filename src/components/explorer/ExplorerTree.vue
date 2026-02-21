@@ -22,6 +22,7 @@ import UiButton from '../ui/UiButton.vue'
 
 const props = defineProps<{
   folderPath: string
+  activePath?: string
 }>()
 
 const emit = defineEmits<{
@@ -118,6 +119,23 @@ function getParentPath(path: string): string {
   const idx = normalized.lastIndexOf('/')
   if (idx <= 0) return path
   return normalized.slice(0, idx)
+}
+
+function getAncestorDirs(path: string): string[] {
+  const root = normalizePath(props.folderPath)
+  const target = normalizePath(path)
+  if (!root || !target || target === root || !target.startsWith(`${root}/`)) return []
+
+  const relative = target.slice(root.length + 1)
+  const segments = relative.split('/').slice(0, -1)
+  const dirs: string[] = []
+
+  let current = root
+  for (const segment of segments) {
+    current = `${current}/${segment}`
+    dirs.push(current)
+  }
+  return dirs
 }
 
 function isConflictError(err: unknown): boolean {
@@ -460,11 +478,6 @@ function handleRowClick(event: MouseEvent, node: TreeNode) {
 
   focusedPath.value = node.path
   emit('select', selectionManager.selectedPaths.value)
-
-  // Open markdown files on single click for primary selection only.
-  if (!node.is_dir && node.is_markdown && !event.shiftKey && !isToggle) {
-    emit('open', node.path)
-  }
 }
 
 function handleDoubleClick(node: TreeNode) {
@@ -813,6 +826,19 @@ async function initializeExplorer() {
   }
 }
 
+async function revealPath(path: string) {
+  if (!path || !props.folderPath) return
+  const ancestors = getAncestorDirs(path)
+  for (const dir of ancestors) {
+    if (!expandedPaths.value.has(dir)) {
+      expandedPaths.value = new Set(expandedPaths.value).add(dir)
+      await loadChildren(dir)
+    }
+  }
+  persistExpandedState()
+  focusedPath.value = path
+}
+
 let refreshTimer: number | null = null
 
 function startExternalRefresh() {
@@ -884,6 +910,15 @@ watch(
   { immediate: true }
 )
 
+watch(
+  () => props.activePath,
+  async (next) => {
+    if (!next || !props.folderPath) return
+    await revealPath(next)
+  },
+  { immediate: true }
+)
+
 onMounted(() => {
   window.addEventListener('click', closeContextMenu)
   focusTree()
@@ -896,8 +931,8 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="space-y-3">
-    <div class="flex flex-wrap items-center gap-2">
+  <div class="space-y-2">
+    <div class="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2 dark:border-slate-800">
       <UiButton size="sm" :disabled="!folderPath" @click="beginCreate(folderPath, 'file')">New file</UiButton>
       <UiButton size="sm" :disabled="!folderPath" @click="beginCreate(folderPath, 'folder')">New folder</UiButton>
       <UiButton size="sm" variant="ghost" :disabled="!folderPath" @click="refreshLoadedDirs">Refresh</UiButton>
@@ -906,7 +941,7 @@ onBeforeUnmount(() => {
     <div
       ref="treeRef"
       tabindex="0"
-      class="min-h-[220px] rounded-xl border border-slate-200/80 bg-slate-50/75 p-2 outline-none focus:ring-2 focus:ring-blue-500/50 dark:border-slate-700/80 dark:bg-slate-950/45"
+      class="min-h-[220px] rounded-md border border-slate-200 bg-white p-2 outline-none focus:ring-1 focus:ring-slate-500 dark:border-slate-800 dark:bg-slate-950"
       @keydown="onTreeKeydown"
       @contextmenu.prevent="onTreeContextMenu"
       @click="clearSelectionIfBackground"
@@ -922,6 +957,7 @@ onBeforeUnmount(() => {
             :depth="row.depth"
             :expanded="expandedPaths.has(row.path)"
             :selected="selectionManager.isSelected(row.path)"
+            :active="activePath === row.path"
             :focused="focusedPath === row.path"
             :drag-target="dragManager.dragTargetPath.value === row.path"
             :cut-pending="Boolean(clipboard?.mode === 'cut' && clipboard.paths.includes(row.path))"
