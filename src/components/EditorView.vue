@@ -519,20 +519,6 @@ function syncWikilinkMenuFromCaret() {
   openWikilinkMenuAtCaret(query, true)
 }
 
-function openSlashMenuAtCaret() {
-  if (!holder.value) return
-
-  const selection = window.getSelection()
-  const range = selection?.rangeCount ? selection.getRangeAt(0) : null
-  const caretRect = range?.getBoundingClientRect()
-  const holderRect = holder.value.getBoundingClientRect()
-
-  slashLeft.value = Math.max(8, (caretRect?.left ?? holderRect.left) - holderRect.left)
-  slashTop.value = Math.max(8, (caretRect?.bottom ?? holderRect.top) - holderRect.top + 8)
-  slashIndex.value = 0
-  slashOpen.value = true
-}
-
 async function replaceCurrentBlock(type: string, data: Record<string, unknown>) {
   if (!editor) return
   const index = editor.blocks.getCurrentBlockIndex()
@@ -680,8 +666,8 @@ function onEditorKeydown(event: KeyboardEvent) {
   }
 
   if (event.key === '/' && block.name === 'paragraph' && isCurrentBlockEmpty()) {
-    event.preventDefault()
-    openSlashMenuAtCaret()
+    // Let EditorJS handle the native slash menu to avoid duplicate popovers.
+    closeSlashMenu()
     return
   }
 
