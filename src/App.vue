@@ -10,7 +10,7 @@ import { listDir, readTextFile, writeTextFile, initDb, ftsSearch } from './lib/a
 const vaultPath = ref<string>('')
 const files = ref<string[]>([])
 const currentPath = ref<string>('')
-const status = ref<string>('Pret')
+const status = ref<string>('Ready')
 const query = ref<string>('')
 const hits = ref<Array<{ path: string; snippet: string; score: number }>>([])
 type ThemePreference = 'light' | 'dark' | 'system'
@@ -53,31 +53,31 @@ function onSystemThemeChanged() {
   }
 }
 const selectedFileName = computed(() => {
-  if (!currentPath.value) return 'Aucun'
+  if (!currentPath.value) return 'None'
   const parts = currentPath.value.split('/')
   return parts[parts.length - 1] || currentPath.value
 })
 
 async function onPickVault() {
-  // Pour rester simple: tu saisis un chemin. Tu peux brancher ensuite un dialog plugin si tu veux.
-  const p = window.prompt('Chemin du vault (dossier):', vaultPath.value || '')
+  // Keep this simple: ask for a path; a native dialog can be wired in later.
+  const p = window.prompt('Vault path (folder):', vaultPath.value || '')
   if (!p) return
   vaultPath.value = p
   status.value = 'Listing...'
   files.value = await listDir(p)
-  status.value = `OK, ${files.value.length} elements`
+  status.value = `OK, ${files.value.length} items`
 }
 
 async function openFile(path: string) {
   currentPath.value = path
-  status.value = 'Lecture...'
+  status.value = 'Reading...'
   const txt = await readTextFile(path)
   status.value = 'OK'
   return txt
 }
 
 async function saveFile(path: string, txt: string) {
-  status.value = 'Ecriture...'
+  status.value = 'Writing...'
   await writeTextFile(path, txt)
   status.value = 'OK'
 }
@@ -91,9 +91,9 @@ async function onInitDb() {
 async function onSearch() {
   const q = query.value.trim()
   if (!q) return
-  status.value = 'Recherche...'
+  status.value = 'Searching...'
   hits.value = await ftsSearch(q)
-  status.value = `OK, ${hits.value.length} resultats`
+  status.value = `OK, ${hits.value.length} results`
 }
 
 watch(themePreference, (next) => {
@@ -124,7 +124,7 @@ onBeforeUnmount(() => {
           </div>
           <div class="flex flex-wrap items-center gap-2">
             <UiThemeSwitcher v-model="themePreference" />
-            <UiButton variant="primary" @click="onPickVault">Choisir vault</UiButton>
+            <UiButton variant="primary" @click="onPickVault">Choose vault</UiButton>
             <UiButton variant="secondary" @click="onInitDb">Init DB</UiButton>
           </div>
         </div>
@@ -135,8 +135,8 @@ onBeforeUnmount(() => {
           <div class="space-y-4">
             <div class="rounded-xl border border-slate-200/80 bg-slate-50/75 p-3 dark:border-slate-700/80 dark:bg-slate-950/55">
               <p class="text-[11px] uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Vault</p>
-              <p class="mt-1 truncate text-sm text-slate-900 dark:text-slate-100" :title="vaultPath || 'Non defini'">
-                {{ vaultPath || 'Non defini' }}
+              <p class="mt-1 truncate text-sm text-slate-900 dark:text-slate-100" :title="vaultPath || 'Not set'">
+                {{ vaultPath || 'Not set' }}
               </p>
             </div>
             <div class="rounded-xl border border-slate-200/80 bg-slate-50/75 p-3 dark:border-slate-700/80 dark:bg-slate-950/55">
@@ -144,7 +144,7 @@ onBeforeUnmount(() => {
               <p class="mt-1 text-sm text-emerald-700 dark:text-emerald-300">{{ status }}</p>
             </div>
             <div class="space-y-2">
-              <p class="text-[11px] uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Recherche</p>
+              <p class="text-[11px] uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Search</p>
               <div class="flex gap-2">
                 <UiInput
                   v-model="query"
@@ -154,7 +154,7 @@ onBeforeUnmount(() => {
               </div>
             </div>
             <div v-if="hits.length" class="space-y-2">
-              <p class="text-[11px] uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Resultats</p>
+              <p class="text-[11px] uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Results</p>
               <article
                 v-for="h in hits"
                 :key="h.path + h.score"
@@ -166,7 +166,7 @@ onBeforeUnmount(() => {
               </article>
             </div>
             <div class="space-y-2">
-              <p class="text-[11px] uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Fichiers</p>
+              <p class="text-[11px] uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Files</p>
               <div class="space-y-1">
                 <UiButton
                   v-for="f in files"
@@ -185,7 +185,7 @@ onBeforeUnmount(() => {
 
         <UiPanel className="min-h-0">
           <div class="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200/80 bg-slate-50/75 p-3 dark:border-slate-700/75 dark:bg-slate-950/55">
-            <p class="text-[11px] uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Fichier</p>
+            <p class="text-[11px] uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">File</p>
             <p class="font-mono text-xs text-slate-700 dark:text-slate-300">{{ selectedFileName }}</p>
             <p
               v-if="currentPath"
