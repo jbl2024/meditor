@@ -8,7 +8,7 @@ import {
   ChevronDoubleUpIcon,
   DocumentPlusIcon,
   FolderPlusIcon
-} from '@heroicons/vue/20/solid'
+} from '@heroicons/vue/24/outline'
 import { useSelectionManager } from './composables/useSelectionManager'
 import {
   copyEntry,
@@ -932,7 +932,7 @@ onBeforeUnmount(() => {
       <UiButton
         size="sm"
         variant="ghost"
-        class-name="h-6 w-6 rounded-md px-0"
+        class-name="h-7 rounded-lg px-2.5 text-[12px]"
         title="Expand all folders"
         aria-label="Expand all folders"
         :disabled="!folderPath"
@@ -943,7 +943,7 @@ onBeforeUnmount(() => {
       <UiButton
         size="sm"
         variant="ghost"
-        class-name="h-6 w-6 rounded-md px-0"
+        class-name="h-7 rounded-lg px-2.5 text-[12px]"
         title="Collapse all folders"
         aria-label="Collapse all folders"
         :disabled="!folderPath"
@@ -954,7 +954,7 @@ onBeforeUnmount(() => {
       <UiButton
         size="sm"
         variant="ghost"
-        class-name="h-6 w-6 rounded-md px-0"
+        class-name="h-7 rounded-lg px-2.5 text-[12px]"
         title="Refresh explorer"
         aria-label="Refresh explorer"
         :disabled="!folderPath"
