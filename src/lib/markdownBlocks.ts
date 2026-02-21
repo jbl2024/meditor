@@ -37,15 +37,13 @@ function escapeHtml(value: string): string {
 }
 
 function inlineMarkdownToHtml(value: string): string {
-  const linkRe = /\[([^\]]+)\]\(([^)\s]+)\)/g
+  const tokenRe = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]|\[([^\]]+)\]\(([^)\s]+)\)/g
   let html = ''
   let lastIndex = 0
   let match: RegExpExecArray | null
 
-  while ((match = linkRe.exec(value)) !== null) {
+  while ((match = tokenRe.exec(value)) !== null) {
     const full = match[0]
-    const text = match[1]
-    const href = match[2]
     const index = match.index
     const isEscaped = index > 0 && value[index - 1] === '\\'
 
@@ -54,7 +52,20 @@ function inlineMarkdownToHtml(value: string): string {
     }
 
     html += escapeHtml(value.slice(lastIndex, index))
-    html += `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(text)}</a>`
+    if (match[1]) {
+      const target = match[1].trim()
+      const alias = (match[2] ?? '').trim()
+      const label = alias || target
+      if (!target) {
+        html += escapeHtml(full)
+      } else {
+        html += `<a href="#" data-wikilink-target="${escapeHtml(target)}">${escapeHtml(label)}</a>`
+      }
+    } else {
+      const text = match[3]
+      const href = match[4]
+      html += `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(text)}</a>`
+    }
     lastIndex = index + full.length
   }
 
@@ -86,6 +97,15 @@ function elementToMarkdown(node: Node): string {
   if (tag === 'code') return `\`${children.replace(/`/g, '\\`')}\``
 
   if (tag === 'a') {
+    const wikilinkTarget = element.getAttribute('data-wikilink-target')?.trim()
+    if (wikilinkTarget) {
+      const label = children.trim()
+      if (label && label !== wikilinkTarget) {
+        return `[[${wikilinkTarget}|${label}]]`
+      }
+      return `[[${wikilinkTarget}]]`
+    }
+
     const href = element.getAttribute('href')?.trim()
     if (href) return `[${children}](${href})`
   }

@@ -211,7 +211,7 @@ function focusEditor() {
   editable?.focus()
 }
 
-function openWikilinkMenuAtCaret(query: string) {
+function openWikilinkMenuAtCaret(query: string, keepSelection = false) {
   if (!holder.value) return
   const selection = window.getSelection()
   const range = selection?.rangeCount ? selection.getRangeAt(0) : null
@@ -220,8 +220,15 @@ function openWikilinkMenuAtCaret(query: string) {
 
   wikilinkLeft.value = Math.max(8, (caretRect?.left ?? holderRect.left) - holderRect.left)
   wikilinkTop.value = Math.max(8, (caretRect?.bottom ?? holderRect.top) - holderRect.top + 8)
+  const previousCount = wikilinkResults.value.length
+  const previousIndex = wikilinkIndex.value
   wikilinkQuery.value = query
-  wikilinkIndex.value = 0
+  if (keepSelection && previousCount > 0) {
+    const nextCount = wikilinkResults.value.length
+    wikilinkIndex.value = nextCount > 0 ? Math.min(previousIndex, nextCount - 1) : 0
+  } else {
+    wikilinkIndex.value = 0
+  }
   wikilinkOpen.value = true
 }
 
@@ -243,6 +250,15 @@ function readWikilinkQueryAtCaret(): string | null {
   return query
 }
 
+function createWikilinkAnchor(target: string): HTMLAnchorElement {
+  const anchor = document.createElement('a')
+  anchor.href = '#'
+  anchor.dataset.wikilinkTarget = target
+  anchor.textContent = target
+  anchor.className = 'md-wikilink'
+  return anchor
+}
+
 function replaceActiveWikilinkQuery(target: string) {
   const selection = window.getSelection()
   if (!selection || !selection.rangeCount || !selection.isCollapsed) return false
@@ -260,14 +276,89 @@ function replaceActiveWikilinkQuery(target: string) {
   range.setEnd(textNode, offset)
   range.deleteContents()
 
-  const inserted = document.createTextNode(`[[${target}]]`)
+  const inserted = createWikilinkAnchor(target)
   range.insertNode(inserted)
 
   const nextRange = document.createRange()
-  nextRange.setStart(inserted, inserted.length)
+  nextRange.setStartAfter(inserted)
   nextRange.collapse(true)
   selection.removeAllRanges()
   selection.addRange(nextRange)
+  return true
+}
+
+function tokenForAnchor(anchor: HTMLAnchorElement): string {
+  const target = anchor.dataset.wikilinkTarget?.trim() ?? ''
+  return target ? `[[${target}]]` : ''
+}
+
+function nodeToWikilinkAnchor(node: Node | null): HTMLAnchorElement | null {
+  if (!node || node.nodeType !== Node.ELEMENT_NODE) return null
+  const element = node as HTMLElement
+  if (element.tagName.toLowerCase() !== 'a') return null
+  if (!element.dataset.wikilinkTarget) return null
+  return element as HTMLAnchorElement
+}
+
+function adjacentWikilinkAnchor(selection: Selection, direction: 'left' | 'right'): HTMLAnchorElement | null {
+  const node = selection.focusNode
+  if (!node) return null
+  const ownerElement =
+    node.nodeType === Node.ELEMENT_NODE
+      ? (node as HTMLElement)
+      : (node.parentElement as HTMLElement | null)
+  const ownerAnchor = ownerElement?.closest('a[data-wikilink-target]') as HTMLAnchorElement | null
+  if (ownerAnchor) {
+    return ownerAnchor
+  }
+
+  if (node.nodeType === Node.TEXT_NODE) {
+    const textNode = node as Text
+    if (direction === 'left' && selection.focusOffset === 0) {
+      return nodeToWikilinkAnchor(textNode.previousSibling)
+    }
+    if (direction === 'right' && selection.focusOffset === textNode.length) {
+      return nodeToWikilinkAnchor(textNode.nextSibling)
+    }
+    return null
+  }
+
+  if (node.nodeType === Node.ELEMENT_NODE) {
+    const element = node as HTMLElement
+    const childIndex = selection.focusOffset
+    if (direction === 'left' && childIndex > 0) {
+      return nodeToWikilinkAnchor(element.childNodes.item(childIndex - 1))
+    }
+    if (direction === 'right' && childIndex < element.childNodes.length) {
+      return nodeToWikilinkAnchor(element.childNodes.item(childIndex))
+    }
+  }
+
+  return null
+}
+
+function expandAdjacentWikilinkForEditing(direction: 'left' | 'right'): boolean {
+  const selection = window.getSelection()
+  if (!selection || !selection.rangeCount || !selection.isCollapsed) return false
+
+  const anchor = adjacentWikilinkAnchor(selection, direction)
+  if (!anchor || !anchor.parentNode) return false
+
+  const token = tokenForAnchor(anchor)
+  if (!token) return false
+
+  const textNode = document.createTextNode(token)
+  anchor.parentNode.replaceChild(textNode, anchor)
+
+  const range = document.createRange()
+  if (direction === 'left') {
+    range.setStart(textNode, token.length)
+  } else {
+    range.setStart(textNode, 0)
+  }
+  range.collapse(true)
+  selection.removeAllRanges()
+  selection.addRange(range)
   return true
 }
 
@@ -329,7 +420,7 @@ function syncWikilinkMenuFromCaret() {
     closeWikilinkMenu()
     return
   }
-  openWikilinkMenuAtCaret(query)
+  openWikilinkMenuAtCaret(query, true)
 }
 
 function openSlashMenuAtCaret() {
@@ -398,6 +489,10 @@ function onEditorKeydown(event: KeyboardEvent) {
   if (wikilinkOpen.value) {
     if (event.key === 'ArrowDown') {
       event.preventDefault()
+      event.stopPropagation()
+      if (typeof event.stopImmediatePropagation === 'function') {
+        event.stopImmediatePropagation()
+      }
       if (wikilinkResults.value.length) {
         wikilinkIndex.value = (wikilinkIndex.value + 1) % wikilinkResults.value.length
       }
@@ -405,8 +500,20 @@ function onEditorKeydown(event: KeyboardEvent) {
     }
     if (event.key === 'ArrowUp') {
       event.preventDefault()
+      event.stopPropagation()
+      if (typeof event.stopImmediatePropagation === 'function') {
+        event.stopImmediatePropagation()
+      }
       if (wikilinkResults.value.length) {
         wikilinkIndex.value = (wikilinkIndex.value - 1 + wikilinkResults.value.length) % wikilinkResults.value.length
+      }
+      return
+    }
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      event.preventDefault()
+      event.stopPropagation()
+      if (typeof event.stopImmediatePropagation === 'function') {
+        event.stopImmediatePropagation()
       }
       return
     }
@@ -414,12 +521,32 @@ function onEditorKeydown(event: KeyboardEvent) {
       const selected = wikilinkResults.value[wikilinkIndex.value]
       if (!selected) return
       event.preventDefault()
+      event.stopPropagation()
+      if (typeof event.stopImmediatePropagation === 'function') {
+        event.stopImmediatePropagation()
+      }
       void applyWikilinkSelection(selected.target)
       return
     }
     if (event.key === 'Escape') {
       event.preventDefault()
+      event.stopPropagation()
+      if (typeof event.stopImmediatePropagation === 'function') {
+        event.stopImmediatePropagation()
+      }
       closeWikilinkMenu()
+      return
+    }
+  }
+
+  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+    const direction = event.key === 'ArrowLeft' ? 'left' : 'right'
+    if (expandAdjacentWikilinkForEditing(direction)) {
+      event.preventDefault()
+      event.stopPropagation()
+      if (typeof event.stopImmediatePropagation === 'function') {
+        event.stopImmediatePropagation()
+      }
       return
     }
   }
@@ -490,13 +617,23 @@ function onEditorKeydown(event: KeyboardEvent) {
   }
 }
 
-function onEditorKeyup() {
+function onEditorKeyup(event: KeyboardEvent) {
+  if (wikilinkOpen.value && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', 'Tab', 'Escape'].includes(event.key)) {
+    return
+  }
   syncWikilinkMenuFromCaret()
 }
 
 function onEditorClick(event: MouseEvent) {
   const target = event.target as HTMLElement | null
   if (!target?.closest('.ce-block')) {
+    return
+  }
+  const anchor = target.closest('a[data-wikilink-target]') as HTMLAnchorElement | null
+  if (anchor?.dataset.wikilinkTarget) {
+    event.preventDefault()
+    event.stopPropagation()
+    void props.openLinkTarget(anchor.dataset.wikilinkTarget)
     return
   }
   syncWikilinkMenuFromCaret()
@@ -660,8 +797,8 @@ async function ensureEditor() {
   })
 
   await editor.isReady
-  holder.value.addEventListener('keydown', onEditorKeydown)
-  holder.value.addEventListener('keyup', onEditorKeyup)
+  holder.value.addEventListener('keydown', onEditorKeydown, true)
+  holder.value.addEventListener('keyup', onEditorKeyup, true)
   holder.value.addEventListener('click', onEditorClick, true)
   holder.value.addEventListener('paste', onEditorPaste, true)
 }
@@ -672,8 +809,8 @@ async function destroyEditor() {
   closeWikilinkMenu()
 
   if (holder.value) {
-    holder.value.removeEventListener('keydown', onEditorKeydown)
-    holder.value.removeEventListener('keyup', onEditorKeyup)
+    holder.value.removeEventListener('keydown', onEditorKeydown, true)
+    holder.value.removeEventListener('keyup', onEditorKeyup, true)
     holder.value.removeEventListener('click', onEditorClick, true)
     holder.value.removeEventListener('paste', onEditorPaste, true)
   }
@@ -866,3 +1003,14 @@ defineExpose({
     </div>
   </div>
 </template>
+
+<style scoped>
+.editor-holder :deep(a.md-wikilink) {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
+.dark .editor-holder :deep(a.md-wikilink) {
+  color: #60a5fa;
+}
+</style>
