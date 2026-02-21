@@ -8,9 +8,10 @@ import InlineCode from '@editorjs/inline-code'
 import List from '@editorjs/list'
 import Paragraph from '@editorjs/paragraph'
 import Quote from '@editorjs/quote'
-import { editorDataToMarkdown, markdownToEditorData } from '../lib/markdownBlocks'
+import { editorDataToMarkdown, markdownToEditorData, type EditorBlock } from '../lib/markdownBlocks'
 
 const AUTOSAVE_IDLE_MS = 1800
+const VIRTUAL_TITLE_BLOCK_ID = '__virtual_title__'
 
 type SlashCommand = {
   id: string
@@ -37,12 +38,14 @@ const props = defineProps<{
   path: string
   openFile: (path: string) => Promise<string>
   saveFile: (path: string, text: string, options: { explicit: boolean }) => Promise<{ persisted: boolean }>
+  renameFileFromTitle: (path: string, title: string) => Promise<{ path: string; title: string }>
   loadLinkTargets: () => Promise<string[]>
   openLinkTarget: (target: string) => Promise<boolean>
 }>()
 
 const emit = defineEmits<{
   status: [payload: { path: string; dirty: boolean; saving: boolean; saveError: string }]
+  pathRenamed: [payload: { from: string; to: string }]
   outline: [payload: HeadingNode[]]
 }>()
 
@@ -50,6 +53,7 @@ const holder = ref<HTMLDivElement | null>(null)
 let editor: EditorJS | null = null
 let autosaveTimer: ReturnType<typeof setTimeout> | null = null
 let outlineTimer: ReturnType<typeof setTimeout> | null = null
+let titleLockTimer: ReturnType<typeof setTimeout> | null = null
 let suppressOnChange = false
 let suppressCollapseOnNextArrowKeyup = false
 
@@ -103,6 +107,108 @@ const statusText = computed(() => {
   return 'Saved'
 })
 
+function noteTitleFromPath(path: string): string {
+  const normalized = path.replace(/\\/g, '/')
+  const parts = normalized.split('/')
+  const name = parts[parts.length - 1] || normalized
+  const stem = name.replace(/\.(md|markdown)$/i, '').trim()
+  return stem || 'Untitled'
+}
+
+function extractPlainText(value: unknown): string {
+  const html = String(value ?? '')
+  if (!html.trim()) return ''
+  const container = document.createElement('div')
+  container.innerHTML = html
+  return container.innerText.replace(/\u200B/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+function blockTextCandidate(block: OutputBlockData | undefined): string {
+  if (!block) return ''
+  const data = (block.data as Record<string, unknown>) ?? {}
+  if (typeof data.text !== 'undefined') return extractPlainText(data.text)
+  if (typeof data.code === 'string') return data.code.trim()
+  return ''
+}
+
+function virtualTitleBlock(title: string): OutputBlockData {
+  return {
+    id: VIRTUAL_TITLE_BLOCK_ID,
+    type: 'header',
+    data: { level: 1, text: title.trim() || 'Untitled' }
+  } as OutputBlockData
+}
+
+function stripVirtualTitle(blocks: OutputBlockData[]): OutputBlockData[] {
+  return blocks.filter((block) => block.id !== VIRTUAL_TITLE_BLOCK_ID)
+}
+
+function readVirtualTitle(blocks: OutputBlockData[]): string {
+  const virtual = blocks.find((block) => block.id === VIRTUAL_TITLE_BLOCK_ID)
+  return blockTextCandidate(virtual)
+}
+
+function withVirtualTitle(blocks: OutputBlockData[], title: string): { blocks: OutputBlockData[]; changed: boolean } {
+  const content = stripVirtualTitle(
+    blocks.map((block) => ({
+      ...block,
+      data: { ...(block.data as Record<string, unknown>) }
+    }))
+  )
+  const desired = title.trim() || 'Untitled'
+  const next = [virtualTitleBlock(desired), ...content]
+
+  const first = blocks[0]
+  const firstLevel = Number(((first?.data as Record<string, unknown>)?.level ?? 0))
+  const firstText = blockTextCandidate(first)
+  const hasSingleLeadingVirtual =
+    Boolean(first) &&
+    first.id === VIRTUAL_TITLE_BLOCK_ID &&
+    first.type === 'header' &&
+    firstLevel === 1 &&
+    firstText === desired &&
+    !blocks.slice(1).some((block) => block.id === VIRTUAL_TITLE_BLOCK_ID)
+
+  const changed = !hasSingleLeadingVirtual || blocks.length !== next.length
+  return { blocks: next, changed }
+}
+
+function moveRecordKey<T>(record: Record<string, T>, from: string, to: string): Record<string, T> {
+  if (!from || !to || from === to || !(from in record)) return record
+  const next = { ...record }
+  next[to] = next[from]
+  delete next[from]
+  return next
+}
+
+function movePathState(from: string, to: string) {
+  if (!from || !to || from === to) return
+  loadedTextByPath.value = moveRecordKey(loadedTextByPath.value, from, to)
+  dirtyByPath.value = moveRecordKey(dirtyByPath.value, from, to)
+  scrollTopByPath.value = moveRecordKey(scrollTopByPath.value, from, to)
+  savingByPath.value = moveRecordKey(savingByPath.value, from, to)
+  saveErrorByPath.value = moveRecordKey(saveErrorByPath.value, from, to)
+}
+
+async function renderBlocks(blocks: OutputBlockData[]) {
+  if (!editor) return
+  const rememberedScroll = holder.value?.scrollTop ?? 0
+  suppressOnChange = true
+  try {
+    await editor.render({
+      time: Date.now(),
+      version: '2.0.0',
+      blocks
+    })
+  } finally {
+    suppressOnChange = false
+  }
+  await nextTick()
+  if (holder.value) {
+    holder.value.scrollTop = rememberedScroll
+  }
+}
+
 function setDirty(path: string, dirty: boolean) {
   dirtyByPath.value = {
     ...dirtyByPath.value,
@@ -149,11 +255,47 @@ function clearOutlineTimer() {
   outlineTimer = null
 }
 
+function clearTitleLockTimer() {
+  if (!titleLockTimer) return
+  clearTimeout(titleLockTimer)
+  titleLockTimer = null
+}
+
 function scheduleAutosave() {
   clearAutosaveTimer()
   autosaveTimer = setTimeout(() => {
     void saveCurrentFile(false)
   }, AUTOSAVE_IDLE_MS)
+}
+
+function isVirtualTitleDomValid(): boolean {
+  if (!holder.value) return true
+  const firstBlock = holder.value.querySelector('.ce-block') as HTMLElement | null
+  if (!firstBlock) return false
+  if (firstBlock.dataset.id !== VIRTUAL_TITLE_BLOCK_ID) return false
+  const header = firstBlock.querySelector('.ce-header') as HTMLElement | null
+  return Boolean(header && header.tagName.toLowerCase() === 'h1')
+}
+
+async function enforceVirtualTitleStructure() {
+  if (!editor || suppressOnChange) return
+  const path = currentPath.value
+  if (!path) return
+
+  const data = await editor.save()
+  const rawBlocks = (data.blocks ?? []) as OutputBlockData[]
+  const title = readVirtualTitle(rawBlocks) || blockTextCandidate(rawBlocks[0]) || noteTitleFromPath(path)
+  const normalized = withVirtualTitle(rawBlocks, title)
+  if (!normalized.changed) return
+  await renderBlocks(normalized.blocks)
+}
+
+function scheduleVirtualTitleLock() {
+  clearTitleLockTimer()
+  titleLockTimer = setTimeout(() => {
+    if (isVirtualTitleDomValid()) return
+    void enforceVirtualTitleStructure()
+  }, 80)
 }
 
 function closeSlashMenu() {
@@ -679,6 +821,13 @@ function onEditorKeydown(event: KeyboardEvent) {
   const block = getCurrentBlock()
   if (!block) return
 
+  if (block.id === VIRTUAL_TITLE_BLOCK_ID) {
+    if (event.key === 'Backspace' && getCurrentBlockText(block).length === 0) {
+      event.preventDefault()
+      return
+    }
+  }
+
   if (event.key === '[' && !event.metaKey && !event.ctrlKey && !event.altKey) {
     window.setTimeout(() => {
       void syncWikilinkMenuFromCaret()
@@ -713,6 +862,12 @@ function onEditorKeydown(event: KeyboardEvent) {
   }
 
   if (event.key === 'Backspace' && block.name === 'header' && getCurrentBlockText(block).length === 0) {
+    const index = editor.blocks.getCurrentBlockIndex()
+    if (index === 0) {
+      event.preventDefault()
+      closeSlashMenu()
+      return
+    }
     event.preventDefault()
     closeSlashMenu()
     void replaceCurrentBlock('paragraph', { text: '' })
@@ -754,6 +909,15 @@ function onEditorClick(event: MouseEvent) {
   collapseClosedWikilinkNearCaret()
   void syncWikilinkMenuFromCaret()
   void openLinkedTokenAtCaret()
+}
+
+function onEditorContextMenu(event: MouseEvent) {
+  const target = event.target as HTMLElement | null
+  if (!target) return
+  const block = target.closest('.ce-block') as HTMLElement | null
+  if (!block || block.dataset.id !== VIRTUAL_TITLE_BLOCK_ID) return
+  event.preventDefault()
+  event.stopPropagation()
 }
 
 function looksLikeMarkdown(text: string): boolean {
@@ -823,6 +987,8 @@ function parseOutlineFromDom(): HeadingNode[] {
   const out: HeadingNode[] = []
 
   for (const header of headers) {
+    const block = header.closest('.ce-block') as HTMLElement | null
+    if (block?.dataset.id === VIRTUAL_TITLE_BLOCK_ID) continue
     const text = header.innerText.trim()
     if (!text) continue
     const tag = header.tagName.toLowerCase()
@@ -908,6 +1074,7 @@ async function ensureEditor() {
       setDirty(path, true)
       setSaveError(path, '')
       scheduleAutosave()
+      scheduleVirtualTitleLock()
       emitOutlineSoon()
     }
   })
@@ -916,11 +1083,13 @@ async function ensureEditor() {
   holder.value.addEventListener('keydown', onEditorKeydown, true)
   holder.value.addEventListener('keyup', onEditorKeyup, true)
   holder.value.addEventListener('click', onEditorClick, true)
+  holder.value.addEventListener('contextmenu', onEditorContextMenu, true)
   holder.value.addEventListener('paste', onEditorPaste, true)
 }
 
 async function destroyEditor() {
   clearAutosaveTimer()
+  clearTitleLockTimer()
   closeSlashMenu()
   closeWikilinkMenu()
 
@@ -928,6 +1097,7 @@ async function destroyEditor() {
     holder.value.removeEventListener('keydown', onEditorKeydown, true)
     holder.value.removeEventListener('keyup', onEditorKeyup, true)
     holder.value.removeEventListener('click', onEditorClick, true)
+    holder.value.removeEventListener('contextmenu', onEditorContextMenu, true)
     holder.value.removeEventListener('paste', onEditorPaste, true)
   }
 
@@ -949,12 +1119,18 @@ async function loadCurrentFile(path: string) {
 
   try {
     const txt = await props.openFile(path)
+    const parsed = markdownToEditorData(txt)
+    const normalized = withVirtualTitle(parsed.blocks as OutputBlockData[], noteTitleFromPath(path))
     suppressOnChange = true
     loadedTextByPath.value = {
       ...loadedTextByPath.value,
       [path]: txt
     }
-    await editor.render(markdownToEditorData(txt))
+    await editor.render({
+      time: Date.now(),
+      version: parsed.version,
+      blocks: normalized.blocks
+    })
     setDirty(path, false)
 
     await nextTick()
@@ -971,42 +1147,64 @@ async function loadCurrentFile(path: string) {
 }
 
 async function saveCurrentFile(manual = true) {
-  const path = currentPath.value
-  if (!path || !editor || savingByPath.value[path]) return
+  const initialPath = currentPath.value
+  if (!initialPath || !editor || savingByPath.value[initialPath]) return
 
-  setSaving(path, true)
-  if (manual) setSaveError(path, '')
+  let savePath = initialPath
+  setSaving(savePath, true)
+  if (manual) setSaveError(savePath, '')
 
   try {
     const data = await editor.save()
-    const md = editorDataToMarkdown(data)
-    const lastLoaded = loadedTextByPath.value[path] ?? ''
+    const rawBlocks = (data.blocks ?? []) as OutputBlockData[]
+    const requestedTitle = readVirtualTitle(rawBlocks) || blockTextCandidate(rawBlocks[0]) || noteTitleFromPath(initialPath)
+    const lastLoaded = loadedTextByPath.value[initialPath] ?? ''
 
-    if (!manual && md === lastLoaded) {
-      setDirty(path, false)
-      return
-    }
-
-    const latestOnDisk = await props.openFile(path)
+    const latestOnDisk = await props.openFile(initialPath)
     if (latestOnDisk !== lastLoaded) {
       throw new Error('File changed on disk. Reload before saving to avoid overwrite.')
     }
 
-    const result = await props.saveFile(path, md, { explicit: manual })
+    const renameResult = await props.renameFileFromTitle(initialPath, requestedTitle)
+    savePath = renameResult.path
+    const normalized = withVirtualTitle(rawBlocks, renameResult.title)
+    const markdownBlocks = stripVirtualTitle(normalized.blocks)
+    const markdown = editorDataToMarkdown({ blocks: markdownBlocks as unknown as EditorBlock[] })
+
+    if (!manual && savePath === initialPath && markdown === lastLoaded) {
+      setDirty(savePath, false)
+      return
+    }
+
+    if (savePath !== initialPath) {
+      movePathState(initialPath, savePath)
+      emit('pathRenamed', { from: initialPath, to: savePath })
+    }
+
+    if (normalized.changed) {
+      await renderBlocks(normalized.blocks)
+    }
+
+    const result = await props.saveFile(savePath, markdown, { explicit: manual })
     if (!result.persisted) {
-      setDirty(path, true)
+      setDirty(savePath, true)
       return
     }
 
     loadedTextByPath.value = {
       ...loadedTextByPath.value,
-      [path]: md
+      [savePath]: markdown
     }
-    setDirty(path, false)
+    if (savePath !== initialPath) {
+      const nextLoaded = { ...loadedTextByPath.value }
+      delete nextLoaded[initialPath]
+      loadedTextByPath.value = nextLoaded
+    }
+    setDirty(savePath, false)
   } catch (err) {
-    setSaveError(path, err instanceof Error ? err.message : 'Could not save file.')
+    setSaveError(savePath, err instanceof Error ? err.message : 'Could not save file.')
   } finally {
-    setSaving(path, false)
+    setSaving(savePath, false)
     emitOutlineSoon()
   }
 }
@@ -1044,6 +1242,7 @@ onMounted(async () => {
 
 onBeforeUnmount(async () => {
   clearOutlineTimer()
+  clearTitleLockTimer()
   await destroyEditor()
 })
 

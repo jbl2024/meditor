@@ -59,6 +59,26 @@ export function useEditorState() {
     return snippet
   }
 
+  function movePath(fromPath: string, toPath: string) {
+    if (!fromPath || !toPath || fromPath === toPath) return
+
+    const status = fileStatus.value[fromPath]
+    if (status) {
+      const next = { ...fileStatus.value }
+      delete next[fromPath]
+      next[toPath] = status
+      fileStatus.value = next
+    }
+
+    const snippet = revealSnippetByPath.value[fromPath]
+    if (snippet) {
+      const next = { ...revealSnippetByPath.value }
+      delete next[fromPath]
+      next[toPath] = snippet
+      revealSnippetByPath.value = next
+    }
+  }
+
   const hasUnsaved = computed(() =>
     Object.values(fileStatus.value).some((status) => status.dirty)
   )
@@ -72,6 +92,7 @@ export function useEditorState() {
     clearStatus,
     setActiveOutline,
     setRevealSnippet,
-    consumeRevealSnippet
+    consumeRevealSnippet,
+    movePath
   }
 }

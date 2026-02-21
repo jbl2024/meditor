@@ -12,6 +12,7 @@ import {
   listChildren,
   pathExists,
   readTextFile,
+  renameEntry,
   reindexMarkdownFile,
   revealInFileManager,
   selectWorkingFolder,
@@ -37,6 +38,11 @@ type SaveFileOptions = {
 
 type SaveFileResult = {
   persisted: boolean
+}
+
+type RenameFromTitleResult = {
+  path: string
+  title: string
 }
 
 type VirtualDoc = {
@@ -200,6 +206,10 @@ const metadataRows = computed(() => {
 const mediaQuery = typeof window !== 'undefined'
   ? window.matchMedia('(prefers-color-scheme: dark)')
   : null
+
+const WINDOWS_RESERVED_NAME_RE = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i
+const FORBIDDEN_FILE_CHARS_RE = /[<>:"/\\|?*\u0000-\u001f]/g
+const MAX_FILE_STEM_LENGTH = 120
 
 function fileName(path: string): string {
   const normalized = path.replace(/\\/g, '/')
@@ -398,12 +408,98 @@ function noteTitleFromPath(path: string): string {
   return filename || 'Untitled'
 }
 
+function markdownExtensionFromPath(path: string): string {
+  const name = fileName(path)
+  const match = name.match(/\.(md|markdown)$/i)
+  return match ? match[0] : '.md'
+}
+
+function sanitizeTitleForFileName(raw: string): string {
+  const cleaned = raw
+    .replace(FORBIDDEN_FILE_CHARS_RE, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[. ]+$/g, '')
+
+  const base = cleaned.slice(0, MAX_FILE_STEM_LENGTH).trim()
+  if (!base) return 'Untitled'
+  if (base === '.' || base === '..') return 'Untitled'
+  if (WINDOWS_RESERVED_NAME_RE.test(base)) return `${base}-note`
+  return base
+}
+
+function onEditorPathRenamed(payload: { from: string; to: string }) {
+  const fromPath = payload.from
+  const toPath = payload.to
+  if (!fromPath || !toPath || fromPath === toPath) return
+
+  workspace.replaceTabPath(fromPath, toPath)
+  editorState.movePath(fromPath, toPath)
+
+  if (virtualDocs.value[fromPath]) {
+    const nextVirtual = { ...virtualDocs.value }
+    nextVirtual[toPath] = nextVirtual[fromPath]
+    delete nextVirtual[fromPath]
+    virtualDocs.value = nextVirtual
+  }
+
+  if (allWorkspaceFiles.value.includes(fromPath) || !allWorkspaceFiles.value.includes(toPath)) {
+    const moved = allWorkspaceFiles.value
+      .map((path) => (path === fromPath ? toPath : path))
+      .filter((path, index, source) => source.indexOf(path) === index)
+      .sort((a, b) => a.localeCompare(b))
+    allWorkspaceFiles.value = moved
+  }
+
+  backlinks.value = backlinks.value.map((path) => (path === fromPath ? toPath : path))
+}
+
+async function renameFileFromTitle(path: string, rawTitle: string): Promise<RenameFromTitleResult> {
+  const root = filesystem.workingFolderPath.value
+  if (!root) {
+    throw new Error('Working folder is not set.')
+  }
+
+  const normalizedTitle = sanitizeTitleForFileName(rawTitle)
+  const ext = markdownExtensionFromPath(path)
+  const nextName = `${normalizedTitle}${ext}`
+
+  if (fileName(path) === nextName) {
+    return { path, title: normalizedTitle }
+  }
+
+  const exists = await pathExists(root, path)
+  if (!exists) {
+    const parent = path.replace(/\\/g, '/').replace(/\/[^/]+$/, '')
+    let candidate = `${parent}/${nextName}`
+    let idx = 1
+    while (await pathExists(root, candidate)) {
+      const alt = `${normalizedTitle} (${idx})${ext}`
+      candidate = `${parent}/${alt}`
+      idx += 1
+      if (idx > 9_999) {
+        throw new Error('Could not choose a unique filename.')
+      }
+    }
+    return {
+      path: candidate,
+      title: noteTitleFromPath(candidate)
+    }
+  }
+
+  const renamedPath = await renameEntry(root, path, nextName, 'rename')
+  return {
+    path: renamedPath,
+    title: noteTitleFromPath(renamedPath)
+  }
+}
+
 async function ensureVirtualMarkdown(path: string, titleLine: string) {
   if (virtualDocs.value[path]) return
   virtualDocs.value = {
     ...virtualDocs.value,
     [path]: {
-      content: `${titleLine}\n`,
+      content: titleLine ? `${titleLine}\n` : '',
       titleLine
     }
   }
@@ -670,8 +766,7 @@ async function openWikilinkTarget(target: string) {
 
   const withExtension = /\.(md|markdown)$/i.test(normalized) ? normalized : `${normalized}.md`
   const fullPath = `${root}/${withExtension}`
-  const title = noteTitleFromPath(fullPath)
-  return await openOrPrepareMarkdown(fullPath, `# ${title}`)
+  return await openOrPrepareMarkdown(fullPath, '')
 }
 
 async function loadWikilinkTargets(): Promise<string[]> {
@@ -1244,9 +1339,11 @@ onBeforeUnmount(() => {
               :path="activeFilePath"
               :openFile="openFile"
               :saveFile="saveFile"
+              :renameFileFromTitle="renameFileFromTitle"
               :loadLinkTargets="loadWikilinkTargets"
               :openLinkTarget="openWikilinkTarget"
               @status="onEditorStatus"
+              @pathRenamed="onEditorPathRenamed"
               @outline="onEditorOutline"
             />
           </main>

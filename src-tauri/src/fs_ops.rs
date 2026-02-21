@@ -110,6 +110,50 @@ fn validate_name(name: &str) -> Result<String> {
     return Err(AppError::InvalidName);
   }
 
+  if trimmed
+    .chars()
+    .any(|ch| matches!(ch, '<' | '>' | ':' | '"' | '|' | '?' | '*') || ch.is_control())
+  {
+    return Err(AppError::InvalidName);
+  }
+
+  if trimmed.ends_with('.') || trimmed.ends_with(' ') {
+    return Err(AppError::InvalidName);
+  }
+
+  let lower = trimmed.to_ascii_lowercase();
+  if matches!(
+    lower.as_str(),
+    "con"
+      | "prn"
+      | "aux"
+      | "nul"
+      | "com1"
+      | "com2"
+      | "com3"
+      | "com4"
+      | "com5"
+      | "com6"
+      | "com7"
+      | "com8"
+      | "com9"
+      | "lpt1"
+      | "lpt2"
+      | "lpt3"
+      | "lpt4"
+      | "lpt5"
+      | "lpt6"
+      | "lpt7"
+      | "lpt8"
+      | "lpt9"
+  ) {
+    return Err(AppError::InvalidName);
+  }
+
+  if trimmed.len() > 255 {
+    return Err(AppError::InvalidName);
+  }
+
   Ok(trimmed.to_string())
 }
 
@@ -734,6 +778,42 @@ mod tests {
 
     assert!(renamed.ends_with("new.md"));
     assert!(!source.exists());
+    fs::remove_dir_all(dir).expect("cleanup");
+  }
+
+  #[test]
+  fn rename_entry_rejects_invalid_name_characters() {
+    let dir = make_temp_dir();
+    let root = dir.to_string_lossy().to_string();
+    let source = dir.join("old.md");
+    fs::write(&source, "content").expect("write source");
+
+    let result = rename_entry(
+      root,
+      source.to_string_lossy().to_string(),
+      "bad:name.md".to_string(),
+      ConflictStrategy::Rename,
+    );
+
+    assert!(result.is_err());
+    assert!(source.exists());
+    fs::remove_dir_all(dir).expect("cleanup");
+  }
+
+  #[test]
+  fn create_entry_rejects_reserved_windows_names() {
+    let dir = make_temp_dir();
+    let root = dir.to_string_lossy().to_string();
+
+    let result = create_entry(
+      root.clone(),
+      root,
+      "CON".to_string(),
+      EntryKind::File,
+      ConflictStrategy::Fail,
+    );
+
+    assert!(result.is_err());
     fs::remove_dir_all(dir).expect("cleanup");
   }
 

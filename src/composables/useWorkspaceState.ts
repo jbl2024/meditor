@@ -95,6 +95,25 @@ export function useWorkspaceState() {
     activeTabPath.value = openTabs.value[nextIndex].path
   }
 
+  function replaceTabPath(fromPath: string, toPath: string) {
+    if (!fromPath || !toPath || fromPath === toPath) return
+
+    let changed = false
+    openTabs.value = openTabs.value.map((tab) => {
+      if (tab.path !== fromPath) return tab
+      changed = true
+      return { ...tab, path: toPath }
+    })
+
+    if (activeTabPath.value === fromPath) {
+      activeTabPath.value = toPath
+    }
+
+    if (!changed && activeTabPath.value === toPath && !openTabs.value.some((tab) => tab.path === toPath)) {
+      openTabs.value.push({ path: toPath, pinned: false })
+    }
+  }
+
   return {
     openTabs,
     activeTabPath,
@@ -113,6 +132,7 @@ export function useWorkspaceState() {
     closeCurrentTab,
     togglePin,
     moveTab,
-    nextTab
+    nextTab,
+    replaceTabPath
   }
 }
