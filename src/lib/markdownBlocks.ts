@@ -36,8 +36,34 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;')
 }
 
+function inlineMarkdownToHtml(value: string): string {
+  const linkRe = /\[([^\]]+)\]\(([^)\s]+)\)/g
+  let html = ''
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+
+  while ((match = linkRe.exec(value)) !== null) {
+    const full = match[0]
+    const text = match[1]
+    const href = match[2]
+    const index = match.index
+    const isEscaped = index > 0 && value[index - 1] === '\\'
+
+    if (isEscaped) {
+      continue
+    }
+
+    html += escapeHtml(value.slice(lastIndex, index))
+    html += `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(text)}</a>`
+    lastIndex = index + full.length
+  }
+
+  html += escapeHtml(value.slice(lastIndex))
+  return html
+}
+
 function blockTextToHtml(value: string): string {
-  return escapeHtml(value).replace(/\n/g, '<br>')
+  return inlineMarkdownToHtml(value).replace(/\n/g, '<br>')
 }
 
 function elementToMarkdown(node: Node): string {

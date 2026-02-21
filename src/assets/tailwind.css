@@ -148,6 +148,16 @@
     line-height: 1.4;
   }
 
+  .editor-holder a {
+    color: #0b5cad;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .editor-holder a:hover {
+    color: #0a4a8a;
+  }
+
   html.dark .editor-holder .ce-paragraph {
     color: #e2e8f0;
   }
@@ -164,5 +174,13 @@
     border-color: #334155;
     background: #0f172a;
     color: #e2e8f0;
+  }
+
+  html.dark .editor-holder a {
+    color: #7fb4ee;
+  }
+
+  html.dark .editor-holder a:hover {
+    color: #9ac4f1;
   }
 }
