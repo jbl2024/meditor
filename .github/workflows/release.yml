@@ -10,16 +10,22 @@ permissions:
 
 jobs:
   build:
-    name: Build ${{ matrix.platform }}
+    name: Build ${{ matrix.build_id }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - platform: macos
+            build_id: macos
             runs-on: macos-latest
           - platform: linux
+            build_id: linux-amd64
             runs-on: ubuntu-22.04
+          - platform: linux
+            build_id: linux-arm64
+            runs-on: ubuntu-24.04-arm
           - platform: windows
+            build_id: windows
             runs-on: windows-latest
 
     runs-on: ${{ matrix.runs-on }}
@@ -55,7 +61,7 @@ jobs:
       - name: Upload binaries only
         uses: actions/upload-artifact@v4
         with:
-          name: bundle-${{ matrix.platform }}
+          name: bundle-${{ matrix.build_id }}
           path: |
             src-tauri/target/release/bundle/**/*.dmg
             src-tauri/target/release/bundle/**/*.appimage
