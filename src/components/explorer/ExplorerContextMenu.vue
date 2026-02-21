@@ -99,7 +99,7 @@ onBeforeUnmount(() => {
   <Teleport to="body">
     <div
       ref="menuRef"
-      class="fixed z-[120] min-w-[230px] rounded-xl border border-slate-300/90 bg-white p-1 shadow-xl dark:border-slate-700/80 dark:bg-slate-900"
+      class="fixed z-[120] w-60 max-w-[calc(100vw-16px)] rounded-xl border border-slate-300/90 bg-white p-1 shadow-xl dark:border-slate-700/80 dark:bg-slate-900"
       :style="{ left: `${clampedX}px`, top: `${clampedY}px` }"
       @click.stop
     >
