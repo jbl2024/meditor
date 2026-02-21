@@ -661,7 +661,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="ide-root">
+  <div class="ide-root" :class="{ dark: resolvedTheme === 'dark' }">
     <header class="topbar">
       <div class="tabs-row">
         <div class="tab-scroll">
@@ -916,7 +916,7 @@ onBeforeUnmount(() => {
   color: #0f172a;
 }
 
-:global(.dark) .ide-root {
+.ide-root.dark {
   background: #020617;
   color: #e2e8f0;
 }
@@ -930,7 +930,7 @@ onBeforeUnmount(() => {
   background: #f8fafc;
 }
 
-:global(.dark) .topbar {
+.ide-root.dark .topbar {
   border-bottom-color: #1e293b;
   background: #0f172a;
 }
@@ -962,7 +962,7 @@ onBeforeUnmount(() => {
   font-size: 12px;
 }
 
-:global(.dark) .tab-item {
+.ide-root.dark .tab-item {
   border-right-color: #1e293b;
   background: #0b1220;
   color: #94a3b8;
@@ -973,7 +973,7 @@ onBeforeUnmount(() => {
   color: #0f172a;
 }
 
-:global(.dark) .tab-item.active {
+.ide-root.dark .tab-item.active {
   background: #020617;
   color: #e2e8f0;
 }
@@ -1034,7 +1034,7 @@ onBeforeUnmount(() => {
   gap: 6px;
 }
 
-:global(.dark) .activity-bar {
+.ide-root.dark .activity-bar {
   border-right-color: #1e293b;
   background: #0f172a;
 }
@@ -1056,7 +1056,7 @@ onBeforeUnmount(() => {
   background: #ffffff;
 }
 
-:global(.dark) .activity-btn.active {
+.ide-root.dark .activity-btn.active {
   color: #e2e8f0;
   border-color: #334155;
   background: #020617;
@@ -1076,8 +1076,8 @@ onBeforeUnmount(() => {
   border-left: 1px solid #e2e8f0;
 }
 
-:global(.dark) .left-sidebar,
-:global(.dark) .right-pane {
+.ide-root.dark .left-sidebar,
+.ide-root.dark .right-pane {
   background: #0b1220;
   border-color: #1e293b;
 }
@@ -1091,7 +1091,7 @@ onBeforeUnmount(() => {
   padding: 0 8px;
 }
 
-:global(.dark) .panel-header {
+.ide-root.dark .panel-header {
   border-bottom-color: #1e293b;
 }
 
@@ -1136,7 +1136,7 @@ onBeforeUnmount(() => {
   font-size: 12px;
 }
 
-:global(.dark) .tool-input {
+.ide-root.dark .tool-input {
   border-color: #334155;
   background: #020617;
   color: #e2e8f0;
@@ -1169,7 +1169,7 @@ onBeforeUnmount(() => {
   font-size: 12px;
 }
 
-:global(.dark) .result-item {
+.ide-root.dark .result-item {
   border-color: #1e293b;
   background: #020617;
   color: #cbd5e1;
@@ -1185,7 +1185,7 @@ onBeforeUnmount(() => {
   background: #e2e8f0;
 }
 
-:global(.dark) .splitter {
+.ide-root.dark .splitter {
   background: #1e293b;
 }
 
@@ -1196,7 +1196,7 @@ onBeforeUnmount(() => {
   background: #ffffff;
 }
 
-:global(.dark) .center-area {
+.ide-root.dark .center-area {
   background: #020617;
 }
 
@@ -1205,7 +1205,7 @@ onBeforeUnmount(() => {
   padding: 10px;
 }
 
-:global(.dark) .pane-section {
+.ide-root.dark .pane-section {
   border-bottom-color: #1e293b;
 }
 
@@ -1251,7 +1251,7 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
 }
 
-:global(.dark) .meta-row span:last-child {
+.ide-root.dark .meta-row span:last-child {
   color: #cbd5e1;
 }
 
@@ -1268,7 +1268,7 @@ onBeforeUnmount(() => {
   overflow-x: auto;
 }
 
-:global(.dark) .status-bar {
+.ide-root.dark .status-bar {
   border-top-color: #1e293b;
   background: #0f172a;
   color: #94a3b8;
@@ -1309,7 +1309,7 @@ onBeforeUnmount(() => {
   padding: 10px;
 }
 
-:global(.dark) .modal {
+.ide-root.dark .modal {
   border-color: #334155;
   background: #020617;
 }
@@ -1337,13 +1337,13 @@ onBeforeUnmount(() => {
   background: #dbeafe;
 }
 
-:global(.dark) .modal-item {
+.ide-root.dark .modal-item {
   border-color: #1e293b;
   background: #0b1220;
   color: #cbd5e1;
 }
 
-:global(.dark) .modal-item.active {
+.ide-root.dark .modal-item.active {
   border-color: #475569;
   background: #1e293b;
 }
