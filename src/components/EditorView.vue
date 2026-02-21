@@ -244,7 +244,46 @@ function onEditorKeydown(event: KeyboardEvent) {
 }
 
 function looksLikeMarkdown(text: string): boolean {
-  return /(^#{1,6}\s)|(^\s*[-*+]\s)|(^\s*\d+\.\s)|(^>\s)|(```)/m.test(text)
+  return /(^#{1,6}\s)|(^\s*[-*+]\s)|(^\s*[-*+]\s+\[[ xX]?\])|(^\s*\d+\.\s)|(^>\s)|(```)|(\[[^\]]+\]\([^)]+\))/m.test(text)
+}
+
+function isLikelyMarkdownPaste(plain: string, html: string): boolean {
+  if (!plain.trim()) return false
+  if (!looksLikeMarkdown(plain)) return false
+
+  // Even when HTML is present (many apps add it), prefer Markdown conversion
+  // if the plain-text payload strongly resembles markdown syntax.
+  if (!html) return true
+  return true
+}
+
+function insertParsedMarkdownBlocks(parsedBlocks: OutputBlockData[]) {
+  if (!editor || parsedBlocks.length === 0) return
+
+  const index = editor.blocks.getCurrentBlockIndex()
+  if (index < 0) return
+
+  const current = editor.blocks.getBlockByIndex(index)
+  const currentIsEmptyParagraph =
+    Boolean(current) && current?.name === 'paragraph' && getCurrentBlockText(current).length === 0
+
+  const [first, ...rest] = parsedBlocks
+
+  if (currentIsEmptyParagraph) {
+    const inserted = editor.blocks.insert(first.type, first.data, undefined, index, true, true)
+    if (rest.length > 0) {
+      editor.blocks.insertMany(rest, index + 1)
+    }
+    placeCaretInBlock(inserted.id)
+    return
+  }
+
+  const insertionIndex = index + 1
+  const inserted = editor.blocks.insert(first.type, first.data, undefined, insertionIndex, true, false)
+  if (rest.length > 0) {
+    editor.blocks.insertMany(rest, insertionIndex + 1)
+  }
+  placeCaretInBlock(inserted.id)
 }
 
 function onEditorPaste(event: ClipboardEvent) {
@@ -253,28 +292,19 @@ function onEditorPaste(event: ClipboardEvent) {
   const plain = event.clipboardData?.getData('text/plain') ?? ''
   const html = event.clipboardData?.getData('text/html') ?? ''
 
-  if (!plain || html || !looksLikeMarkdown(plain)) {
+  if (!isLikelyMarkdownPaste(plain, html)) {
     return
   }
 
   const parsed = markdownToEditorData(plain)
   if (!parsed.blocks.length) return
 
-  const index = editor.blocks.getCurrentBlockIndex()
-  if (index < 0) return
-
-  const current = editor.blocks.getBlockByIndex(index)
-  if (!current || current.name !== 'paragraph' || getCurrentBlockText(current).length > 0) {
-    return
-  }
-
   event.preventDefault()
-  const [first, ...rest] = parsed.blocks
-  const inserted = editor.blocks.insert(first.type, first.data, undefined, index, true, true)
-  if (rest.length > 0) {
-    editor.blocks.insertMany(rest as OutputBlockData[], index + 1)
+  event.stopPropagation()
+  if (typeof event.stopImmediatePropagation === 'function') {
+    event.stopImmediatePropagation()
   }
-  placeCaretInBlock(inserted.id)
+  insertParsedMarkdownBlocks(parsed.blocks as OutputBlockData[])
 }
 
 async function ensureEditor() {
@@ -325,7 +355,7 @@ async function ensureEditor() {
 
   await editor.isReady
   holder.value.addEventListener('keydown', onEditorKeydown)
-  holder.value.addEventListener('paste', onEditorPaste)
+  holder.value.addEventListener('paste', onEditorPaste, true)
 }
 
 async function loadCurrentFile() {
@@ -412,7 +442,7 @@ onBeforeUnmount(async () => {
 
   if (holder.value) {
     holder.value.removeEventListener('keydown', onEditorKeydown)
-    holder.value.removeEventListener('paste', onEditorPaste)
+    holder.value.removeEventListener('paste', onEditorPaste, true)
   }
 
   if (editor) {
