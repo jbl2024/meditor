@@ -17,16 +17,16 @@
     margin: 0;
     font-family: var(--font-sans);
     background:
-      radial-gradient(1200px 500px at 0% -10%, rgba(16, 185, 129, 0.16), transparent 60%),
-      radial-gradient(1000px 500px at 100% -10%, rgba(59, 130, 246, 0.14), transparent 60%),
+      radial-gradient(1200px 500px at 0% -10%, rgba(0, 49, 83, 0.16), transparent 60%),
+      radial-gradient(1000px 500px at 100% -10%, rgba(23, 76, 114, 0.14), transparent 60%),
       #f8fafc;
     color: #0f172a;
   }
 
   html.dark body {
     background:
-      radial-gradient(1200px 500px at 0% -10%, rgba(16, 185, 129, 0.22), transparent 60%),
-      radial-gradient(1000px 500px at 100% -10%, rgba(59, 130, 246, 0.24), transparent 60%),
+      radial-gradient(1200px 500px at 0% -10%, rgba(0, 49, 83, 0.26), transparent 60%),
+      radial-gradient(1000px 500px at 100% -10%, rgba(23, 76, 114, 0.26), transparent 60%),
       #020617;
     color: #e2e8f0;
   }
@@ -34,8 +34,12 @@
 
 @layer components {
   .search-snippet b {
-    color: #22d3ee;
+    color: #003153;
     font-weight: 700;
+  }
+
+  html.dark .search-snippet b {
+    color: #89a9c8;
   }
 
   .editor-holder .ce-toolbar__plus,

@@ -20,7 +20,7 @@ const props = withDefaults(defineProps<{
 
 const variantClass = computed(() => {
   if (props.variant === 'primary') {
-    return 'border-cyan-500/60 bg-cyan-500/90 text-white hover:bg-cyan-400 dark:border-cyan-400/60 dark:bg-cyan-400/90 dark:text-slate-950 dark:hover:bg-cyan-300'
+    return 'border-[#003153]/75 bg-[#003153] text-white hover:bg-[#002744] dark:border-[#4a6f95]/75 dark:bg-[#4a6f95] dark:text-slate-950 dark:hover:bg-[#5a82ad]'
   }
   if (props.variant === 'ghost') {
     return 'border-slate-300/90 bg-transparent text-slate-700 hover:border-slate-400 hover:text-slate-900 dark:border-slate-700/70 dark:text-slate-300 dark:hover:border-slate-500 dark:hover:text-slate-100'

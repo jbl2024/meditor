@@ -118,7 +118,7 @@ onBeforeUnmount(() => {
       <header class="rounded-2xl border border-slate-200/80 bg-white/85 p-4 shadow-[0_14px_35px_rgba(148,163,184,0.25)] backdrop-blur-sm dark:border-slate-700/70 dark:bg-slate-900/65 dark:shadow-[0_14px_35px_rgba(2,6,23,0.45)]">
         <div class="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
           <div>
-            <p class="text-xs uppercase tracking-[0.22em] text-cyan-700 dark:text-cyan-300/85">Local-first markdown</p>
+            <p class="text-xs uppercase tracking-[0.22em] text-[#003153] dark:text-[#89a9c8]">Local-first markdown</p>
             <h1 class="mt-1 text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">meditor workspace</h1>
             <p class="mt-1 text-sm text-slate-600 dark:text-slate-400">Tauri 2, Vue 3, Editor.js, SQLite FTS5 BM25</p>
           </div>
@@ -160,7 +160,7 @@ onBeforeUnmount(() => {
                 :key="h.path + h.score"
                 class="rounded-xl border border-slate-200/80 bg-slate-50/75 p-3 dark:border-slate-700/70 dark:bg-slate-950/55"
               >
-                <p class="truncate text-xs font-semibold text-cyan-700 dark:text-cyan-200" :title="h.path">{{ h.path }}</p>
+                <p class="truncate text-xs font-semibold text-[#003153] dark:text-[#89a9c8]" :title="h.path">{{ h.path }}</p>
                 <p class="search-snippet mt-2 text-xs leading-relaxed text-slate-700 dark:text-slate-300" v-html="h.snippet"></p>
                 <p class="mt-2 text-[11px] text-slate-500 dark:text-slate-500">score: {{ h.score.toFixed(3) }}</p>
               </article>
