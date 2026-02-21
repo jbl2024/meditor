@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import EditorView from './components/EditorView.vue'
-import FileExplorerView from './components/explorer/FileExplorerView.vue'
+import ExplorerTree from './components/explorer/ExplorerTree.vue'
 import UiButton from './components/ui/UiButton.vue'
 import UiInput from './components/ui/UiInput.vue'
 import UiPanel from './components/ui/UiPanel.vue'
@@ -13,6 +13,7 @@ const currentPath = ref<string>('')
 const query = ref<string>('')
 const errorMessage = ref<string>('')
 const hits = ref<Array<{ path: string; snippet: string; score: number }>>([])
+const selectedCount = ref<number>(0)
 
 type ThemePreference = 'light' | 'dark' | 'system'
 const THEME_STORAGE_KEY = 'meditor.theme.preference'
@@ -87,12 +88,16 @@ async function loadWorkingFolder(path: string) {
   }
 }
 
-function onExplorerSelect(path: string) {
-  currentPath.value = path
-}
-
 function onExplorerError(message: string) {
   errorMessage.value = message
+}
+
+function onExplorerSelection(paths: string[]) {
+  selectedCount.value = paths.length
+}
+
+function onExplorerOpen(path: string) {
+  currentPath.value = path
 }
 
 async function openFile(path: string) {
@@ -146,11 +151,9 @@ onBeforeUnmount(() => {
     <div class="mx-auto flex h-screen max-w-[1800px] flex-col p-4 lg:p-5">
       <header class="rounded-2xl border border-slate-200/80 bg-white/85 p-4 shadow-[0_14px_35px_rgba(148,163,184,0.25)] backdrop-blur-sm dark:border-slate-700/70 dark:bg-slate-900/65 dark:shadow-[0_14px_35px_rgba(2,6,23,0.45)]">
         <div class="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-          <div>
-            <p class="text-xs uppercase tracking-[0.22em] text-[#003153] dark:text-[#89a9c8]">Local-first markdown</p>
-            <h1 class="mt-1 text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">meditor workspace</h1>
-            <p class="mt-1 text-sm text-slate-600 dark:text-slate-400">Tauri 2, Vue 3, Editor.js, SQLite FTS5 BM25</p>
-          </div>
+          <p class="max-w-[65vw] truncate rounded-lg border border-slate-300/80 bg-slate-100/70 px-3 py-2 font-mono text-xs text-slate-700 dark:border-slate-700/80 dark:bg-slate-900/70 dark:text-slate-300" :title="workingFolderPath || 'No folder selected'">
+            {{ workingFolderPath || 'No folder selected' }}
+          </p>
           <div class="flex flex-wrap items-center gap-2">
             <UiThemeSwitcher v-model="themePreference" />
             <UiButton variant="primary" @click="onSelectWorkingFolder">Select working folder</UiButton>
@@ -194,11 +197,14 @@ onBeforeUnmount(() => {
             </div>
 
             <div class="space-y-2">
-              <p class="text-[11px] uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Explorer</p>
-              <FileExplorerView
+              <p class="text-[11px] uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                Explorer
+                <span class="ml-2 normal-case tracking-normal text-slate-400 dark:text-slate-500">{{ selectedCount }} selected</span>
+              </p>
+              <ExplorerTree
                 :folder-path="workingFolderPath"
-                :selected-path="currentPath"
-                @select="onExplorerSelect"
+                @open="onExplorerOpen"
+                @select="onExplorerSelection"
                 @error="onExplorerError"
               />
             </div>

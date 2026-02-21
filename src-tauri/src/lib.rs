@@ -7,8 +7,9 @@ use serde::Serialize;
 use thiserror::Error;
 
 use fs_ops::{
-  create_entry, duplicate_entry, list_tree, move_entry, open_path_external, read_text_file,
-  rename_entry, select_working_folder, trash_entry, write_text_file,
+  copy_entry, create_entry, duplicate_entry, list_children, move_entry, open_path_external,
+  path_exists, read_text_file, rename_entry, reveal_in_file_manager, select_working_folder,
+  trash_entry, write_text_file,
 };
 
 #[derive(Debug, Error)]
@@ -21,6 +22,8 @@ enum AppError {
   InvalidPath,
   #[error("Invalid name.")]
   InvalidName,
+  #[error("File or folder already exists.")]
+  AlreadyExists,
   #[error("Operation failed.")]
   OperationFailed,
   #[error("{0}")]
@@ -148,15 +151,18 @@ pub fn run() {
     .plugin(tauri_plugin_opener::init())
     .invoke_handler(tauri::generate_handler![
       select_working_folder,
-      list_tree,
+      list_children,
+      path_exists,
       read_text_file,
       write_text_file,
       create_entry,
       rename_entry,
       duplicate_entry,
+      copy_entry,
       move_entry,
       trash_entry,
       open_path_external,
+      reveal_in_file_manager,
       init_db,
       fts_search
     ])

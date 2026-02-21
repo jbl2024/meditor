@@ -18,14 +18,22 @@ pub struct TreeNode {
   pub path: String,
   pub is_dir: bool,
   pub is_markdown: bool,
-  pub children: Vec<TreeNode>,
+  pub has_children: bool,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ConflictStrategy {
+  Fail,
   Rename,
   Overwrite,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EntryKind {
+  File,
+  Folder,
 }
 
 fn is_markdown_file(path: &Path) -> bool {
@@ -47,6 +55,14 @@ fn should_skip_file(path: &Path) -> bool {
 fn normalize_existing_dir(path: &str) -> Result<PathBuf> {
   let pb = PathBuf::from(path);
   if pb.as_os_str().is_empty() || !pb.is_dir() {
+    return Err(AppError::InvalidPath);
+  }
+  Ok(pb)
+}
+
+fn normalize_path(path: &str) -> Result<PathBuf> {
+  let pb = PathBuf::from(path);
+  if pb.as_os_str().is_empty() {
     return Err(AppError::InvalidPath);
   }
   Ok(pb)
@@ -141,6 +157,7 @@ fn resolve_destination(path: PathBuf, strategy: ConflictStrategy, is_dir: bool) 
   }
 
   match strategy {
+    ConflictStrategy::Fail => Err(AppError::AlreadyExists),
     ConflictStrategy::Rename => next_available_path(&path),
     ConflictStrategy::Overwrite => {
       if is_dir || path.is_dir() {
@@ -183,7 +200,25 @@ fn duplicate_file_name(path: &Path) -> Result<String> {
   Ok(format!("{stem} copy{ext}"))
 }
 
-fn collect_tree(dir: &Path) -> Result<Vec<TreeNode>> {
+fn directory_has_visible_children(dir: &Path) -> Result<bool> {
+  for entry in fs::read_dir(dir)? {
+    let entry = entry?;
+    let path = entry.path();
+    let name = entry.file_name().to_string_lossy().to_string();
+    if name == TRASH_DIR_NAME {
+      continue;
+    }
+    if path.is_dir() {
+      return Ok(true);
+    }
+    if path.is_file() && !should_skip_file(&path) {
+      return Ok(true);
+    }
+  }
+  Ok(false)
+}
+
+fn collect_children(dir: &Path) -> Result<Vec<TreeNode>> {
   let mut directories: Vec<TreeNode> = Vec::new();
   let mut files: Vec<TreeNode> = Vec::new();
 
@@ -197,13 +232,12 @@ fn collect_tree(dir: &Path) -> Result<Vec<TreeNode>> {
     }
 
     if path.is_dir() {
-      let children = collect_tree(&path)?;
       directories.push(TreeNode {
         name,
         path: path.to_string_lossy().to_string(),
         is_dir: true,
         is_markdown: false,
-        children,
+        has_children: directory_has_visible_children(&path)?,
       });
       continue;
     }
@@ -217,7 +251,7 @@ fn collect_tree(dir: &Path) -> Result<Vec<TreeNode>> {
       path: path.to_string_lossy().to_string(),
       is_dir: false,
       is_markdown: is_markdown_file(&path),
-      children: Vec::new(),
+      has_children: false,
     });
   }
 
@@ -237,9 +271,19 @@ pub fn select_working_folder() -> Result<Option<String>> {
 }
 
 #[tauri::command]
-pub fn list_tree(path: String) -> Result<Vec<TreeNode>> {
-  let root = normalize_existing_dir(&path)?;
-  collect_tree(&root)
+pub fn list_children(folder_path: String, dir_path: String) -> Result<Vec<TreeNode>> {
+  let root = normalize_existing_dir(&folder_path)?;
+  let dir = normalize_existing_dir(&dir_path)?;
+  ensure_within_root(&root, &dir)?;
+  collect_children(&dir)
+}
+
+#[tauri::command]
+pub fn path_exists(folder_path: String, path: String) -> Result<bool> {
+  let root = normalize_existing_dir(&folder_path)?;
+  let pb = normalize_path(&path)?;
+  ensure_parent_within_root(&root, &pb)?;
+  Ok(pb.exists())
 }
 
 #[tauri::command]
@@ -253,10 +297,7 @@ pub fn read_text_file(folder_path: String, path: String) -> Result<String> {
 #[tauri::command]
 pub fn write_text_file(folder_path: String, path: String, content: String) -> Result<()> {
   let root = normalize_existing_dir(&folder_path)?;
-  let pb = PathBuf::from(path);
-  if pb.as_os_str().is_empty() {
-    return Err(AppError::InvalidPath);
-  }
+  let pb = normalize_path(&path)?;
   ensure_parent_within_root(&root, &pb)?;
   fs::write(pb, content)?;
   Ok(())
@@ -267,7 +308,7 @@ pub fn create_entry(
   folder_path: String,
   parent_path: String,
   name: String,
-  is_dir: bool,
+  kind: EntryKind,
   conflict_strategy: ConflictStrategy,
 ) -> Result<String> {
   let root = normalize_existing_dir(&folder_path)?;
@@ -278,6 +319,7 @@ pub fn create_entry(
   let base_path = parent.join(safe_name);
   ensure_parent_within_root(&root, &base_path)?;
 
+  let is_dir = matches!(kind, EntryKind::Folder);
   let destination = resolve_destination(base_path, conflict_strategy, is_dir)?;
 
   if is_dir {
@@ -399,6 +441,48 @@ pub fn move_entry(
 }
 
 #[tauri::command]
+pub fn copy_entry(
+  folder_path: String,
+  source_path: String,
+  target_dir_path: String,
+  conflict_strategy: ConflictStrategy,
+) -> Result<String> {
+  let root = normalize_existing_dir(&folder_path)?;
+  let source = normalize_existing_path(&source_path)?;
+  let target_dir = normalize_existing_dir(&target_dir_path)?;
+
+  ensure_within_root(&root, &source)?;
+  ensure_within_root(&root, &target_dir)?;
+
+  if source.is_dir() {
+    let source_canonical = fs::canonicalize(&source)?;
+    let target_canonical = fs::canonicalize(&target_dir)?;
+    if target_canonical.starts_with(&source_canonical) {
+      return Err(AppError::InvalidOperation(
+        "Cannot copy a folder into itself.".to_string(),
+      ));
+    }
+  }
+
+  let Some(file_name) = source.file_name() else {
+    return Err(AppError::InvalidPath);
+  };
+  let base_destination = target_dir.join(file_name);
+  let destination = resolve_destination(base_destination, conflict_strategy, source.is_dir())?;
+
+  if source.is_dir() {
+    copy_dir_recursive(&source, &destination)?;
+  } else {
+    if destination.exists() {
+      fs::remove_file(&destination)?;
+    }
+    fs::copy(&source, &destination)?;
+  }
+
+  Ok(destination.to_string_lossy().to_string())
+}
+
+#[tauri::command]
 pub fn trash_entry(folder_path: String, path: String) -> Result<String> {
   let root = normalize_existing_dir(&folder_path)?;
   let source = normalize_existing_path(&path)?;
@@ -443,6 +527,18 @@ pub fn open_path_external(path: String) -> Result<()> {
   Ok(())
 }
 
+#[tauri::command]
+pub fn reveal_in_file_manager(path: String) -> Result<()> {
+  let pb = normalize_existing_path(&path)?;
+  let target = if pb.is_dir() {
+    pb
+  } else {
+    pb.parent().ok_or(AppError::InvalidPath)?.to_path_buf()
+  };
+  open::that_detached(target).map_err(|_| AppError::OperationFailed)?;
+  Ok(())
+}
+
 #[cfg(test)]
 mod tests {
   use std::{
@@ -452,8 +548,8 @@ mod tests {
   };
 
   use super::{
-    create_entry, duplicate_entry, list_tree, move_entry, read_text_file, rename_entry, trash_entry,
-    ConflictStrategy,
+    copy_entry, create_entry, duplicate_entry, list_children, move_entry, read_text_file,
+    rename_entry, trash_entry, ConflictStrategy, EntryKind,
   };
 
   fn make_temp_dir() -> PathBuf {
@@ -475,7 +571,7 @@ mod tests {
       root.clone(),
       root.clone(),
       "note.md".to_string(),
-      false,
+      EntryKind::File,
       ConflictStrategy::Rename,
     )
     .expect("create first");
@@ -484,7 +580,7 @@ mod tests {
       root.clone(),
       root.clone(),
       "note.md".to_string(),
-      false,
+      EntryKind::File,
       ConflictStrategy::Rename,
     )
     .expect("create second");
@@ -560,7 +656,11 @@ mod tests {
     fs::write(root.join("meditor.sqlite"), "db").expect("write db");
     fs::create_dir_all(root.join(".meditor-trash")).expect("trash dir");
 
-    let tree = list_tree(root.to_string_lossy().to_string()).expect("list tree");
+    let tree = list_children(
+      root.to_string_lossy().to_string(),
+      root.to_string_lossy().to_string(),
+    )
+    .expect("list tree");
     assert_eq!(tree.len(), 1);
     assert_eq!(tree[0].name, "doc.md");
     fs::remove_dir_all(dir).expect("cleanup");
@@ -583,6 +683,28 @@ mod tests {
 
     assert!(renamed.ends_with("new.md"));
     assert!(!source.exists());
+    fs::remove_dir_all(dir).expect("cleanup");
+  }
+
+  #[test]
+  fn copy_entry_works_for_files() {
+    let dir = make_temp_dir();
+    let root = dir.to_string_lossy().to_string();
+    let source = dir.join("a.md");
+    let target_dir = dir.join("sub");
+    fs::create_dir_all(&target_dir).expect("create sub");
+    fs::write(&source, "content").expect("write source");
+
+    let copied = copy_entry(
+      root.clone(),
+      source.to_string_lossy().to_string(),
+      target_dir.to_string_lossy().to_string(),
+      ConflictStrategy::Fail,
+    )
+    .expect("copy");
+
+    let text = read_text_file(root, copied).expect("read copied");
+    assert_eq!(text, "content");
     fs::remove_dir_all(dir).expect("cleanup");
   }
 }
