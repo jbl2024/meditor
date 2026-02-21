@@ -138,6 +138,8 @@ type PaletteAction = {
 }
 
 const paletteActions = computed<PaletteAction[]>(() => [
+  { id: 'open-workspace', label: 'Open Workspace', run: () => openWorkspaceFromPalette() },
+  { id: 'close-workspace', label: 'Close Workspace', run: () => closeWorkspaceFromPalette() },
   { id: 'open-today', label: 'Open Today', run: () => openTodayNote() },
   { id: 'open-yesterday', label: 'Open Yesterday', run: () => openYesterdayNote() },
   { id: 'open-specific-date', label: 'Open Specific Date', run: () => openSpecificDateNote() },
@@ -351,8 +353,9 @@ function stopResize() {
 async function onSelectWorkingFolder() {
   filesystem.errorMessage.value = ''
   const path = await selectWorkingFolder()
-  if (!path) return
+  if (!path) return false
   await loadWorkingFolder(path)
+  return true
 }
 
 async function loadWorkingFolder(path: string) {
@@ -921,6 +924,16 @@ async function createNewFileFromPalette() {
 function closeAllTabsFromPalette() {
   workspace.closeAllTabs()
   editorState.setActiveOutline([])
+  return true
+}
+
+async function openWorkspaceFromPalette() {
+  return await onSelectWorkingFolder()
+}
+
+function closeWorkspaceFromPalette() {
+  if (!filesystem.hasWorkspace.value) return false
+  closeWorkspace()
   return true
 }
 
