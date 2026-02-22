@@ -9,9 +9,39 @@ import List from '@editorjs/list'
 import Paragraph from '@editorjs/paragraph'
 import Quote from '@editorjs/quote'
 import { editorDataToMarkdown, markdownToEditorData, type EditorBlock } from '../lib/markdownBlocks'
+import PropertyAddDropdown from './properties/PropertyAddDropdown.vue'
+import PropertyTokenInput from './properties/PropertyTokenInput.vue'
+import {
+  composeMarkdownDocument,
+  parseFrontmatter,
+  serializeFrontmatter,
+  type FrontmatterEnvelope,
+  type FrontmatterField
+} from '../lib/frontmatter'
+import {
+  defaultPropertyTypeForKey,
+  normalizePropertyKey,
+  sanitizePropertyTypeSchema,
+  type PropertyType,
+  type PropertyTypeSchema
+} from '../lib/propertyTypes'
 
 const AUTOSAVE_IDLE_MS = 1800
 const VIRTUAL_TITLE_BLOCK_ID = '__virtual_title__'
+type CorePropertyOption = {
+  key: string
+  label?: string
+  description?: string
+}
+const CORE_PROPERTY_OPTIONS: CorePropertyOption[] = [
+  { key: 'tags', label: 'tags', description: 'Tag list' },
+  { key: 'aliases', label: 'aliases', description: 'Alternative names' },
+  { key: 'cssclasses', label: 'cssclasses', description: 'Note CSS classes' },
+  { key: 'date', label: 'date', description: 'Primary date (YYYY-MM-DD)' },
+  { key: 'deadline', label: 'deadline', description: 'Due date (YYYY-MM-DD)' },
+  { key: 'archive', label: 'archive', description: 'Archive flag' },
+  { key: 'published', label: 'published', description: 'Publish flag' }
+]
 
 type SlashCommand = {
   id: string
@@ -54,6 +84,8 @@ const props = defineProps<{
   saveFile: (path: string, text: string, options: { explicit: boolean }) => Promise<{ persisted: boolean }>
   renameFileFromTitle: (path: string, title: string) => Promise<{ path: string; title: string }>
   loadLinkTargets: () => Promise<string[]>
+  loadPropertyTypeSchema: () => Promise<Record<string, string>>
+  savePropertyTypeSchema: (schema: Record<string, string>) => Promise<void>
   openLinkTarget: (target: string) => Promise<boolean>
 }>()
 
@@ -61,6 +93,7 @@ const emit = defineEmits<{
   status: [payload: { path: string; dirty: boolean; saving: boolean; saveError: string }]
   'path-renamed': [payload: { from: string; to: string; manual: boolean }]
   outline: [payload: HeadingNode[]]
+  properties: [payload: { path: string; items: Array<{ key: string; value: string }>; parseErrorCount: number }]
 }>()
 
 const holder = ref<HTMLDivElement | null>(null)
@@ -115,6 +148,37 @@ const currentPath = computed(() => props.path?.trim() || '')
 const isDirty = computed(() => Boolean(dirtyByPath.value[currentPath.value]))
 const isSaving = computed(() => Boolean(savingByPath.value[currentPath.value]))
 const saveError = computed(() => saveErrorByPath.value[currentPath.value] ?? '')
+const propertyEditorMode = ref<'structured' | 'raw'>('structured')
+const frontmatterByPath = ref<Record<string, FrontmatterEnvelope>>({})
+const rawYamlByPath = ref<Record<string, string>>({})
+const propertiesExpandedByPath = ref<Record<string, boolean>>({})
+const propertySchema = ref<PropertyTypeSchema>({})
+const propertySchemaLoaded = ref(false)
+const propertySchemaSaving = ref(false)
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/
+
+const activeFrontmatter = computed<FrontmatterEnvelope | null>(() => {
+  const path = currentPath.value
+  if (!path) return null
+  return frontmatterByPath.value[path] ?? null
+})
+
+const activeFields = computed(() => activeFrontmatter.value?.fields ?? [])
+const activeParseErrors = computed(() => activeFrontmatter.value?.parseErrors ?? [])
+const activeRawYaml = computed(() => {
+  const path = currentPath.value
+  if (!path) return ''
+  return rawYamlByPath.value[path] ?? ''
+})
+
+const canUseStructuredProperties = computed(() => !activeParseErrors.value.length)
+const structuredPropertyFields = computed(() => activeFields.value)
+const structuredPropertyKeys = computed(() =>
+  structuredPropertyFields.value
+    .map((field) => field.key.trim().toLowerCase())
+    .filter(Boolean)
+)
+
 const statusText = computed(() => {
   if (!currentPath.value) return 'Select a file'
   if (saveError.value) return saveError.value
@@ -204,6 +268,377 @@ function movePathState(from: string, to: string) {
   scrollTopByPath.value = moveRecordKey(scrollTopByPath.value, from, to)
   savingByPath.value = moveRecordKey(savingByPath.value, from, to)
   saveErrorByPath.value = moveRecordKey(saveErrorByPath.value, from, to)
+  frontmatterByPath.value = moveRecordKey(frontmatterByPath.value, from, to)
+  rawYamlByPath.value = moveRecordKey(rawYamlByPath.value, from, to)
+}
+
+async function ensurePropertySchemaLoaded() {
+  if (propertySchemaLoaded.value) return
+  const loaded = await props.loadPropertyTypeSchema()
+  propertySchema.value = sanitizePropertyTypeSchema(loaded)
+  propertySchemaLoaded.value = true
+}
+
+async function persistPropertySchema() {
+  if (propertySchemaSaving.value) return
+  propertySchemaSaving.value = true
+  try {
+    await props.savePropertyTypeSchema(propertySchema.value)
+  } finally {
+    propertySchemaSaving.value = false
+  }
+}
+
+function parseAndStoreFrontmatter(path: string, sourceMarkdown: string) {
+  const envelope = parseFrontmatter(sourceMarkdown, propertySchema.value)
+  frontmatterByPath.value = {
+    ...frontmatterByPath.value,
+    [path]: envelope
+  }
+  rawYamlByPath.value = {
+    ...rawYamlByPath.value,
+    [path]: envelope.rawYaml
+  }
+  if (currentPath.value === path) {
+    propertyEditorMode.value = envelope.parseErrors.length ? 'raw' : 'structured'
+  }
+  if (typeof propertiesExpandedByPath.value[path] === 'undefined') {
+    propertiesExpandedByPath.value = {
+      ...propertiesExpandedByPath.value,
+      [path]: envelope.fields.some((field) => field.key.trim().length > 0)
+    }
+  }
+  emitProperties(path)
+}
+
+function serializableFrontmatterFields(fields: FrontmatterField[]): FrontmatterField[] {
+  return fields.filter((field) => field.key.trim().length > 0)
+}
+
+function updateFrontmatterFields(path: string, nextFields: FrontmatterField[]) {
+  const current = frontmatterByPath.value[path]
+  if (!current) return
+
+  const normalized = nextFields.map((field, index) => ({
+    ...field,
+    order: index
+  }))
+
+  const serializable = serializableFrontmatterFields(normalized)
+  const rawYaml = serializeFrontmatter(serializable)
+  const parseErrors = (() => {
+    const seen = new Set<string>()
+    const out: Array<{ line: number; message: string }> = []
+    normalized.forEach((field, index) => {
+      const key = field.key.trim().toLowerCase()
+      if (!key) return
+      if (seen.has(key) && key) out.push({ line: index + 1, message: `Duplicate property key: ${field.key}` })
+      seen.add(key)
+      if (field.type === 'date' && typeof field.value === 'string' && field.value && !DATE_ONLY_RE.test(field.value)) {
+        out.push({ line: index + 1, message: `Invalid date value for ${field.key}. Use YYYY-MM-DD.` })
+      }
+    })
+    return out
+  })()
+
+  frontmatterByPath.value = {
+    ...frontmatterByPath.value,
+    [path]: {
+      ...current,
+      hasFrontmatter: serializable.length > 0,
+      fields: normalized,
+      rawYaml,
+      parseErrors
+    }
+  }
+  rawYamlByPath.value = {
+    ...rawYamlByPath.value,
+    [path]: rawYaml
+  }
+  emitProperties(path)
+}
+
+function propertyValuePreview(value: FrontmatterField['value']): string {
+  if (Array.isArray(value)) return value.join(', ')
+  if (typeof value === 'boolean') return value ? 'true' : 'false'
+  if (typeof value === 'number') return String(value)
+  return String(value ?? '').replace(/\n/g, ' ')
+}
+
+function emitProperties(path: string) {
+  const envelope = frontmatterByPath.value[path]
+  if (!envelope) {
+    emit('properties', { path, items: [], parseErrorCount: 0 })
+    return
+  }
+  const items = envelope.fields
+    .filter((field) => field.key.trim().length > 0)
+    .map((field) => ({
+      key: field.key,
+      value: propertyValuePreview(field.value)
+    }))
+  emit('properties', {
+    path,
+    items,
+    parseErrorCount: envelope.parseErrors.length
+  })
+}
+
+function setPropertyDirty(path: string) {
+  setDirty(path, true)
+  setSaveError(path, '')
+  scheduleAutosave()
+}
+
+function updatePropertyField(index: number, patch: Partial<FrontmatterField>) {
+  const path = currentPath.value
+  if (!path) return
+  const fields = [...activeFields.value]
+  const current = fields[index]
+  if (!current) return
+  fields[index] = {
+    ...current,
+    ...patch
+  }
+  updateFrontmatterFields(path, fields)
+  setPropertyDirty(path)
+}
+
+function removePropertyField(index: number) {
+  const path = currentPath.value
+  if (!path) return
+  const fields = [...activeFields.value]
+  if (index < 0 || index >= fields.length) return
+  fields.splice(index, 1)
+  updateFrontmatterFields(path, fields)
+  setPropertyDirty(path)
+}
+
+function addPropertyField(initialKey = '') {
+  const path = currentPath.value
+  if (!path) return
+  const fields = [...activeFields.value]
+  const normalizedKey = initialKey.trim()
+  const lockedType = lockedPropertyTypeForKey(normalizedKey)
+  const inferredType =
+    lockedType ??
+    propertySchema.value[normalizePropertyKey(normalizedKey)] ??
+    suggestedPropertyTypeForKey(normalizedKey) ??
+    'text'
+  const initialValue: FrontmatterField['value'] =
+    inferredType === 'checkbox'
+      ? false
+      : inferredType === 'number'
+        ? 0
+        : inferredType === 'list' || inferredType === 'tags'
+          ? []
+          : ''
+  fields.push({
+    key: normalizedKey,
+    value: initialValue,
+    type: inferredType,
+    order: fields.length,
+    styleHint: inferredType === 'list' || inferredType === 'tags' ? 'inline-list' : 'plain'
+  })
+  updateFrontmatterFields(path, fields)
+  propertiesExpandedByPath.value = {
+    ...propertiesExpandedByPath.value,
+    [path]: true
+  }
+  if (normalizedKey) {
+    const normalizedSchemaKey = normalizePropertyKey(normalizedKey)
+    if (normalizedSchemaKey) {
+      propertySchema.value = {
+        ...propertySchema.value,
+        [normalizedSchemaKey]: inferredType
+      }
+      void persistPropertySchema()
+    }
+  }
+  setPropertyDirty(path)
+}
+
+function coerceValueForType(type: PropertyType, input: string): string | number | boolean | string[] {
+  if (type === 'checkbox') return input === 'true'
+  if (type === 'number') {
+    const parsed = Number(input)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+  if (type === 'list' || type === 'tags') {
+    return input
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean)
+  }
+  return input
+}
+
+function lockedPropertyTypeForKey(key: string): PropertyType | null {
+  return defaultPropertyTypeForKey(key)
+}
+
+function suggestedPropertyTypeForKey(key: string): PropertyType | null {
+  const normalized = normalizePropertyKey(key)
+  if (normalized === 'date' || normalized === 'deadline') return 'date'
+  if (normalized === 'archive' || normalized === 'published') return 'checkbox'
+  return null
+}
+
+function isPropertyTypeLocked(key: string): boolean {
+  return Boolean(lockedPropertyTypeForKey(key))
+}
+
+async function onPropertyTypeChange(index: number, nextTypeRaw: string) {
+  const path = currentPath.value
+  if (!path) return
+  const field = activeFields.value[index]
+  if (!field) return
+  if (isPropertyTypeLocked(field.key)) return
+  const nextType = nextTypeRaw as PropertyType
+  const normalizedKey = normalizePropertyKey(field.key)
+  if (normalizedKey) {
+    propertySchema.value = {
+      ...propertySchema.value,
+      [normalizedKey]: nextType
+    }
+    await persistPropertySchema()
+  }
+
+  let nextValue: FrontmatterField['value'] = field.value
+  if (nextType === 'checkbox') {
+    nextValue = Boolean(field.value)
+  } else if (nextType === 'number') {
+    const parsed = Number(field.value)
+    nextValue = Number.isFinite(parsed) ? parsed : 0
+  } else if (nextType === 'list' || nextType === 'tags') {
+    nextValue = Array.isArray(field.value)
+      ? field.value
+      : String(field.value ?? '')
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean)
+  } else {
+    nextValue = Array.isArray(field.value) ? field.value.join(', ') : String(field.value ?? '')
+  }
+
+  updatePropertyField(index, {
+    type: nextType,
+    value: nextValue,
+    styleHint: nextType === 'list' || nextType === 'tags' ? 'inline-list' : field.styleHint
+  })
+}
+
+async function onPropertyKeyInput(index: number, nextKey: string) {
+  const field = activeFields.value[index]
+  const previousKey = normalizePropertyKey(field?.key ?? '')
+  const normalizedNext = normalizePropertyKey(nextKey)
+  const lockedType = lockedPropertyTypeForKey(normalizedNext)
+  const currentValue = field?.value
+  const nextValue = (() => {
+    if (!field) return ''
+    if (!lockedType) return currentValue ?? ''
+    if (lockedType === 'list' || lockedType === 'tags') {
+      if (Array.isArray(currentValue)) return currentValue
+      return String(currentValue ?? '')
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean)
+    }
+    if (lockedType === 'checkbox') return Boolean(currentValue)
+    if (lockedType === 'number') {
+      const parsed = Number(currentValue)
+      return Number.isFinite(parsed) ? parsed : 0
+    }
+    return String(currentValue ?? '')
+  })()
+  updatePropertyField(index, {
+    key: nextKey,
+    ...(lockedType ? { type: lockedType, value: nextValue, styleHint: lockedType === 'list' || lockedType === 'tags' ? 'inline-list' : 'plain' } : {})
+  })
+  if (!normalizedNext) return
+
+  const nextSchema: PropertyTypeSchema = {
+    ...propertySchema.value,
+    [normalizedNext]: lockedType ?? (field?.type ?? 'text')
+  }
+  if (previousKey && previousKey !== normalizedNext) {
+    delete nextSchema[previousKey]
+  }
+  propertySchema.value = nextSchema
+  await persistPropertySchema()
+}
+
+function onPropertyValueInput(index: number, rawInput: string) {
+  const field = activeFields.value[index]
+  if (!field) return
+  const nextValue = coerceValueForType(effectiveTypeForField(field), rawInput)
+  updatePropertyField(index, { value: nextValue })
+}
+
+function onPropertyCheckboxInput(index: number, checked: boolean) {
+  updatePropertyField(index, { value: checked })
+}
+
+function onPropertyTokensChange(index: number, tokens: string[]) {
+  const field = activeFields.value[index]
+  if (!field) return
+  const type = effectiveTypeForField(field)
+  if (type !== 'list' && type !== 'tags') return
+  updatePropertyField(index, { value: tokens, styleHint: 'inline-list' })
+}
+
+function effectiveTypeForField(field: FrontmatterField): PropertyType {
+  return lockedPropertyTypeForKey(field.key) ?? field.type
+}
+
+function inputValue(event: Event): string {
+  return (event.target as HTMLInputElement | HTMLTextAreaElement | null)?.value ?? ''
+}
+
+function selectValue(event: Event): string {
+  return (event.target as HTMLSelectElement | null)?.value ?? ''
+}
+
+function checkboxValue(event: Event): boolean {
+  return (event.target as HTMLInputElement | null)?.checked ?? false
+}
+
+function hasStructuredProperties(path: string): boolean {
+  return (frontmatterByPath.value[path]?.fields ?? []).some((field) => field.key.trim().length > 0)
+}
+
+function propertiesExpanded(path: string): boolean {
+  const stored = propertiesExpandedByPath.value[path]
+  if (typeof stored === 'boolean') return stored
+  return hasStructuredProperties(path)
+}
+
+function togglePropertiesVisibility() {
+  const path = currentPath.value
+  if (!path) return
+  propertiesExpandedByPath.value = {
+    ...propertiesExpandedByPath.value,
+    [path]: !propertiesExpanded(path)
+  }
+}
+
+function onRawYamlInput(nextRaw: string) {
+  const path = currentPath.value
+  if (!path) return
+  rawYamlByPath.value = {
+    ...rawYamlByPath.value,
+    [path]: nextRaw
+  }
+
+  const body = frontmatterByPath.value[path]?.body ?? ''
+  const markdown = composeMarkdownDocument(body, nextRaw)
+  const parsed = parseFrontmatter(markdown, propertySchema.value)
+  frontmatterByPath.value = {
+    ...frontmatterByPath.value,
+    [path]: parsed
+  }
+  emitProperties(path)
+  setPropertyDirty(path)
 }
 
 async function renderBlocks(blocks: OutputBlockData[]) {
@@ -1389,6 +1824,7 @@ async function loadCurrentFile(path: string) {
   if (!path) return
 
   await ensureEditor()
+  await ensurePropertySchemaLoaded()
   if (!editor) return
 
   clearAutosaveTimer()
@@ -1398,7 +1834,9 @@ async function loadCurrentFile(path: string) {
 
   try {
     const txt = await props.openFile(path)
-    const parsed = markdownToEditorData(txt)
+    parseAndStoreFrontmatter(path, txt)
+    const body = frontmatterByPath.value[path]?.body ?? txt
+    const parsed = markdownToEditorData(body)
     const normalized = withVirtualTitle(parsed.blocks as OutputBlockData[], noteTitleFromPath(path))
     suppressOnChange = true
     loadedTextByPath.value = {
@@ -1449,7 +1887,12 @@ async function saveCurrentFile(manual = true) {
     savePath = renameResult.path
     const normalized = withVirtualTitle(rawBlocks, renameResult.title)
     const markdownBlocks = stripVirtualTitle(normalized.blocks)
-    const markdown = editorDataToMarkdown({ blocks: markdownBlocks as unknown as EditorBlock[] })
+    const bodyMarkdown = editorDataToMarkdown({ blocks: markdownBlocks as unknown as EditorBlock[] })
+    const frontmatterState = frontmatterByPath.value[savePath] ?? frontmatterByPath.value[initialPath]
+    const frontmatterYaml = propertyEditorMode.value === 'raw'
+      ? (rawYamlByPath.value[savePath] ?? rawYamlByPath.value[initialPath] ?? '')
+      : serializeFrontmatter(serializableFrontmatterFields(frontmatterState?.fields ?? []))
+    const markdown = composeMarkdownDocument(bodyMarkdown, frontmatterYaml)
 
     if (!manual && savePath === initialPath && markdown === lastLoaded) {
       setDirty(savePath, false)
@@ -1475,6 +1918,7 @@ async function saveCurrentFile(manual = true) {
       ...loadedTextByPath.value,
       [savePath]: markdown
     }
+    parseAndStoreFrontmatter(savePath, markdown)
     if (savePath !== initialPath) {
       const nextLoaded = { ...loadedTextByPath.value }
       delete nextLoaded[initialPath]
@@ -1501,6 +1945,9 @@ watch(
 
     const nextPath = next?.trim()
     if (!nextPath) {
+      propertySchemaLoaded.value = false
+      propertySchema.value = {}
+      emit('properties', { path: '', items: [], parseErrorCount: 0 })
       await destroyEditor()
       emit('outline', [])
       return
@@ -1550,12 +1997,132 @@ defineExpose({
       Open a file to start editing
     </div>
 
-    <div
-      v-else
-      ref="holder"
-      class="editor-holder relative min-h-0 flex-1 overflow-y-auto bg-white px-8 py-6 dark:bg-slate-950"
-      @click="closeSlashMenu(); closeWikilinkMenu()"
-    >
+    <div v-else class="editor-shell min-h-0 flex-1 overflow-hidden bg-white dark:bg-slate-950">
+      <section class="properties-panel border-b border-slate-200 px-8 py-4 dark:border-slate-800">
+        <div class="mb-3 flex items-center justify-between gap-3">
+          <button
+            type="button"
+            class="inline-flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100"
+            @click="togglePropertiesVisibility"
+          >
+            <span aria-hidden="true">{{ propertiesExpanded(path) ? '▾' : '▸' }}</span>
+            <span>Properties</span>
+          </button>
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              class="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 dark:border-slate-700 dark:text-slate-200"
+              :class="propertyEditorMode === 'structured' ? 'bg-slate-100 dark:bg-slate-800' : ''"
+              :disabled="!canUseStructuredProperties"
+              @click="propertyEditorMode = 'structured'"
+            >
+              Structured
+            </button>
+            <button
+              type="button"
+              class="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 dark:border-slate-700 dark:text-slate-200"
+              :class="propertyEditorMode === 'raw' ? 'bg-slate-100 dark:bg-slate-800' : ''"
+              @click="propertyEditorMode = 'raw'"
+            >
+              Raw YAML
+            </button>
+          </div>
+        </div>
+
+        <div v-if="propertiesExpanded(path) && propertyEditorMode === 'structured'" class="space-y-2">
+          <div
+            v-for="(field, index) in structuredPropertyFields"
+            :key="index"
+            class="property-row grid grid-cols-[1fr_auto_2fr_auto] items-center gap-2"
+          >
+            <input
+              :value="field.key"
+              class="rounded border border-slate-300 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              placeholder="key"
+              @input="void onPropertyKeyInput(index, inputValue($event))"
+            />
+            <select
+              :value="effectiveTypeForField(field)"
+              class="rounded border border-slate-300 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              :disabled="isPropertyTypeLocked(field.key)"
+              @change="void onPropertyTypeChange(index, selectValue($event))"
+            >
+              <option value="text">Text</option>
+              <option value="list">List</option>
+              <option value="number">Number</option>
+              <option value="checkbox">Checkbox</option>
+              <option value="date">Date</option>
+              <option value="tags">Tags</option>
+            </select>
+            <div class="min-w-0">
+              <input
+                v-if="effectiveTypeForField(field) === 'text' || effectiveTypeForField(field) === 'date'"
+                :value="String(field.value ?? '')"
+                class="w-full rounded border border-slate-300 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                :placeholder="effectiveTypeForField(field) === 'date' ? 'YYYY-MM-DD' : 'value'"
+                @input="onPropertyValueInput(index, inputValue($event))"
+              />
+              <input
+                v-else-if="effectiveTypeForField(field) === 'number'"
+                :value="String(field.value ?? 0)"
+                class="w-full rounded border border-slate-300 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                type="number"
+                @input="onPropertyValueInput(index, inputValue($event))"
+              />
+              <PropertyTokenInput
+                v-else-if="effectiveTypeForField(field) === 'list' || effectiveTypeForField(field) === 'tags'"
+                :model-value="Array.isArray(field.value) ? field.value : []"
+                :placeholder="effectiveTypeForField(field) === 'tags' ? 'add tag' : 'add value'"
+                @update:modelValue="onPropertyTokensChange(index, $event)"
+              />
+              <label v-else class="inline-flex items-center gap-2 text-xs text-slate-700 dark:text-slate-200">
+                <input
+                  type="checkbox"
+                  :checked="Boolean(field.value)"
+                  @change="onPropertyCheckboxInput(index, checkboxValue($event))"
+                />
+                true / false
+              </label>
+            </div>
+            <button
+              type="button"
+              class="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 dark:border-slate-700 dark:text-slate-200"
+              @click="removePropertyField(index)"
+            >
+              Remove
+            </button>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <PropertyAddDropdown
+              :options="CORE_PROPERTY_OPTIONS"
+              :existing-keys="structuredPropertyKeys"
+              @select="addPropertyField"
+            />
+          </div>
+        </div>
+
+        <div v-else-if="propertiesExpanded(path)">
+          <textarea
+            class="font-mono min-h-28 w-full rounded border border-slate-300 p-2 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            :value="activeRawYaml"
+            placeholder="title: My note"
+            @input="onRawYamlInput(inputValue($event))"
+          ></textarea>
+        </div>
+
+        <div v-if="propertiesExpanded(path) && activeParseErrors.length" class="mt-2 text-xs text-red-600 dark:text-red-400">
+          <div v-for="(error, index) in activeParseErrors" :key="`${error.line}-${index}`">
+            Line {{ error.line }}: {{ error.message }}
+          </div>
+        </div>
+      </section>
+
+      <div
+        ref="holder"
+        class="editor-holder relative min-h-0 flex-1 overflow-y-auto px-8 py-6"
+        @click="closeSlashMenu(); closeWikilinkMenu()"
+      >
 
       <div
         v-if="slashOpen"
@@ -1592,6 +2159,7 @@ defineExpose({
           {{ item.label }}
         </button>
         <div v-if="!wikilinkResults.length" class="px-3 py-1.5 text-sm text-slate-500 dark:text-slate-400">No matches</div>
+      </div>
       </div>
     </div>
 

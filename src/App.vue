@@ -14,9 +14,11 @@ import {
   readTextFile,
   renameEntry,
   reindexMarkdownFile,
+  readPropertyTypeSchema,
   revealInFileManager,
   selectWorkingFolder,
   updateWikilinksForRename,
+  writePropertyTypeSchema,
   writeTextFile
 } from './lib/api'
 import { useEditorState } from './composables/useEditorState'
@@ -25,6 +27,7 @@ import { useWorkspaceState, type SidebarMode } from './composables/useWorkspaceS
 
 type ThemePreference = 'light' | 'dark' | 'system'
 type SearchHit = { path: string; snippet: string; score: number }
+type PropertyPreviewRow = { key: string; value: string }
 
 type EditorViewExposed = {
   saveNow: () => Promise<void>
@@ -77,6 +80,8 @@ const tabScrollRef = ref<HTMLElement | null>(null)
 const overflowMenuRef = ref<HTMLElement | null>(null)
 const backlinks = ref<string[]>([])
 const backlinksLoading = ref(false)
+const propertiesPreview = ref<PropertyPreviewRow[]>([])
+const propertyParseErrorCount = ref(0)
 const virtualDocs = ref<Record<string, VirtualDoc>>({})
 const overflowMenuOpen = ref(false)
 const wikilinkRewritePrompt = ref<{ fromPath: string; toPath: string } | null>(null)
@@ -857,6 +862,18 @@ function onEditorOutline(payload: Array<{ level: 1 | 2 | 3; text: string }>) {
   editorState.setActiveOutline(payload)
 }
 
+function onEditorProperties(payload: { path: string; items: PropertyPreviewRow[]; parseErrorCount: number }) {
+  if (!activeFilePath.value || payload.path !== activeFilePath.value) {
+    if (!payload.path) {
+      propertiesPreview.value = []
+      propertyParseErrorCount.value = 0
+    }
+    return
+  }
+  propertiesPreview.value = payload.items
+  propertyParseErrorCount.value = payload.parseErrorCount
+}
+
 async function onOutlineHeadingClick(index: number) {
   await editorRef.value?.revealOutlineHeading(index)
 }
@@ -1017,6 +1034,23 @@ async function loadWikilinkTargets(): Promise<string[]> {
     filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not load wikilink targets.'
     return []
   }
+}
+
+async function loadPropertyTypeSchema(): Promise<Record<string, string>> {
+  const root = filesystem.workingFolderPath.value
+  if (!root) return {}
+  try {
+    return await readPropertyTypeSchema(root)
+  } catch (err) {
+    filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not load property types.'
+    return {}
+  }
+}
+
+async function savePropertyTypeSchema(schema: Record<string, string>): Promise<void> {
+  const root = filesystem.workingFolderPath.value
+  if (!root) return
+  await writePropertyTypeSchema(root, schema)
 }
 
 async function loadAllFiles() {
@@ -1731,10 +1765,13 @@ onBeforeUnmount(() => {
               :saveFile="saveFile"
               :renameFileFromTitle="renameFileFromTitle"
               :loadLinkTargets="loadWikilinkTargets"
+              :loadPropertyTypeSchema="loadPropertyTypeSchema"
+              :savePropertyTypeSchema="savePropertyTypeSchema"
               :openLinkTarget="openWikilinkTarget"
               @status="onEditorStatus"
               @path-renamed="onEditorPathRenamed"
               @outline="onEditorOutline"
+              @properties="onEditorProperties"
             />
           </main>
 
@@ -1784,6 +1821,20 @@ onBeforeUnmount(() => {
               <div class="metadata-grid">
                 <div v-for="row in metadataRows" :key="row.label" class="meta-row">
                   <span>{{ row.label }}</span>
+                  <span :title="row.value">{{ row.value }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="pane-section">
+              <h3>Properties</h3>
+              <div v-if="propertyParseErrorCount > 0" class="placeholder">
+                {{ propertyParseErrorCount }} parse error{{ propertyParseErrorCount > 1 ? 's' : '' }}
+              </div>
+              <div v-else-if="!propertiesPreview.length" class="placeholder">No properties</div>
+              <div v-else class="metadata-grid">
+                <div v-for="row in propertiesPreview" :key="row.key" class="meta-row">
+                  <span>{{ row.key }}</span>
                   <span :title="row.value">{{ row.value }}</span>
                 </div>
               </div>

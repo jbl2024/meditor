@@ -7,14 +7,17 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 ## [Unreleased]
 
 ### Added
+- feat(properties): add Obsidian-compatible properties editor with reusable core-property picker and tokenized list/tag input
 
 ### Changed
+- ux(properties): support collapsible properties panel and monospace raw YAML editor
 
 ### Deprecated
 
 ### Removed
 
 ### Fixed
+- fix(properties): keep focus while editing keys and allow comma entry in list/tag inputs
 
 ### Security
 

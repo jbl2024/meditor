@@ -1,7 +1,7 @@
 mod fs_ops;
 
 use std::{
-  collections::HashSet,
+  collections::{HashMap, HashSet},
   fs,
   path::{Path, PathBuf},
   process::Command,
@@ -20,6 +20,7 @@ use fs_ops::{
 
 const INTERNAL_DIR_NAME: &str = ".meditor";
 const DB_FILE_NAME: &str = "meditor.sqlite";
+const PROPERTY_TYPE_SCHEMA_FILE: &str = "property-types.json";
 
 #[derive(Debug, Error)]
 enum AppError {
@@ -62,6 +63,14 @@ fn open_db(folder_path: &str) -> Result<Connection> {
 
   let db_path = db_dir.join(DB_FILE_NAME);
   Ok(Connection::open(db_path)?)
+}
+
+fn property_type_schema_path(folder_path: &str) -> Result<PathBuf> {
+  let root = normalize_existing_dir(folder_path)?;
+  let root_canonical = fs::canonicalize(&root)?;
+  let schema_dir = root_canonical.join(INTERNAL_DIR_NAME);
+  fs::create_dir_all(&schema_dir)?;
+  Ok(schema_dir.join(PROPERTY_TYPE_SCHEMA_FILE))
 }
 
 fn normalize_existing_file(path: &str) -> Result<PathBuf> {
@@ -319,19 +328,33 @@ fn parse_iso_date_targets(markdown: &str) -> Vec<String> {
 }
 
 fn parse_note_targets(markdown: &str) -> Vec<String> {
+  let content = strip_yaml_frontmatter(markdown);
   let mut targets = HashSet::new();
 
-  for target in parse_wikilink_targets(markdown) {
+  for target in parse_wikilink_targets(content) {
     if let Some(normalized) = normalize_wikilink_target(&target) {
       targets.insert(normalized);
     }
   }
 
-  for target in parse_iso_date_targets(markdown) {
+  for target in parse_iso_date_targets(content) {
     targets.insert(target.to_lowercase());
   }
 
   targets.into_iter().collect()
+}
+
+fn strip_yaml_frontmatter(markdown: &str) -> &str {
+  if !markdown.starts_with("---\n") {
+    return markdown;
+  }
+
+  let rest = &markdown[4..];
+  if let Some(end) = rest.find("\n---\n") {
+    return &rest[(end + 5)..];
+  }
+
+  markdown
 }
 
 fn split_wikilink_target_suffix(content: &str) -> (&str, &str) {
@@ -458,7 +481,8 @@ fn reindex_markdown_file(folder_path: String, path: String) -> Result<()> {
 
   let normalized_path = fs::canonicalize(&file_path)?;
   let markdown = fs::read_to_string(&normalized_path)?;
-  let chunks = chunk_markdown(&markdown);
+  let content_for_indexing = strip_yaml_frontmatter(&markdown);
+  let chunks = chunk_markdown(content_for_indexing);
   let targets = parse_note_targets(&markdown);
   let mtime = fs::metadata(&normalized_path)
     .and_then(|meta| meta.modified())
@@ -499,6 +523,58 @@ fn reindex_markdown_file(folder_path: String, path: String) -> Result<()> {
   }
 
   tx.commit()?;
+  Ok(())
+}
+
+#[tauri::command]
+fn read_property_type_schema(folder_path: String) -> Result<HashMap<String, String>> {
+  let schema_path = property_type_schema_path(&folder_path)?;
+  if !schema_path.exists() {
+    return Ok(HashMap::new());
+  }
+
+  let raw = fs::read_to_string(schema_path)?;
+  let parsed: serde_json::Value = serde_json::from_str(&raw)
+    .map_err(|_| AppError::InvalidOperation("Property type schema is invalid.".to_string()))?;
+
+  let mut out: HashMap<String, String> = HashMap::new();
+  if let Some(object) = parsed.as_object() {
+    for (key, value) in object {
+      let normalized_key = key.trim().to_lowercase();
+      if normalized_key.is_empty() {
+        continue;
+      }
+      let Some(raw_type) = value.as_str() else {
+        continue;
+      };
+      if !matches!(raw_type, "text" | "list" | "number" | "checkbox" | "date" | "tags") {
+        continue;
+      }
+      out.insert(normalized_key, raw_type.to_string());
+    }
+  }
+
+  Ok(out)
+}
+
+#[tauri::command]
+fn write_property_type_schema(folder_path: String, schema: HashMap<String, String>) -> Result<()> {
+  let schema_path = property_type_schema_path(&folder_path)?;
+  let mut sanitized: HashMap<String, String> = HashMap::new();
+
+  for (key, value) in schema {
+    let normalized_key = key.trim().to_lowercase();
+    if normalized_key.is_empty() {
+      continue;
+    }
+    if !matches!(value.as_str(), "text" | "list" | "number" | "checkbox" | "date" | "tags") {
+      continue;
+    }
+    sanitized.insert(normalized_key, value);
+  }
+
+  let serialized = serde_json::to_string_pretty(&sanitized).map_err(|_| AppError::OperationFailed)?;
+  fs::write(schema_path, serialized)?;
   Ok(())
 }
 
@@ -705,7 +781,9 @@ pub fn run() {
       reindex_markdown_file,
       fts_search,
       backlinks_for_path,
-      update_wikilinks_for_rename
+      update_wikilinks_for_rename,
+      read_property_type_schema,
+      write_property_type_schema
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
@@ -745,5 +823,20 @@ mod tests {
     let (output, changed) = rewrite_wikilinks_for_note(input, "notes/old", "notes/new");
     assert!(changed);
     assert_eq!(output, "[[notes/new]] [[notes/new]].");
+  }
+
+  #[test]
+  fn strip_yaml_frontmatter_removes_header_block() {
+    let markdown = "---\ntitle: Test\ntags: [one]\n---\n# Body\n[[note]]";
+    let stripped = strip_yaml_frontmatter(markdown);
+    assert_eq!(stripped, "# Body\n[[note]]");
+  }
+
+  #[test]
+  fn parse_note_targets_ignores_frontmatter_links() {
+    let markdown = "---\nassignee: \"[[Alice]]\"\n---\n[[BodyNote]]";
+    let targets = parse_note_targets(markdown);
+    assert_eq!(targets.len(), 1);
+    assert!(targets.iter().any(|item| item == "bodynote"));
   }
 }

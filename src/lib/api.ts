@@ -115,3 +115,11 @@ export async function updateWikilinksForRename(
 ): Promise<{ updated_files: number }> {
   return await invoke('update_wikilinks_for_rename', { folderPath, oldPath, newPath })
 }
+
+export async function readPropertyTypeSchema(folderPath: string): Promise<Record<string, string>> {
+  return await invoke('read_property_type_schema', { folderPath })
+}
+
+export async function writePropertyTypeSchema(folderPath: string, schema: Record<string, string>): Promise<void> {
+  await invoke('write_property_type_schema', { folderPath, schema })
+}
