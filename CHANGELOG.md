@@ -18,6 +18,18 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.1.9] - 2026-02-22
+
+### Added
+- feat(new-note): support nested paths with dot-segment normalization inside workspace (a913a2e)
+- feat(command-palette): use dedicated modal for open-specific-date action (744a9e2)
+
+### Changed
+- refactor(editor): open daily notes as real files and focus first editable block on load (4d82564)
+
+### Fixed
+- fix(daily-notes): open new day notes without prefilled heading (ceeca6c)
+
 ## [0.1.8] - 2026-02-22
 
 ### Added
