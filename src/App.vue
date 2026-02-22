@@ -1609,6 +1609,12 @@ function onWindowKeydown(event: KeyboardEvent) {
     return
   }
 
+  if (key === 'e') {
+    event.preventDefault()
+    workspace.setSidebarMode('explorer')
+    return
+  }
+
   if (key === 'b') {
     event.preventDefault()
     workspace.toggleSidebar()
