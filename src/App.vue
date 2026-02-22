@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { XMarkIcon } from '@heroicons/vue/24/outline'
 import EditorView from './components/EditorView.vue'
 import ExplorerTree from './components/explorer/ExplorerTree.vue'
 import UiButton from './components/ui/UiButton.vue'
@@ -1848,7 +1849,9 @@ onBeforeUnmount(() => {
                 <span class="tab-name">{{ tab.title }}</span>
                 <span v-if="tab.saving" class="tab-state" title="Saving">~</span>
                 <span v-else-if="tab.dirty" class="tab-state" title="Unsaved">•</span>
-                <button class="tab-close" type="button" @click.stop="onTabClose(tab.path)">x</button>
+                <button class="tab-close" type="button" @click.stop="onTabClose(tab.path)">
+                  <XMarkIcon />
+                </button>
               </div>
               <div v-if="!tabView.length" class="tab-empty">No open files</div>
             </div>
@@ -2261,6 +2264,11 @@ onBeforeUnmount(() => {
   width: 16px;
   height: 16px;
   font-size: 12px;
+}
+
+.tab-close svg {
+  width: 12px;
+  height: 12px;
 }
 
 .tab-empty {
