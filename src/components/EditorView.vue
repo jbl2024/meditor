@@ -1997,7 +1997,7 @@ defineExpose({
       Open a file to start editing
     </div>
 
-    <div v-else class="editor-shell min-h-0 flex-1 overflow-hidden bg-white dark:bg-slate-950">
+    <div v-else class="editor-shell flex min-h-0 flex-1 flex-col overflow-hidden bg-white dark:bg-slate-950">
       <section class="properties-panel border-b border-slate-200 px-8 py-4 dark:border-slate-800">
         <div class="mb-3 flex items-center justify-between gap-3">
           <button
