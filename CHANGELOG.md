@@ -21,6 +21,14 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.2.4] - 2026-02-22
+
+### Changed
+- style(editor): override EditorJS list gap variables to reduce vertical spacing (b6f2f57)
+- style(editor): soften text tone and tighten heading/list typography (0d749be)
+- style(typography): switch UI font to Geist (c685254)
+- style(typography): load IBM Plex Sans and JetBrains Mono via Google Fonts (5d06c55)
+
 ## [0.2.3] - 2026-02-22
 
 ### Added
