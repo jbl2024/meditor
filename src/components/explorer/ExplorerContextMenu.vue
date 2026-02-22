@@ -1,5 +1,17 @@
 <script setup lang="ts">
+import type { Component } from 'vue'
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import {
+  ArrowTopRightOnSquareIcon,
+  ClipboardDocumentIcon,
+  DocumentDuplicateIcon,
+  DocumentPlusIcon,
+  FolderOpenIcon,
+  FolderPlusIcon,
+  PencilSquareIcon,
+  ScissorsIcon,
+  TrashIcon
+} from '@heroicons/vue/24/outline'
 
 export type MenuAction =
   | 'open'
@@ -31,18 +43,18 @@ const menuRef = ref<HTMLElement | null>(null)
 const clampedX = ref(0)
 const clampedY = ref(0)
 
-const items: Array<{ id: MenuAction; label: string; enabled?: boolean }> = [
-  { id: 'open', label: 'Open' },
-  { id: 'open-external', label: 'Open externally' },
-  { id: 'reveal', label: 'Reveal in file manager' },
-  { id: 'rename', label: 'Rename' },
-  { id: 'duplicate', label: 'Duplicate' },
-  { id: 'delete', label: 'Delete' },
-  { id: 'new-file', label: 'New note' },
-  { id: 'new-folder', label: 'New folder' },
-  { id: 'cut', label: 'Cut' },
-  { id: 'copy', label: 'Copy' },
-  { id: 'paste', label: 'Paste' }
+const items: Array<{ id: MenuAction; label: string; icon: Component; enabled?: boolean }> = [
+  { id: 'open', label: 'Open', icon: FolderOpenIcon },
+  { id: 'open-external', label: 'Open externally', icon: ArrowTopRightOnSquareIcon },
+  { id: 'reveal', label: 'Reveal in file manager', icon: FolderOpenIcon },
+  { id: 'rename', label: 'Rename', icon: PencilSquareIcon },
+  { id: 'duplicate', label: 'Duplicate', icon: DocumentDuplicateIcon },
+  { id: 'delete', label: 'Delete', icon: TrashIcon },
+  { id: 'new-file', label: 'New note', icon: DocumentPlusIcon },
+  { id: 'new-folder', label: 'New folder', icon: FolderPlusIcon },
+  { id: 'cut', label: 'Cut', icon: ScissorsIcon },
+  { id: 'copy', label: 'Copy', icon: DocumentDuplicateIcon },
+  { id: 'paste', label: 'Paste', icon: ClipboardDocumentIcon }
 ]
 
 function isDisabled(id: MenuAction): boolean {
@@ -107,11 +119,12 @@ onBeforeUnmount(() => {
         v-for="item in items"
         :key="item.id"
         type="button"
-        class="w-full rounded-lg px-3 py-2 text-left text-xs"
+        class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs"
         :class="isDisabled(item.id) ? 'cursor-not-allowed opacity-45' : 'hover:bg-slate-100 dark:hover:bg-slate-800'"
         :disabled="isDisabled(item.id)"
         @click="onAction(item.id)"
       >
+        <component :is="item.icon" class="h-4 w-4 shrink-0" />
         {{ item.label }}
       </button>
     </div>
