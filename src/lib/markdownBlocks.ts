@@ -1,3 +1,5 @@
+import { normalizeCalloutKind } from './callouts'
+
 export type EditorBlock = {
   id?: string
   type: string
@@ -321,13 +323,13 @@ export function markdownToEditorData(markdown: string): EditorDocument {
 
       const calloutMarker = quoteLines[0]?.trim().match(CALLOUT_MARKER_RE)
       if (calloutMarker) {
-        const typeToken = calloutMarker[1].toUpperCase()
+        const typeToken = normalizeCalloutKind(calloutMarker[1])
         const lead = calloutMarker[2].trim()
         const messageLines = lead ? [lead, ...quoteLines.slice(1)] : quoteLines.slice(1)
         blocks.push({
-          type: 'warning',
+          type: 'callout',
           data: {
-            title: typeToken,
+            kind: typeToken,
             message: normalizeMultiline(messageLines.join('\n'))
           }
         })
@@ -527,12 +529,17 @@ function blockToMarkdown(block: EditorBlock): string {
         .join('\n')
     }
 
+    case 'callout':
     case 'warning': {
-      const rawTitle = normalizeMultiline(String(block.data?.title ?? '')).trim()
-      const typeToken = (rawTitle || 'NOTE')
-        .toUpperCase()
-        .replace(/[^A-Z0-9_-]+/g, '-')
-        .replace(/^-+|-+$/g, '') || 'NOTE'
+      const rawKind = block.type === 'callout'
+        ? String(block.data?.kind ?? '')
+        : String(block.data?.title ?? '')
+      const typeToken = normalizeCalloutKind(
+        rawKind
+          .toUpperCase()
+          .replace(/[^A-Z0-9_-]+/g, '-')
+          .replace(/^-+|-+$/g, '')
+      )
       const message = normalizeMultiline(String(block.data?.message ?? ''))
       if (!message) return `> [!${typeToken}]`
       const lines = message.split('\n').map((line) => `> ${line}`).join('\n')

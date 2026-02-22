@@ -240,4 +240,238 @@
   html.dark .editor-holder a:hover {
     color: #9ac4f1;
   }
+
+  .editor-holder .meditor-callout {
+    border-radius: 0.75rem;
+    padding: 0.95rem 1rem 1rem;
+    margin: 0.2rem 0;
+    border: 1px solid transparent;
+    background: #d9e0ec;
+  }
+
+  .editor-holder .meditor-callout-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .editor-holder .meditor-callout-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: #1f6ac4;
+    font-weight: 680;
+    line-height: 1.2;
+  }
+
+  .editor-holder .meditor-callout-icon {
+    width: 1.2rem;
+    height: 1.2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+  }
+
+  .editor-holder .meditor-callout-icon svg {
+    width: 1.1rem;
+    height: 1.1rem;
+  }
+
+  .editor-holder .meditor-callout-kind {
+    border: 1px solid #c2ccda;
+    border-radius: 0.5rem;
+    background: #eef2f8;
+    color: #334155;
+    font-size: 0.72rem;
+    font-weight: 650;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 0.25rem 0.45rem;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-1px);
+    transition: opacity 120ms ease, transform 120ms ease;
+  }
+
+  .editor-holder .meditor-callout:focus-within .meditor-callout-kind {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+
+  .editor-holder .meditor-callout-message {
+    margin-top: 0.75rem;
+    min-height: 1.5rem;
+    line-height: 1.65;
+    color: #111827;
+    white-space: pre-wrap;
+    outline: none;
+  }
+
+  .editor-holder .meditor-callout-message[data-placeholder]:empty::before {
+    content: attr(data-placeholder);
+    color: #64748b;
+  }
+
+  .editor-holder .meditor-callout[data-callout-kind='note'],
+  .editor-holder .meditor-callout[data-callout-kind='info'],
+  .editor-holder .meditor-callout[data-callout-kind='abstract'] {
+    background: #d9e0ec;
+    border-color: #cad3e2;
+  }
+
+  .editor-holder .meditor-callout[data-callout-kind='note'] .meditor-callout-title,
+  .editor-holder .meditor-callout[data-callout-kind='info'] .meditor-callout-title,
+  .editor-holder .meditor-callout[data-callout-kind='abstract'] .meditor-callout-title {
+    color: #1f6ac4;
+  }
+
+  .editor-holder .meditor-callout[data-callout-kind='tip'],
+  .editor-holder .meditor-callout[data-callout-kind='success'] {
+    background: #dce9dd;
+    border-color: #c9dbcb;
+  }
+
+  .editor-holder .meditor-callout[data-callout-kind='tip'] .meditor-callout-title,
+  .editor-holder .meditor-callout[data-callout-kind='success'] .meditor-callout-title {
+    color: #1f7a3e;
+  }
+
+  .editor-holder .meditor-callout[data-callout-kind='question'],
+  .editor-holder .meditor-callout[data-callout-kind='example'] {
+    background: #e4dff0;
+    border-color: #d6cceb;
+  }
+
+  .editor-holder .meditor-callout[data-callout-kind='question'] .meditor-callout-title,
+  .editor-holder .meditor-callout[data-callout-kind='example'] .meditor-callout-title {
+    color: #6d28d9;
+  }
+
+  .editor-holder .meditor-callout[data-callout-kind='warning'] {
+    background: #e9e0d8;
+    border-color: #dccdbf;
+  }
+
+  .editor-holder .meditor-callout[data-callout-kind='warning'] .meditor-callout-title {
+    color: #db6d08;
+  }
+
+  .editor-holder .meditor-callout[data-callout-kind='error'] {
+    background: #ecd8de;
+    border-color: #e2c7d0;
+  }
+
+  .editor-holder .meditor-callout[data-callout-kind='error'] .meditor-callout-title {
+    color: #e11d48;
+  }
+
+  .editor-holder .meditor-callout[data-callout-kind='failure'],
+  .editor-holder .meditor-callout[data-callout-kind='danger'],
+  .editor-holder .meditor-callout[data-callout-kind='bug'] {
+    background: #ecd8de;
+    border-color: #e2c7d0;
+  }
+
+  .editor-holder .meditor-callout[data-callout-kind='failure'] .meditor-callout-title,
+  .editor-holder .meditor-callout[data-callout-kind='danger'] .meditor-callout-title,
+  .editor-holder .meditor-callout[data-callout-kind='bug'] .meditor-callout-title {
+    color: #e11d48;
+  }
+
+  .editor-holder .meditor-callout[data-callout-kind='quote'] {
+    background: #e7e3df;
+    border-color: #d8d1ca;
+  }
+
+  .editor-holder .meditor-callout[data-callout-kind='quote'] .meditor-callout-title {
+    color: #6b7280;
+  }
+
+  html.dark .editor-holder .meditor-callout[data-callout-kind='note'],
+  html.dark .editor-holder .meditor-callout[data-callout-kind='info'],
+  html.dark .editor-holder .meditor-callout[data-callout-kind='abstract'] {
+    background: #1e293b;
+    border-color: #334155;
+  }
+
+  html.dark .editor-holder .meditor-callout[data-callout-kind='note'] .meditor-callout-title,
+  html.dark .editor-holder .meditor-callout[data-callout-kind='info'] .meditor-callout-title,
+  html.dark .editor-holder .meditor-callout[data-callout-kind='abstract'] .meditor-callout-title {
+    color: #93c5fd;
+  }
+
+  html.dark .editor-holder .meditor-callout[data-callout-kind='tip'],
+  html.dark .editor-holder .meditor-callout[data-callout-kind='success'] {
+    background: #182a1f;
+    border-color: #24412d;
+  }
+
+  html.dark .editor-holder .meditor-callout[data-callout-kind='tip'] .meditor-callout-title,
+  html.dark .editor-holder .meditor-callout[data-callout-kind='success'] .meditor-callout-title {
+    color: #86efac;
+  }
+
+  html.dark .editor-holder .meditor-callout[data-callout-kind='question'],
+  html.dark .editor-holder .meditor-callout[data-callout-kind='example'] {
+    background: #251a3a;
+    border-color: #3a2660;
+  }
+
+  html.dark .editor-holder .meditor-callout[data-callout-kind='question'] .meditor-callout-title,
+  html.dark .editor-holder .meditor-callout[data-callout-kind='example'] .meditor-callout-title {
+    color: #c4b5fd;
+  }
+
+  html.dark .editor-holder .meditor-callout[data-callout-kind='warning'] {
+    background: #33261b;
+    border-color: #4b341f;
+  }
+
+  html.dark .editor-holder .meditor-callout[data-callout-kind='warning'] .meditor-callout-title {
+    color: #f59e0b;
+  }
+
+  html.dark .editor-holder .meditor-callout[data-callout-kind='error'] {
+    background: #341b22;
+    border-color: #4a222f;
+  }
+
+  html.dark .editor-holder .meditor-callout[data-callout-kind='error'] .meditor-callout-title {
+    color: #fb7185;
+  }
+
+  html.dark .editor-holder .meditor-callout[data-callout-kind='failure'],
+  html.dark .editor-holder .meditor-callout[data-callout-kind='danger'],
+  html.dark .editor-holder .meditor-callout[data-callout-kind='bug'] {
+    background: #341b22;
+    border-color: #4a222f;
+  }
+
+  html.dark .editor-holder .meditor-callout[data-callout-kind='failure'] .meditor-callout-title,
+  html.dark .editor-holder .meditor-callout[data-callout-kind='danger'] .meditor-callout-title,
+  html.dark .editor-holder .meditor-callout[data-callout-kind='bug'] .meditor-callout-title {
+    color: #fb7185;
+  }
+
+  html.dark .editor-holder .meditor-callout[data-callout-kind='quote'] {
+    background: #24272c;
+    border-color: #353a43;
+  }
+
+  html.dark .editor-holder .meditor-callout[data-callout-kind='quote'] .meditor-callout-title {
+    color: #cbd5e1;
+  }
+
+  html.dark .editor-holder .meditor-callout-kind {
+    background: #0f172a;
+    border-color: #334155;
+    color: #cbd5e1;
+  }
+
+  html.dark .editor-holder .meditor-callout-message {
+    color: #e5e7eb;
+  }
 }
