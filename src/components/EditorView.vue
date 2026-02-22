@@ -72,6 +72,10 @@ type ArrowLinkContext = {
   range: EditableLinkRange
 }
 
+type CaretSnapshot =
+  | { kind: 'contenteditable'; blockIndex: number; offset: number }
+  | { kind: 'text-input'; blockIndex: number; offset: number }
+
 const SLASH_COMMANDS: SlashCommand[] = [
   { id: 'heading', label: 'Heading', type: 'header', data: { text: '', level: 2 } },
   { id: 'bullet', label: 'List', type: 'list', data: { style: 'unordered', items: [] } },
@@ -115,6 +119,7 @@ let expandedLinkContext: ArrowLinkContext | null = null
 const loadedTextByPath = ref<Record<string, string>>({})
 const dirtyByPath = ref<Record<string, boolean>>({})
 const scrollTopByPath = ref<Record<string, number>>({})
+const caretByPath = ref<Record<string, CaretSnapshot>>({})
 const savingByPath = ref<Record<string, boolean>>({})
 const saveErrorByPath = ref<Record<string, string>>({})
 
@@ -281,10 +286,132 @@ function movePathState(from: string, to: string) {
   loadedTextByPath.value = moveRecordKey(loadedTextByPath.value, from, to)
   dirtyByPath.value = moveRecordKey(dirtyByPath.value, from, to)
   scrollTopByPath.value = moveRecordKey(scrollTopByPath.value, from, to)
+  caretByPath.value = moveRecordKey(caretByPath.value, from, to)
   savingByPath.value = moveRecordKey(savingByPath.value, from, to)
   saveErrorByPath.value = moveRecordKey(saveErrorByPath.value, from, to)
   frontmatterByPath.value = moveRecordKey(frontmatterByPath.value, from, to)
   rawYamlByPath.value = moveRecordKey(rawYamlByPath.value, from, to)
+}
+
+function textOffsetWithinRoot(selection: Selection, root: HTMLElement): number | null {
+  if (!selection.rangeCount || !selection.isCollapsed) return null
+  const node = selection.focusNode
+  if (!node || !root.contains(node)) return null
+
+  const range = document.createRange()
+  range.selectNodeContents(root)
+  range.setEnd(node, selection.focusOffset)
+  return range.toString().length
+}
+
+function resolveTextPosition(root: HTMLElement, offset: number): { node: Text; offset: number } | null {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  let remaining = Math.max(0, offset)
+  let current = walker.nextNode() as Text | null
+
+  while (current) {
+    const length = current.data.length
+    if (remaining <= length) {
+      return { node: current, offset: remaining }
+    }
+    remaining -= length
+    current = walker.nextNode() as Text | null
+  }
+
+  if (!root.lastChild || root.lastChild.nodeType !== Node.TEXT_NODE) {
+    root.appendChild(document.createTextNode(''))
+  }
+  const tail = root.lastChild as Text
+  return { node: tail, offset: tail.data.length }
+}
+
+function isTextEntryElement(element: HTMLElement): element is HTMLTextAreaElement | HTMLInputElement {
+  if (element instanceof HTMLTextAreaElement) return true
+  if (!(element instanceof HTMLInputElement)) return false
+  const type = (element.type || 'text').toLowerCase()
+  return ['text', 'search', 'url', 'tel', 'password', 'email', 'number'].includes(type)
+}
+
+function captureCaret(path: string) {
+  if (!path || !holder.value) return
+  const blocks = Array.from(holder.value.querySelectorAll('.ce-block')) as HTMLElement[]
+
+  const activeElement = document.activeElement as HTMLElement | null
+  if (activeElement && holder.value.contains(activeElement)) {
+    if (isTextEntryElement(activeElement)) {
+      const block = activeElement.closest('.ce-block') as HTMLElement | null
+      if (!block) return
+      const blockIndex = blocks.indexOf(block)
+      if (blockIndex < 0) return
+      caretByPath.value = {
+        ...caretByPath.value,
+        [path]: {
+          kind: 'text-input',
+          blockIndex,
+          offset: activeElement.selectionStart ?? 0
+        }
+      }
+      return
+    }
+  }
+
+  const selection = window.getSelection()
+  if (!selection || !selection.rangeCount || !selection.isCollapsed) return
+  const node = selection.focusNode
+  if (!node) return
+  const parent = node.nodeType === Node.ELEMENT_NODE ? (node as HTMLElement) : node.parentElement
+  const block = parent?.closest('.ce-block') as HTMLElement | null
+  if (!block) return
+  const blockIndex = blocks.indexOf(block)
+  if (blockIndex < 0) return
+  const editable = block.querySelector('[contenteditable="true"]') as HTMLElement | null
+  if (!editable) return
+  const offset = textOffsetWithinRoot(selection, editable)
+  if (offset === null) return
+
+  caretByPath.value = {
+    ...caretByPath.value,
+    [path]: {
+      kind: 'contenteditable',
+      blockIndex,
+      offset
+    }
+  }
+}
+
+function restoreCaret(path: string): boolean {
+  if (!path || !holder.value) return false
+  const snapshot = caretByPath.value[path]
+  if (!snapshot) return false
+  const blocks = Array.from(holder.value.querySelectorAll('.ce-block')) as HTMLElement[]
+  const block = blocks[snapshot.blockIndex]
+  if (!block) return false
+
+  if (snapshot.kind === 'text-input') {
+    const input = Array.from(block.querySelectorAll('textarea, input'))
+      .find((element) => isTextEntryElement(element as HTMLElement)) as HTMLTextAreaElement | HTMLInputElement | undefined
+    if (!input) return false
+    const max = input.value.length
+    const offset = Math.max(0, Math.min(snapshot.offset, max))
+    input.focus()
+    input.setSelectionRange(offset, offset)
+    return true
+  }
+
+  const editable = block.querySelector('[contenteditable="true"]') as HTMLElement | null
+  if (!editable) return false
+  const resolved = resolveTextPosition(editable, snapshot.offset)
+  if (!resolved) return false
+
+  editable.focus()
+  const selection = window.getSelection()
+  if (!selection) return false
+  const range = document.createRange()
+  range.setStart(resolved.node, resolved.offset)
+  range.collapse(true)
+  selection.removeAllRanges()
+  selection.addRange(range)
+  return true
 }
 
 async function ensurePropertySchemaLoaded() {
@@ -1624,6 +1751,7 @@ function onEditorKeyup(event: KeyboardEvent) {
   }
 
   collapseClosedLinkNearCaret()
+  captureCaret(currentPath.value)
   void syncWikilinkMenuFromCaret()
 }
 
@@ -1645,6 +1773,7 @@ function onEditorClick(event: MouseEvent) {
     return
   }
   collapseClosedLinkNearCaret()
+  captureCaret(currentPath.value)
   void syncWikilinkMenuFromCaret()
   void openLinkedTokenAtCaret()
 }
@@ -1927,7 +2056,8 @@ async function loadCurrentFile(path: string) {
     if (holder.value) {
       holder.value.scrollTop = targetScrollTop
     }
-    if (!hasRememberedScroll || targetScrollTop <= 1) {
+    const restoredCaret = restoreCaret(path)
+    if (!restoredCaret && (!hasRememberedScroll || targetScrollTop <= 1)) {
       await focusFirstContentBlock()
     }
     emitOutlineSoon()
@@ -2011,6 +2141,7 @@ watch(
   () => props.path,
   async (next, prev) => {
     if (prev && holder.value) {
+      captureCaret(prev)
       scrollTopByPath.value = {
         ...scrollTopByPath.value,
         [prev]: holder.value.scrollTop
