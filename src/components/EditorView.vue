@@ -379,10 +379,43 @@ function placeCaretInBlock(blockId: string) {
   selection.addRange(range)
 }
 
+function firstEditableNonVirtualBlockId(): string | null {
+  if (!holder.value) return null
+  const blocks = Array.from(holder.value.querySelectorAll('.ce-block')) as HTMLElement[]
+  for (const block of blocks) {
+    const id = block.dataset.id ?? ''
+    if (!id || id === VIRTUAL_TITLE_BLOCK_ID) continue
+    const editable = block.querySelector('[contenteditable="true"]') as HTMLElement | null
+    if (editable) return id
+  }
+  return null
+}
+
 function focusEditor() {
   if (!holder.value) return
   const editable = holder.value.querySelector('[contenteditable="true"]') as HTMLElement | null
   editable?.focus()
+}
+
+async function focusFirstContentBlock() {
+  if (!editor) return
+
+  const existing = firstEditableNonVirtualBlockId()
+  if (existing) {
+    placeCaretInBlock(existing)
+    return
+  }
+
+  // New/empty notes have only the virtual title block. Create one real paragraph
+  // block for typing, but don't mark the document dirty until the user edits.
+  suppressOnChange = true
+  try {
+    const inserted = editor.blocks.insert('paragraph', { text: '' }, undefined, 1, true, false)
+    await nextTick()
+    placeCaretInBlock(inserted.id)
+  } finally {
+    suppressOnChange = false
+  }
 }
 
 function openWikilinkMenuAtCaret(query: string, keepSelection = false) {
@@ -1384,6 +1417,7 @@ async function loadCurrentFile(path: string) {
     if (holder.value) {
       holder.value.scrollTop = remembered
     }
+    await focusFirstContentBlock()
     emitOutlineSoon()
   } catch (err) {
     setSaveError(path, err instanceof Error ? err.message : 'Could not read file.')
@@ -1501,6 +1535,7 @@ defineExpose({
     await loadCurrentFile(currentPath.value)
   },
   focusEditor,
+  focusFirstContentBlock,
   revealSnippet,
   revealOutlineHeading
 })

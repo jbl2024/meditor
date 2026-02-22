@@ -30,6 +30,7 @@ type EditorViewExposed = {
   saveNow: () => Promise<void>
   reloadCurrent: () => Promise<void>
   focusEditor: () => void
+  focusFirstContentBlock: () => Promise<void>
   revealSnippet: (snippet: string) => Promise<void>
   revealOutlineHeading: (index: number) => Promise<void>
 }
@@ -882,7 +883,23 @@ async function openDailyNote(date: string) {
     filesystem.errorMessage.value = 'Invalid date format. Use YYYY-MM-DD.'
     return false
   }
-  return await openOrPrepareMarkdown(dailyNotePath(root, date), '')
+  const path = dailyNotePath(root, date)
+  let exists = false
+  try {
+    exists = await pathExists(root, path)
+  } catch {
+    exists = false
+  }
+
+  if (!exists) {
+    await ensureParentFolders(path)
+    await writeTextFile(root, path, '')
+    if (!allWorkspaceFiles.value.includes(path)) {
+      allWorkspaceFiles.value = [...allWorkspaceFiles.value, path].sort((a, b) => a.localeCompare(b))
+    }
+  }
+
+  return await openTabWithAutosave(path)
 }
 
 async function openTodayNote() {
@@ -1117,7 +1134,6 @@ async function submitNewFileFromModal() {
       allWorkspaceFiles.value = [...allWorkspaceFiles.value, created].sort((a, b) => a.localeCompare(b))
     }
     closeNewFileModal()
-    nextTick(() => editorRef.value?.focusEditor())
     return true
   } catch (err) {
     newFileModalError.value = err instanceof Error ? err.message : 'Could not create file.'
