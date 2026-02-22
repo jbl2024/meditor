@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
+  ComputerDesktopIcon,
   CommandLineIcon,
   EllipsisHorizontalIcon,
   FolderIcon,
   LinkIcon,
   MagnifyingGlassIcon,
+  MoonIcon,
   StarIcon,
+  SunIcon,
   XMarkIcon
 } from '@heroicons/vue/24/outline'
 import EditorView from './components/EditorView.vue'
@@ -1935,6 +1938,7 @@ onBeforeUnmount(() => {
                   :class="{ active: themePreference === 'light' }"
                   @click="setThemeFromOverflow('light')"
                 >
+                  <SunIcon class="overflow-item-icon" />
                   Light
                 </button>
                 <button
@@ -1943,6 +1947,7 @@ onBeforeUnmount(() => {
                   :class="{ active: themePreference === 'dark' }"
                   @click="setThemeFromOverflow('dark')"
                 >
+                  <MoonIcon class="overflow-item-icon" />
                   Dark
                 </button>
                 <button
@@ -1951,6 +1956,7 @@ onBeforeUnmount(() => {
                   :class="{ active: themePreference === 'system' }"
                   @click="setThemeFromOverflow('system')"
                 >
+                  <ComputerDesktopIcon class="overflow-item-icon" />
                   System
                 </button>
               </div>
@@ -2404,7 +2410,7 @@ onBeforeUnmount(() => {
 .overflow-item.active {
   background: #e2e8f0;
   color: #0f172a;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .ide-root.dark .overflow-item {
