@@ -2285,33 +2285,37 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   border: 0;
-  border-right: 1px solid #e2e8f0;
-  background: #f1f5f9;
-  color: #334155;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #94a3b8;
   min-width: 140px;
   max-width: 220px;
-  padding: 0 10px;
+  padding: 0 12px;
   font-size: 12px;
 }
 
 .ide-root.dark .tab-item {
-  border-right-color: #1e293b;
-  background: #0b1220;
   color: #94a3b8;
 }
 
 .tab-item.active {
-  background: #ffffff;
+  border-bottom-color: #000000;
+  background: transparent;
   color: #0f172a;
 }
 
 .ide-root.dark .tab-item.active {
-  background: #020617;
+  border-bottom-color: #e2e8f0;
+  background: transparent;
   color: #e2e8f0;
 }
 
-.tab-item.active .tab-name {
-  font-weight: 700;
+.tab-item:not(.active):hover {
+  color: #64748b;
+}
+
+.ide-root.dark .tab-item:not(.active):hover {
+  color: #cbd5e1;
 }
 
 .tab-name {
@@ -2827,15 +2831,16 @@ onBeforeUnmount(() => {
 }
 
 .status-bar {
-  height: 24px;
+  height: 22px;
   border-top: 1px solid #e2e8f0;
   background: #f8fafc;
-  font-size: 11px;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   color: #475569;
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 0 8px;
+  gap: 0;
+  padding: 0;
   overflow-x: auto;
 }
 
@@ -2846,7 +2851,19 @@ onBeforeUnmount(() => {
 }
 
 .status-item {
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 8px;
   white-space: nowrap;
+}
+
+.status-item + .status-item {
+  border-left: 1px solid #cbd5e1;
+}
+
+.ide-root.dark .status-item + .status-item {
+  border-left-color: #1e293b;
 }
 
 .toast {
