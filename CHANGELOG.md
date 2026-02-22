@@ -21,6 +21,24 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.2.6] - 2026-02-22
+
+### Added
+- feat(wikilinks): add heading and block anchor navigation for intra-note links (cfc6d1a)
+
+### Changed
+- chore(editor): remove temporary wikilink arrow debug instrumentation (b62126a)
+- refactor(editor): remove redundant local status footer from EditorView (1b71759)
+- style(chrome): restore tab separators and reduce status bar font size (02c71c7)
+- style(layout): soften pane splitters with ghost resize handles (2ede800)
+- style(ui): tighten tab hierarchy and harden status bar density (a3858b2)
+
+### Fixed
+- fix(wikilinks): keep autocomplete insertion in raw mode for post-selection edits (4350284)
+- fix(wikilinks): correct caret boundary detection for arrow-based raw link editing (908c304)
+- fix(mermaid): apply dark styling to template select dropdown and options (71a5abe)
+- fix(status-bar): shorten editing label to prevent footer shift (e2e7950)
+
 ## [0.2.5] - 2026-02-22
 
 ### Added
