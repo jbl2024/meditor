@@ -187,6 +187,15 @@ fn normalize_note_key(root: &Path, path: &Path) -> Result<String> {
   Ok(key.to_lowercase())
 }
 
+fn normalize_workspace_relative_path(root: &Path, path: &Path) -> Result<String> {
+  let relative = path.strip_prefix(root).map_err(|_| AppError::InvalidPath)?;
+  Ok(relative.to_string_lossy().replace('\\', "/"))
+}
+
+fn workspace_absolute_path(root: &Path, stored_path: &str) -> String {
+  root.join(stored_path).to_string_lossy().to_string()
+}
+
 fn note_link_target(root: &Path, path: &Path) -> Result<String> {
   let relative = path.strip_prefix(root).map_err(|_| AppError::InvalidPath)?;
   let normalized = strip_markdown_extension(relative);
@@ -746,8 +755,8 @@ fn reindex_markdown_file(folder_path: String, path: String) -> Result<()> {
 
   let conn = open_db(&folder_path)?;
   let tx = conn.unchecked_transaction()?;
-  let path_for_db = normalized_path.to_string_lossy().to_string();
   let root_canonical = fs::canonicalize(&root)?;
+  let path_for_db = normalize_workspace_relative_path(&root_canonical, &normalized_path)?;
   let source_key = normalize_note_key(&root_canonical, &normalized_path)?;
 
   tx.execute("DELETE FROM chunks WHERE path = ?1", params![path_for_db.clone()])?;
@@ -788,6 +797,46 @@ fn reindex_markdown_file(folder_path: String, path: String) -> Result<()> {
 
   tx.commit()?;
   Ok(())
+}
+
+#[derive(Serialize)]
+struct RebuildIndexResult {
+  indexed_files: usize,
+}
+
+#[tauri::command]
+fn rebuild_workspace_index(folder_path: String) -> Result<RebuildIndexResult> {
+  let root = normalize_existing_dir(&folder_path)?;
+  let root_canonical = fs::canonicalize(&root)?;
+  let conn = open_db(&folder_path)?;
+
+  conn.execute_batch(
+    r#"
+    DELETE FROM embeddings;
+    DELETE FROM chunks;
+    DELETE FROM note_links;
+    DELETE FROM note_properties;
+  "#,
+  )?;
+
+  let markdown_files = list_markdown_files_via_find(&root_canonical)?;
+  let mut indexed_files = 0usize;
+  for candidate in markdown_files {
+    let canonical_candidate = match fs::canonicalize(&candidate) {
+      Ok(value) => value,
+      Err(_) => continue,
+    };
+    if ensure_within_root(&root_canonical, &canonical_candidate).is_err() {
+      continue;
+    }
+    reindex_markdown_file(
+      folder_path.clone(),
+      canonical_candidate.to_string_lossy().to_string(),
+    )?;
+    indexed_files += 1;
+  }
+
+  Ok(RebuildIndexResult { indexed_files })
 }
 
 #[tauri::command]
@@ -1053,6 +1102,8 @@ fn paths_matching_property_filters(conn: &Connection, filters: &[PropertyFilter]
 #[tauri::command]
 fn fts_search(folder_path: String, query: String) -> Result<Vec<Hit>> {
   let conn = open_db(&folder_path)?;
+  let root = normalize_existing_dir(&folder_path)?;
+  let root_canonical = fs::canonicalize(&root)?;
   let q = query.trim();
   if q.is_empty() {
     return Ok(vec![]);
@@ -1073,7 +1124,7 @@ fn fts_search(folder_path: String, query: String) -> Result<Vec<Hit>> {
     let mut out: Vec<Hit> = paths
       .into_iter()
       .map(|path| Hit {
-        path,
+        path: workspace_absolute_path(&root_canonical, &path),
         snippet: "property match".to_string(),
         score: 0.0,
       })
@@ -1106,7 +1157,7 @@ fn fts_search(folder_path: String, query: String) -> Result<Vec<Hit>> {
       }
     }
     out.push(Hit {
-      path,
+      path: workspace_absolute_path(&root_canonical, &path),
       snippet: row.get::<_, String>(1)?,
       score: row.get::<_, f64>(2)?,
     });
@@ -1276,6 +1327,7 @@ pub fn run() {
       init_db,
       reindex_markdown_file,
       fts_search,
+      rebuild_workspace_index,
       backlinks_for_path,
       update_wikilinks_for_rename,
       read_property_type_schema,

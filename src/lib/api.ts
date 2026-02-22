@@ -116,6 +116,10 @@ export async function updateWikilinksForRename(
   return await invoke('update_wikilinks_for_rename', { folderPath, oldPath, newPath })
 }
 
+export async function rebuildWorkspaceIndex(folderPath: string): Promise<{ indexed_files: number }> {
+  return await invoke('rebuild_workspace_index', { folderPath })
+}
+
 export async function readPropertyTypeSchema(folderPath: string): Promise<Record<string, string>> {
   return await invoke('read_property_type_schema', { folderPath })
 }

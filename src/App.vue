@@ -12,6 +12,7 @@ import {
   listChildren,
   pathExists,
   readTextFile,
+  rebuildWorkspaceIndex,
   renameEntry,
   reindexMarkdownFile,
   readPropertyTypeSchema,
@@ -1218,6 +1219,23 @@ function closeWorkspaceFromPalette() {
   return true
 }
 
+async function rebuildIndexFromOverflow() {
+  const root = filesystem.workingFolderPath.value
+  if (!root) return
+  closeOverflowMenu()
+  filesystem.indexingState.value = 'indexing'
+  try {
+    const result = await rebuildWorkspaceIndex(root)
+    await loadAllFiles()
+    await refreshBacklinks()
+    filesystem.errorMessage.value = `Index rebuilt (${result.indexed_files} file${result.indexed_files === 1 ? '' : 's'}).`
+  } catch (err) {
+    filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not rebuild index.'
+  } finally {
+    filesystem.indexingState.value = 'idle'
+  }
+}
+
 function closeOtherTabsFromPalette() {
   const active = workspace.activeTabPath.value
   if (!active) return false
@@ -1707,6 +1725,18 @@ onBeforeUnmount(() => {
                 ...
               </UiButton>
               <div v-if="overflowMenuOpen" class="overflow-menu">
+                <button
+                  type="button"
+                  class="overflow-item"
+                  :disabled="!filesystem.hasWorkspace.value || filesystem.indexingState.value === 'indexing'"
+                  @click="void rebuildIndexFromOverflow()"
+                >
+                  <svg class="overflow-item-icon" viewBox="0 0 16 16" aria-hidden="true">
+                    <path d="M8 2.5a5.5 5.5 0 1 1-4.4 2.2" />
+                    <polyline points="1.8,2.6 4.9,2.6 4.9,5.7" />
+                  </svg>
+                  Rebuild index
+                </button>
                 <button
                   type="button"
                   class="overflow-item"
