@@ -83,6 +83,7 @@ const overflowMenuOpen = ref(false)
 const wikilinkRewritePrompt = ref<{ fromPath: string; toPath: string } | null>(null)
 const newFileModalVisible = ref(false)
 const newFilePathInput = ref('')
+const newFileModalError = ref('')
 const wikilinkRewriteQueue: Array<{
   fromPath: string
   toPath: string
@@ -226,6 +227,7 @@ const mediaQuery = typeof window !== 'undefined'
 
 const WINDOWS_RESERVED_NAME_RE = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i
 const FORBIDDEN_FILE_CHARS_RE = /[<>:"/\\|?*\u0000-\u001f]/g
+const FORBIDDEN_FILE_NAME_CHARS_RE = /[<>:"\\|?*\u0000-\u001f]/
 const MAX_FILE_STEM_LENGTH = 120
 
 function fileName(path: string): string {
@@ -1057,6 +1059,7 @@ async function runQuickOpenAction(id: string) {
 
 async function createNewFileFromPalette() {
   newFilePathInput.value = ''
+  newFileModalError.value = ''
   newFileModalVisible.value = true
   await nextTick()
   document.querySelector<HTMLInputElement>('[data-new-file-input=\"true\"]')?.focus()
@@ -1066,12 +1069,13 @@ async function createNewFileFromPalette() {
 function closeNewFileModal() {
   newFileModalVisible.value = false
   newFilePathInput.value = ''
+  newFileModalError.value = ''
 }
 
 async function submitNewFileFromModal() {
   const root = filesystem.workingFolderPath.value
   if (!root) {
-    filesystem.errorMessage.value = 'Working folder is not set.'
+    newFileModalError.value = 'Working folder is not set.'
     return false
   }
 
@@ -1082,17 +1086,30 @@ async function submitNewFileFromModal() {
     .replace(/\/+/g, '/')
 
   if (!normalized || normalized.endsWith('/')) {
-    filesystem.errorMessage.value = 'Invalid file path.'
+    newFileModalError.value = 'Invalid file path.'
     return false
   }
 
   const parts = normalized.split('/').filter(Boolean)
   if (parts.some((part) => part === '.' || part === '..')) {
-    filesystem.errorMessage.value = 'Path cannot include . or .. segments.'
+    newFileModalError.value = 'Path cannot include . or .. segments.'
+    return false
+  }
+  if (parts.some((part) => FORBIDDEN_FILE_NAME_CHARS_RE.test(part))) {
+    newFileModalError.value = 'File names cannot include < > : " \\ | ? *'
     return false
   }
 
   const rawName = parts[parts.length - 1]
+  const stem = rawName.replace(/\.(md|markdown)$/i, '')
+  if (!stem) {
+    newFileModalError.value = 'File name is required.'
+    return false
+  }
+  if (WINDOWS_RESERVED_NAME_RE.test(stem)) {
+    newFileModalError.value = 'That file name is reserved by the OS.'
+    return false
+  }
   const name = /\.(md|markdown)$/i.test(rawName) ? rawName : `${rawName}.md`
   const parentPath = parts.length > 1 ? `${root}/${parts.slice(0, -1).join('/')}` : root
 
@@ -1107,7 +1124,7 @@ async function submitNewFileFromModal() {
     nextTick(() => editorRef.value?.focusEditor())
     return true
   } catch (err) {
-    filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not create file.'
+    newFileModalError.value = err instanceof Error ? err.message : 'Could not create file.'
     return false
   }
 }
@@ -1355,6 +1372,12 @@ watch(themePreference, (next) => {
 
 watch(quickOpenQuery, () => {
   quickOpenActiveIndex.value = 0
+})
+
+watch(newFilePathInput, () => {
+  if (newFileModalError.value) {
+    newFileModalError.value = ''
+  }
 })
 
 watch(quickOpenItemCount, (count) => {
@@ -1798,6 +1821,7 @@ onBeforeUnmount(() => {
           placeholder="untitled"
           @keydown="onNewFileInputKeydown"
         />
+        <p v-if="newFileModalError" class="modal-input-error">{{ newFileModalError }}</p>
         <div class="confirm-actions">
           <UiButton size="sm" variant="ghost" @click="closeNewFileModal">Cancel</UiButton>
           <UiButton size="sm" @click="submitNewFileFromModal">Create</UiButton>
@@ -2500,6 +2524,16 @@ onBeforeUnmount(() => {
 
 .ide-root.dark .confirm-text {
   color: #94a3b8;
+}
+
+.modal-input-error {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #b91c1c;
+}
+
+.ide-root.dark .modal-input-error {
+  color: #fda4af;
 }
 
 .confirm-path {
