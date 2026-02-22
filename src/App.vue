@@ -68,8 +68,6 @@ const searchLoading = ref(false)
 const quickOpenVisible = ref(false)
 const quickOpenQuery = ref('')
 const quickOpenActiveIndex = ref(0)
-const quickOpenDateInputVisible = ref(false)
-const quickOpenDateInput = ref('')
 const leftPaneWidth = ref(300)
 const rightPaneWidth = ref(300)
 const allWorkspaceFiles = ref<string[]>([])
@@ -85,6 +83,9 @@ const wikilinkRewritePrompt = ref<{ fromPath: string; toPath: string } | null>(n
 const newFileModalVisible = ref(false)
 const newFilePathInput = ref('')
 const newFileModalError = ref('')
+const openDateModalVisible = ref(false)
+const openDateInput = ref('')
+const openDateModalError = ref('')
 const wikilinkRewriteQueue: Array<{
   fromPath: string
   toPath: string
@@ -913,23 +914,29 @@ async function openYesterdayNote() {
 }
 
 async function openSpecificDateNote() {
-  quickOpenDateInputVisible.value = true
-  quickOpenDateInput.value = formatIsoDate(new Date())
+  openDateInput.value = formatIsoDate(new Date())
+  openDateModalError.value = ''
+  openDateModalVisible.value = true
   await nextTick()
-  document.querySelector<HTMLInputElement>('[data-quick-open-date-input=\"true\"]')?.focus()
-  return false
+  document.querySelector<HTMLInputElement>('[data-open-date-input=\"true\"]')?.focus()
+  return true
 }
 
-async function submitSpecificDateFromPalette() {
-  const isoDate = parseIsoDateInput(quickOpenDateInput.value.trim())
+function closeOpenDateModal() {
+  openDateModalVisible.value = false
+  openDateInput.value = ''
+  openDateModalError.value = ''
+}
+
+async function submitOpenDateFromModal() {
+  const isoDate = parseIsoDateInput(openDateInput.value.trim())
   if (!isoDate) {
-    filesystem.errorMessage.value = 'Invalid date. Use YYYY-MM-DD (example: 2026-02-22).'
+    openDateModalError.value = 'Invalid date. Use YYYY-MM-DD (example: 2026-02-22).'
     return false
   }
   const opened = await openDailyNote(isoDate)
   if (!opened) return false
-  closeQuickOpen()
-  nextTick(() => editorRef.value?.focusEditor())
+  closeOpenDateModal()
   return true
 }
 
@@ -1035,8 +1042,6 @@ function closeQuickOpen() {
   quickOpenVisible.value = false
   quickOpenQuery.value = ''
   quickOpenActiveIndex.value = 0
-  quickOpenDateInputVisible.value = false
-  quickOpenDateInput.value = ''
 }
 
 async function openQuickResult(item: QuickOpenResult) {
@@ -1064,7 +1069,7 @@ async function runQuickOpenAction(id: string) {
   if (!shouldClose) return
   closeQuickOpen()
   nextTick(() => {
-    if (!newFileModalVisible.value) {
+    if (!newFileModalVisible.value && !openDateModalVisible.value) {
       editorRef.value?.focusEditor()
     }
   })
@@ -1165,10 +1170,6 @@ function closeOtherTabsFromPalette() {
 }
 
 function onQuickOpenEnter() {
-  if (quickOpenDateInputVisible.value) {
-    void submitSpecificDateFromPalette()
-    return
-  }
   if (quickOpenIsActionMode.value) {
     const action = quickOpenActionResults.value[quickOpenActiveIndex.value]
     if (action) {
@@ -1208,7 +1209,7 @@ function onQuickOpenInputKeydown(event: KeyboardEvent) {
   }
 }
 
-function onQuickOpenDateInputKeydown(event: KeyboardEvent) {
+function onOpenDateInputKeydown(event: KeyboardEvent) {
   if (event.metaKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
     event.stopPropagation()
     return
@@ -1216,16 +1217,13 @@ function onQuickOpenDateInputKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape') {
     event.preventDefault()
     event.stopPropagation()
-    quickOpenDateInputVisible.value = false
-    nextTick(() => {
-      document.querySelector<HTMLInputElement>('[data-quick-open-input=\"true\"]')?.focus()
-    })
+    closeOpenDateModal()
     return
   }
   if (event.key === 'Enter') {
     event.preventDefault()
     event.stopPropagation()
-    void submitSpecificDateFromPalette()
+    void submitOpenDateFromModal()
   }
 }
 
@@ -1273,6 +1271,12 @@ function onWindowKeydown(event: KeyboardEvent) {
     event.preventDefault()
     event.stopPropagation()
     closeNewFileModal()
+    return
+  }
+  if (isEscape && openDateModalVisible.value) {
+    event.preventDefault()
+    event.stopPropagation()
+    closeOpenDateModal()
     return
   }
 
@@ -1389,6 +1393,12 @@ watch(quickOpenQuery, () => {
 watch(newFilePathInput, () => {
   if (newFileModalError.value) {
     newFileModalError.value = ''
+  }
+})
+
+watch(openDateInput, () => {
+  if (openDateModalError.value) {
+    openDateModalError.value = ''
   }
 })
 
@@ -1780,41 +1790,30 @@ onBeforeUnmount(() => {
           placeholder="Type file name, or start with > for actions"
           @keydown="onQuickOpenInputKeydown"
         />
-        <input
-          v-if="quickOpenDateInputVisible"
-          v-model="quickOpenDateInput"
-          data-quick-open-date-input="true"
-          class="tool-input quick-open-date-input"
-          placeholder="YYYY-MM-DD"
-          @keydown="onQuickOpenDateInputKeydown"
-        />
         <div class="modal-list">
-          <template v-if="!quickOpenDateInputVisible">
-            <button
-              v-for="(item, index) in quickOpenActionResults"
-              :key="item.id"
-              type="button"
-              class="modal-item"
-              :class="{ active: quickOpenActiveIndex === index }"
-              @click="runQuickOpenAction(item.id)"
-              @mousemove="setQuickOpenActiveIndex(index)"
-            >
-              {{ item.label }}
-            </button>
-            <button
-              v-for="(item, index) in quickOpenResults"
-              :key="item.kind === 'file' ? item.path : `daily-${item.date}`"
-              type="button"
-              class="modal-item"
-              :class="{ active: quickOpenActiveIndex === index }"
-              @click="openQuickResult(item)"
-              @mousemove="setQuickOpenActiveIndex(index)"
-            >
-              {{ item.label }}
-            </button>
-          </template>
-          <div v-if="quickOpenDateInputVisible" class="placeholder">Enter a date as `YYYY-MM-DD`, then press Enter.</div>
-          <div v-else-if="quickOpenIsActionMode && !quickOpenActionResults.length" class="placeholder">No matching actions</div>
+          <button
+            v-for="(item, index) in quickOpenActionResults"
+            :key="item.id"
+            type="button"
+            class="modal-item"
+            :class="{ active: quickOpenActiveIndex === index }"
+            @click="runQuickOpenAction(item.id)"
+            @mousemove="setQuickOpenActiveIndex(index)"
+          >
+            {{ item.label }}
+          </button>
+          <button
+            v-for="(item, index) in quickOpenResults"
+            :key="item.kind === 'file' ? item.path : `daily-${item.date}`"
+            type="button"
+            class="modal-item"
+            :class="{ active: quickOpenActiveIndex === index }"
+            @click="openQuickResult(item)"
+            @mousemove="setQuickOpenActiveIndex(index)"
+          >
+            {{ item.label }}
+          </button>
+          <div v-if="quickOpenIsActionMode && !quickOpenActionResults.length" class="placeholder">No matching actions</div>
           <div v-else-if="!quickOpenIsActionMode && !quickOpenResults.length" class="placeholder">
             {{ quickOpenQuery.trim() ? 'No matching files' : 'Type to search files' }}
           </div>
@@ -1837,6 +1836,25 @@ onBeforeUnmount(() => {
         <div class="confirm-actions">
           <UiButton size="sm" variant="ghost" @click="closeNewFileModal">Cancel</UiButton>
           <UiButton size="sm" @click="submitNewFileFromModal">Create</UiButton>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="openDateModalVisible" class="modal-overlay" @click.self="closeOpenDateModal">
+      <div class="modal confirm-modal">
+        <h3 class="confirm-title">Open Specific Date</h3>
+        <p class="confirm-text">Enter a date as `YYYY-MM-DD`.</p>
+        <input
+          v-model="openDateInput"
+          data-open-date-input="true"
+          class="tool-input"
+          placeholder="2026-02-22"
+          @keydown="onOpenDateInputKeydown"
+        />
+        <p v-if="openDateModalError" class="modal-input-error">{{ openDateModalError }}</p>
+        <div class="confirm-actions">
+          <UiButton size="sm" variant="ghost" @click="closeOpenDateModal">Cancel</UiButton>
+          <UiButton size="sm" @click="submitOpenDateFromModal">Open</UiButton>
         </div>
       </div>
     </div>
@@ -2295,10 +2313,6 @@ onBeforeUnmount(() => {
   color: #0f172a;
   padding: 0 8px;
   font-size: 12px;
-}
-
-.quick-open-date-input {
-  margin-top: 8px;
 }
 
 .ide-root.dark .tool-input {
