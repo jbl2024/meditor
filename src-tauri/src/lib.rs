@@ -8,7 +8,7 @@ use std::{
   time::{SystemTime, UNIX_EPOCH},
 };
 
-use rusqlite::{params, Connection};
+use rusqlite::{params, params_from_iter, types::Value as SqlValue, Connection};
 use serde::Serialize;
 use thiserror::Error;
 
@@ -357,6 +357,237 @@ fn strip_yaml_frontmatter(markdown: &str) -> &str {
   markdown
 }
 
+fn extract_yaml_frontmatter(markdown: &str) -> Option<&str> {
+  if !markdown.starts_with("---\n") {
+    return None;
+  }
+  let rest = &markdown[4..];
+  let end = rest.find("\n---\n")?;
+  Some(&rest[..end])
+}
+
+#[derive(Debug, Clone)]
+struct IndexedProperty {
+  key: String,
+  kind: &'static str,
+  value_text: Option<String>,
+  value_num: Option<f64>,
+  value_bool: Option<i64>,
+  value_date: Option<String>,
+}
+
+fn unquote_yaml_scalar(value: &str) -> String {
+  let trimmed = value.trim();
+  if trimmed.len() >= 2 {
+    let bytes = trimmed.as_bytes();
+    let first = bytes[0] as char;
+    let last = bytes[trimmed.len() - 1] as char;
+    if (first == '"' && last == '"') || (first == '\'' && last == '\'') {
+      return trimmed[1..trimmed.len() - 1].to_string();
+    }
+  }
+  trimmed.to_string()
+}
+
+fn is_iso_date_value(input: &str) -> bool {
+  if input.len() != 10 {
+    return false;
+  }
+  let bytes = input.as_bytes();
+  for (idx, value) in bytes.iter().enumerate() {
+    if idx == 4 || idx == 7 {
+      if *value != b'-' {
+        return false;
+      }
+      continue;
+    }
+    if !value.is_ascii_digit() {
+      return false;
+    }
+  }
+  true
+}
+
+fn parse_yaml_frontmatter_properties(markdown: &str) -> Vec<IndexedProperty> {
+  let Some(raw_yaml) = extract_yaml_frontmatter(markdown) else {
+    return Vec::new();
+  };
+
+  let lines: Vec<&str> = raw_yaml.lines().collect();
+  let mut out = Vec::new();
+  let mut idx = 0usize;
+
+  while idx < lines.len() {
+    let line = lines[idx];
+    let trimmed = line.trim();
+    if trimmed.is_empty() || trimmed.starts_with('#') {
+      idx += 1;
+      continue;
+    }
+    if line.starts_with(' ') || line.starts_with('\t') {
+      idx += 1;
+      continue;
+    }
+
+    let Some((raw_key, raw_value_part)) = line.split_once(':') else {
+      idx += 1;
+      continue;
+    };
+
+    let key = raw_key.trim().to_lowercase();
+    if key.is_empty() {
+      idx += 1;
+      continue;
+    }
+
+    let value_part = raw_value_part.trim_start();
+
+    if value_part == "|" {
+      idx += 1;
+      let mut text_lines: Vec<String> = Vec::new();
+      while idx < lines.len() {
+        let next = lines[idx];
+        if let Some(stripped) = next.strip_prefix("  ") {
+          text_lines.push(stripped.to_string());
+          idx += 1;
+          continue;
+        }
+        if next.trim().is_empty() {
+          text_lines.push(String::new());
+          idx += 1;
+          continue;
+        }
+        break;
+      }
+      let text = text_lines.join("\n");
+      out.push(IndexedProperty {
+        key,
+        kind: "text",
+        value_text: Some(text.to_lowercase()),
+        value_num: None,
+        value_bool: None,
+        value_date: None,
+      });
+      continue;
+    }
+
+    if value_part.starts_with('[') && value_part.ends_with(']') {
+      let inner = value_part[1..value_part.len() - 1].trim();
+      if !inner.is_empty() {
+        for item in inner.split(',') {
+          let value = unquote_yaml_scalar(item);
+          if value.is_empty() {
+            continue;
+          }
+          out.push(IndexedProperty {
+            key: key.clone(),
+            kind: "list",
+            value_text: Some(value.to_lowercase()),
+            value_num: None,
+            value_bool: None,
+            value_date: None,
+          });
+        }
+      }
+      idx += 1;
+      continue;
+    }
+
+    if value_part.is_empty() {
+      idx += 1;
+      let mut consumed = false;
+      while idx < lines.len() {
+        let next = lines[idx];
+        let Some(item) = next.strip_prefix("  - ") else {
+          if next.trim().is_empty() {
+            idx += 1;
+            continue;
+          }
+          break;
+        };
+        consumed = true;
+        let value = unquote_yaml_scalar(item);
+        if !value.is_empty() {
+          out.push(IndexedProperty {
+            key: key.clone(),
+            kind: "list",
+            value_text: Some(value.to_lowercase()),
+            value_num: None,
+            value_bool: None,
+            value_date: None,
+          });
+        }
+        idx += 1;
+      }
+      if !consumed {
+        out.push(IndexedProperty {
+          key,
+          kind: "text",
+          value_text: Some(String::new()),
+          value_num: None,
+          value_bool: None,
+          value_date: None,
+        });
+      }
+      continue;
+    }
+
+    let scalar = unquote_yaml_scalar(value_part);
+    if scalar.eq_ignore_ascii_case("true") || scalar.eq_ignore_ascii_case("false") {
+      out.push(IndexedProperty {
+        key,
+        kind: "bool",
+        value_text: Some(scalar.to_lowercase()),
+        value_num: None,
+        value_bool: Some(if scalar.eq_ignore_ascii_case("true") { 1 } else { 0 }),
+        value_date: None,
+      });
+      idx += 1;
+      continue;
+    }
+
+    if let Ok(num) = scalar.parse::<f64>() {
+      if num.is_finite() {
+        out.push(IndexedProperty {
+          key,
+          kind: "number",
+          value_text: Some(scalar.to_lowercase()),
+          value_num: Some(num),
+          value_bool: None,
+          value_date: None,
+        });
+        idx += 1;
+        continue;
+      }
+    }
+
+    if is_iso_date_value(&scalar) {
+      out.push(IndexedProperty {
+        key,
+        kind: "date",
+        value_text: Some(scalar.to_lowercase()),
+        value_num: None,
+        value_bool: None,
+        value_date: Some(scalar),
+      });
+      idx += 1;
+      continue;
+    }
+
+    out.push(IndexedProperty {
+      key,
+      kind: "text",
+      value_text: Some(scalar.to_lowercase()),
+      value_num: None,
+      value_bool: None,
+      value_date: None,
+    });
+    idx += 1;
+  }
+
+  out
+}
+
 fn split_wikilink_target_suffix(content: &str) -> (&str, &str) {
   let pipe_idx = content.find('|');
   let heading_idx = content.find('#');
@@ -467,6 +698,22 @@ fn init_db(folder_path: String) -> Result<()> {
     );
     CREATE INDEX IF NOT EXISTS idx_note_links_source ON note_links(source_path);
     CREATE INDEX IF NOT EXISTS idx_note_links_target ON note_links(target_key);
+
+    CREATE TABLE IF NOT EXISTS note_properties (
+      path TEXT NOT NULL,
+      key TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      value_text TEXT,
+      value_num REAL,
+      value_bool INTEGER,
+      value_date TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_note_properties_path ON note_properties(path);
+    CREATE INDEX IF NOT EXISTS idx_note_properties_key ON note_properties(key);
+    CREATE INDEX IF NOT EXISTS idx_note_properties_key_text ON note_properties(key, value_text);
+    CREATE INDEX IF NOT EXISTS idx_note_properties_key_num ON note_properties(key, value_num);
+    CREATE INDEX IF NOT EXISTS idx_note_properties_key_bool ON note_properties(key, value_bool);
+    CREATE INDEX IF NOT EXISTS idx_note_properties_key_date ON note_properties(key, value_date);
   "#,
   )?;
 
@@ -484,6 +731,7 @@ fn reindex_markdown_file(folder_path: String, path: String) -> Result<()> {
   let content_for_indexing = strip_yaml_frontmatter(&markdown);
   let chunks = chunk_markdown(content_for_indexing);
   let targets = parse_note_targets(&markdown);
+  let properties = parse_yaml_frontmatter_properties(&markdown);
   let mtime = fs::metadata(&normalized_path)
     .and_then(|meta| meta.modified())
     .ok()
@@ -504,6 +752,7 @@ fn reindex_markdown_file(folder_path: String, path: String) -> Result<()> {
 
   tx.execute("DELETE FROM chunks WHERE path = ?1", params![path_for_db.clone()])?;
   tx.execute("DELETE FROM note_links WHERE source_path = ?1", params![path_for_db.clone()])?;
+  tx.execute("DELETE FROM note_properties WHERE path = ?1", params![path_for_db.clone()])?;
 
   for (anchor, text) in chunks {
     tx.execute(
@@ -519,6 +768,21 @@ fn reindex_markdown_file(folder_path: String, path: String) -> Result<()> {
     tx.execute(
       "INSERT INTO note_links(source_path, target_key) VALUES (?1, ?2)",
       params![path_for_db, target],
+    )?;
+  }
+
+  for property in properties {
+    tx.execute(
+      "INSERT INTO note_properties(path, key, kind, value_text, value_num, value_bool, value_date) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+      params![
+        path_for_db,
+        property.key,
+        property.kind,
+        property.value_text,
+        property.value_num,
+        property.value_bool,
+        property.value_date
+      ],
     )?;
   }
 
@@ -585,12 +849,238 @@ struct Hit {
   score: f64,
 }
 
+#[derive(Debug, Clone)]
+enum PropertyFilter {
+  Has { key: String },
+  EqText { key: String, value: String },
+  EqBool { key: String, value: i64 },
+  EqNum { key: String, value: f64 },
+  EqDate { key: String, value: String },
+  GtNum { key: String, value: f64 },
+  GteNum { key: String, value: f64 },
+  LtNum { key: String, value: f64 },
+  LteNum { key: String, value: f64 },
+  GtDate { key: String, value: String },
+  GteDate { key: String, value: String },
+  LtDate { key: String, value: String },
+  LteDate { key: String, value: String },
+}
+
+fn is_property_key_token(input: &str) -> bool {
+  let trimmed = input.trim();
+  if trimmed.is_empty() {
+    return false;
+  }
+  trimmed
+    .chars()
+    .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-')
+}
+
+fn parse_property_filter_token(token: &str) -> Option<PropertyFilter> {
+  let token = token.trim();
+  if token.is_empty() {
+    return None;
+  }
+
+  if let Some(raw_key) = token.strip_prefix("has:") {
+    let key = raw_key.trim().to_lowercase();
+    if is_property_key_token(&key) {
+      return Some(PropertyFilter::Has { key });
+    }
+    return None;
+  }
+
+  let operators = [(">=", 2usize), ("<=", 2usize), (">", 1usize), ("<", 1usize), (":", 1usize), ("=", 1usize)];
+  for (op, len) in operators {
+    let Some(position) = token.find(op) else {
+      continue;
+    };
+    if position == 0 {
+      return None;
+    }
+    let key = token[..position].trim().to_lowercase();
+    if !is_property_key_token(&key) {
+      return None;
+    }
+    let raw_value = token[(position + len)..].trim();
+    if raw_value.is_empty() {
+      return None;
+    }
+    let value = unquote_yaml_scalar(raw_value);
+
+    if op == ":" || op == "=" {
+      if value.eq_ignore_ascii_case("true") || value.eq_ignore_ascii_case("false") {
+        return Some(PropertyFilter::EqBool {
+          key,
+          value: if value.eq_ignore_ascii_case("true") { 1 } else { 0 },
+        });
+      }
+      if let Ok(number) = value.parse::<f64>() {
+        if number.is_finite() {
+          return Some(PropertyFilter::EqNum { key, value: number });
+        }
+      }
+      if is_iso_date_value(&value) {
+        return Some(PropertyFilter::EqDate { key, value });
+      }
+      return Some(PropertyFilter::EqText {
+        key,
+        value: value.to_lowercase(),
+      });
+    }
+
+    if is_iso_date_value(&value) {
+      return match op {
+        ">" => Some(PropertyFilter::GtDate { key, value }),
+        ">=" => Some(PropertyFilter::GteDate { key, value }),
+        "<" => Some(PropertyFilter::LtDate { key, value }),
+        "<=" => Some(PropertyFilter::LteDate { key, value }),
+        _ => None,
+      };
+    }
+
+    if let Ok(number) = value.parse::<f64>() {
+      if number.is_finite() {
+        return match op {
+          ">" => Some(PropertyFilter::GtNum { key, value: number }),
+          ">=" => Some(PropertyFilter::GteNum { key, value: number }),
+          "<" => Some(PropertyFilter::LtNum { key, value: number }),
+          "<=" => Some(PropertyFilter::LteNum { key, value: number }),
+          _ => None,
+        };
+      }
+    }
+    return None;
+  }
+
+  None
+}
+
+fn split_search_query(raw: &str) -> (String, Vec<PropertyFilter>) {
+  let mut text_terms: Vec<String> = Vec::new();
+  let mut filters: Vec<PropertyFilter> = Vec::new();
+
+  for token in raw.split_whitespace() {
+    if let Some(filter) = parse_property_filter_token(token) {
+      filters.push(filter);
+    } else {
+      text_terms.push(token.to_string());
+    }
+  }
+
+  (text_terms.join(" "), filters)
+}
+
+fn path_set_for_property_filter(conn: &Connection, filter: &PropertyFilter) -> Result<HashSet<String>> {
+  let (sql, args): (&str, Vec<SqlValue>) = match filter {
+    PropertyFilter::Has { key } => (
+      "SELECT DISTINCT path FROM note_properties WHERE key = ?1",
+      vec![SqlValue::Text(key.clone())],
+    ),
+    PropertyFilter::EqText { key, value } => (
+      "SELECT DISTINCT path FROM note_properties WHERE key = ?1 AND value_text = ?2",
+      vec![SqlValue::Text(key.clone()), SqlValue::Text(value.clone())],
+    ),
+    PropertyFilter::EqBool { key, value } => (
+      "SELECT DISTINCT path FROM note_properties WHERE key = ?1 AND value_bool = ?2",
+      vec![SqlValue::Text(key.clone()), SqlValue::Integer(*value)],
+    ),
+    PropertyFilter::EqNum { key, value } => (
+      "SELECT DISTINCT path FROM note_properties WHERE key = ?1 AND value_num = ?2",
+      vec![SqlValue::Text(key.clone()), SqlValue::Real(*value)],
+    ),
+    PropertyFilter::EqDate { key, value } => (
+      "SELECT DISTINCT path FROM note_properties WHERE key = ?1 AND value_date = ?2",
+      vec![SqlValue::Text(key.clone()), SqlValue::Text(value.clone())],
+    ),
+    PropertyFilter::GtNum { key, value } => (
+      "SELECT DISTINCT path FROM note_properties WHERE key = ?1 AND value_num > ?2",
+      vec![SqlValue::Text(key.clone()), SqlValue::Real(*value)],
+    ),
+    PropertyFilter::GteNum { key, value } => (
+      "SELECT DISTINCT path FROM note_properties WHERE key = ?1 AND value_num >= ?2",
+      vec![SqlValue::Text(key.clone()), SqlValue::Real(*value)],
+    ),
+    PropertyFilter::LtNum { key, value } => (
+      "SELECT DISTINCT path FROM note_properties WHERE key = ?1 AND value_num < ?2",
+      vec![SqlValue::Text(key.clone()), SqlValue::Real(*value)],
+    ),
+    PropertyFilter::LteNum { key, value } => (
+      "SELECT DISTINCT path FROM note_properties WHERE key = ?1 AND value_num <= ?2",
+      vec![SqlValue::Text(key.clone()), SqlValue::Real(*value)],
+    ),
+    PropertyFilter::GtDate { key, value } => (
+      "SELECT DISTINCT path FROM note_properties WHERE key = ?1 AND value_date > ?2",
+      vec![SqlValue::Text(key.clone()), SqlValue::Text(value.clone())],
+    ),
+    PropertyFilter::GteDate { key, value } => (
+      "SELECT DISTINCT path FROM note_properties WHERE key = ?1 AND value_date >= ?2",
+      vec![SqlValue::Text(key.clone()), SqlValue::Text(value.clone())],
+    ),
+    PropertyFilter::LtDate { key, value } => (
+      "SELECT DISTINCT path FROM note_properties WHERE key = ?1 AND value_date < ?2",
+      vec![SqlValue::Text(key.clone()), SqlValue::Text(value.clone())],
+    ),
+    PropertyFilter::LteDate { key, value } => (
+      "SELECT DISTINCT path FROM note_properties WHERE key = ?1 AND value_date <= ?2",
+      vec![SqlValue::Text(key.clone()), SqlValue::Text(value.clone())],
+    ),
+  };
+
+  let mut stmt = conn.prepare(sql)?;
+  let mut rows = stmt.query(params_from_iter(args.iter()))?;
+  let mut out = HashSet::new();
+  while let Some(row) = rows.next()? {
+    let path: String = row.get(0)?;
+    out.insert(path);
+  }
+  Ok(out)
+}
+
+fn paths_matching_property_filters(conn: &Connection, filters: &[PropertyFilter]) -> Result<HashSet<String>> {
+  let mut acc: Option<HashSet<String>> = None;
+  for filter in filters {
+    let next = path_set_for_property_filter(conn, filter)?;
+    if let Some(existing) = acc.as_mut() {
+      existing.retain(|item| next.contains(item));
+    } else {
+      acc = Some(next);
+    }
+  }
+  Ok(acc.unwrap_or_default())
+}
+
 #[tauri::command]
 fn fts_search(folder_path: String, query: String) -> Result<Vec<Hit>> {
   let conn = open_db(&folder_path)?;
   let q = query.trim();
   if q.is_empty() {
     return Ok(vec![]);
+  }
+
+  let (text_query, property_filters) = split_search_query(q);
+  let property_paths = if property_filters.is_empty() {
+    None
+  } else {
+    Some(paths_matching_property_filters(&conn, &property_filters)?)
+  };
+
+  if text_query.is_empty() {
+    let Some(paths) = property_paths else {
+      return Ok(vec![]);
+    };
+
+    let mut out: Vec<Hit> = paths
+      .into_iter()
+      .map(|path| Hit {
+        path,
+        snippet: "property match".to_string(),
+        score: 0.0,
+      })
+      .collect();
+    out.sort_by(|a, b| a.path.to_lowercase().cmp(&b.path.to_lowercase()));
+    out.truncate(25);
+    return Ok(out);
   }
 
   let mut stmt = conn.prepare(
@@ -605,12 +1095,18 @@ fn fts_search(folder_path: String, query: String) -> Result<Vec<Hit>> {
   "#,
   )?;
 
-  let mut rows = stmt.query(params![q])?;
+  let mut rows = stmt.query(params![text_query])?;
   let mut out = Vec::new();
 
   while let Some(row) = rows.next()? {
+    let path = row.get::<_, String>(0)?;
+    if let Some(paths) = property_paths.as_ref() {
+      if !paths.contains(&path) {
+        continue;
+      }
+    }
     out.push(Hit {
-      path: row.get::<_, String>(0)?,
+      path,
       snippet: row.get::<_, String>(1)?,
       score: row.get::<_, f64>(2)?,
     });
@@ -838,5 +1334,23 @@ mod tests {
     let targets = parse_note_targets(markdown);
     assert_eq!(targets.len(), 1);
     assert!(targets.iter().any(|item| item == "bodynote"));
+  }
+
+  #[test]
+  fn parse_yaml_frontmatter_properties_indexes_scalars_and_lists() {
+    let markdown = "---\npriority: 2\narchive: true\ndeadline: 2026-03-01\ntags: [dev, urgent]\n---\nbody";
+    let indexed = parse_yaml_frontmatter_properties(markdown);
+    assert!(indexed.iter().any(|item| item.key == "priority" && item.kind == "number"));
+    assert!(indexed.iter().any(|item| item.key == "archive" && item.kind == "bool"));
+    assert!(indexed.iter().any(|item| item.key == "deadline" && item.kind == "date"));
+    assert!(indexed.iter().any(|item| item.key == "tags" && item.kind == "list" && item.value_text.as_deref() == Some("dev")));
+    assert!(indexed.iter().any(|item| item.key == "tags" && item.kind == "list" && item.value_text.as_deref() == Some("urgent")));
+  }
+
+  #[test]
+  fn split_search_query_extracts_property_filters() {
+    let (text, filters) = split_search_query("roadmap tags:dev deadline>=2026-01-01 has:archive");
+    assert_eq!(text, "roadmap");
+    assert_eq!(filters.len(), 3);
   }
 }

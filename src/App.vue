@@ -1621,7 +1621,7 @@ onBeforeUnmount(() => {
                 data-search-input="true"
                 :disabled="!filesystem.hasWorkspace.value"
                 class="tool-input"
-                placeholder="Search files and content"
+                placeholder="Search content (e.g. tags:dev has:deadline deadline>=2026-03-01)"
                 @keydown.enter.prevent="runGlobalSearch"
               />
               <UiButton size="sm" :disabled="!filesystem.hasWorkspace.value || searchLoading" @click="runGlobalSearch">
