@@ -2755,13 +2755,36 @@ onBeforeUnmount(() => {
 }
 
 .splitter {
-  width: 5px;
+  width: 8px;
+  flex: 0 0 8px;
+  position: relative;
   cursor: col-resize;
-  background: #e2e8f0;
+  background: transparent;
 }
 
-.ide-root.dark .splitter {
-  background: #1e293b;
+.splitter::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: #94a3b8;
+  opacity: 0;
+  transform: translateX(-50%);
+  transition: opacity 120ms ease;
+}
+
+.splitter:hover::before {
+  opacity: 0.45;
+}
+
+.splitter:active::before {
+  opacity: 0.7;
+}
+
+.ide-root.dark .splitter::before {
+  background: #64748b;
 }
 
 .center-area {
