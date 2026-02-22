@@ -35,3 +35,18 @@ prepare-release:
 	fi
 	@./scripts/prepare-version.sh "$(VERSION)"
 	@./scripts/build-changelog.sh --version "$(VERSION)"
+	@VERSION_NO_V="$(VERSION)"; VERSION_NO_V=$${VERSION_NO_V#v}; \
+	CURRENT_BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
+	echo ""; \
+	echo "Release files are prepared. Review changes before committing:"; \
+	echo "  git status"; \
+	echo "  git diff"; \
+	echo ""; \
+	echo "Suggested commit message:"; \
+	echo "  chore(release): prepare v$$VERSION_NO_V"; \
+	echo ""; \
+	echo "Suggested commands:"; \
+	echo "  git commit -m \"chore(release): prepare v$$VERSION_NO_V\""; \
+	echo "  git tag v$$VERSION_NO_V"; \
+	echo "  git push origin $$CURRENT_BRANCH"; \
+	echo "  git push origin v$$VERSION_NO_V"
