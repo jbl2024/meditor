@@ -103,26 +103,31 @@
 
   .editor-holder .cdx-list {
     margin: 0.05rem 0 0.2rem;
-    padding-left: 1.1rem;
+    --spacing-s: 2px;
+    --spacing-xs: 0px;
+    gap: 2px !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
   }
 
   .editor-holder .cdx-list__item {
     margin: 0;
     padding: 0;
+    line-height: 1.26;
   }
 
   .editor-holder .cdx-list__item + .cdx-list__item {
-    margin-top: 0.08rem;
+    margin-top: 0.01rem;
   }
 
   .editor-holder .cdx-list__item-content {
-    line-height: 1.4;
+    padding-left: 0.55rem !important;
+    line-height: 1.26;
   }
 
-  .editor-holder .cdx-list li {
-    margin: 0;
-    padding: 0;
-    line-height: 1.4;
+  .editor-holder .cdx-list__item-children {
+    gap: 2px !important;
+    padding-top: 2px !important;
   }
 
   .editor-holder .ce-header {
