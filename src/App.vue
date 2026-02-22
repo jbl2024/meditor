@@ -179,6 +179,9 @@ type PaletteAction = {
 const paletteActions = computed<PaletteAction[]>(() => [
   { id: 'open-workspace', label: 'Open Workspace', run: () => openWorkspaceFromPalette() },
   { id: 'close-workspace', label: 'Close Workspace', run: () => closeWorkspaceFromPalette() },
+  { id: 'theme-light', label: 'Theme: Light', run: () => setThemeFromPalette('light') },
+  { id: 'theme-dark', label: 'Theme: Dark', run: () => setThemeFromPalette('dark') },
+  { id: 'theme-system', label: 'Theme: System', run: () => setThemeFromPalette('system') },
   { id: 'open-today', label: 'Open Today', run: () => openTodayNote() },
   { id: 'open-yesterday', label: 'Open Yesterday', run: () => openYesterdayNote() },
   { id: 'open-specific-date', label: 'Open Specific Date', run: () => openSpecificDateNote() },
@@ -383,6 +386,11 @@ function onOverflowMenuPointerDown(event: MouseEvent) {
 function setThemeFromOverflow(next: ThemePreference) {
   themePreference.value = next
   closeOverflowMenu()
+}
+
+function setThemeFromPalette(next: ThemePreference) {
+  themePreference.value = next
+  return true
 }
 
 function closeWorkspace() {
