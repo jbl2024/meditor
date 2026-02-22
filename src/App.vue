@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
+  ArrowLeftIcon,
+  ArrowRightIcon,
   ComputerDesktopIcon,
   CommandLineIcon,
   EllipsisHorizontalIcon,
   FolderIcon,
+  HomeIcon,
   LinkIcon,
   MagnifyingGlassIcon,
   MoonIcon,
@@ -15,6 +18,7 @@ import {
 import EditorView from './components/EditorView.vue'
 import ExplorerTree from './components/explorer/ExplorerTree.vue'
 import UiButton from './components/ui/UiButton.vue'
+import { useDocumentHistory } from './composables/useDocumentHistory'
 import {
   backlinksForPath,
   clearWorkingFolder,
@@ -60,6 +64,10 @@ type SaveFileOptions = {
   explicit: boolean
 }
 
+type NavigateOptions = {
+  recordHistory?: boolean
+}
+
 type SaveFileResult = {
   persisted: boolean
 }
@@ -80,6 +88,7 @@ const WORKING_FOLDER_STORAGE_KEY = 'meditor.working-folder.path'
 const workspace = useWorkspaceState()
 const editorState = useEditorState()
 const filesystem = useFilesystemState()
+const documentHistory = useDocumentHistory()
 const isMacOs = typeof navigator !== 'undefined' && /(Mac|iPhone|iPad|iPod)/i.test(navigator.platform || navigator.userAgent)
 
 const themePreference = ref<ThemePreference>('system')
@@ -259,6 +268,10 @@ const mediaQuery = typeof window !== 'undefined'
   ? window.matchMedia('(prefers-color-scheme: dark)')
   : null
 
+const backShortcutLabel = computed(() => (isMacOs ? 'Cmd+[' : 'Ctrl+['))
+const forwardShortcutLabel = computed(() => (isMacOs ? 'Cmd+]' : 'Ctrl+]'))
+const homeShortcutLabel = computed(() => (isMacOs ? 'Cmd+Shift+H' : 'Ctrl+Shift+H'))
+
 const WINDOWS_RESERVED_NAME_RE = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i
 const FORBIDDEN_FILE_CHARS_RE = /[<>:"/\\|?*\u0000-\u001f]/g
 const FORBIDDEN_FILE_NAME_CHARS_RE = /[<>:"\\|?*\u0000-\u001f]/
@@ -401,6 +414,7 @@ function setThemeFromPalette(next: ThemePreference) {
 async function closeWorkspace() {
   if (!filesystem.hasWorkspace.value) return
   workspace.closeAllTabs()
+  documentHistory.reset()
   editorState.setActiveOutline([])
   searchHits.value = []
   allWorkspaceFiles.value = []
@@ -509,22 +523,54 @@ async function ensureActiveTabSavedBeforeSwitch(targetPath: string): Promise<boo
   return true
 }
 
-async function openTabWithAutosave(path: string): Promise<boolean> {
+async function openTabWithAutosave(path: string, options: NavigateOptions = {}): Promise<boolean> {
   const target = path.trim()
   if (!target) return false
   const canSwitch = await ensureActiveTabSavedBeforeSwitch(target)
   if (!canSwitch) return false
   workspace.openTab(target)
+  if (options.recordHistory !== false) {
+    documentHistory.record(target)
+  }
   return true
 }
 
-async function setActiveTabWithAutosave(path: string): Promise<boolean> {
+async function setActiveTabWithAutosave(path: string, options: NavigateOptions = {}): Promise<boolean> {
   const target = path.trim()
   if (!target) return false
   const canSwitch = await ensureActiveTabSavedBeforeSwitch(target)
   if (!canSwitch) return false
   workspace.setActiveTab(target)
+  if (options.recordHistory !== false) {
+    documentHistory.record(target)
+  }
   return true
+}
+
+async function goBackInHistory() {
+  const target = documentHistory.goBack()
+  if (!target) return false
+  const opened = await openTabWithAutosave(target, { recordHistory: false })
+  if (opened) {
+    await nextTick()
+    editorRef.value?.focusEditor()
+    return true
+  }
+  documentHistory.goForward()
+  return false
+}
+
+async function goForwardInHistory() {
+  const target = documentHistory.goForward()
+  if (!target) return false
+  const opened = await openTabWithAutosave(target, { recordHistory: false })
+  if (opened) {
+    await nextTick()
+    editorRef.value?.focusEditor()
+    return true
+  }
+  documentHistory.goBack()
+  return false
 }
 
 async function onExplorerOpen(path: string) {
@@ -593,6 +639,7 @@ function applyPathRenameLocally(payload: { from: string; to: string }) {
   if (!fromPath || !toPath || fromPath === toPath) return
 
   workspace.replaceTabPath(fromPath, toPath)
+  documentHistory.replacePath(fromPath, toPath)
   editorState.movePath(fromPath, toPath)
 
   if (virtualDocs.value[fromPath]) {
@@ -1695,6 +1742,24 @@ function onWindowKeydown(event: KeyboardEvent) {
     return
   }
 
+  if (key === '[' && !event.shiftKey) {
+    event.preventDefault()
+    void goBackInHistory()
+    return
+  }
+
+  if (key === ']' && !event.shiftKey) {
+    event.preventDefault()
+    void goForwardInHistory()
+    return
+  }
+
+  if (key === 'h' && event.shiftKey) {
+    event.preventDefault()
+    void openTodayNote()
+    return
+  }
+
   if (key === 'w') {
     event.preventDefault()
     workspace.closeCurrentTab()
@@ -1800,6 +1865,7 @@ watch(quickOpenItemCount, (count) => {
 watch(
   () => filesystem.workingFolderPath.value,
   () => {
+    documentHistory.reset()
     allWorkspaceFiles.value = []
     backlinks.value = []
     virtualDocs.value = {}
@@ -2022,6 +2088,38 @@ onBeforeUnmount(() => {
           </div>
 
           <div class="global-actions">
+            <div class="nav-actions">
+              <button
+                type="button"
+                class="toolbar-icon-btn"
+                :disabled="!documentHistory.canGoBack.value"
+                :title="`Back (${backShortcutLabel})`"
+                :aria-label="`Back (${backShortcutLabel})`"
+                @click="void goBackInHistory()"
+              >
+                <ArrowLeftIcon />
+              </button>
+              <button
+                type="button"
+                class="toolbar-icon-btn"
+                :disabled="!filesystem.hasWorkspace.value"
+                :title="`Home: today note (${homeShortcutLabel})`"
+                :aria-label="`Home: today note (${homeShortcutLabel})`"
+                @click="void openTodayNote()"
+              >
+                <HomeIcon />
+              </button>
+              <button
+                type="button"
+                class="toolbar-icon-btn"
+                :disabled="!documentHistory.canGoForward.value"
+                :title="`Forward (${forwardShortcutLabel})`"
+                :aria-label="`Forward (${forwardShortcutLabel})`"
+                @click="void goForwardInHistory()"
+              >
+                <ArrowRightIcon />
+              </button>
+            </div>
             <button
               type="button"
               class="toolbar-icon-btn"
@@ -2467,6 +2565,15 @@ onBeforeUnmount(() => {
   position: relative;
 }
 
+.nav-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 2px;
+  padding-right: 6px;
+  border-right: 1px solid #e2e8f0;
+}
+
 .toolbar-icon-btn {
   width: 28px;
   height: 28px;
@@ -2483,6 +2590,12 @@ onBeforeUnmount(() => {
 .toolbar-icon-btn:hover {
   background: #e2e8f0;
   color: #334155;
+}
+
+.toolbar-icon-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+  pointer-events: none;
 }
 
 .toolbar-icon-btn.active {
@@ -2512,6 +2625,10 @@ onBeforeUnmount(() => {
   border-color: #334155;
   background: #020617;
   color: #e2e8f0;
+}
+
+.ide-root.dark .nav-actions {
+  border-right-color: #1e293b;
 }
 
 .overflow-wrap {
