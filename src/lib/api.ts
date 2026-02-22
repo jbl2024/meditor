@@ -23,77 +23,72 @@ export async function setWorkingFolder(path: string): Promise<string> {
   return await invoke('set_working_folder', { path })
 }
 
-export async function listChildren(folderPath: string, dirPath: string): Promise<TreeNode[]> {
-  return await invoke('list_children', { folderPath, dirPath })
+export async function listChildren(dirPath: string): Promise<TreeNode[]> {
+  return await invoke('list_children', { dirPath })
 }
 
-export async function listMarkdownFiles(folderPath: string): Promise<string[]> {
-  return await invoke('list_markdown_files', { folderPath })
+export async function listMarkdownFiles(): Promise<string[]> {
+  return await invoke('list_markdown_files')
 }
 
-export async function pathExists(folderPath: string, path: string): Promise<boolean> {
-  return await invoke('path_exists', { folderPath, path })
+export async function pathExists(path: string): Promise<boolean> {
+  return await invoke('path_exists', { path })
 }
 
-export async function readTextFile(folderPath: string, path: string): Promise<string> {
-  return await invoke('read_text_file', { folderPath, path })
+export async function readTextFile(path: string): Promise<string> {
+  return await invoke('read_text_file', { path })
 }
 
-export async function writeTextFile(folderPath: string, path: string, content: string): Promise<void> {
-  await invoke('write_text_file', { folderPath, path, content })
+export async function writeTextFile(path: string, content: string): Promise<void> {
+  await invoke('write_text_file', { path, content })
 }
 
-export async function reindexMarkdownFile(folderPath: string, path: string): Promise<void> {
-  await invoke('reindex_markdown_file', { folderPath, path })
+export async function reindexMarkdownFile(path: string): Promise<void> {
+  await invoke('reindex_markdown_file', { path })
 }
 
 export async function createEntry(
-  folderPath: string,
   parentPath: string,
   name: string,
   kind: EntryKind,
   conflictStrategy: ConflictStrategy
 ): Promise<string> {
-  return await invoke('create_entry', { folderPath, parentPath, name, kind, conflictStrategy })
+  return await invoke('create_entry', { parentPath, name, kind, conflictStrategy })
 }
 
 export async function renameEntry(
-  folderPath: string,
   path: string,
   newName: string,
   conflictStrategy: ConflictStrategy
 ): Promise<string> {
-  return await invoke('rename_entry', { folderPath, path, newName, conflictStrategy })
+  return await invoke('rename_entry', { path, newName, conflictStrategy })
 }
 
 export async function duplicateEntry(
-  folderPath: string,
   path: string,
   conflictStrategy: ConflictStrategy
 ): Promise<string> {
-  return await invoke('duplicate_entry', { folderPath, path, conflictStrategy })
+  return await invoke('duplicate_entry', { path, conflictStrategy })
 }
 
 export async function copyEntry(
-  folderPath: string,
   sourcePath: string,
   targetDirPath: string,
   conflictStrategy: ConflictStrategy
 ): Promise<string> {
-  return await invoke('copy_entry', { folderPath, sourcePath, targetDirPath, conflictStrategy })
+  return await invoke('copy_entry', { sourcePath, targetDirPath, conflictStrategy })
 }
 
 export async function moveEntry(
-  folderPath: string,
   sourcePath: string,
   targetDirPath: string,
   conflictStrategy: ConflictStrategy
 ): Promise<string> {
-  return await invoke('move_entry', { folderPath, sourcePath, targetDirPath, conflictStrategy })
+  return await invoke('move_entry', { sourcePath, targetDirPath, conflictStrategy })
 }
 
-export async function trashEntry(folderPath: string, path: string): Promise<string> {
-  return await invoke('trash_entry', { folderPath, path })
+export async function trashEntry(path: string): Promise<string> {
+  return await invoke('trash_entry', { path })
 }
 
 export async function openPathExternal(path: string): Promise<void> {
@@ -104,34 +99,33 @@ export async function revealInFileManager(path: string): Promise<void> {
   await invoke('reveal_in_file_manager', { path })
 }
 
-export async function initDb(folderPath: string): Promise<void> {
-  await invoke('init_db', { folderPath })
+export async function initDb(): Promise<void> {
+  await invoke('init_db')
 }
 
-export async function ftsSearch(folderPath: string, query: string): Promise<Array<{ path: string; snippet: string; score: number }>> {
-  return await invoke('fts_search', { folderPath, query })
+export async function ftsSearch(query: string): Promise<Array<{ path: string; snippet: string; score: number }>> {
+  return await invoke('fts_search', { query })
 }
 
-export async function backlinksForPath(folderPath: string, path: string): Promise<Array<{ path: string }>> {
-  return await invoke('backlinks_for_path', { folderPath, path })
+export async function backlinksForPath(path: string): Promise<Array<{ path: string }>> {
+  return await invoke('backlinks_for_path', { path })
 }
 
 export async function updateWikilinksForRename(
-  folderPath: string,
   oldPath: string,
   newPath: string
 ): Promise<{ updated_files: number }> {
-  return await invoke('update_wikilinks_for_rename', { folderPath, oldPath, newPath })
+  return await invoke('update_wikilinks_for_rename', { oldPath, newPath })
 }
 
-export async function rebuildWorkspaceIndex(folderPath: string): Promise<{ indexed_files: number }> {
-  return await invoke('rebuild_workspace_index', { folderPath })
+export async function rebuildWorkspaceIndex(): Promise<{ indexed_files: number }> {
+  return await invoke('rebuild_workspace_index')
 }
 
-export async function readPropertyTypeSchema(folderPath: string): Promise<Record<string, string>> {
-  return await invoke('read_property_type_schema', { folderPath })
+export async function readPropertyTypeSchema(): Promise<Record<string, string>> {
+  return await invoke('read_property_type_schema')
 }
 
-export async function writePropertyTypeSchema(folderPath: string, schema: Record<string, string>): Promise<void> {
-  await invoke('write_property_type_schema', { folderPath, schema })
+export async function writePropertyTypeSchema(schema: Record<string, string>): Promise<void> {
+  await invoke('write_property_type_schema', { schema })
 }

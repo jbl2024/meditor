@@ -36,6 +36,7 @@ import {
   writePropertyTypeSchema,
   writeTextFile
 } from './lib/api'
+import { parseSearchSnippet } from './lib/searchSnippets'
 import { parseWikilinkTarget, type WikilinkAnchor } from './lib/wikilinks'
 import { useEditorState } from './composables/useEditorState'
 import { useFilesystemState } from './composables/useFilesystemState'
@@ -43,7 +44,6 @@ import { useWorkspaceState, type SidebarMode } from './composables/useWorkspaceS
 
 type ThemePreference = 'light' | 'dark' | 'system'
 type SearchHit = { path: string; snippet: string; score: number }
-type SearchSnippetPart = { text: string; highlighted: boolean }
 type PropertyPreviewRow = { key: string; value: string }
 
 type EditorViewExposed = {
@@ -294,30 +294,6 @@ function toRelativePath(path: string): string {
   return path
 }
 
-function parseSearchSnippet(snippet: string): SearchSnippetPart[] {
-  const source = String(snippet ?? '')
-  if (!source) return [{ text: '', highlighted: false }]
-
-  const parts: SearchSnippetPart[] = []
-  const tokens = source.split(/(<\/?b>)/gi)
-  let highlighted = false
-  for (const token of tokens) {
-    const lower = token.toLowerCase()
-    if (lower === '<b>') {
-      highlighted = true
-      continue
-    }
-    if (lower === '</b>') {
-      highlighted = false
-      continue
-    }
-    if (!token) continue
-    parts.push({ text: token, highlighted })
-  }
-
-  return parts.length ? parts : [{ text: source, highlighted: false }]
-}
-
 function normalizeDatePart(value: number): string {
   return String(value).padStart(2, '0')
 }
@@ -485,7 +461,7 @@ async function loadWorkingFolder(path: string) {
     const canonical = await setWorkingFolder(path)
     filesystem.setWorkspacePath(canonical)
     filesystem.indexingState.value = 'indexing'
-    await initDb(canonical)
+    await initDb()
     searchHits.value = []
     allWorkspaceFiles.value = []
     window.localStorage.setItem(WORKING_FOLDER_STORAGE_KEY, canonical)
@@ -564,7 +540,7 @@ async function openFile(path: string) {
   }
   const virtual = virtualDocs.value[path]
   if (virtual) return virtual.content
-  return await readTextFile(filesystem.workingFolderPath.value, path)
+  return await readTextFile(path)
 }
 
 async function ensureParentFolders(filePath: string) {
@@ -578,9 +554,9 @@ async function ensureParentFolders(filePath: string) {
   let current = root
   for (const segment of parts.slice(0, -1)) {
     const next = `${current}/${segment}`
-    const exists = await pathExists(root, next)
+    const exists = await pathExists(next)
     if (!exists) {
-      await createEntry(root, current, segment, 'folder', 'fail')
+      await createEntry(current, segment, 'folder', 'fail')
     }
     current = next
   }
@@ -686,7 +662,7 @@ async function maybeRewriteWikilinksForRename(fromPath: string, toPath: string) 
   if (!shouldRewrite) return
   filesystem.indexingState.value = 'indexing'
   try {
-    await updateWikilinksForRename(root, fromPath, toPath)
+    await updateWikilinksForRename(fromPath, toPath)
     await refreshBacklinks()
   } catch (err) {
     filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not update wikilinks.'
@@ -719,12 +695,12 @@ async function renameFileFromTitle(path: string, rawTitle: string): Promise<Rena
     return { path, title: normalizedTitle }
   }
 
-  const exists = await pathExists(root, path)
+  const exists = await pathExists(path)
   if (!exists) {
     const parent = path.replace(/\\/g, '/').replace(/\/[^/]+$/, '')
     let candidate = `${parent}/${nextName}`
     let idx = 1
-    while (await pathExists(root, candidate)) {
+    while (await pathExists(candidate)) {
       const alt = `${normalizedTitle} (${idx})${ext}`
       candidate = `${parent}/${alt}`
       idx += 1
@@ -738,7 +714,7 @@ async function renameFileFromTitle(path: string, rawTitle: string): Promise<Rena
     }
   }
 
-  const renamedPath = await renameEntry(root, path, nextName, 'rename')
+  const renamedPath = await renameEntry(path, nextName, 'rename')
   return {
     path: renamedPath,
     title: noteTitleFromPath(renamedPath)
@@ -765,7 +741,7 @@ async function openOrPrepareMarkdown(path: string, titleLine: string) {
 
   let exists = false
   try {
-    exists = await pathExists(root, path)
+    exists = await pathExists(path)
   } catch {
     // If parent folders do not exist yet (for example journal/), treat as non-existent
     // and open a virtual buffer. Folder creation is deferred until first write.
@@ -800,7 +776,7 @@ async function saveFile(path: string, txt: string, options: SaveFileOptions): Pr
   }
 
   await ensureParentFolders(path)
-  await writeTextFile(filesystem.workingFolderPath.value, path, txt)
+  await writeTextFile(path, txt)
 
   if (virtual) {
     const nextVirtual = { ...virtualDocs.value }
@@ -814,7 +790,7 @@ async function saveFile(path: string, txt: string, options: SaveFileOptions): Pr
 
   filesystem.indexingState.value = 'indexing'
   try {
-    await reindexMarkdownFile(filesystem.workingFolderPath.value, path)
+    await reindexMarkdownFile(path)
   } finally {
     filesystem.indexingState.value = 'idle'
   }
@@ -838,7 +814,7 @@ async function runGlobalSearch() {
     if (!allWorkspaceFiles.value.length) {
       await loadAllFiles()
     }
-    const ftsHits = await ftsSearch(filesystem.workingFolderPath.value, q)
+    const ftsHits = await ftsSearch(q)
     const qLower = q.toLowerCase()
     const filenameHits = allWorkspaceFiles.value
       .filter((path) => toRelativePath(path).toLowerCase().includes(qLower))
@@ -985,7 +961,7 @@ async function refreshBacklinks() {
 
   backlinksLoading.value = true
   try {
-    const results = await backlinksForPath(root, path)
+    const results = await backlinksForPath(path)
     backlinks.value = results.map((item) => item.path)
   } catch {
     backlinks.value = []
@@ -1007,14 +983,14 @@ async function openDailyNote(date: string) {
   const path = dailyNotePath(root, date)
   let exists = false
   try {
-    exists = await pathExists(root, path)
+    exists = await pathExists(path)
   } catch {
     exists = false
   }
 
   if (!exists) {
     await ensureParentFolders(path)
-    await writeTextFile(root, path, '')
+    await writeTextFile(path, '')
     if (!allWorkspaceFiles.value.includes(path)) {
       allWorkspaceFiles.value = [...allWorkspaceFiles.value, path].sort((a, b) => a.localeCompare(b))
     }
@@ -1129,7 +1105,7 @@ async function loadWikilinkTargets(): Promise<string[]> {
   const root = filesystem.workingFolderPath.value
   if (!root) return []
   try {
-    return await listMarkdownFiles(root)
+    return await listMarkdownFiles()
   } catch (err) {
     filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not load wikilink targets.'
     return []
@@ -1183,14 +1159,14 @@ async function loadWikilinkHeadings(target: string): Promise<string[]> {
   try {
     if (isIsoDate(normalized)) {
       const path = dailyNotePath(root, normalized)
-      if (!(await pathExists(root, path))) return []
-      return extractHeadingsFromMarkdown(await readTextFile(root, path))
+      if (!(await pathExists(path))) return []
+      return extractHeadingsFromMarkdown(await readTextFile(path))
     }
 
     const markdownFiles = await loadWikilinkTargets()
     const existing = resolveExistingWikilinkPath(normalized, markdownFiles)
     if (!existing) return []
-    return extractHeadingsFromMarkdown(await readTextFile(root, `${root}/${existing}`))
+    return extractHeadingsFromMarkdown(await readTextFile(`${root}/${existing}`))
   } catch {
     return []
   }
@@ -1200,7 +1176,7 @@ async function loadPropertyTypeSchema(): Promise<Record<string, string>> {
   const root = filesystem.workingFolderPath.value
   if (!root) return {}
   try {
-    return await readPropertyTypeSchema(root)
+    return await readPropertyTypeSchema()
   } catch (err) {
     filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not load property types.'
     return {}
@@ -1210,7 +1186,7 @@ async function loadPropertyTypeSchema(): Promise<Record<string, string>> {
 async function savePropertyTypeSchema(schema: Record<string, string>): Promise<void> {
   const root = filesystem.workingFolderPath.value
   if (!root) return
-  await writePropertyTypeSchema(root, schema)
+  await writePropertyTypeSchema(schema)
 }
 
 async function loadAllFiles() {
@@ -1223,7 +1199,7 @@ async function loadAllFiles() {
 
     while (queue.length > 0) {
       const dir = queue.shift()!
-      const children = await listChildren(filesystem.workingFolderPath.value, dir)
+      const children = await listChildren(dir)
       for (const child of children) {
         if (child.is_dir) {
           queue.push(child.path)
@@ -1341,7 +1317,7 @@ async function suggestedNotePathPrefix(): Promise<string> {
   if (!root) return ''
 
   try {
-    const rootChildren = await listChildren(root, root)
+    const rootChildren = await listChildren(root)
     if (rootChildren.some((entry) => entry.is_dir && entry.name.toLowerCase() === 'notes')) {
       return 'notes/'
     }
@@ -1366,9 +1342,9 @@ async function ensureParentDirectoriesForRelativePath(relativePath: string): Pro
   let current = root
   for (const segment of parts.slice(0, -1)) {
     const next = `${current}/${segment}`
-    const exists = await pathExists(root, next)
+    const exists = await pathExists(next)
     if (!exists) {
-      await createEntry(root, current, segment, 'folder', 'fail')
+      await createEntry(current, segment, 'folder', 'fail')
     }
     current = next
   }
@@ -1427,7 +1403,7 @@ async function submitNewFileFromModal() {
 
   try {
     await ensureParentFolders(fullPath)
-    const created = await createEntry(root, parentPath, name, 'file', 'fail')
+    const created = await createEntry(parentPath, name, 'file', 'fail')
     const opened = await openTabWithAutosave(created)
     if (!opened) return false
     if (/\.(md|markdown)$/i.test(created) && !allWorkspaceFiles.value.includes(created)) {
@@ -1476,7 +1452,7 @@ async function submitNewFolderFromModal() {
 
   try {
     const parentPath = await ensureParentDirectoriesForRelativePath(normalized)
-    await createEntry(root, parentPath, name, 'folder', 'fail')
+    await createEntry(parentPath, name, 'folder', 'fail')
     closeNewFolderModal()
     return true
   } catch (err) {
@@ -1507,7 +1483,7 @@ async function rebuildIndexFromOverflow() {
   closeOverflowMenu()
   filesystem.indexingState.value = 'indexing'
   try {
-    const result = await rebuildWorkspaceIndex(root)
+    const result = await rebuildWorkspaceIndex()
     await loadAllFiles()
     await refreshBacklinks()
     filesystem.notifySuccess(`Index rebuilt (${result.indexed_files} file${result.indexed_files === 1 ? '' : 's'}).`)

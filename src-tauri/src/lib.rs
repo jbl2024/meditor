@@ -755,7 +755,7 @@ fn rewrite_wikilinks_for_note(
 }
 
 #[tauri::command]
-fn init_db(_folder_path: String) -> Result<()> {
+fn init_db() -> Result<()> {
     let conn = open_db()?;
 
     conn.execute_batch(
@@ -827,7 +827,7 @@ fn init_db(_folder_path: String) -> Result<()> {
 }
 
 #[tauri::command]
-fn reindex_markdown_file(_folder_path: String, path: String) -> Result<()> {
+fn reindex_markdown_file(path: String) -> Result<()> {
     let root = active_workspace_root()?;
     let file_path = normalize_existing_file(&path)?;
     ensure_within_root(&root, &file_path)?;
@@ -911,7 +911,7 @@ struct RebuildIndexResult {
 }
 
 #[tauri::command]
-fn rebuild_workspace_index(_folder_path: String) -> Result<RebuildIndexResult> {
+fn rebuild_workspace_index() -> Result<RebuildIndexResult> {
     let root_canonical = active_workspace_root()?;
     let conn = open_db()?;
 
@@ -934,10 +934,7 @@ fn rebuild_workspace_index(_folder_path: String) -> Result<RebuildIndexResult> {
         if ensure_within_root(&root_canonical, &canonical_candidate).is_err() {
             continue;
         }
-        reindex_markdown_file(
-            String::new(),
-            canonical_candidate.to_string_lossy().to_string(),
-        )?;
+        reindex_markdown_file(canonical_candidate.to_string_lossy().to_string())?;
         indexed_files += 1;
     }
 
@@ -945,7 +942,7 @@ fn rebuild_workspace_index(_folder_path: String) -> Result<RebuildIndexResult> {
 }
 
 #[tauri::command]
-fn read_property_type_schema(_folder_path: String) -> Result<HashMap<String, String>> {
+fn read_property_type_schema() -> Result<HashMap<String, String>> {
     let schema_path = property_type_schema_path()?;
     if !schema_path.exists() {
         return Ok(HashMap::new());
@@ -979,7 +976,7 @@ fn read_property_type_schema(_folder_path: String) -> Result<HashMap<String, Str
 }
 
 #[tauri::command]
-fn write_property_type_schema(_folder_path: String, schema: HashMap<String, String>) -> Result<()> {
+fn write_property_type_schema(schema: HashMap<String, String>) -> Result<()> {
     let schema_path = property_type_schema_path()?;
     let mut sanitized: HashMap<String, String> = HashMap::new();
 
@@ -1229,7 +1226,7 @@ fn paths_matching_property_filters(
 }
 
 #[tauri::command]
-fn fts_search(_folder_path: String, query: String) -> Result<Vec<Hit>> {
+fn fts_search(query: String) -> Result<Vec<Hit>> {
     let conn = open_db()?;
     let root_canonical = active_workspace_root()?;
     let q = query.trim();
@@ -1343,7 +1340,7 @@ fn list_markdown_files_via_find(root: &Path) -> Result<Vec<PathBuf>> {
 }
 
 #[tauri::command]
-fn backlinks_for_path(_folder_path: String, path: String) -> Result<Vec<Backlink>> {
+fn backlinks_for_path(path: String) -> Result<Vec<Backlink>> {
     let root_canonical = active_workspace_root()?;
     let mut path_buf = PathBuf::from(path);
     if path_buf.as_os_str().is_empty() {
@@ -1400,7 +1397,6 @@ fn backlinks_for_path(_folder_path: String, path: String) -> Result<Vec<Backlink
 
 #[tauri::command]
 fn update_wikilinks_for_rename(
-    _folder_path: String,
     old_path: String,
     new_path: String,
 ) -> Result<WikilinkRewriteResult> {
@@ -1437,10 +1433,7 @@ fn update_wikilinks_for_rename(
         }
 
         fs::write(&canonical_candidate, updated_markdown)?;
-        reindex_markdown_file(
-            String::new(),
-            canonical_candidate.to_string_lossy().to_string(),
-        )?;
+        reindex_markdown_file(canonical_candidate.to_string_lossy().to_string())?;
         changed_files += 1;
     }
 
@@ -1596,7 +1589,10 @@ mod tests {
 
         for dir in special_dirs.into_iter().flatten() {
             let result = set_active_workspace(&dir.to_string_lossy());
-            assert!(result.is_err(), "expected special directory to be rejected: {dir:?}");
+            assert!(
+                result.is_err(),
+                "expected special directory to be rejected: {dir:?}"
+            );
         }
     }
 

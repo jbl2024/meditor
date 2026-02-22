@@ -149,10 +149,11 @@ function inlineMarkdownToHtml(value: string): string {
   return html
 }
 
-function sanitizeExternalHref(raw: string): string | null {
+export function sanitizeExternalHref(raw: string): string | null {
   const value = String(raw ?? '').trim()
   if (!value) return null
   if (/[\u0000-\u001f\u007f]/.test(value)) return null
+  if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(value)) return null
 
   try {
     const parsed = new URL(value, 'https://meditor.local')

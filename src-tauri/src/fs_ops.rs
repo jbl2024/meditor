@@ -358,7 +358,7 @@ pub fn set_working_folder(path: String) -> Result<String> {
 }
 
 #[tauri::command]
-pub fn list_children(_folder_path: String, dir_path: String) -> Result<Vec<TreeNode>> {
+pub fn list_children(dir_path: String) -> Result<Vec<TreeNode>> {
     let root = active_workspace_root()?;
     let dir = normalize_existing_dir(&dir_path)?;
     ensure_within_root(&root, &dir)?;
@@ -366,7 +366,7 @@ pub fn list_children(_folder_path: String, dir_path: String) -> Result<Vec<TreeN
 }
 
 #[tauri::command]
-pub fn list_markdown_files(_folder_path: String) -> Result<Vec<String>> {
+pub fn list_markdown_files() -> Result<Vec<String>> {
     let root_canonical = active_workspace_root()?;
     let mut out = Vec::new();
     collect_markdown_files_recursive(&root_canonical, &root_canonical, &mut out)?;
@@ -375,7 +375,7 @@ pub fn list_markdown_files(_folder_path: String) -> Result<Vec<String>> {
 }
 
 #[tauri::command]
-pub fn path_exists(_folder_path: String, path: String) -> Result<bool> {
+pub fn path_exists(path: String) -> Result<bool> {
     let root = active_workspace_root()?;
     let pb = normalize_path(&path)?;
     ensure_parent_within_root(&root, &pb)?;
@@ -383,7 +383,7 @@ pub fn path_exists(_folder_path: String, path: String) -> Result<bool> {
 }
 
 #[tauri::command]
-pub fn read_text_file(_folder_path: String, path: String) -> Result<String> {
+pub fn read_text_file(path: String) -> Result<String> {
     let root = active_workspace_root()?;
     let pb = normalize_existing_path(&path)?;
     ensure_within_root(&root, &pb)?;
@@ -391,7 +391,7 @@ pub fn read_text_file(_folder_path: String, path: String) -> Result<String> {
 }
 
 #[tauri::command]
-pub fn write_text_file(_folder_path: String, path: String, content: String) -> Result<()> {
+pub fn write_text_file(path: String, content: String) -> Result<()> {
     let root = active_workspace_root()?;
     let pb = normalize_path(&path)?;
     ensure_parent_within_root(&root, &pb)?;
@@ -401,7 +401,6 @@ pub fn write_text_file(_folder_path: String, path: String, content: String) -> R
 
 #[tauri::command]
 pub fn create_entry(
-    _folder_path: String,
     parent_path: String,
     name: String,
     kind: EntryKind,
@@ -431,7 +430,6 @@ pub fn create_entry(
 
 #[tauri::command]
 pub fn rename_entry(
-    _folder_path: String,
     path: String,
     new_name: String,
     conflict_strategy: ConflictStrategy,
@@ -462,11 +460,7 @@ pub fn rename_entry(
 }
 
 #[tauri::command]
-pub fn duplicate_entry(
-    _folder_path: String,
-    path: String,
-    conflict_strategy: ConflictStrategy,
-) -> Result<String> {
+pub fn duplicate_entry(path: String, conflict_strategy: ConflictStrategy) -> Result<String> {
     let root = active_workspace_root()?;
     let source = normalize_existing_path(&path)?;
     ensure_within_root(&root, &source)?;
@@ -493,7 +487,6 @@ pub fn duplicate_entry(
 
 #[tauri::command]
 pub fn move_entry(
-    _folder_path: String,
     source_path: String,
     target_dir_path: String,
     conflict_strategy: ConflictStrategy,
@@ -538,7 +531,6 @@ pub fn move_entry(
 
 #[tauri::command]
 pub fn copy_entry(
-    _folder_path: String,
     source_path: String,
     target_dir_path: String,
     conflict_strategy: ConflictStrategy,
@@ -579,7 +571,7 @@ pub fn copy_entry(
 }
 
 #[tauri::command]
-pub fn trash_entry(_folder_path: String, path: String) -> Result<String> {
+pub fn trash_entry(path: String) -> Result<String> {
     let root = active_workspace_root()?;
     let source = normalize_existing_path(&path)?;
     ensure_within_root(&root, &source)?;
@@ -675,7 +667,6 @@ mod tests {
 
         let first = create_entry(
             root.clone(),
-            root.clone(),
             "note.md".to_string(),
             EntryKind::File,
             ConflictStrategy::Rename,
@@ -683,7 +674,6 @@ mod tests {
         .expect("create first");
 
         let second = create_entry(
-            root.clone(),
             root.clone(),
             "note.md".to_string(),
             EntryKind::File,
@@ -700,19 +690,16 @@ mod tests {
     fn duplicate_file_creates_copy() {
         let dir = make_temp_dir();
         activate_workspace(&dir);
-        let root = dir.to_string_lossy().to_string();
         let source = dir.join("doc.md");
         fs::write(&source, "hello").expect("write source");
 
         let duplicated = duplicate_entry(
-            root,
             source.to_string_lossy().to_string(),
             ConflictStrategy::Rename,
         )
         .expect("duplicate");
 
-        let copied_content =
-            read_text_file(dir.to_string_lossy().to_string(), duplicated).expect("read duplicated");
+        let copied_content = read_text_file(duplicated).expect("read duplicated");
         assert_eq!(copied_content, "hello");
         fs::remove_dir_all(dir).expect("cleanup");
     }
@@ -721,7 +708,6 @@ mod tests {
     fn move_entry_renames_on_conflict() {
         let dir = make_temp_dir();
         activate_workspace(&dir);
-        let root = dir.to_string_lossy().to_string();
         let source = dir.join("a.md");
         let destination_dir = dir.join("dest");
 
@@ -730,7 +716,6 @@ mod tests {
         fs::write(destination_dir.join("a.md"), "existing").expect("write existing");
 
         let moved = move_entry(
-            root,
             source.to_string_lossy().to_string(),
             destination_dir.to_string_lossy().to_string(),
             ConflictStrategy::Rename,
@@ -745,11 +730,10 @@ mod tests {
     fn trash_entry_moves_file_to_trash_folder() {
         let dir = make_temp_dir();
         activate_workspace(&dir);
-        let root = dir.to_string_lossy().to_string();
         let source = dir.join("to-delete.md");
         fs::write(&source, "delete me").expect("write source");
 
-        let trashed = trash_entry(root, source.to_string_lossy().to_string()).expect("trash");
+        let trashed = trash_entry(source.to_string_lossy().to_string()).expect("trash");
 
         assert!(trashed.contains(".meditor-trash"));
         assert!(PathBuf::from(trashed).exists());
@@ -768,11 +752,7 @@ mod tests {
         fs::write(root.join(".meditor").join("meditor.sqlite"), "db").expect("write db");
         fs::create_dir_all(root.join(".meditor-trash")).expect("trash dir");
 
-        let tree = list_children(
-            root.to_string_lossy().to_string(),
-            root.to_string_lossy().to_string(),
-        )
-        .expect("list tree");
+        let tree = list_children(root.to_string_lossy().to_string()).expect("list tree");
         assert_eq!(tree.len(), 1);
         assert_eq!(tree[0].name, "doc.md");
         fs::remove_dir_all(dir).expect("cleanup");
@@ -791,7 +771,7 @@ mod tests {
         fs::create_dir_all(root.join(".meditor")).expect("internal dir");
         fs::write(root.join(".meditor").join("hidden.md"), "x").expect("write hidden");
 
-        let files = list_markdown_files(root.to_string_lossy().to_string()).expect("list markdown");
+        let files = list_markdown_files().expect("list markdown");
         assert_eq!(
             files,
             vec!["a.md".to_string(), "docs/b.markdown".to_string()]
@@ -803,12 +783,10 @@ mod tests {
     fn rename_entry_changes_name() {
         let dir = make_temp_dir();
         activate_workspace(&dir);
-        let root = dir.to_string_lossy().to_string();
         let source = dir.join("old.md");
         fs::write(&source, "content").expect("write source");
 
         let renamed = rename_entry(
-            root,
             source.to_string_lossy().to_string(),
             "new.md".to_string(),
             ConflictStrategy::Rename,
@@ -824,12 +802,10 @@ mod tests {
     fn rename_entry_rejects_invalid_name_characters() {
         let dir = make_temp_dir();
         activate_workspace(&dir);
-        let root = dir.to_string_lossy().to_string();
         let source = dir.join("old.md");
         fs::write(&source, "content").expect("write source");
 
         let result = rename_entry(
-            root,
             source.to_string_lossy().to_string(),
             "bad:name.md".to_string(),
             ConflictStrategy::Rename,
@@ -847,7 +823,6 @@ mod tests {
         let root = dir.to_string_lossy().to_string();
 
         let result = create_entry(
-            root.clone(),
             root,
             "CON".to_string(),
             EntryKind::File,
@@ -862,21 +837,19 @@ mod tests {
     fn copy_entry_works_for_files() {
         let dir = make_temp_dir();
         activate_workspace(&dir);
-        let root = dir.to_string_lossy().to_string();
         let source = dir.join("a.md");
         let target_dir = dir.join("sub");
         fs::create_dir_all(&target_dir).expect("create sub");
         fs::write(&source, "content").expect("write source");
 
         let copied = copy_entry(
-            root.clone(),
             source.to_string_lossy().to_string(),
             target_dir.to_string_lossy().to_string(),
             ConflictStrategy::Fail,
         )
         .expect("copy");
 
-        let text = read_text_file(root, copied).expect("read copied");
+        let text = read_text_file(copied).expect("read copied");
         assert_eq!(text, "content");
         fs::remove_dir_all(dir).expect("cleanup");
     }

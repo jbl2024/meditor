@@ -175,7 +175,7 @@ async function loadChildren(dirPath: string) {
   loadingDirs.value = nextLoading
 
   try {
-    const children = await listChildren(props.folderPath, dirPath)
+    const children = await listChildren(dirPath)
     childrenByDir.value[dirPath] = children
 
     for (const child of children) {
@@ -320,7 +320,7 @@ async function confirmRename() {
 
   await runWithConflictModal(
     async (strategy) => {
-      const renamedPath = await renameEntry(props.folderPath, path, newName, strategy)
+      const renamedPath = await renameEntry(path, newName, strategy)
       const parent = getParentPath(path)
       cancelRename()
       await loadChildren(parent)
@@ -364,7 +364,7 @@ async function executeDelete(paths: string[]) {
 
   for (const path of paths) {
     try {
-      await trashEntry(props.folderPath, path)
+      await trashEntry(path)
     } catch (err) {
       emitError(errorMessage(err) ?? 'Delete failed.')
     }
@@ -382,7 +382,7 @@ async function runDuplicate(paths: string[]) {
   await runWithConflictModal(
     async (strategy) => {
       for (const path of paths) {
-        await duplicateEntry(props.folderPath, path, strategy)
+        await duplicateEntry(path, strategy)
       }
       await refreshLoadedDirs()
     },
@@ -430,9 +430,9 @@ async function executePaste(targetDir: string, pathsOverride?: string[]) {
     async (strategy) => {
       for (const source of sources) {
         if (mode === 'copy') {
-          await copyEntry(props.folderPath, source, targetDir, strategy)
+          await copyEntry(source, targetDir, strategy)
         } else {
-          await moveEntry(props.folderPath, source, targetDir, strategy)
+          await moveEntry(source, targetDir, strategy)
         }
       }
 
