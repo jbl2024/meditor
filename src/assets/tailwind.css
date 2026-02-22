@@ -637,8 +637,14 @@ html.dark .ce-popover-item--focused,
     border-radius: 0.45rem;
     background: #ffffff;
     color: #334155;
+    color-scheme: light;
     font-size: 0.75rem;
     padding: 0.24rem 0.42rem;
+  }
+
+  .editor-holder .meditor-mermaid-template option {
+    background: #ffffff;
+    color: #334155;
   }
 
   .editor-holder .meditor-mermaid-body {
@@ -723,6 +729,12 @@ html.dark .ce-popover-item--focused,
     border-color: #475569;
     background: #020617;
     color: #cbd5e1;
+    color-scheme: dark;
+  }
+
+  html.dark .editor-holder .meditor-mermaid-template option {
+    background: #0f172a;
+    color: #e2e8f0;
   }
 
   html.dark .editor-holder .meditor-mermaid-code {
