@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
-  ArrowRightIcon,
   ComputerDesktopIcon,
   CommandLineIcon,
   EllipsisHorizontalIcon,
@@ -82,7 +81,9 @@ const themePreference = ref<ThemePreference>('system')
 const searchQuery = ref('')
 const searchHits = ref<SearchHit[]>([])
 const searchLoading = ref(false)
-const hasSearchQuery = computed(() => searchQuery.value.trim().length > 0)
+const hasSearched = ref(false)
+let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
+let searchRequestToken = 0
 const quickOpenVisible = ref(false)
 const quickOpenQuery = ref('')
 const quickOpenActiveIndex = ref(0)
@@ -774,8 +775,14 @@ async function saveFile(path: string, txt: string, options: SaveFileOptions): Pr
 
 async function runGlobalSearch() {
   const q = searchQuery.value.trim()
-  if (!q || !filesystem.workingFolderPath.value) return
+  if (!q || !filesystem.workingFolderPath.value) {
+    hasSearched.value = false
+    searchHits.value = []
+    return
+  }
 
+  const requestToken = ++searchRequestToken
+  hasSearched.value = true
   filesystem.errorMessage.value = ''
   searchLoading.value = true
   try {
@@ -794,16 +801,23 @@ async function runGlobalSearch() {
 
     const merged = [...filenameHits, ...ftsHits]
     const dedupe = new Set<string>()
-    searchHits.value = merged.filter((hit) => {
+    const deduped = merged.filter((hit) => {
       const key = `${hit.path}::${hit.snippet}`
       if (dedupe.has(key)) return false
       dedupe.add(key)
       return true
     })
+    if (requestToken === searchRequestToken) {
+      searchHits.value = deduped
+    }
   } catch (err) {
-    filesystem.errorMessage.value = err instanceof Error ? err.message : 'Search failed.'
+    if (requestToken === searchRequestToken) {
+      filesystem.errorMessage.value = err instanceof Error ? err.message : 'Search failed.'
+    }
   } finally {
-    searchLoading.value = false
+    if (requestToken === searchRequestToken) {
+      searchLoading.value = false
+    }
   }
 }
 
@@ -1629,9 +1643,20 @@ watch(quickOpenQuery, () => {
 })
 
 watch(searchQuery, (next) => {
-  if (!next.trim()) {
-    searchHits.value = []
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer)
+    searchDebounceTimer = null
   }
+  if (!next.trim() || !filesystem.workingFolderPath.value) {
+    searchRequestToken += 1
+    hasSearched.value = false
+    searchLoading.value = false
+    searchHits.value = []
+    return
+  }
+  searchDebounceTimer = setTimeout(() => {
+    void runGlobalSearch()
+  }, 180)
 })
 
 watch(newFilePathInput, () => {
@@ -1732,6 +1757,10 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   clearWikilinkRewritePromptQueue()
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer)
+    searchDebounceTimer = null
+  }
   mediaQuery?.removeEventListener('change', onSystemThemeChanged)
   window.removeEventListener('keydown', onWindowKeydown, true)
   window.removeEventListener('mousedown', onOverflowMenuPointerDown, true)
@@ -1823,21 +1852,10 @@ onBeforeUnmount(() => {
                 placeholder="Search content (e.g. tags:dev has:deadline deadline>=2026-03-01)"
                 @keydown.enter.prevent="runGlobalSearch"
               />
-              <button
-                type="button"
-                class="search-go-btn"
-                :disabled="!filesystem.hasWorkspace.value || searchLoading"
-                title="Run search"
-                aria-label="Run search"
-                @click="runGlobalSearch"
-              >
-                <span v-if="searchLoading">...</span>
-                <ArrowRightIcon v-else class="search-go-icon" />
-              </button>
             </div>
 
             <div class="results-list">
-              <div v-if="hasSearchQuery && !searchLoading && !searchHits.length" class="placeholder">No results</div>
+              <div v-if="hasSearched && !searchLoading && !searchHits.length" class="placeholder">No results</div>
               <section v-for="group in groupedSearchResults" :key="group.path" class="result-group">
                 <h3 class="result-file">{{ toRelativePath(group.path) }}</h3>
                 <button
@@ -2675,49 +2693,10 @@ onBeforeUnmount(() => {
   font-size: 12px;
 }
 
-.search-go-btn {
-  width: 30px;
-  height: 30px;
-  border: 1px solid #cbd5e1;
-  border-radius: 9999px;
-  background: #ffffff;
-  color: #334155;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  flex: 0 0 auto;
-}
-
-.search-go-btn:hover {
-  background: #f1f5f9;
-}
-
-.search-go-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.search-go-icon {
-  width: 14px;
-  height: 14px;
-  stroke-width: 1.8;
-}
-
 .ide-root.dark .tool-input {
   border-color: #334155;
   background: #020617;
   color: #e2e8f0;
-}
-
-.ide-root.dark .search-go-btn {
-  border-color: #334155;
-  background: #020617;
-  color: #cbd5e1;
-}
-
-.ide-root.dark .search-go-btn:hover {
-  background: #1e293b;
 }
 
 .results-list {
