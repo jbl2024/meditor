@@ -293,10 +293,6 @@ function parseIsoDateInput(input: string): string | null {
   return `${year}-${normalizeDatePart(month)}-${normalizeDatePart(day)}`
 }
 
-function dailyTitle(date: string): string {
-  return `# ${date}`
-}
-
 function dailyNotePath(root: string, date: string): string {
   return `${root}/journal/${date}.md`
 }
@@ -886,7 +882,7 @@ async function openDailyNote(date: string) {
     filesystem.errorMessage.value = 'Invalid date format. Use YYYY-MM-DD.'
     return false
   }
-  return await openOrPrepareMarkdown(dailyNotePath(root, date), dailyTitle(date))
+  return await openOrPrepareMarkdown(dailyNotePath(root, date), '')
 }
 
 async function openTodayNote() {
