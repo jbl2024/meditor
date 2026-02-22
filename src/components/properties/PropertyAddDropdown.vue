@@ -112,13 +112,13 @@ onBeforeUnmount(() => {
   </div>
 </template>
 
-<style scoped>
+<style>
 .property-add-dropdown {
   position: relative;
   display: inline-flex;
 }
 
-.dropdown-panel {
+.property-add-dropdown .dropdown-panel {
   position: absolute;
   top: calc(100% + 0.25rem);
   left: 0;
@@ -131,12 +131,12 @@ onBeforeUnmount(() => {
   box-shadow: 0 8px 24px rgb(15 23 42 / 0.12);
 }
 
-:global(.dark) .dropdown-panel {
+.dark .property-add-dropdown .dropdown-panel {
   border-color: rgb(51 65 85 / 1);
   background: rgb(15 23 42 / 1);
 }
 
-.dropdown-item {
+.property-add-dropdown .dropdown-item {
   display: flex;
   width: 100%;
   flex-direction: column;
@@ -151,42 +151,42 @@ onBeforeUnmount(() => {
   color: rgb(30 41 59 / 1);
 }
 
-.dropdown-item:hover {
+.property-add-dropdown .dropdown-item:hover {
   background: rgb(241 245 249 / 1);
 }
 
-.dropdown-item small {
+.property-add-dropdown .dropdown-item small {
   font-size: 0.6875rem;
   color: rgb(100 116 139 / 1);
 }
 
-:global(.dark) .dropdown-item {
+.dark .property-add-dropdown .dropdown-item {
   color: rgb(226 232 240 / 1);
 }
 
-:global(.dark) .dropdown-item:hover {
+.dark .property-add-dropdown .dropdown-item:hover {
   background: rgb(30 41 59 / 1);
 }
 
-:global(.dark) .dropdown-item small {
+.dark .property-add-dropdown .dropdown-item small {
   color: rgb(148 163 184 / 1);
 }
 
-.dropdown-divider {
+.property-add-dropdown .dropdown-divider {
   margin: 0.25rem 0;
   border-top: 1px solid rgb(226 232 240 / 1);
 }
 
-:global(.dark) .dropdown-divider {
+.dark .property-add-dropdown .dropdown-divider {
   border-top-color: rgb(51 65 85 / 1);
 }
 
-.dropdown-custom-row {
+.property-add-dropdown .dropdown-custom-row {
   display: flex;
   gap: 0.375rem;
 }
 
-.dropdown-custom-input {
+.property-add-dropdown .dropdown-custom-input {
   min-width: 0;
   flex: 1;
   border: 1px solid rgb(203 213 225 / 1);
@@ -196,13 +196,13 @@ onBeforeUnmount(() => {
   line-height: 1rem;
 }
 
-:global(.dark) .dropdown-custom-input {
+.dark .property-add-dropdown .dropdown-custom-input {
   border-color: rgb(51 65 85 / 1);
   background: rgb(15 23 42 / 1);
   color: rgb(226 232 240 / 1);
 }
 
-.dropdown-custom-btn {
+.property-add-dropdown .dropdown-custom-btn {
   border: 1px solid rgb(203 213 225 / 1);
   border-radius: 0.375rem;
   padding: 0.25rem 0.5rem;
@@ -213,7 +213,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 
-:global(.dark) .dropdown-custom-btn {
+.dark .property-add-dropdown .dropdown-custom-btn {
   border-color: rgb(51 65 85 / 1);
   background: rgb(30 41 59 / 1);
   color: rgb(226 232 240 / 1);

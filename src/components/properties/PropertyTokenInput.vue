@@ -146,7 +146,7 @@ watch(
   </div>
 </template>
 
-<style scoped>
+<style>
 .property-token-input {
   display: flex;
   min-height: 2rem;
@@ -160,12 +160,12 @@ watch(
   background: white;
 }
 
-:global(.dark) .property-token-input {
+.dark .property-token-input {
   border-color: rgb(51 65 85 / 1);
   background: rgb(15 23 42 / 1);
 }
 
-.token-pill {
+.property-token-input .token-pill {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
@@ -177,12 +177,12 @@ watch(
   color: rgb(30 41 59 / 1);
 }
 
-:global(.dark) .token-pill {
+.dark .property-token-input .token-pill {
   background: rgb(51 65 85 / 1);
   color: rgb(226 232 240 / 1);
 }
 
-.token-remove {
+.property-token-input .token-remove {
   border: 0;
   background: transparent;
   padding: 0;
@@ -192,7 +192,7 @@ watch(
   cursor: pointer;
 }
 
-.token-editor {
+.property-token-input .token-editor {
   min-width: 8rem;
   flex: 1;
   border: 0;
@@ -203,7 +203,7 @@ watch(
   color: rgb(15 23 42 / 1);
 }
 
-:global(.dark) .token-editor {
+.dark .property-token-input .token-editor {
   color: rgb(241 245 249 / 1);
 }
 </style>
