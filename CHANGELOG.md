@@ -18,6 +18,20 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.1.8] - 2026-02-22
+
+### Added
+- feat(command-palette): add inline open-specific-date input with YYYY-MM-DD parsing (462fcc5)
+
+### Changed
+- chore: remove bootstrap.sh (095e178)
+
+### Fixed
+- fix(new-note-modal): show and clear validation errors inline near path input (628de09)
+- fix(notes): auto-append .md when creating new note from modal (ed8841c)
+- fix(input-keyboard): prevent cmd+arrow propagation from modal inputs (ee52051)
+- fix(command-palette): replace new-file prompt with dedicated modal (ce1313f)
+
 ## [0.1.7] - 2026-02-22
 
 ### Changed
