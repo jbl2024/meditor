@@ -649,7 +649,8 @@ mod tests {
 
     use super::{
         copy_entry, create_entry, duplicate_entry, list_children, list_markdown_files, move_entry,
-        read_text_file, rename_entry, trash_entry, ConflictStrategy, EntryKind,
+        open_path_external, read_text_file, rename_entry, reveal_in_file_manager, trash_entry,
+        ConflictStrategy, EntryKind,
     };
 
     fn make_temp_dir() -> PathBuf {
@@ -878,5 +879,39 @@ mod tests {
         let text = read_text_file(root, copied).expect("read copied");
         assert_eq!(text, "content");
         fs::remove_dir_all(dir).expect("cleanup");
+    }
+
+    #[test]
+    fn open_path_external_rejects_path_outside_workspace() {
+        let workspace = make_temp_dir();
+        activate_workspace(&workspace);
+
+        let outside_dir = make_temp_dir();
+        let outside = outside_dir.join("outside.md");
+        fs::write(&outside, "x").expect("write outside");
+
+        let result = open_path_external(outside.to_string_lossy().to_string());
+        assert!(result.is_err());
+
+        fs::remove_file(outside).expect("cleanup outside file");
+        fs::remove_dir_all(outside_dir).expect("cleanup outside dir");
+        fs::remove_dir_all(workspace).expect("cleanup workspace");
+    }
+
+    #[test]
+    fn reveal_in_file_manager_rejects_path_outside_workspace() {
+        let workspace = make_temp_dir();
+        activate_workspace(&workspace);
+
+        let outside_dir = make_temp_dir();
+        let outside = outside_dir.join("outside.md");
+        fs::write(&outside, "x").expect("write outside");
+
+        let result = reveal_in_file_manager(outside.to_string_lossy().to_string());
+        assert!(result.is_err());
+
+        fs::remove_file(outside).expect("cleanup outside file");
+        fs::remove_dir_all(outside_dir).expect("cleanup outside dir");
+        fs::remove_dir_all(workspace).expect("cleanup workspace");
     }
 }

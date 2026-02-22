@@ -1579,6 +1579,28 @@ mod tests {
     }
 
     #[test]
+    fn set_active_workspace_rejects_special_user_directories() {
+        let Some(user_dirs) = UserDirs::new() else {
+            return;
+        };
+
+        let special_dirs = [
+            user_dirs.desktop_dir(),
+            user_dirs.document_dir(),
+            user_dirs.download_dir(),
+            user_dirs.picture_dir(),
+            user_dirs.audio_dir(),
+            user_dirs.video_dir(),
+            user_dirs.public_dir(),
+        ];
+
+        for dir in special_dirs.into_iter().flatten() {
+            let result = set_active_workspace(&dir.to_string_lossy());
+            assert!(result.is_err(), "expected special directory to be rejected: {dir:?}");
+        }
+    }
+
+    #[test]
     fn set_active_workspace_accepts_regular_folder() {
         let temp = std::env::temp_dir().join("meditor-workspace-guard-test");
         fs::create_dir_all(&temp).expect("create temp dir");
