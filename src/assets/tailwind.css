@@ -18,12 +18,12 @@
     margin: 0;
     font-family: var(--font-sans);
     background: #fff;
-    color: #0f172a;
+    color: #1a1a1a;
   }
 
   html.dark body {
     background: #020617;
-    color: #e2e8f0;
+    color: #d4d4d4;
   }
 
   button,
@@ -90,7 +90,7 @@
 
   .editor-holder .ce-paragraph {
     font-size: 1rem;
-    color: #0f172a;
+    color: #1a1a1a;
     line-height: 1.72;
     padding: 0;
   }
@@ -98,19 +98,43 @@
   .editor-holder .cdx-list,
   .editor-holder .cdx-list__item,
   .editor-holder .cdx-list__item-content {
-    color: #0f172a;
+    color: #1a1a1a;
+  }
+
+  .editor-holder .cdx-list {
+    margin: 0.05rem 0 0.2rem;
+    padding-left: 1.1rem;
+  }
+
+  .editor-holder .cdx-list__item {
+    margin: 0;
+    padding: 0;
+  }
+
+  .editor-holder .cdx-list__item + .cdx-list__item {
+    margin-top: 0.08rem;
+  }
+
+  .editor-holder .cdx-list__item-content {
+    line-height: 1.4;
+  }
+
+  .editor-holder .cdx-list li {
+    margin: 0;
+    padding: 0;
+    line-height: 1.4;
   }
 
   .editor-holder .ce-header {
     line-height: 1.35;
-    color: #0f172a;
+    color: #1a1a1a;
     margin: 0.15rem 0;
     font-weight: 650;
   }
 
   .editor-holder h1.ce-header {
     font-size: 2rem;
-    font-weight: 760;
+    font-weight: 600;
   }
 
   .editor-holder h2.ce-header {
@@ -174,7 +198,7 @@
   }
 
   html.dark .editor-holder .ce-paragraph {
-    color: #f1f5f9;
+    color: #d4d4d4;
   }
 
   html.dark .editor-holder .ce-header {
@@ -184,7 +208,7 @@
   html.dark .editor-holder .cdx-list,
   html.dark .editor-holder .cdx-list__item,
   html.dark .editor-holder .cdx-list__item-content {
-    color: #e2e8f0;
+    color: #d4d4d4;
   }
 
   html.dark .editor-holder .cdx-list__item::before {
