@@ -2285,6 +2285,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   border: 0;
+  border-right: 1px solid #e2e8f0;
   border-bottom: 2px solid transparent;
   background: transparent;
   color: #94a3b8;
@@ -2295,6 +2296,7 @@ onBeforeUnmount(() => {
 }
 
 .ide-root.dark .tab-item {
+  border-right-color: #1e293b;
   color: #94a3b8;
 }
 
@@ -2857,7 +2859,7 @@ onBeforeUnmount(() => {
   height: 22px;
   border-top: 1px solid #e2e8f0;
   background: #f8fafc;
-  font-size: 12px;
+  font-size: 11px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   color: #475569;
   display: flex;
