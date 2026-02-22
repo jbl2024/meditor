@@ -21,6 +21,13 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.2.1] - 2026-02-22
+
+### Added
+- feat(editor): add mermaid block with templates and markdown fence round-trip (3f7bd64)
+- feat(editor): replace warning plugin with custom obsidian-style callout block (de354d2)
+- feat(editor): add table and callout blocks with markdown round-trip support (6043a44)
+
 ## [0.2.0] - 2026-02-22
 
 ### Added
