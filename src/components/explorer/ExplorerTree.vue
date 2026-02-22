@@ -12,7 +12,6 @@ import {
 import { useSelectionManager } from './composables/useSelectionManager'
 import {
   copyEntry,
-  createEntry,
   duplicateEntry,
   listChildren,
   moveEntry,
@@ -36,11 +35,10 @@ const emit = defineEmits<{
   select: [paths: string[]]
   error: [message: string]
   'path-renamed': [payload: { from: string; to: string }]
+  'request-create': [payload: { parentPath: string; entryKind: EntryKind }]
 }>()
 
-type VisibleRow =
-  | { kind: 'node'; path: string; depth: number }
-  | { kind: 'create'; key: string; parentPath: string; depth: number; entryKind: EntryKind }
+type VisibleRow = { kind: 'node'; path: string; depth: number }
 
 const treeRoot = computed(() => props.folderPath)
 const childrenByDir = ref<Record<string, TreeNode[]>>({})
@@ -54,7 +52,6 @@ const treeRef = ref<HTMLElement | null>(null)
 const contextMenu = ref<{ x: number; y: number; targetPath: string | null } | null>(null)
 const editingPath = ref<string>('')
 const editingValue = ref('')
-const creating = ref<{ parentPath: string; entryKind: EntryKind; value: string } | null>(null)
 
 const conflictPrompt = ref<{
   title: string
@@ -85,16 +82,6 @@ const visibleRows = computed<VisibleRow[]>(() => {
 
   const pushDir = (dirPath: string, depth: number) => {
     const children = childrenByDir.value[dirPath] ?? []
-
-    if (creating.value && creating.value.parentPath === dirPath) {
-      rows.push({
-        kind: 'create',
-        key: `create-${dirPath}-${creating.value.entryKind}`,
-        parentPath: dirPath,
-        depth,
-        entryKind: creating.value.entryKind
-      })
-    }
 
     for (const child of children) {
       rows.push({ kind: 'node', path: child.path, depth })
@@ -276,16 +263,8 @@ function closeContextMenu() {
   contextMenu.value = null
 }
 
-function beginCreate(parentPath: string, entryKind: EntryKind) {
-  creating.value = {
-    parentPath,
-    entryKind,
-    value: entryKind === 'file' ? 'untitled.md' : 'new-folder'
-  }
-}
-
-function cancelCreate() {
-  creating.value = null
+function requestCreate(parentPath: string, entryKind: EntryKind) {
+  emit('request-create', { parentPath, entryKind })
 }
 
 async function resolveConflictAndRetry(
@@ -314,37 +293,6 @@ async function runWithConflictModal(
     }
     emitError(errorMessage(err) ?? 'Operation failed.')
   }
-}
-
-async function confirmCreate() {
-  if (!creating.value || !props.folderPath) return
-
-  const name = creating.value.value.trim()
-  if (!name) {
-    emitError('Name cannot be empty.')
-    return
-  }
-
-  const payload = creating.value
-
-  await runWithConflictModal(
-    async (strategy) => {
-      const created = await createEntry(
-        props.folderPath,
-        payload.parentPath,
-        name,
-        payload.entryKind,
-        strategy
-      )
-      cancelCreate()
-      await loadChildren(payload.parentPath)
-      if (payload.entryKind === 'file' && /\.(md|markdown)$/i.test(created)) {
-        emit('open', created)
-      }
-    },
-    'File or folder already exists',
-    'Choose how to proceed.'
-  )
 }
 
 function startRename(path: string) {
@@ -592,7 +540,7 @@ async function onContextAction(action: MenuAction) {
 
   if (action === 'new-file' || action === 'new-folder') {
     const parent = targetNode?.is_dir ? targetNode.path : targetPath ? getParentPath(targetPath) : props.folderPath
-    beginCreate(parent || props.folderPath, action === 'new-file' ? 'file' : 'folder')
+    requestCreate(parent || props.folderPath, action === 'new-file' ? 'file' : 'folder')
     closeContextMenu()
     return
   }
@@ -785,7 +733,7 @@ async function onTreeKeydown(event: KeyboardEvent) {
 
   if (ctrlOrMeta && key.toLowerCase() === 'n') {
     event.preventDefault()
-    beginCreate(props.folderPath, event.shiftKey ? 'folder' : 'file')
+    requestCreate(props.folderPath, event.shiftKey ? 'folder' : 'file')
     return
   }
 
@@ -937,10 +885,10 @@ onBeforeUnmount(() => {
 <template>
   <div class="flex h-full min-h-0 flex-col gap-2">
     <div class="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2 dark:border-slate-800">
-      <UiButton size="sm" class-name="h-7 rounded-lg px-2.5 text-[12px]" :disabled="!folderPath" @click="beginCreate(folderPath, 'file')">
+      <UiButton size="sm" class-name="h-7 rounded-lg px-2.5 text-[12px]" :disabled="!folderPath" @click="requestCreate(folderPath, 'file')">
         <DocumentPlusIcon class="h-5 w-5" />
       </UiButton>
-      <UiButton size="sm" class-name="h-7 rounded-lg px-2.5 text-[12px]" :disabled="!folderPath" @click="beginCreate(folderPath, 'folder')">
+      <UiButton size="sm" class-name="h-7 rounded-lg px-2.5 text-[12px]" :disabled="!folderPath" @click="requestCreate(folderPath, 'folder')">
         <FolderPlusIcon class="h-5 w-5" />
       </UiButton>
       <UiButton
@@ -990,43 +938,27 @@ onBeforeUnmount(() => {
       <p v-else-if="!visibleRows.length" class="px-2 py-1 text-xs text-slate-500 dark:text-slate-500">No files or folders. Use New file or New folder.</p>
 
       <template v-else>
-        <template v-for="row in visibleRows" :key="row.kind === 'node' ? row.path : row.key">
-          <ExplorerItem
-            v-if="row.kind === 'node'"
-            :node="nodeByPath[row.path]"
-            :depth="row.depth"
-            :expanded="expandedPaths.has(row.path)"
-            :selected="selectionManager.isSelected(row.path)"
-            :active="activePath === row.path"
-            :focused="focusedPath === row.path"
-            :cut-pending="Boolean(clipboard?.mode === 'cut' && clipboard.paths.includes(row.path))"
-            :editing="editingPath === row.path"
-            :rename-value="editingValue"
-            @toggle="toggleExpand"
-            @click="handleRowClick"
-            @doubleclick="handleDoubleClick"
-            @contextmenu="onNodeContextMenu"
-            @rowaction="onRowAction"
-            @rename-update="editingValue = $event"
-            @rename-confirm="confirmRename"
-            @rename-cancel="cancelRename"
-          />
-
-          <div
-            v-else
-            class="py-1"
-            :style="{ paddingLeft: `${row.depth * 14 + 24}px` }"
-          >
-            <input
-              v-if="creating"
-              v-model="creating.value"
-              class="h-7 w-full rounded-lg border border-slate-300/90 bg-white/95 px-2 text-xs text-slate-900 outline-none focus:border-[#003153]/70 focus:ring-2 focus:ring-[#003153]/20 dark:border-slate-600/70 dark:bg-slate-900/80 dark:text-slate-100 dark:focus:border-[#4a6f95]/70 dark:focus:ring-[#4a6f95]/30"
-              @keydown.enter.stop.prevent="confirmCreate"
-              @keydown.esc.stop.prevent="cancelCreate"
-              @blur="confirmCreate"
-            />
-          </div>
-        </template>
+        <ExplorerItem
+          v-for="row in visibleRows"
+          :key="row.path"
+          :node="nodeByPath[row.path]"
+          :depth="row.depth"
+          :expanded="expandedPaths.has(row.path)"
+          :selected="selectionManager.isSelected(row.path)"
+          :active="activePath === row.path"
+          :focused="focusedPath === row.path"
+          :cut-pending="Boolean(clipboard?.mode === 'cut' && clipboard.paths.includes(row.path))"
+          :editing="editingPath === row.path"
+          :rename-value="editingValue"
+          @toggle="toggleExpand"
+          @click="handleRowClick"
+          @doubleclick="handleDoubleClick"
+          @contextmenu="onNodeContextMenu"
+          @rowaction="onRowAction"
+          @rename-update="editingValue = $event"
+          @rename-confirm="confirmRename"
+          @rename-cancel="cancelRename"
+        />
       </template>
     </div>
 

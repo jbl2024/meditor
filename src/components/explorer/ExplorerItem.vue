@@ -42,7 +42,8 @@ function iconForNode(node: TreeNode) {
       selected ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-slate-100' : 'text-slate-700 dark:text-slate-300',
       active ? 'font-semibold text-slate-950 dark:text-white' : '',
       focused ? 'ring-1 ring-blue-500/70' : '',
-      cutPending ? 'opacity-45' : 'opacity-100'
+      cutPending ? 'opacity-45' : 'opacity-100',
+      editing ? 'cursor-default' : 'cursor-pointer select-none'
     ]"
     :style="{ paddingLeft: `${depth * 14 + 8}px` }"
     @click="emit('click', $event, node)"

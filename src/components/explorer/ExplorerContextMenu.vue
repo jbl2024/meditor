@@ -38,7 +38,7 @@ const items: Array<{ id: MenuAction; label: string; enabled?: boolean }> = [
   { id: 'rename', label: 'Rename' },
   { id: 'duplicate', label: 'Duplicate' },
   { id: 'delete', label: 'Delete' },
-  { id: 'new-file', label: 'New file' },
+  { id: 'new-file', label: 'New note' },
   { id: 'new-folder', label: 'New folder' },
   { id: 'cut', label: 'Cut' },
   { id: 'copy', label: 'Copy' },

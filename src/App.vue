@@ -89,6 +89,9 @@ const wikilinkRewritePrompt = ref<{ fromPath: string; toPath: string } | null>(n
 const newFileModalVisible = ref(false)
 const newFilePathInput = ref('')
 const newFileModalError = ref('')
+const newFolderModalVisible = ref(false)
+const newFolderPathInput = ref('')
+const newFolderModalError = ref('')
 const openDateModalVisible = ref(false)
 const openDateInput = ref('')
 const openDateModalError = ref('')
@@ -1126,18 +1129,15 @@ async function runQuickOpenAction(id: string) {
   if (!shouldClose) return
   closeQuickOpen()
   nextTick(() => {
-    if (!newFileModalVisible.value && !openDateModalVisible.value) {
+    if (!newFileModalVisible.value && !newFolderModalVisible.value && !openDateModalVisible.value) {
       editorRef.value?.focusEditor()
     }
   })
 }
 
 async function createNewFileFromPalette() {
-  newFilePathInput.value = ''
-  newFileModalError.value = ''
-  newFileModalVisible.value = true
-  await nextTick()
-  document.querySelector<HTMLInputElement>('[data-new-file-input=\"true\"]')?.focus()
+  const prefill = await suggestedNotePathPrefix()
+  await openNewFileModal(prefill)
   return true
 }
 
@@ -1145,6 +1145,88 @@ function closeNewFileModal() {
   newFileModalVisible.value = false
   newFilePathInput.value = ''
   newFileModalError.value = ''
+}
+
+async function openNewFileModal(prefill = '') {
+  newFilePathInput.value = prefill
+  newFileModalError.value = ''
+  newFileModalVisible.value = true
+  await nextTick()
+  document.querySelector<HTMLInputElement>('[data-new-file-input=\"true\"]')?.focus()
+}
+
+function closeNewFolderModal() {
+  newFolderModalVisible.value = false
+  newFolderPathInput.value = ''
+  newFolderModalError.value = ''
+}
+
+async function openNewFolderModal(prefill = '') {
+  newFolderPathInput.value = prefill
+  newFolderModalError.value = ''
+  newFolderModalVisible.value = true
+  await nextTick()
+  document.querySelector<HTMLInputElement>('[data-new-folder-input=\"true\"]')?.focus()
+}
+
+function parentPrefixForModal(parentPath: string): string {
+  const root = filesystem.workingFolderPath.value
+  if (!root) return ''
+  const normalizedRoot = root.replace(/\\/g, '/').replace(/\/+$/, '')
+  const normalizedParent = parentPath.replace(/\\/g, '/').replace(/\/+$/, '')
+  if (!normalizedParent || normalizedParent === normalizedRoot) return ''
+  if (!normalizedParent.startsWith(`${normalizedRoot}/`)) return ''
+  const relative = normalizedParent.slice(normalizedRoot.length + 1)
+  return relative ? `${relative}/` : ''
+}
+
+async function suggestedNotePathPrefix(): Promise<string> {
+  const root = filesystem.workingFolderPath.value
+  if (!root) return ''
+
+  try {
+    const rootChildren = await listChildren(root, root)
+    if (rootChildren.some((entry) => entry.is_dir && entry.name.toLowerCase() === 'notes')) {
+      return 'notes/'
+    }
+  } catch {
+    // Fall back to active path below.
+  }
+
+  const activePath = workspace.activeTabPath.value
+  if (!activePath) return ''
+  return parentPrefixForModal(activePath.replace(/\/[^/]+$/, ''))
+}
+
+async function ensureParentDirectoriesForRelativePath(relativePath: string): Promise<string> {
+  const root = filesystem.workingFolderPath.value
+  if (!root) {
+    throw new Error('Working folder is not set.')
+  }
+
+  const parts = relativePath.split('/').filter(Boolean)
+  if (parts.length <= 1) return root
+
+  let current = root
+  for (const segment of parts.slice(0, -1)) {
+    const next = `${current}/${segment}`
+    const exists = await pathExists(root, next)
+    if (!exists) {
+      await createEntry(root, current, segment, 'folder', 'fail')
+    }
+    current = next
+  }
+
+  return current
+}
+
+function onExplorerRequestCreate(payload: { parentPath: string; entryKind: 'file' | 'folder' }) {
+  const prefill = parentPrefixForModal(payload.parentPath)
+  if (payload.entryKind === 'folder') {
+    void openNewFolderModal(prefill)
+    return
+  }
+  void openNewFileModal(prefill)
 }
 
 async function submitNewFileFromModal() {
@@ -1199,6 +1281,50 @@ async function submitNewFileFromModal() {
     return true
   } catch (err) {
     newFileModalError.value = err instanceof Error ? err.message : 'Could not create file.'
+    return false
+  }
+}
+
+async function submitNewFolderFromModal() {
+  const root = filesystem.workingFolderPath.value
+  if (!root) {
+    newFolderModalError.value = 'Working folder is not set.'
+    return false
+  }
+
+  const normalized = normalizeRelativeNotePath(newFolderPathInput.value)
+  if (!normalized || normalized.endsWith('/')) {
+    newFolderModalError.value = 'Invalid folder path.'
+    return false
+  }
+  if (normalized.startsWith('../') || normalized === '..') {
+    newFolderModalError.value = 'Path must stay inside the workspace.'
+    return false
+  }
+
+  const parts = normalized.split('/').filter(Boolean)
+  if (parts.some((part) => FORBIDDEN_FILE_NAME_CHARS_RE.test(part))) {
+    newFolderModalError.value = 'Folder names cannot include < > : " \\ | ? *'
+    return false
+  }
+
+  const name = parts[parts.length - 1]
+  if (!name) {
+    newFolderModalError.value = 'Folder name is required.'
+    return false
+  }
+  if (WINDOWS_RESERVED_NAME_RE.test(name)) {
+    newFolderModalError.value = 'That folder name is reserved by the OS.'
+    return false
+  }
+
+  try {
+    const parentPath = await ensureParentDirectoriesForRelativePath(normalized)
+    await createEntry(root, parentPath, name, 'folder', 'fail')
+    closeNewFolderModal()
+    return true
+  } catch (err) {
+    newFolderModalError.value = err instanceof Error ? err.message : 'Could not create folder.'
     return false
   }
 }
@@ -1319,6 +1445,24 @@ function onNewFileInputKeydown(event: KeyboardEvent) {
   }
 }
 
+function onNewFolderInputKeydown(event: KeyboardEvent) {
+  if (event.metaKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+    event.stopPropagation()
+    return
+  }
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    event.stopPropagation()
+    closeNewFolderModal()
+    return
+  }
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    event.stopPropagation()
+    void submitNewFolderFromModal()
+  }
+}
+
 function moveQuickOpenSelection(delta: number) {
   const count = quickOpenItemCount.value
   if (!count) return
@@ -1345,6 +1489,12 @@ function onWindowKeydown(event: KeyboardEvent) {
     event.preventDefault()
     event.stopPropagation()
     closeNewFileModal()
+    return
+  }
+  if (isEscape && newFolderModalVisible.value) {
+    event.preventDefault()
+    event.stopPropagation()
+    closeNewFolderModal()
     return
   }
   if (isEscape && openDateModalVisible.value) {
@@ -1467,6 +1617,12 @@ watch(quickOpenQuery, () => {
 watch(newFilePathInput, () => {
   if (newFileModalError.value) {
     newFileModalError.value = ''
+  }
+})
+
+watch(newFolderPathInput, () => {
+  if (newFolderModalError.value) {
+    newFolderModalError.value = ''
   }
 })
 
@@ -1623,6 +1779,7 @@ onBeforeUnmount(() => {
               :active-path="activeFilePath"
               @open="onExplorerOpen"
               @path-renamed="onExplorerPathRenamed"
+              @request-create="onExplorerRequestCreate"
               @select="onExplorerSelection"
               @error="onExplorerError"
             />
@@ -1950,6 +2107,25 @@ onBeforeUnmount(() => {
         <div class="confirm-actions">
           <UiButton size="sm" variant="ghost" @click="closeNewFileModal">Cancel</UiButton>
           <UiButton size="sm" @click="submitNewFileFromModal">Create</UiButton>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="newFolderModalVisible" class="modal-overlay" @click.self="closeNewFolderModal">
+      <div class="modal confirm-modal">
+        <h3 class="confirm-title">New Folder</h3>
+        <p class="confirm-text">Enter a workspace-relative folder path.</p>
+        <input
+          v-model="newFolderPathInput"
+          data-new-folder-input="true"
+          class="tool-input"
+          placeholder="new-folder"
+          @keydown="onNewFolderInputKeydown"
+        />
+        <p v-if="newFolderModalError" class="modal-input-error">{{ newFolderModalError }}</p>
+        <div class="confirm-actions">
+          <UiButton size="sm" variant="ghost" @click="closeNewFolderModal">Cancel</UiButton>
+          <UiButton size="sm" @click="submitNewFolderFromModal">Create</UiButton>
         </div>
       </div>
     </div>
