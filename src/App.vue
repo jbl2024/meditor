@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { XMarkIcon } from '@heroicons/vue/24/outline'
+import {
+  CommandLineIcon,
+  EllipsisHorizontalIcon,
+  MagnifyingGlassIcon,
+  XMarkIcon
+} from '@heroicons/vue/24/outline'
 import EditorView from './components/EditorView.vue'
 import ExplorerTree from './components/explorer/ExplorerTree.vue'
 import UiButton from './components/ui/UiButton.vue'
@@ -1871,19 +1876,35 @@ onBeforeUnmount(() => {
                 <line x1="10" y1="2.5" x2="10" y2="13.5" />
               </svg>
             </button>
-            <UiButton size="sm" variant="ghost" title="Global search" @click="openSearchPanel">Search</UiButton>
-            <UiButton size="sm" variant="ghost" title="Command palette" @click="openCommandPalette">Cmd</UiButton>
+            <button
+              type="button"
+              class="toolbar-icon-btn"
+              title="Global search"
+              aria-label="Global search"
+              @click="openSearchPanel"
+            >
+              <MagnifyingGlassIcon />
+            </button>
+            <button
+              type="button"
+              class="toolbar-icon-btn"
+              title="Command palette"
+              aria-label="Command palette"
+              @click="openCommandPalette"
+            >
+              <CommandLineIcon />
+            </button>
             <div ref="overflowMenuRef" class="overflow-wrap">
-              <UiButton
-                size="sm"
-                variant="ghost"
+              <button
+                type="button"
+                class="toolbar-icon-btn"
                 title="View options"
                 aria-label="View options"
                 :aria-expanded="overflowMenuOpen"
                 @click="toggleOverflowMenu"
               >
-                ...
-              </UiButton>
+                <EllipsisHorizontalIcon />
+              </button>
               <div v-if="overflowMenuOpen" class="overflow-menu">
                 <button
                   type="button"
