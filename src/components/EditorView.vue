@@ -1921,11 +1921,15 @@ async function loadCurrentFile(path: string) {
     setDirty(path, false)
 
     await nextTick()
-    const remembered = scrollTopByPath.value[path] ?? 0
+    const remembered = scrollTopByPath.value[path]
+    const hasRememberedScroll = typeof remembered === 'number'
+    const targetScrollTop = remembered ?? 0
     if (holder.value) {
-      holder.value.scrollTop = remembered
+      holder.value.scrollTop = targetScrollTop
     }
-    await focusFirstContentBlock()
+    if (!hasRememberedScroll || targetScrollTop <= 1) {
+      await focusFirstContentBlock()
+    }
     emitOutlineSoon()
   } catch (err) {
     setSaveError(path, err instanceof Error ? err.message : 'Could not read file.')
