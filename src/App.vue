@@ -1154,6 +1154,11 @@ function onQuickOpenEnter() {
 }
 
 function onQuickOpenInputKeydown(event: KeyboardEvent) {
+  if (event.metaKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+    // Keep native caret/selection behavior in the input, but prevent app-level handlers.
+    event.stopPropagation()
+    return
+  }
   if (event.key === 'ArrowDown') {
     event.preventDefault()
     event.stopPropagation()
@@ -1174,6 +1179,10 @@ function onQuickOpenInputKeydown(event: KeyboardEvent) {
 }
 
 function onQuickOpenDateInputKeydown(event: KeyboardEvent) {
+  if (event.metaKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+    event.stopPropagation()
+    return
+  }
   if (event.key === 'Escape') {
     event.preventDefault()
     event.stopPropagation()
@@ -1191,6 +1200,10 @@ function onQuickOpenDateInputKeydown(event: KeyboardEvent) {
 }
 
 function onNewFileInputKeydown(event: KeyboardEvent) {
+  if (event.metaKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+    event.stopPropagation()
+    return
+  }
   if (event.key === 'Escape') {
     event.preventDefault()
     event.stopPropagation()
