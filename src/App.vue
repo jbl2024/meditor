@@ -2108,7 +2108,7 @@ onBeforeUnmount(() => {
 
     <footer class="status-bar">
       <span class="status-item">{{ activeFilePath ? toRelativePath(activeFilePath) : 'No file' }}</span>
-      <span class="status-item">{{ activeStatus.saving ? 'saving...' : virtualDocs[activeFilePath] ? 'unsaved' : activeStatus.dirty ? 'edit' : 'saved' }}</span>
+      <span class="status-item status-item-state">{{ activeStatus.saving ? 'saving...' : virtualDocs[activeFilePath] ? 'unsaved' : activeStatus.dirty ? 'edit' : 'saved' }}</span>
       <span class="status-item">index: {{ filesystem.indexingState.value }}</span>
       <span class="status-item">embeddings: {{ filesystem.embeddingQueueState.value }}</span>
       <span class="status-item">workspace: {{ filesystem.workingFolderPath.value || 'none' }}</span>
@@ -2881,6 +2881,11 @@ onBeforeUnmount(() => {
   height: 100%;
   padding: 0 8px;
   white-space: nowrap;
+}
+
+.status-item-state {
+  width: 10ch;
+  justify-content: center;
 }
 
 .status-item + .status-item {
