@@ -4,7 +4,6 @@ use std::{
     collections::{HashMap, HashSet},
     fs,
     path::{Path, PathBuf},
-    process::Command,
     sync::{Mutex, OnceLock},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -22,6 +21,7 @@ use fs_ops::{
 };
 
 const INTERNAL_DIR_NAME: &str = ".meditor";
+const TRASH_DIR_NAME: &str = ".meditor-trash";
 const DB_FILE_NAME: &str = "meditor.sqlite";
 const PROPERTY_TYPE_SCHEMA_FILE: &str = "property-types.json";
 const RESERVED_WORKSPACE_ERROR: &str =
@@ -1304,35 +1304,41 @@ struct WikilinkRewriteResult {
 }
 
 fn list_markdown_files_via_find(root: &Path) -> Result<Vec<PathBuf>> {
-    let output = Command::new("find")
-        .arg(root)
-        .args([
-            "-type",
-            "f",
-            "(",
-            "-iname",
-            "*.md",
-            "-o",
-            "-iname",
-            "*.markdown",
-            ")",
-        ])
-        .output()?;
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
+        for entry in fs::read_dir(dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().to_string();
 
-    if !output.status.success() {
-        return Err(AppError::OperationFailed);
-    }
+            if path.is_dir() {
+                if name == INTERNAL_DIR_NAME || name == TRASH_DIR_NAME {
+                    continue;
+                }
+                walk(&path, out)?;
+                continue;
+            }
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let mut files = Vec::new();
-    for line in stdout.lines() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() {
-            continue;
+            if !path.is_file() {
+                continue;
+            }
+
+            if name == DB_FILE_NAME || name.starts_with("meditor.sqlite-") {
+                continue;
+            }
+
+            let Some(ext) = path.extension().and_then(|value| value.to_str()) else {
+                continue;
+            };
+
+            if ext.eq_ignore_ascii_case("md") || ext.eq_ignore_ascii_case("markdown") {
+                out.push(path);
+            }
         }
-        files.push(PathBuf::from(trimmed));
+        Ok(())
     }
 
+    let mut files = Vec::new();
+    walk(root, &mut files)?;
     Ok(files)
 }
 
