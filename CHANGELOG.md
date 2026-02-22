@@ -21,6 +21,17 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.2.0] - 2026-02-22
+
+### Added
+- feat(index): add manual rebuild action and switch sqlite note paths to workspace-relative (cbd24a6)
+- feat(search): index frontmatter properties and support property-filter queries (28bef43)
+- feat(properties): add Obsidian-compatible frontmatter editor with workspace type schema (1607270)
+
+### Fixed
+- fix(notifications): add typed auto-dismissing toast system with success/info/error tones (1b1f84b)
+- fix(editor): restore mouse scrolling by making properties/editor shell a flex column (bf0a1cd)
+
 ## [0.1.9] - 2026-02-22
 
 ### Added
