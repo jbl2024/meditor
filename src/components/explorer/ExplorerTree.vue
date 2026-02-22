@@ -885,10 +885,24 @@ onBeforeUnmount(() => {
 <template>
   <div class="flex h-full min-h-0 flex-col gap-2">
     <div class="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2 dark:border-slate-800">
-      <UiButton size="sm" class-name="h-7 rounded-lg px-2.5 text-[12px]" :disabled="!folderPath" @click="requestCreate(folderPath, 'file')">
+      <UiButton
+        size="sm"
+        class-name="h-7 rounded-lg px-2.5 text-[12px]"
+        title="New note"
+        aria-label="New note"
+        :disabled="!folderPath"
+        @click="requestCreate(folderPath, 'file')"
+      >
         <DocumentPlusIcon class="h-5 w-5" />
       </UiButton>
-      <UiButton size="sm" class-name="h-7 rounded-lg px-2.5 text-[12px]" :disabled="!folderPath" @click="requestCreate(folderPath, 'folder')">
+      <UiButton
+        size="sm"
+        class-name="h-7 rounded-lg px-2.5 text-[12px]"
+        title="New folder"
+        aria-label="New folder"
+        :disabled="!folderPath"
+        @click="requestCreate(folderPath, 'folder')"
+      >
         <FolderPlusIcon class="h-5 w-5" />
       </UiButton>
       <UiButton
