@@ -3,7 +3,10 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   CommandLineIcon,
   EllipsisHorizontalIcon,
+  FolderIcon,
+  LinkIcon,
   MagnifyingGlassIcon,
+  StarIcon,
   XMarkIcon
 } from '@heroicons/vue/24/outline'
 import EditorView from './components/EditorView.vue'
@@ -1735,36 +1738,40 @@ onBeforeUnmount(() => {
           :class="{ active: workspace.sidebarMode.value === 'explorer' && workspace.sidebarVisible.value }"
           type="button"
           title="Explorer"
+          aria-label="Explorer"
           @click="setSidebarMode('explorer')"
         >
-          E
+          <FolderIcon class="activity-btn-icon" />
         </button>
         <button
           class="activity-btn"
           :class="{ active: workspace.sidebarMode.value === 'search' && workspace.sidebarVisible.value }"
           type="button"
           title="Search"
+          aria-label="Search"
           @click="setSidebarMode('search')"
         >
-          S
+          <MagnifyingGlassIcon class="activity-btn-icon" />
         </button>
         <button
           class="activity-btn"
           :class="{ active: workspace.sidebarMode.value === 'backlinks' && workspace.sidebarVisible.value }"
           type="button"
           title="Backlinks"
+          aria-label="Backlinks"
           @click="setSidebarMode('backlinks')"
         >
-          B
+          <LinkIcon class="activity-btn-icon" />
         </button>
         <button
           class="activity-btn"
           :class="{ active: workspace.sidebarMode.value === 'favorites' && workspace.sidebarVisible.value }"
           type="button"
           title="Favorites"
+          aria-label="Favorites"
           @click="setSidebarMode('favorites')"
         >
-          F
+          <StarIcon class="activity-btn-icon" />
         </button>
       </aside>
 
@@ -1876,24 +1883,6 @@ onBeforeUnmount(() => {
                 <line x1="10" y1="2.5" x2="10" y2="13.5" />
               </svg>
             </button>
-            <button
-              type="button"
-              class="toolbar-icon-btn"
-              title="Global search"
-              aria-label="Global search"
-              @click="openSearchPanel"
-            >
-              <MagnifyingGlassIcon />
-            </button>
-            <button
-              type="button"
-              class="toolbar-icon-btn"
-              title="Command palette"
-              aria-label="Command palette"
-              @click="openCommandPalette"
-            >
-              <CommandLineIcon />
-            </button>
             <div ref="overflowMenuRef" class="overflow-wrap">
               <button
                 type="button"
@@ -1906,6 +1895,14 @@ onBeforeUnmount(() => {
                 <EllipsisHorizontalIcon />
               </button>
               <div v-if="overflowMenuOpen" class="overflow-menu">
+                <button
+                  type="button"
+                  class="overflow-item"
+                  @click="openCommandPalette"
+                >
+                  <CommandLineIcon class="overflow-item-icon" />
+                  Command palette
+                </button>
                 <button
                   type="button"
                   class="overflow-item"
@@ -2504,11 +2501,18 @@ onBeforeUnmount(() => {
   width: 28px;
   height: 28px;
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: 6px;
   background: transparent;
   color: #64748b;
-  font-size: 11px;
-  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.activity-btn:hover {
+  background: #e2e8f0;
+  color: #334155;
 }
 
 .activity-btn.active {
@@ -2517,10 +2521,25 @@ onBeforeUnmount(() => {
   background: #ffffff;
 }
 
+.activity-btn-icon {
+  width: 14px;
+  height: 14px;
+  stroke-width: 1.6;
+}
+
+.ide-root.dark .activity-btn {
+  color: #94a3b8;
+}
+
 .ide-root.dark .activity-btn.active {
   color: #e2e8f0;
   border-color: #334155;
   background: #020617;
+}
+
+.ide-root.dark .activity-btn:hover {
+  background: #1e293b;
+  color: #cbd5e1;
 }
 
 .left-sidebar,
