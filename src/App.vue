@@ -1228,9 +1228,9 @@ async function rebuildIndexFromOverflow() {
     const result = await rebuildWorkspaceIndex(root)
     await loadAllFiles()
     await refreshBacklinks()
-    filesystem.errorMessage.value = `Index rebuilt (${result.indexed_files} file${result.indexed_files === 1 ? '' : 's'}).`
+    filesystem.notifySuccess(`Index rebuilt (${result.indexed_files} file${result.indexed_files === 1 ? '' : 's'}).`)
   } catch (err) {
-    filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not rebuild index.'
+    filesystem.notifyError(err instanceof Error ? err.message : 'Could not rebuild index.')
   } finally {
     filesystem.indexingState.value = 'idle'
   }
@@ -1882,7 +1882,18 @@ onBeforeUnmount(() => {
       <span class="status-item">workspace: {{ filesystem.workingFolderPath.value || 'none' }}</span>
     </footer>
 
-    <div v-if="filesystem.errorMessage.value" class="error-toast">{{ filesystem.errorMessage.value }}</div>
+    <div
+      v-if="filesystem.notificationMessage.value"
+      class="toast"
+      :class="`toast-${filesystem.notificationTone.value}`"
+      role="status"
+      aria-live="polite"
+    >
+      <span>{{ filesystem.notificationMessage.value }}</span>
+      <button type="button" class="toast-close" aria-label="Dismiss notification" @click="filesystem.clearNotification()">
+        ×
+      </button>
+    </div>
 
     <div v-if="quickOpenVisible" class="modal-overlay" @click.self="closeQuickOpen">
       <div class="modal quick-open">
@@ -2560,16 +2571,68 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
-.error-toast {
+.toast {
   position: fixed;
   right: 12px;
   bottom: 34px;
-  border: 1px solid #fda4af;
-  background: #fff1f2;
-  color: #9f1239;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   padding: 6px 8px;
   border-radius: 4px;
   font-size: 12px;
+  border: 1px solid transparent;
+  z-index: 80;
+}
+
+.toast-error {
+  border-color: #fda4af;
+  background: #fff1f2;
+  color: #9f1239;
+}
+
+.toast-success {
+  border-color: #86efac;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.toast-info {
+  border-color: #93c5fd;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.ide-root.dark .toast-error {
+  border-color: #be123c;
+  background: #3b0a1a;
+  color: #fecdd3;
+}
+
+.ide-root.dark .toast-success {
+  border-color: #166534;
+  background: #0b2a16;
+  color: #bbf7d0;
+}
+
+.ide-root.dark .toast-info {
+  border-color: #1d4ed8;
+  background: #0f1f45;
+  color: #bfdbfe;
+}
+
+.toast-close {
+  border: 0;
+  background: transparent;
+  color: currentColor;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.85;
+}
+
+.toast-close:hover {
+  opacity: 1;
 }
 
 .modal-overlay {
