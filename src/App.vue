@@ -67,6 +67,8 @@ const searchLoading = ref(false)
 const quickOpenVisible = ref(false)
 const quickOpenQuery = ref('')
 const quickOpenActiveIndex = ref(0)
+const quickOpenDateInputVisible = ref(false)
+const quickOpenDateInput = ref('')
 const leftPaneWidth = ref(300)
 const rightPaneWidth = ref(300)
 const allWorkspaceFiles = ref<string[]>([])
@@ -258,6 +260,12 @@ function normalizeDatePart(value: number): string {
   return String(value).padStart(2, '0')
 }
 
+function isValidCalendarDate(year: number, month: number, day: number): boolean {
+  if (year <= 0 || month < 1 || month > 12 || day < 1 || day > 31) return false
+  const value = new Date(year, month - 1, day)
+  return value.getFullYear() === year && value.getMonth() + 1 === month && value.getDate() === day
+}
+
 function formatIsoDate(date: Date): string {
   return `${date.getFullYear()}-${normalizeDatePart(date.getMonth() + 1)}-${normalizeDatePart(date.getDate())}`
 }
@@ -268,7 +276,17 @@ function isIsoDate(input: string): boolean {
   const year = Number.parseInt(yearRaw, 10)
   const month = Number.parseInt(monthRaw, 10)
   const day = Number.parseInt(dayRaw, 10)
-  return year > 0 && month >= 1 && month <= 12 && day >= 1 && day <= 31
+  return isValidCalendarDate(year, month, day)
+}
+
+function parseIsoDateInput(input: string): string | null {
+  const match = input.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!match) return null
+  const year = Number.parseInt(match[1], 10)
+  const month = Number.parseInt(match[2], 10)
+  const day = Number.parseInt(match[3], 10)
+  if (!isValidCalendarDate(year, month, day)) return null
+  return `${year}-${normalizeDatePart(month)}-${normalizeDatePart(day)}`
 }
 
 function dailyTitle(date: string): string {
@@ -878,10 +896,24 @@ async function openYesterdayNote() {
 }
 
 async function openSpecificDateNote() {
-  const defaultDate = formatIsoDate(new Date())
-  const raw = window.prompt('Open daily note date (YYYY-MM-DD):', defaultDate)
-  if (!raw) return false
-  return await openDailyNote(raw.trim())
+  quickOpenDateInputVisible.value = true
+  quickOpenDateInput.value = formatIsoDate(new Date())
+  await nextTick()
+  document.querySelector<HTMLInputElement>('[data-quick-open-date-input=\"true\"]')?.focus()
+  return false
+}
+
+async function submitSpecificDateFromPalette() {
+  const isoDate = parseIsoDateInput(quickOpenDateInput.value.trim())
+  if (!isoDate) {
+    filesystem.errorMessage.value = 'Invalid date. Use YYYY-MM-DD (example: 2026-02-22).'
+    return false
+  }
+  const opened = await openDailyNote(isoDate)
+  if (!opened) return false
+  closeQuickOpen()
+  nextTick(() => editorRef.value?.focusEditor())
+  return true
 }
 
 async function revealActiveInExplorer() {
@@ -986,6 +1018,8 @@ function closeQuickOpen() {
   quickOpenVisible.value = false
   quickOpenQuery.value = ''
   quickOpenActiveIndex.value = 0
+  quickOpenDateInputVisible.value = false
+  quickOpenDateInput.value = ''
 }
 
 async function openQuickResult(item: QuickOpenResult) {
@@ -1084,6 +1118,10 @@ function closeOtherTabsFromPalette() {
 }
 
 function onQuickOpenEnter() {
+  if (quickOpenDateInputVisible.value) {
+    void submitSpecificDateFromPalette()
+    return
+  }
   if (quickOpenIsActionMode.value) {
     const action = quickOpenActionResults.value[quickOpenActiveIndex.value]
     if (action) {
@@ -1101,17 +1139,37 @@ function onQuickOpenEnter() {
 function onQuickOpenInputKeydown(event: KeyboardEvent) {
   if (event.key === 'ArrowDown') {
     event.preventDefault()
+    event.stopPropagation()
     moveQuickOpenSelection(1)
     return
   }
   if (event.key === 'ArrowUp') {
     event.preventDefault()
+    event.stopPropagation()
     moveQuickOpenSelection(-1)
     return
   }
   if (event.key === 'Enter') {
     event.preventDefault()
+    event.stopPropagation()
     onQuickOpenEnter()
+  }
+}
+
+function onQuickOpenDateInputKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    event.stopPropagation()
+    quickOpenDateInputVisible.value = false
+    nextTick(() => {
+      document.querySelector<HTMLInputElement>('[data-quick-open-input=\"true\"]')?.focus()
+    })
+    return
+  }
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    event.stopPropagation()
+    void submitSpecificDateFromPalette()
   }
 }
 
@@ -1149,11 +1207,6 @@ function onWindowKeydown(event: KeyboardEvent) {
       event.preventDefault()
       event.stopPropagation()
       moveQuickOpenSelection(-1)
-      return
-    }
-    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-      event.preventDefault()
-      event.stopPropagation()
       return
     }
     if (event.key === 'Enter') {
@@ -1641,30 +1694,41 @@ onBeforeUnmount(() => {
           placeholder="Type file name, or start with > for actions"
           @keydown="onQuickOpenInputKeydown"
         />
+        <input
+          v-if="quickOpenDateInputVisible"
+          v-model="quickOpenDateInput"
+          data-quick-open-date-input="true"
+          class="tool-input quick-open-date-input"
+          placeholder="YYYY-MM-DD"
+          @keydown="onQuickOpenDateInputKeydown"
+        />
         <div class="modal-list">
-          <button
-            v-for="(item, index) in quickOpenActionResults"
-            :key="item.id"
-            type="button"
-            class="modal-item"
-            :class="{ active: quickOpenActiveIndex === index }"
-            @click="runQuickOpenAction(item.id)"
-            @mousemove="setQuickOpenActiveIndex(index)"
-          >
-            {{ item.label }}
-          </button>
-          <button
-            v-for="(item, index) in quickOpenResults"
-            :key="item.kind === 'file' ? item.path : `daily-${item.date}`"
-            type="button"
-            class="modal-item"
-            :class="{ active: quickOpenActiveIndex === index }"
-            @click="openQuickResult(item)"
-            @mousemove="setQuickOpenActiveIndex(index)"
-          >
-            {{ item.label }}
-          </button>
-          <div v-if="quickOpenIsActionMode && !quickOpenActionResults.length" class="placeholder">No matching actions</div>
+          <template v-if="!quickOpenDateInputVisible">
+            <button
+              v-for="(item, index) in quickOpenActionResults"
+              :key="item.id"
+              type="button"
+              class="modal-item"
+              :class="{ active: quickOpenActiveIndex === index }"
+              @click="runQuickOpenAction(item.id)"
+              @mousemove="setQuickOpenActiveIndex(index)"
+            >
+              {{ item.label }}
+            </button>
+            <button
+              v-for="(item, index) in quickOpenResults"
+              :key="item.kind === 'file' ? item.path : `daily-${item.date}`"
+              type="button"
+              class="modal-item"
+              :class="{ active: quickOpenActiveIndex === index }"
+              @click="openQuickResult(item)"
+              @mousemove="setQuickOpenActiveIndex(index)"
+            >
+              {{ item.label }}
+            </button>
+          </template>
+          <div v-if="quickOpenDateInputVisible" class="placeholder">Enter a date as `YYYY-MM-DD`, then press Enter.</div>
+          <div v-else-if="quickOpenIsActionMode && !quickOpenActionResults.length" class="placeholder">No matching actions</div>
           <div v-else-if="!quickOpenIsActionMode && !quickOpenResults.length" class="placeholder">
             {{ quickOpenQuery.trim() ? 'No matching files' : 'Type to search files' }}
           </div>
@@ -2126,6 +2190,10 @@ onBeforeUnmount(() => {
   color: #0f172a;
   padding: 0 8px;
   font-size: 12px;
+}
+
+.quick-open-date-input {
+  margin-top: 8px;
 }
 
 .ide-root.dark .tool-input {
