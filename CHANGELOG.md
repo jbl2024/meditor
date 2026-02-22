@@ -21,6 +21,18 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.2.3] - 2026-02-22
+
+### Added
+- feat(explorer): add heroicons to context menu actions (0400199)
+- feat(explorer): use modals for new note/folder with parent path prefill (b7bb225)
+
+### Changed
+- style(editor): compact properties panel header and collapsed layout (8db95ed)
+
+### Fixed
+- fix(explorer): add tooltips for new note and new folder toolbar actions (a517616)
+
 ## [0.2.2] - 2026-02-22
 
 ### Changed
