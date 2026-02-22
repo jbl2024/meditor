@@ -16,6 +16,7 @@ const UNORDERED_LIST_RE = /^\s*[-*+]\s+(.+)$/
 const TASK_LIST_RE = /^\s*[-*+]\s+\[([ xX])\]\s*(.*)$/
 const HR_RE = /^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/
 const FENCE_START_RE = /^```\s*([^`]*)$/
+const CALLOUT_MARKER_RE = /^\[!([A-Za-z0-9_-]+)\]\s*(.*)$/
 
 type RichListItem = {
   content?: string
@@ -222,6 +223,30 @@ function isRawFallbackStart(line: string): boolean {
   return false
 }
 
+function parseTableCells(line: string): string[] | null {
+  const trimmed = line.trim()
+  if (!trimmed || !trimmed.includes('|')) return null
+  if (!trimmed.startsWith('|') && !trimmed.endsWith('|')) return null
+
+  const inner = trimmed.replace(/^\|/, '').replace(/\|$/, '')
+  const cells = inner.split('|').map((cell) => cell.trim().replace(/\\\|/g, '|'))
+  if (!cells.length || cells.every((cell) => cell.length === 0)) return null
+  return cells
+}
+
+function isTableSeparatorLine(line: string, expectedColumns: number): boolean {
+  const cells = parseTableCells(line)
+  if (!cells || cells.length !== expectedColumns) return false
+  return cells.every((cell) => /^:?-{3,}:?$/.test(cell.replace(/\s+/g, '')))
+}
+
+function isMarkdownTableStart(lines: string[], index: number): boolean {
+  if (index + 1 >= lines.length) return false
+  const header = parseTableCells(lines[index])
+  if (!header || header.length < 2) return false
+  return isTableSeparatorLine(lines[index + 1], header.length)
+}
+
 function isBlockStarter(line: string): boolean {
   return (
     HEADING_RE.test(line) ||
@@ -294,12 +319,49 @@ export function markdownToEditorData(markdown: string): EditorDocument {
         i += 1
       }
 
+      const calloutMarker = quoteLines[0]?.trim().match(CALLOUT_MARKER_RE)
+      if (calloutMarker) {
+        const typeToken = calloutMarker[1].toUpperCase()
+        const lead = calloutMarker[2].trim()
+        const messageLines = lead ? [lead, ...quoteLines.slice(1)] : quoteLines.slice(1)
+        blocks.push({
+          type: 'warning',
+          data: {
+            title: typeToken,
+            message: normalizeMultiline(messageLines.join('\n'))
+          }
+        })
+        continue
+      }
+
       blocks.push({
         type: 'quote',
         data: {
           text: quoteLines.join('\n'),
           caption: '',
           alignment: 'left'
+        }
+      })
+      continue
+    }
+
+    if (isMarkdownTableStart(lines, i)) {
+      const header = parseTableCells(lines[i]) ?? []
+      const rows: string[][] = [header]
+      i += 2
+
+      while (i < lines.length) {
+        const row = parseTableCells(lines[i])
+        if (!row) break
+        rows.push(row)
+        i += 1
+      }
+
+      blocks.push({
+        type: 'table',
+        data: {
+          withHeadings: true,
+          content: rows
         }
       })
       continue
@@ -365,7 +427,13 @@ export function markdownToEditorData(markdown: string): EditorDocument {
     }
 
     const paragraphLines: string[] = []
-    while (i < lines.length && lines[i].trim() && !isBlockStarter(lines[i]) && !isRawFallbackStart(lines[i])) {
+    while (
+      i < lines.length &&
+      lines[i].trim() &&
+      !isBlockStarter(lines[i]) &&
+      !isRawFallbackStart(lines[i]) &&
+      !isMarkdownTableStart(lines, i)
+    ) {
       paragraphLines.push(lines[i])
       i += 1
     }
@@ -457,6 +525,38 @@ function blockToMarkdown(block: EditorBlock): string {
         .split('\n')
         .map((line) => `> ${line}`)
         .join('\n')
+    }
+
+    case 'warning': {
+      const rawTitle = normalizeMultiline(String(block.data?.title ?? '')).trim()
+      const typeToken = (rawTitle || 'NOTE')
+        .toUpperCase()
+        .replace(/[^A-Z0-9_-]+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'NOTE'
+      const message = normalizeMultiline(String(block.data?.message ?? ''))
+      if (!message) return `> [!${typeToken}]`
+      const lines = message.split('\n').map((line) => `> ${line}`).join('\n')
+      return `> [!${typeToken}]\n${lines}`
+    }
+
+    case 'table': {
+      const rawRows = Array.isArray(block.data?.content) ? block.data.content : []
+      const rows = rawRows
+        .map((row) => (Array.isArray(row) ? row.map((cell) => String(cell ?? '')) : []))
+        .filter((row) => row.length > 0)
+      if (!rows.length) return ''
+
+      const withHeadings = Boolean(block.data?.withHeadings)
+      const columnCount = Math.max(...rows.map((row) => row.length), 2)
+      const pad = (row: string[]) => Array.from({ length: columnCount }, (_, idx) => row[idx] ?? '')
+      const escapeCell = (value: string) => value.replace(/\|/g, '\\|').replace(/\r\n?/g, '\n').replace(/\n/g, '<br>')
+      const rowToLine = (row: string[]) => `| ${row.map((cell) => escapeCell(cell.trim())).join(' | ')} |`
+
+      const normalizedRows = rows.map(pad)
+      const header = withHeadings ? normalizedRows[0] : Array.from({ length: columnCount }, () => '')
+      const bodyRows = withHeadings ? normalizedRows.slice(1) : normalizedRows
+      const separator = `| ${Array.from({ length: columnCount }, () => '---').join(' | ')} |`
+      return [rowToLine(header), separator, ...bodyRows.map(rowToLine)].join('\n')
     }
 
     case 'code': {

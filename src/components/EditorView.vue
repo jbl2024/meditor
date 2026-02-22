@@ -8,6 +8,8 @@ import InlineCode from '@editorjs/inline-code'
 import List from '@editorjs/list'
 import Paragraph from '@editorjs/paragraph'
 import Quote from '@editorjs/quote'
+import Table from '@editorjs/table'
+import Warning from '@editorjs/warning'
 import { editorDataToMarkdown, markdownToEditorData, type EditorBlock } from '../lib/markdownBlocks'
 import PropertyAddDropdown from './properties/PropertyAddDropdown.vue'
 import PropertyTokenInput from './properties/PropertyTokenInput.vue'
@@ -73,6 +75,8 @@ const SLASH_COMMANDS: SlashCommand[] = [
   { id: 'heading', label: 'Heading', type: 'header', data: { text: '', level: 2 } },
   { id: 'bullet', label: 'List', type: 'list', data: { style: 'unordered', items: [] } },
   { id: 'checklist', label: 'Checklist', type: 'list', data: { style: 'checklist', items: [] } },
+  { id: 'table', label: 'Table', type: 'table', data: { withHeadings: true, content: [['', ''], ['', '']] } },
+  { id: 'callout', label: 'Callout', type: 'warning', data: { title: 'NOTE', message: '' } },
   { id: 'code', label: 'Code', type: 'code', data: { code: '' } },
   { id: 'quote', label: 'Quote', type: 'quote', data: { text: '', caption: '', alignment: 'left' } },
   { id: 'divider', label: 'Divider', type: 'delimiter', data: {} }
@@ -1776,6 +1780,18 @@ async function ensureEditor() {
       },
       quote: {
         class: Quote,
+        inlineToolbar: ['bold', 'italic', 'link', 'inlineCode']
+      },
+      table: {
+        class: Table as unknown as never,
+        config: {
+          rows: 2,
+          cols: 2,
+          withHeadings: true
+        }
+      },
+      warning: {
+        class: Warning as unknown as never,
         inlineToolbar: ['bold', 'italic', 'link', 'inlineCode']
       },
       code: CodeTool,
