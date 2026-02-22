@@ -21,6 +21,23 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.2.7] - 2026-02-22
+
+### Added
+- feat(navigation): add long-press and context-menu history dropdown for back/forward (3540288)
+- feat(navigation): add browser-style document history with back/home/forward UI and shortcuts (05ffa20)
+
+### Changed
+- test(security): add frontend regression tests and remove stale workspace IPC args (e223078)
+- test(security): add regression coverage for workspace path guards and protected directories (70fb028)
+- refactor(indexing): replace external find with in-process markdown traversal (83989d3)
+
+### Fixed
+- fix(security): narrow tauri core capability permissions for main window (baa5fbf)
+- fix(security): scope external open commands to workspace and remove broad opener capability (923f30d)
+- fix(security): remove v-html snippet rendering, enforce CSP, and allowlist external link schemes (20b4841)
+- fix(workspace): surface protected-folder rejection when selecting workspace (6f4690e)
+
 ## [0.2.6] - 2026-02-22
 
 ### Added
