@@ -2071,8 +2071,11 @@ defineExpose({
     </div>
 
     <div v-else class="editor-shell flex min-h-0 flex-1 flex-col overflow-hidden bg-white dark:bg-slate-950">
-      <section class="properties-panel border-b border-slate-200 px-8 py-4 dark:border-slate-800">
-        <div class="mb-3 flex items-center justify-between gap-3">
+      <section
+        class="properties-panel border-b border-slate-200 dark:border-slate-800"
+        :class="propertiesExpanded(path) ? 'px-8 py-3' : 'px-8 py-2'"
+      >
+        <div class="flex items-center justify-between gap-3" :class="propertiesExpanded(path) ? 'mb-2' : 'mb-0'">
           <button
             type="button"
             class="inline-flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100"
@@ -2081,10 +2084,10 @@ defineExpose({
             <span aria-hidden="true">{{ propertiesExpanded(path) ? '▾' : '▸' }}</span>
             <span>Properties</span>
           </button>
-          <div class="flex items-center gap-2">
+          <div v-if="propertiesExpanded(path)" class="flex items-center gap-1.5">
             <button
               type="button"
-              class="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 dark:border-slate-700 dark:text-slate-200"
+              class="rounded border border-slate-300 px-2 py-0.5 text-[11px] text-slate-700 dark:border-slate-700 dark:text-slate-200"
               :class="propertyEditorMode === 'structured' ? 'bg-slate-100 dark:bg-slate-800' : ''"
               :disabled="!canUseStructuredProperties"
               @click="propertyEditorMode = 'structured'"
@@ -2093,7 +2096,7 @@ defineExpose({
             </button>
             <button
               type="button"
-              class="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 dark:border-slate-700 dark:text-slate-200"
+              class="rounded border border-slate-300 px-2 py-0.5 text-[11px] text-slate-700 dark:border-slate-700 dark:text-slate-200"
               :class="propertyEditorMode === 'raw' ? 'bg-slate-100 dark:bg-slate-800' : ''"
               @click="propertyEditorMode = 'raw'"
             >
