@@ -1297,22 +1297,26 @@ function replaceActiveWikilinkQuery(target: string) {
 
   const start = text.slice(0, offset).lastIndexOf('[[')
   if (start < 0) return false
+  const close = text.indexOf(']]', start + 2)
+  const end = close >= 0 ? close + 2 : offset
 
   const range = document.createRange()
   range.setStart(textNode, start)
-  range.setEnd(textNode, offset)
+  range.setEnd(textNode, end)
   range.deleteContents()
 
-  const parsed = parseWikilinkTarget(target)
-  const defaultLabel = parsed.anchor?.heading && !parsed.notePath ? parsed.anchor.heading : target
-  const inserted = createWikilinkAnchor(target, defaultLabel)
-  range.insertNode(inserted)
+  const rawToken = `[[${target}]]`
+  const insertedText = document.createTextNode(rawToken)
+  range.insertNode(insertedText)
+  expandedLinkContext = { textNode: insertedText, range: { start: 0, end: rawToken.length } }
 
   const nextRange = document.createRange()
-  nextRange.setStartAfter(inserted)
+  // Keep caret inside the raw token so users can continue editing (for example, append #heading).
+  nextRange.setStart(insertedText, Math.max(0, rawToken.length - 2))
   nextRange.collapse(true)
   selection.removeAllRanges()
   selection.addRange(nextRange)
+  debugWikilinkArrow('replace-query-with-raw-token', { target, rawToken })
   return true
 }
 
