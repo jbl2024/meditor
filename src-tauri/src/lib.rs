@@ -17,7 +17,8 @@ use thiserror::Error;
 use fs_ops::{
     clear_working_folder, copy_entry, create_entry, duplicate_entry, list_children,
     list_markdown_files, move_entry, open_path_external, path_exists, read_text_file, rename_entry,
-    reveal_in_file_manager, select_working_folder, set_working_folder, trash_entry, write_text_file,
+    reveal_in_file_manager, select_working_folder, set_working_folder, trash_entry,
+    write_text_file,
 };
 
 const INTERNAL_DIR_NAME: &str = ".meditor";
@@ -1445,7 +1446,6 @@ fn update_wikilinks_for_rename(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             select_working_folder,
             clear_working_folder,

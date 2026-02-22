@@ -348,13 +348,13 @@ pub fn select_working_folder() -> Result<Option<String>> {
 
 #[tauri::command]
 pub fn clear_working_folder() -> Result<()> {
-  clear_active_workspace()
+    clear_active_workspace()
 }
 
 #[tauri::command]
 pub fn set_working_folder(path: String) -> Result<String> {
-  let canonical = set_active_workspace(&path)?;
-  Ok(canonical.to_string_lossy().to_string())
+    let canonical = set_active_workspace(&path)?;
+    Ok(canonical.to_string_lossy().to_string())
 }
 
 #[tauri::command]
@@ -618,14 +618,18 @@ pub fn trash_entry(_folder_path: String, path: String) -> Result<String> {
 
 #[tauri::command]
 pub fn open_path_external(path: String) -> Result<()> {
+    let root = active_workspace_root()?;
     let pb = normalize_existing_path(&path)?;
+    ensure_within_root(&root, &pb)?;
     open::that_detached(pb).map_err(|_| AppError::OperationFailed)?;
     Ok(())
 }
 
 #[tauri::command]
 pub fn reveal_in_file_manager(path: String) -> Result<()> {
+    let root = active_workspace_root()?;
     let pb = normalize_existing_path(&path)?;
+    ensure_within_root(&root, &pb)?;
     let target = if pb.is_dir() {
         pb
     } else {
