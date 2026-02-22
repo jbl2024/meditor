@@ -55,7 +55,12 @@ jobs:
       - name: Install deps
         run: npm ci
 
-      - name: Build Tauri
+      - name: Build Tauri (Linux)
+        if: matrix.platform == 'linux'
+        run: npm run tauri build -- --bundles appimage,deb
+
+      - name: Build Tauri (Non-Linux)
+        if: matrix.platform != 'linux'
         run: npm run tauri build
 
       # ⬇️ upload uniquement les vrais bundles
@@ -65,6 +70,7 @@ jobs:
           name: bundle-${{ matrix.build_id }}
           path: |
             src-tauri/target/release/bundle/**/*.dmg
+            src-tauri/target/release/bundle/**/*.AppImage
             src-tauri/target/release/bundle/**/*.appimage
             src-tauri/target/release/bundle/**/*.deb
             src-tauri/target/release/bundle/**/*.msi
