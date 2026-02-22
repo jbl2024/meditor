@@ -34,6 +34,7 @@ import {
   writePropertyTypeSchema,
   writeTextFile
 } from './lib/api'
+import { parseWikilinkTarget, type WikilinkAnchor } from './lib/wikilinks'
 import { useEditorState } from './composables/useEditorState'
 import { useFilesystemState } from './composables/useFilesystemState'
 import { useWorkspaceState, type SidebarMode } from './composables/useWorkspaceState'
@@ -49,6 +50,7 @@ type EditorViewExposed = {
   focusFirstContentBlock: () => Promise<void>
   revealSnippet: (snippet: string) => Promise<void>
   revealOutlineHeading: (index: number) => Promise<void>
+  revealAnchor: (anchor: WikilinkAnchor) => Promise<boolean>
 }
 
 type SaveFileOptions = {
@@ -1033,15 +1035,29 @@ async function revealActiveInExplorer() {
 async function openWikilinkTarget(target: string) {
   const root = filesystem.workingFolderPath.value
   if (!root) return false
-  const normalized = sanitizeRelativePath(target)
-  if (!normalized) return false
+  const parsed = parseWikilinkTarget(target)
+  const anchor = parsed.anchor
+  const normalized = sanitizeRelativePath(parsed.notePath)
+  const revealAnchor = async () => {
+    if (!anchor) return true
+    await nextTick()
+    return await editorRef.value?.revealAnchor(anchor) ?? false
+  }
+
+  if (!normalized) {
+    if (!anchor || !activeFilePath.value) return false
+    return await revealAnchor()
+  }
+
   if (normalized.split('/').some((segment) => segment === '.' || segment === '..')) {
     filesystem.errorMessage.value = 'Invalid link target.'
     return false
   }
 
   if (isIsoDate(normalized)) {
-    return await openDailyNote(normalized)
+    const opened = await openDailyNote(normalized)
+    if (!opened) return false
+    return await revealAnchor()
   }
 
   const markdownFiles = await loadWikilinkTargets()
@@ -1055,14 +1071,19 @@ async function openWikilinkTarget(target: string) {
   if (existing) {
     const opened = await openTabWithAutosave(`${root}/${existing}`)
     if (!opened) return false
-    await nextTick()
-    editorRef.value?.focusEditor()
+    const revealed = await revealAnchor()
+    if (!anchor || !revealed) {
+      editorRef.value?.focusEditor()
+    }
     return true
   }
 
   const withExtension = /\.(md|markdown)$/i.test(normalized) ? normalized : `${normalized}.md`
   const fullPath = `${root}/${withExtension}`
-  return await openOrPrepareMarkdown(fullPath, '')
+  const opened = await openOrPrepareMarkdown(fullPath, '')
+  if (!opened) return false
+  if (!anchor) return true
+  return await revealAnchor()
 }
 
 async function loadWikilinkTargets(): Promise<string[]> {
@@ -1072,6 +1093,66 @@ async function loadWikilinkTargets(): Promise<string[]> {
     return await listMarkdownFiles(root)
   } catch (err) {
     filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not load wikilink targets.'
+    return []
+  }
+}
+
+function extractHeadingsFromMarkdown(markdown: string): string[] {
+  const lines = markdown.replace(/\r\n?/g, '\n').split('\n')
+  const out: string[] = []
+  const seen = new Set<string>()
+
+  for (const line of lines) {
+    const match = line.match(/^#{1,6}\s+(.+)$/)
+    if (!match) continue
+    const raw = match[1].trim()
+    if (!raw) continue
+    const text = raw
+      .replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, target: string, alias?: string) => (alias ?? target))
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/\*\*([^*]+)\*\*/g, '$1')
+      .replace(/__([^_]+)__/g, '$1')
+      .replace(/[*_~]/g, '')
+      .trim()
+    if (!text) continue
+    const key = text.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(text)
+  }
+
+  return out
+}
+
+function resolveExistingWikilinkPath(normalizedTarget: string, markdownFiles: string[]): string | null {
+  const withoutExtension = normalizedTarget.replace(/\.(md|markdown)$/i, '').toLowerCase()
+  const exact = markdownFiles.find((path) => path.replace(/\.(md|markdown)$/i, '').toLowerCase() === withoutExtension)
+  if (exact) return exact
+  const prefixed = markdownFiles.filter((path) => path.replace(/\.(md|markdown)$/i, '').toLowerCase().startsWith(withoutExtension))
+  if (prefixed.length === 1) return prefixed[0]
+  return null
+}
+
+async function loadWikilinkHeadings(target: string): Promise<string[]> {
+  const root = filesystem.workingFolderPath.value
+  if (!root) return []
+  const normalized = sanitizeRelativePath(target)
+  if (!normalized) return []
+  if (normalized.split('/').some((segment) => segment === '.' || segment === '..')) return []
+
+  try {
+    if (isIsoDate(normalized)) {
+      const path = dailyNotePath(root, normalized)
+      if (!(await pathExists(root, path))) return []
+      return extractHeadingsFromMarkdown(await readTextFile(root, path))
+    }
+
+    const markdownFiles = await loadWikilinkTargets()
+    const existing = resolveExistingWikilinkPath(normalized, markdownFiles)
+    if (!existing) return []
+    return extractHeadingsFromMarkdown(await readTextFile(root, `${root}/${existing}`))
+  } catch {
     return []
   }
 }
@@ -2027,6 +2108,7 @@ onBeforeUnmount(() => {
               :saveFile="saveFile"
               :renameFileFromTitle="renameFileFromTitle"
               :loadLinkTargets="loadWikilinkTargets"
+              :loadLinkHeadings="loadWikilinkHeadings"
               :loadPropertyTypeSchema="loadPropertyTypeSchema"
               :savePropertyTypeSchema="savePropertyTypeSchema"
               :openLinkTarget="openWikilinkTarget"

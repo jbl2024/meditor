@@ -1,4 +1,5 @@
 import { normalizeCalloutKind } from './callouts'
+import { parseWikilinkTarget } from './wikilinks'
 
 export type EditorBlock = {
   id?: string
@@ -122,7 +123,9 @@ function inlineMarkdownToHtml(value: string): string {
     if (match[1]) {
       const target = match[1].trim()
       const alias = (match[2] ?? '').trim()
-      const label = alias || target
+      const parsed = parseWikilinkTarget(target)
+      const defaultLabel = parsed.anchor?.heading && !parsed.notePath ? parsed.anchor.heading : target
+      const label = alias || defaultLabel
       if (!target) {
         html += parseInlineSegment(full)
       } else {
@@ -184,7 +187,9 @@ function elementToMarkdown(node: Node): string {
 
     if (wikilinkTarget) {
       const label = children.trim()
-      if (label && label !== wikilinkTarget) {
+      const parsed = parseWikilinkTarget(wikilinkTarget)
+      const defaultLabel = parsed.anchor?.heading && !parsed.notePath ? parsed.anchor.heading : wikilinkTarget
+      if (label && label !== defaultLabel) {
         return `[[${wikilinkTarget}|${label}]]`
       }
       return `[[${wikilinkTarget}]]`

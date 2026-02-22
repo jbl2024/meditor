@@ -28,6 +28,13 @@ import {
   type PropertyType,
   type PropertyTypeSchema
 } from '../lib/propertyTypes'
+import {
+  parseWikilinkTarget,
+  normalizeBlockId,
+  normalizeHeadingAnchor,
+  slugifyHeading,
+  type WikilinkAnchor
+} from '../lib/wikilinks'
 
 const AUTOSAVE_IDLE_MS = 1800
 const VIRTUAL_TITLE_BLOCK_ID = '__virtual_title__'
@@ -94,6 +101,7 @@ const props = defineProps<{
   saveFile: (path: string, text: string, options: { explicit: boolean }) => Promise<{ persisted: boolean }>
   renameFileFromTitle: (path: string, title: string) => Promise<{ path: string; title: string }>
   loadLinkTargets: () => Promise<string[]>
+  loadLinkHeadings: (target: string) => Promise<string[]>
   loadPropertyTypeSchema: () => Promise<Record<string, string>>
   savePropertyTypeSchema: (schema: Record<string, string>) => Promise<void>
   openLinkTarget: (target: string) => Promise<boolean>
@@ -133,9 +141,15 @@ const wikilinkLeft = ref(0)
 const wikilinkTop = ref(0)
 const wikilinkQuery = ref('')
 const wikilinkTargets = ref<string[]>([])
+const wikilinkHeadingResults = ref<Array<{ id: string; label: string; target: string; isCreate: boolean }>>([])
+const wikilinkHeadingCache = ref<Record<string, string[]>>({})
 let wikilinkLoadToken = 0
+let wikilinkHeadingLoadToken = 0
 
 const wikilinkResults = computed(() => {
+  if (wikilinkHeadingResults.value.length > 0) {
+    return wikilinkHeadingResults.value
+  }
   const query = wikilinkQuery.value.trim().toLowerCase()
   const base = wikilinkTargets.value
     .filter((path) => !query || path.toLowerCase().includes(query))
@@ -912,7 +926,9 @@ function closeWikilinkMenu() {
   wikilinkOpen.value = false
   wikilinkIndex.value = 0
   wikilinkQuery.value = ''
+  wikilinkHeadingResults.value = []
   wikilinkLoadToken += 1
+  wikilinkHeadingLoadToken += 1
 }
 
 async function refreshWikilinkTargets() {
@@ -1026,6 +1042,81 @@ function openWikilinkMenuAtCaret(query: string, keepSelection = false) {
     wikilinkIndex.value = 0
   }
   wikilinkOpen.value = true
+  void refreshWikilinkHeadingResults(query)
+}
+
+function parseWikilinkQuery(raw: string): { notePart: string; headingPart: string | null } {
+  const targetPart = raw.split('|', 1)[0]?.trim() ?? ''
+  if (!targetPart) return { notePart: '', headingPart: null }
+  if (targetPart.startsWith('#')) {
+    return { notePart: '', headingPart: targetPart.slice(1).trim() }
+  }
+  const hashIndex = targetPart.indexOf('#')
+  if (hashIndex < 0) return { notePart: targetPart, headingPart: null }
+  return {
+    notePart: targetPart.slice(0, hashIndex).trim(),
+    headingPart: targetPart.slice(hashIndex + 1).trim()
+  }
+}
+
+function uniqueHeadings(headings: string[]): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const heading of headings) {
+    const text = heading.trim()
+    if (!text) continue
+    const key = text.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(text)
+  }
+  return out
+}
+
+function headingResultsFor(baseTarget: string, headingQuery: string, headings: string[]) {
+  const query = headingQuery.toLowerCase()
+  return uniqueHeadings(headings)
+    .filter((heading) => !query || heading.toLowerCase().includes(query))
+    .slice(0, 24)
+    .map((heading) => {
+      const target = baseTarget ? `${baseTarget}#${heading}` : `#${heading}`
+      return {
+        id: `heading:${target}`,
+        label: `#${heading}`,
+        target,
+        isCreate: false
+      }
+    })
+}
+
+async function refreshWikilinkHeadingResults(rawQuery: string) {
+  if (!wikilinkOpen.value) return
+  const parsed = parseWikilinkQuery(rawQuery)
+  if (parsed.headingPart === null) {
+    wikilinkHeadingResults.value = []
+    return
+  }
+
+  if (!parsed.notePart) {
+    const headings = parseOutlineFromDom().map((item) => item.text)
+    wikilinkHeadingResults.value = headingResultsFor('', parsed.headingPart, headings)
+    return
+  }
+
+  const cacheKey = parsed.notePart.toLowerCase()
+  if (wikilinkHeadingCache.value[cacheKey]) {
+    wikilinkHeadingResults.value = headingResultsFor(parsed.notePart, parsed.headingPart, wikilinkHeadingCache.value[cacheKey])
+    return
+  }
+
+  const token = ++wikilinkHeadingLoadToken
+  const headings = await props.loadLinkHeadings(parsed.notePart)
+  if (token !== wikilinkHeadingLoadToken) return
+  wikilinkHeadingCache.value = {
+    ...wikilinkHeadingCache.value,
+    [cacheKey]: headings
+  }
+  wikilinkHeadingResults.value = headingResultsFor(parsed.notePart, parsed.headingPart, headings)
 }
 
 function readWikilinkQueryAtCaret(): string | null {
@@ -1057,7 +1148,12 @@ function parseWikilinkToken(token: string): { target: string; label: string } | 
   const [targetRaw, aliasRaw] = inner.split('|', 2)
   const target = targetRaw.trim()
   if (!target || target.includes('\n')) return null
-  const label = (aliasRaw ?? '').trim() || target
+  const defaultLabel = (() => {
+    const parsed = parseWikilinkTarget(target)
+    if (parsed.anchor?.heading && !parsed.notePath) return parsed.anchor.heading
+    return target
+  })()
+  const label = (aliasRaw ?? '').trim() || defaultLabel
   return { target, label }
 }
 
@@ -1147,7 +1243,9 @@ function replaceActiveWikilinkQuery(target: string) {
   range.setEnd(textNode, offset)
   range.deleteContents()
 
-  const inserted = createWikilinkAnchor(target, target)
+  const parsed = parseWikilinkTarget(target)
+  const defaultLabel = parsed.anchor?.heading && !parsed.notePath ? parsed.anchor.heading : target
+  const inserted = createWikilinkAnchor(target, defaultLabel)
   range.insertNode(inserted)
 
   const nextRange = document.createRange()
@@ -1479,9 +1577,9 @@ async function openLinkedTokenAtCaret() {
   const token = extractTokenAtCaret()
   if (!token) return
 
-  const wikilinkMatch = token.match(/^\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]$/)
-  if (wikilinkMatch) {
-    await openLinkTargetWithAutosave(wikilinkMatch[1].trim())
+  const wikilink = parseWikilinkToken(token)
+  if (wikilink) {
+    await openLinkTargetWithAutosave(wikilink.target)
     return
   }
 
@@ -1877,6 +1975,74 @@ function getOutlineHeaderByIndex(index: number): HTMLElement | null {
   return null
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function headingMatchesAnchor(headerText: string, anchorHeading: string): boolean {
+  const wanted = normalizeHeadingAnchor(anchorHeading)
+  if (!wanted) return false
+  const actual = normalizeHeadingAnchor(headerText)
+  if (actual === wanted) return true
+
+  const wantedSlug = slugifyHeading(anchorHeading)
+  const actualSlug = slugifyHeading(headerText)
+  return Boolean(wantedSlug && actualSlug && wantedSlug === actualSlug)
+}
+
+function getHeaderByAnchor(heading: string): HTMLElement | null {
+  if (!holder.value) return null
+  const headers = Array.from(holder.value.querySelectorAll('.ce-header')) as HTMLElement[]
+  for (const header of headers) {
+    const block = header.closest('.ce-block') as HTMLElement | null
+    if (block?.dataset.id === VIRTUAL_TITLE_BLOCK_ID) continue
+    const text = header.innerText.trim()
+    if (!text) continue
+    if (headingMatchesAnchor(text, heading)) return header
+  }
+  return null
+}
+
+function getBlockByAnchor(blockIdRaw: string): HTMLElement | null {
+  if (!holder.value) return null
+  const blockId = normalizeBlockId(blockIdRaw)
+  if (!blockId) return null
+  const matcher = new RegExp(`(^|\\s)\\^${escapeRegExp(blockId)}(\\s|$)`, 'i')
+  const blocks = Array.from(holder.value.querySelectorAll('.ce-block')) as HTMLElement[]
+  for (const block of blocks) {
+    if (block.dataset.id === VIRTUAL_TITLE_BLOCK_ID) continue
+    const text = (block.innerText ?? '').replace(/\s+/g, ' ').trim()
+    if (!text) continue
+    if (matcher.test(text)) return block
+  }
+  return null
+}
+
+async function revealAnchor(anchor: WikilinkAnchor): Promise<boolean> {
+  if (!holder.value) return false
+  if (!anchor.heading && !anchor.blockId) return false
+
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    await nextTick()
+    const target = anchor.blockId
+      ? getBlockByAnchor(anchor.blockId)
+      : anchor.heading
+        ? getHeaderByAnchor(anchor.heading)
+        : null
+    if (target) {
+      target.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      const focusTarget = target.matches('.ce-header')
+        ? target
+        : (target.querySelector('[contenteditable="true"], .ce-code__textarea') as HTMLElement | null)
+      focusTarget?.focus()
+      return true
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 35))
+  }
+
+  return false
+}
+
 async function revealOutlineHeading(index: number) {
   if (!holder.value) return
   await nextTick()
@@ -2181,7 +2347,8 @@ defineExpose({
   focusEditor,
   focusFirstContentBlock,
   revealSnippet,
-  revealOutlineHeading
+  revealOutlineHeading,
+  revealAnchor
 })
 </script>
 
