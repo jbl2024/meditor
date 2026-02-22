@@ -81,6 +81,8 @@ const backlinksLoading = ref(false)
 const virtualDocs = ref<Record<string, VirtualDoc>>({})
 const overflowMenuOpen = ref(false)
 const wikilinkRewritePrompt = ref<{ fromPath: string; toPath: string } | null>(null)
+const newFileModalVisible = ref(false)
+const newFilePathInput = ref('')
 const wikilinkRewriteQueue: Array<{
   fromPath: string
   toPath: string
@@ -1046,20 +1048,34 @@ async function runQuickOpenAction(id: string) {
   const shouldClose = await action.run()
   if (!shouldClose) return
   closeQuickOpen()
-  nextTick(() => editorRef.value?.focusEditor())
+  nextTick(() => {
+    if (!newFileModalVisible.value) {
+      editorRef.value?.focusEditor()
+    }
+  })
 }
 
 async function createNewFileFromPalette() {
+  newFilePathInput.value = 'untitled.md'
+  newFileModalVisible.value = true
+  await nextTick()
+  document.querySelector<HTMLInputElement>('[data-new-file-input=\"true\"]')?.focus()
+  return true
+}
+
+function closeNewFileModal() {
+  newFileModalVisible.value = false
+  newFilePathInput.value = ''
+}
+
+async function submitNewFileFromModal() {
   const root = filesystem.workingFolderPath.value
   if (!root) {
     filesystem.errorMessage.value = 'Working folder is not set.'
     return false
   }
 
-  const raw = window.prompt('New file path (relative to workspace):', 'untitled.md')
-  if (!raw) return false
-
-  const normalized = raw
+  const normalized = newFilePathInput.value
     .trim()
     .replace(/\\/g, '/')
     .replace(/^\/+/, '')
@@ -1086,6 +1102,7 @@ async function createNewFileFromPalette() {
     if (/\.(md|markdown)$/i.test(created) && !allWorkspaceFiles.value.includes(created)) {
       allWorkspaceFiles.value = [...allWorkspaceFiles.value, created].sort((a, b) => a.localeCompare(b))
     }
+    closeNewFileModal()
     nextTick(() => editorRef.value?.focusEditor())
     return true
   } catch (err) {
@@ -1173,6 +1190,20 @@ function onQuickOpenDateInputKeydown(event: KeyboardEvent) {
   }
 }
 
+function onNewFileInputKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    event.stopPropagation()
+    closeNewFileModal()
+    return
+  }
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    event.stopPropagation()
+    void submitNewFileFromModal()
+  }
+}
+
 function moveQuickOpenSelection(delta: number) {
   const count = quickOpenItemCount.value
   if (!count) return
@@ -1193,6 +1224,12 @@ function onWindowKeydown(event: KeyboardEvent) {
     event.preventDefault()
     event.stopPropagation()
     resolveWikilinkRewritePrompt(false)
+    return
+  }
+  if (isEscape && newFileModalVisible.value) {
+    event.preventDefault()
+    event.stopPropagation()
+    closeNewFileModal()
     return
   }
 
@@ -1732,6 +1769,24 @@ onBeforeUnmount(() => {
           <div v-else-if="!quickOpenIsActionMode && !quickOpenResults.length" class="placeholder">
             {{ quickOpenQuery.trim() ? 'No matching files' : 'Type to search files' }}
           </div>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="newFileModalVisible" class="modal-overlay" @click.self="closeNewFileModal">
+      <div class="modal confirm-modal">
+        <h3 class="confirm-title">New Note</h3>
+        <p class="confirm-text">Enter a workspace-relative file path.</p>
+        <input
+          v-model="newFilePathInput"
+          data-new-file-input="true"
+          class="tool-input"
+          placeholder="untitled.md"
+          @keydown="onNewFileInputKeydown"
+        />
+        <div class="confirm-actions">
+          <UiButton size="sm" variant="ghost" @click="closeNewFileModal">Cancel</UiButton>
+          <UiButton size="sm" @click="submitNewFileFromModal">Create</UiButton>
         </div>
       </div>
     </div>
