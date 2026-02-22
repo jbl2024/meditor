@@ -307,6 +307,28 @@ function sanitizeRelativePath(raw: string): string {
     .replace(/\/+/g, '/')
 }
 
+function normalizeRelativeNotePath(raw: string): string | null {
+  const cleaned = raw.trim().replace(/\\/g, '/').replace(/\/+/g, '/')
+  if (!cleaned) return null
+
+  const stack: string[] = []
+  const segments = cleaned.split('/')
+  for (const segment of segments) {
+    if (!segment || segment === '.') continue
+    if (segment === '..') {
+      if (stack.length === 0) {
+        return null
+      }
+      stack.pop()
+      continue
+    }
+    stack.push(segment)
+  }
+
+  if (!stack.length) return null
+  return stack.join('/')
+}
+
 function isTitleOnlyContent(content: string, titleLine: string): boolean {
   const normalized = content.replace(/\r\n/g, '\n').trim()
   return normalized === titleLine
@@ -1097,22 +1119,17 @@ async function submitNewFileFromModal() {
     return false
   }
 
-  const normalized = newFilePathInput.value
-    .trim()
-    .replace(/\\/g, '/')
-    .replace(/^\/+/, '')
-    .replace(/\/+/g, '/')
-
+  const normalized = normalizeRelativeNotePath(newFilePathInput.value)
   if (!normalized || normalized.endsWith('/')) {
     newFileModalError.value = 'Invalid file path.'
     return false
   }
-
-  const parts = normalized.split('/').filter(Boolean)
-  if (parts.some((part) => part === '.' || part === '..')) {
-    newFileModalError.value = 'Path cannot include . or .. segments.'
+  if (normalized.startsWith('../') || normalized === '..') {
+    newFileModalError.value = 'Path must stay inside the workspace.'
     return false
   }
+
+  const parts = normalized.split('/').filter(Boolean)
   if (parts.some((part) => FORBIDDEN_FILE_NAME_CHARS_RE.test(part))) {
     newFileModalError.value = 'File names cannot include < > : " \\ | ? *'
     return false
@@ -1129,9 +1146,14 @@ async function submitNewFileFromModal() {
     return false
   }
   const name = /\.(md|markdown)$/i.test(rawName) ? rawName : `${rawName}.md`
+  const relativeWithExt = parts.length > 1
+    ? `${parts.slice(0, -1).join('/')}/${name}`
+    : name
+  const fullPath = `${root}/${relativeWithExt}`
   const parentPath = parts.length > 1 ? `${root}/${parts.slice(0, -1).join('/')}` : root
 
   try {
+    await ensureParentFolders(fullPath)
     const created = await createEntry(root, parentPath, name, 'file', 'fail')
     const opened = await openTabWithAutosave(created)
     if (!opened) return false
