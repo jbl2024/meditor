@@ -1056,7 +1056,7 @@ async function runQuickOpenAction(id: string) {
 }
 
 async function createNewFileFromPalette() {
-  newFilePathInput.value = 'untitled.md'
+  newFilePathInput.value = ''
   newFileModalVisible.value = true
   await nextTick()
   document.querySelector<HTMLInputElement>('[data-new-file-input=\"true\"]')?.focus()
@@ -1092,7 +1092,8 @@ async function submitNewFileFromModal() {
     return false
   }
 
-  const name = parts[parts.length - 1]
+  const rawName = parts[parts.length - 1]
+  const name = /\.(md|markdown)$/i.test(rawName) ? rawName : `${rawName}.md`
   const parentPath = parts.length > 1 ? `${root}/${parts.slice(0, -1).join('/')}` : root
 
   try {
@@ -1789,12 +1790,12 @@ onBeforeUnmount(() => {
     <div v-if="newFileModalVisible" class="modal-overlay" @click.self="closeNewFileModal">
       <div class="modal confirm-modal">
         <h3 class="confirm-title">New Note</h3>
-        <p class="confirm-text">Enter a workspace-relative file path.</p>
+        <p class="confirm-text">Enter a workspace-relative note path. `.md` is added automatically.</p>
         <input
           v-model="newFilePathInput"
           data-new-file-input="true"
           class="tool-input"
-          placeholder="untitled.md"
+          placeholder="untitled"
           @keydown="onNewFileInputKeydown"
         />
         <div class="confirm-actions">
