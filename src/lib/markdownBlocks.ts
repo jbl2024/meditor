@@ -304,6 +304,16 @@ export function markdownToEditorData(markdown: string): EditorDocument {
       }
       if (i < lines.length && /^```\s*$/.test(lines[i])) i += 1
 
+      if (language.toLowerCase() === 'mermaid') {
+        blocks.push({
+          type: 'mermaid',
+          data: {
+            code: codeLines.join('\n')
+          }
+        })
+        continue
+      }
+
       blocks.push({
         type: 'code',
         data: {
@@ -564,6 +574,11 @@ function blockToMarkdown(block: EditorBlock): string {
       const bodyRows = withHeadings ? normalizedRows.slice(1) : normalizedRows
       const separator = `| ${Array.from({ length: columnCount }, () => '---').join(' | ')} |`
       return [rowToLine(header), separator, ...bodyRows.map(rowToLine)].join('\n')
+    }
+
+    case 'mermaid': {
+      const code = String(block.data?.code ?? '').replace(/\r\n?/g, '\n').trim()
+      return `\`\`\`mermaid\n${code}\n\`\`\``
     }
 
     case 'code': {

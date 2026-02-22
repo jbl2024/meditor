@@ -474,4 +474,143 @@
   html.dark .editor-holder .meditor-callout-message {
     color: #e5e7eb;
   }
+
+  .editor-holder .meditor-mermaid {
+    border: 1px solid #cbd5e1;
+    border-radius: 0.8rem;
+    background: #f8fafc;
+    padding: 0.8rem 0.85rem;
+  }
+
+  .editor-holder .meditor-mermaid-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.7rem;
+    margin-bottom: 0.55rem;
+  }
+
+  .editor-holder .meditor-mermaid-title {
+    font-size: 0.78rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #475569;
+    font-weight: 700;
+  }
+
+  .editor-holder .meditor-mermaid-template {
+    border: 1px solid #cbd5e1;
+    border-radius: 0.45rem;
+    background: #ffffff;
+    color: #334155;
+    font-size: 0.75rem;
+    padding: 0.24rem 0.42rem;
+  }
+
+  .editor-holder .meditor-mermaid-body {
+    display: grid;
+    gap: 0.7rem;
+  }
+
+  .editor-holder .meditor-mermaid-code {
+    width: 100%;
+    min-height: 120px;
+    border: 1px solid #cbd5e1;
+    border-radius: 0.65rem;
+    background: #ffffff;
+    color: #0f172a;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    line-height: 1.55;
+    padding: 0.7rem;
+    resize: vertical;
+    outline: none;
+  }
+
+  .editor-holder .meditor-mermaid-code:focus {
+    border-color: #7aa5d3;
+    box-shadow: 0 0 0 2px rgba(122, 165, 211, 0.2);
+  }
+
+  .editor-holder .meditor-mermaid:not(.is-editing) .meditor-mermaid-code {
+    max-height: 0;
+    min-height: 0;
+    border-width: 0;
+    padding: 0;
+    margin: 0;
+    opacity: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  .editor-holder .meditor-mermaid-preview {
+    border: 1px solid #dbe5f0;
+    border-radius: 0.65rem;
+    background: #ffffff;
+    min-height: 72px;
+    padding: 0.7rem;
+    overflow: auto;
+  }
+
+  .editor-holder .meditor-mermaid-preview svg {
+    max-width: 100%;
+    height: auto;
+  }
+
+  .editor-holder .meditor-mermaid:not(.is-editing) .meditor-mermaid-preview {
+    cursor: pointer;
+  }
+
+  .editor-holder .meditor-mermaid-error {
+    border: 1px solid #f1cbd3;
+    border-radius: 0.55rem;
+    background: #fbeff2;
+    color: #b42346;
+    font-size: 0.76rem;
+    line-height: 1.45;
+    padding: 0.45rem 0.55rem;
+    white-space: pre-wrap;
+  }
+
+  .editor-holder .meditor-mermaid-body {
+    position: relative;
+  }
+
+  html.dark .editor-holder .meditor-mermaid {
+    border-color: #334155;
+    background: #0f172a;
+  }
+
+  html.dark .editor-holder .meditor-mermaid-title {
+    color: #cbd5e1;
+  }
+
+  html.dark .editor-holder .meditor-mermaid-template {
+    border-color: #475569;
+    background: #020617;
+    color: #cbd5e1;
+  }
+
+  html.dark .editor-holder .meditor-mermaid-code {
+    border-color: #334155;
+    background: #020617;
+    color: #e2e8f0;
+  }
+
+  html.dark .editor-holder .meditor-mermaid-code:focus {
+    border-color: #4a6f95;
+    box-shadow: 0 0 0 2px rgba(74, 111, 149, 0.28);
+  }
+
+  html.dark .editor-holder .meditor-mermaid-preview {
+    border-color: #334155;
+    background: #020617;
+  }
+
+  html.dark .editor-holder .meditor-mermaid-error {
+    border-color: #5b2b38;
+    background: #321720;
+    color: #fda4af;
+  }
+
 }

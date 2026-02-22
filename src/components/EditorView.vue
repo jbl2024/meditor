@@ -10,6 +10,7 @@ import Paragraph from '@editorjs/paragraph'
 import Quote from '@editorjs/quote'
 import Table from '@editorjs/table'
 import CalloutTool from '../lib/editorjs/CalloutTool'
+import MermaidTool from '../lib/editorjs/MermaidTool'
 import { editorDataToMarkdown, markdownToEditorData, type EditorBlock } from '../lib/markdownBlocks'
 import PropertyAddDropdown from './properties/PropertyAddDropdown.vue'
 import PropertyTokenInput from './properties/PropertyTokenInput.vue'
@@ -77,6 +78,7 @@ const SLASH_COMMANDS: SlashCommand[] = [
   { id: 'checklist', label: 'Checklist', type: 'list', data: { style: 'checklist', items: [] } },
   { id: 'table', label: 'Table', type: 'table', data: { withHeadings: true, content: [['', ''], ['', '']] } },
   { id: 'callout', label: 'Callout', type: 'callout', data: { kind: 'NOTE', message: '' } },
+  { id: 'mermaid', label: 'Mermaid', type: 'mermaid', data: { code: 'flowchart TD\n  A[Start] --> B[End]' } },
   { id: 'code', label: 'Code', type: 'code', data: { code: '' } },
   { id: 'quote', label: 'Quote', type: 'quote', data: { text: '', caption: '', alignment: 'left' } },
   { id: 'divider', label: 'Divider', type: 'delimiter', data: {} }
@@ -160,6 +162,15 @@ const propertySchema = ref<PropertyTypeSchema>({})
 const propertySchemaLoaded = ref(false)
 const propertySchemaSaving = ref(false)
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/
+const mermaidReplaceDialog = ref<{
+  visible: boolean
+  templateLabel: string
+  resolve: ((approved: boolean) => void) | null
+}>({
+  visible: false,
+  templateLabel: '',
+  resolve: null
+})
 
 const activeFrontmatter = computed<FrontmatterEnvelope | null>(() => {
   const path = currentPath.value
@@ -714,6 +725,29 @@ function clearTitleLockTimer() {
   if (!titleLockTimer) return
   clearTimeout(titleLockTimer)
   titleLockTimer = null
+}
+
+function resolveMermaidReplaceDialog(approved: boolean) {
+  const resolver = mermaidReplaceDialog.value.resolve
+  mermaidReplaceDialog.value = {
+    visible: false,
+    templateLabel: '',
+    resolve: null
+  }
+  resolver?.(approved)
+}
+
+function requestMermaidReplaceConfirm(payload: { templateLabel: string }): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    if (mermaidReplaceDialog.value.resolve) {
+      mermaidReplaceDialog.value.resolve(false)
+    }
+    mermaidReplaceDialog.value = {
+      visible: true,
+      templateLabel: payload.templateLabel,
+      resolve
+    }
+  })
 }
 
 function scheduleAutosave() {
@@ -1410,6 +1444,10 @@ function applyMarkdownShortcut(marker: string) {
 
 function onEditorKeydown(event: KeyboardEvent) {
   if (!editor) return
+  const target = event.target as HTMLElement | null
+  if (target?.closest('.meditor-mermaid')) {
+    return
+  }
 
   if (wikilinkOpen.value) {
     if (event.key === 'ArrowDown') {
@@ -1561,6 +1599,10 @@ function onEditorKeydown(event: KeyboardEvent) {
 }
 
 function onEditorKeyup(event: KeyboardEvent) {
+  const target = event.target as HTMLElement | null
+  if (target?.closest('.meditor-mermaid')) {
+    return
+  }
   if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight') && suppressCollapseOnNextArrowKeyup) {
     suppressCollapseOnNextArrowKeyup = false
     return
@@ -1588,6 +1630,9 @@ function onEditorKeyup(event: KeyboardEvent) {
 function onEditorClick(event: MouseEvent) {
   const target = event.target as HTMLElement | null
   if (!target?.closest('.ce-block')) {
+    return
+  }
+  if (target.closest('.meditor-mermaid')) {
     return
   }
   collapseExpandedLinkIfCaretOutside()
@@ -1655,6 +1700,10 @@ function insertParsedMarkdownBlocks(parsedBlocks: OutputBlockData[]) {
 
 function onEditorPaste(event: ClipboardEvent) {
   if (!editor) return
+  const target = event.target as HTMLElement | null
+  if (target?.closest('.meditor-mermaid')) {
+    return
+  }
 
   const plain = event.clipboardData?.getData('text/plain') ?? ''
   const html = event.clipboardData?.getData('text/html') ?? ''
@@ -1792,6 +1841,12 @@ async function ensureEditor() {
       },
       callout: {
         class: CalloutTool as unknown as never
+      },
+      mermaid: {
+        class: MermaidTool as unknown as never,
+        config: {
+          confirmReplace: requestMermaidReplaceConfirm
+        }
       },
       code: CodeTool,
       delimiter: Delimiter,
@@ -1985,6 +2040,9 @@ onMounted(async () => {
 onBeforeUnmount(async () => {
   clearOutlineTimer()
   clearTitleLockTimer()
+  if (mermaidReplaceDialog.value.resolve) {
+    mermaidReplaceDialog.value.resolve(false)
+  }
   await destroyEditor()
 })
 
@@ -2175,6 +2233,35 @@ defineExpose({
         </button>
         <div v-if="!wikilinkResults.length" class="px-3 py-1.5 text-sm text-slate-500 dark:text-slate-400">No matches</div>
       </div>
+      </div>
+    </div>
+
+    <div
+      v-if="mermaidReplaceDialog.visible"
+      class="fixed inset-0 z-30 flex items-center justify-center bg-slate-950/45 px-4"
+      @click.self="resolveMermaidReplaceDialog(false)"
+    >
+      <div class="w-full max-w-sm rounded-2xl border border-slate-300/80 bg-white p-4 shadow-xl dark:border-slate-700/80 dark:bg-slate-900">
+        <h3 class="text-sm font-semibold text-slate-900 dark:text-slate-100">Replace Mermaid diagram?</h3>
+        <p class="mt-1 text-xs text-slate-600 dark:text-slate-400">
+          Replace current Mermaid content with template "{{ mermaidReplaceDialog.templateLabel }}"?
+        </p>
+        <div class="mt-4 flex justify-end gap-2">
+          <button
+            type="button"
+            class="rounded border border-slate-300 px-3 py-1.5 text-xs text-slate-700 dark:border-slate-700 dark:text-slate-200"
+            @click="resolveMermaidReplaceDialog(false)"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="rounded border border-[#1d4ed8] bg-[#1d4ed8] px-3 py-1.5 text-xs font-semibold text-white"
+            @click="resolveMermaidReplaceDialog(true)"
+          >
+            Replace
+          </button>
+        </div>
       </div>
     </div>
 
