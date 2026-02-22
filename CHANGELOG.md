@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.1.7] - 2026-02-22
+
+### Changed
+- chore(makefile): print manual review and tag/push guidance after prepare-release (ffeca34)
+
 ## [0.1.6] - 2026-02-22
 
 ### Changed
