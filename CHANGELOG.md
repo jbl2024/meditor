@@ -18,6 +18,12 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.1.6] - 2026-02-22
+
+### Changed
+- refactor(release): split prepare-release into version and changelog scripts (4cd446e)
+- build(makefile): add prepare-release target with vX.Y.Z validation and version sync (6909807)
+
 ## [0.1.5] - 2026-02-21
 
 ### Changed
