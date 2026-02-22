@@ -135,13 +135,37 @@ function inlineMarkdownToHtml(value: string): string {
     } else {
       const text = match[3]
       const href = match[4]
-      html += `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${parseInlineSegment(text)}</a>`
+      const safeHref = sanitizeExternalHref(href)
+      if (safeHref) {
+        html += `<a href="${escapeHtml(safeHref)}" target="_blank" rel="noopener noreferrer">${parseInlineSegment(text)}</a>`
+      } else {
+        html += parseInlineSegment(full)
+      }
     }
     lastIndex = index + full.length
   }
 
   html += parseInlineSegment(value.slice(lastIndex))
   return html
+}
+
+function sanitizeExternalHref(raw: string): string | null {
+  const value = String(raw ?? '').trim()
+  if (!value) return null
+  if (/[\u0000-\u001f\u007f]/.test(value)) return null
+
+  try {
+    const parsed = new URL(value, 'https://meditor.local')
+    const protocol = parsed.protocol.toLowerCase()
+    if (protocol === 'http:' || protocol === 'https:' || protocol === 'mailto:') {
+      if (!parsed.hostname && protocol !== 'mailto:') return null
+      return value
+    }
+  } catch {
+    return null
+  }
+
+  return null
 }
 
 function blockTextToHtml(value: string): string {

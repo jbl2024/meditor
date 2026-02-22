@@ -43,6 +43,7 @@ import { useWorkspaceState, type SidebarMode } from './composables/useWorkspaceS
 
 type ThemePreference = 'light' | 'dark' | 'system'
 type SearchHit = { path: string; snippet: string; score: number }
+type SearchSnippetPart = { text: string; highlighted: boolean }
 type PropertyPreviewRow = { key: string; value: string }
 
 type EditorViewExposed = {
@@ -291,6 +292,30 @@ function toRelativePath(path: string): string {
     return path.slice(root.length + 1)
   }
   return path
+}
+
+function parseSearchSnippet(snippet: string): SearchSnippetPart[] {
+  const source = String(snippet ?? '')
+  if (!source) return [{ text: '', highlighted: false }]
+
+  const parts: SearchSnippetPart[] = []
+  const tokens = source.split(/(<\/?b>)/gi)
+  let highlighted = false
+  for (const token of tokens) {
+    const lower = token.toLowerCase()
+    if (lower === '<b>') {
+      highlighted = true
+      continue
+    }
+    if (lower === '</b>') {
+      highlighted = false
+      continue
+    }
+    if (!token) continue
+    parts.push({ text: token, highlighted })
+  }
+
+  return parts.length ? parts : [{ text: source, highlighted: false }]
 }
 
 function normalizeDatePart(value: number): string {
@@ -819,7 +844,7 @@ async function runGlobalSearch() {
       .filter((path) => toRelativePath(path).toLowerCase().includes(qLower))
       .map((path) => ({
         path,
-        snippet: `filename: <b>${toRelativePath(path)}</b>`,
+        snippet: `filename: ${toRelativePath(path)}`,
         score: 0
       }))
 
@@ -1974,7 +1999,12 @@ onBeforeUnmount(() => {
                   class="result-item"
                   @click="onSearchResultOpen(item)"
                 >
-                  <div class="result-snippet" v-html="item.snippet"></div>
+                  <div class="result-snippet">
+                    <template v-for="(part, idx) in parseSearchSnippet(item.snippet)" :key="`${idx}-${part.text}`">
+                      <strong v-if="part.highlighted">{{ part.text }}</strong>
+                      <span v-else>{{ part.text }}</span>
+                    </template>
+                  </div>
                 </button>
               </section>
             </div>
@@ -2848,7 +2878,7 @@ onBeforeUnmount(() => {
   color: #cbd5e1;
 }
 
-.result-snippet :deep(b) {
+.result-snippet :deep(strong) {
   font-weight: 700;
 }
 
