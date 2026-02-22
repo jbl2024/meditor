@@ -108,6 +108,10 @@ const loadingAllFiles = ref(false)
 const editorRef = ref<EditorViewExposed | null>(null)
 const tabScrollRef = ref<HTMLElement | null>(null)
 const overflowMenuRef = ref<HTMLElement | null>(null)
+const backHistoryMenuRef = ref<HTMLElement | null>(null)
+const forwardHistoryMenuRef = ref<HTMLElement | null>(null)
+const backHistoryButtonRef = ref<HTMLElement | null>(null)
+const forwardHistoryButtonRef = ref<HTMLElement | null>(null)
 const backlinks = ref<string[]>([])
 const backlinksLoading = ref(false)
 const propertiesPreview = ref<PropertyPreviewRow[]>([])
@@ -130,6 +134,10 @@ const wikilinkRewriteQueue: Array<{
   resolve: (approved: boolean) => void
 }> = []
 let wikilinkRewriteResolver: ((approved: boolean) => void) | null = null
+const historyMenuOpen = ref<'back' | 'forward' | null>(null)
+const historyMenuStyle = ref<Record<string, string>>({})
+let historyMenuTimer: ReturnType<typeof setTimeout> | null = null
+let historyLongPressTarget: 'back' | 'forward' | null = null
 
 const resizeState = ref<{
   side: 'left' | 'right'
@@ -386,6 +394,7 @@ function onSystemThemeChanged() {
 }
 
 function toggleOverflowMenu() {
+  closeHistoryMenu()
   overflowMenuOpen.value = !overflowMenuOpen.value
 }
 
@@ -393,12 +402,128 @@ function closeOverflowMenu() {
   overflowMenuOpen.value = false
 }
 
-function onOverflowMenuPointerDown(event: MouseEvent) {
-  if (!overflowMenuOpen.value) return
+function closeHistoryMenu() {
+  historyMenuOpen.value = null
+  historyMenuStyle.value = {}
+}
+
+function historyMenuItemCount(side: 'back' | 'forward'): number {
+  const count = side === 'back'
+    ? documentHistory.backTargets.value.length
+    : documentHistory.forwardTargets.value.length
+  return Math.max(1, Math.min(14, count))
+}
+
+function updateHistoryMenuPosition(side: 'back' | 'forward') {
+  const anchor = side === 'back'
+    ? backHistoryButtonRef.value
+    : forwardHistoryButtonRef.value
+  if (!anchor) return
+
+  const rect = anchor.getBoundingClientRect()
+  const viewportPadding = 8
+  const menuWidth = 320
+  const menuHeight = historyMenuItemCount(side) * 32 + 12
+
+  const left = Math.max(
+    viewportPadding,
+    Math.min(rect.left, window.innerWidth - menuWidth - viewportPadding)
+  )
+  const prefersDown = rect.bottom + 6 + menuHeight <= window.innerHeight - viewportPadding
+  const top = prefersDown
+    ? rect.bottom + 6
+    : Math.max(viewportPadding, rect.top - menuHeight - 6)
+
+  historyMenuStyle.value = {
+    position: 'fixed',
+    top: `${Math.round(top)}px`,
+    left: `${Math.round(left)}px`,
+    maxHeight: `${Math.max(120, window.innerHeight - viewportPadding * 2)}px`
+  }
+}
+
+function openHistoryMenu(side: 'back' | 'forward') {
+  closeOverflowMenu()
+  historyMenuOpen.value = side
+  updateHistoryMenuPosition(side)
+}
+
+function onHistoryButtonPointerDown(side: 'back' | 'forward', event: PointerEvent) {
+  if (event.button !== 0) return
+  const canOpen = side === 'back' ? documentHistory.canGoBack.value : documentHistory.canGoForward.value
+  if (!canOpen) return
+  historyLongPressTarget = null
+  if (historyMenuTimer) {
+    clearTimeout(historyMenuTimer)
+    historyMenuTimer = null
+  }
+  historyMenuTimer = setTimeout(() => {
+    historyLongPressTarget = side
+    openHistoryMenu(side)
+  }, 420)
+}
+
+function cancelHistoryLongPress() {
+  if (historyMenuTimer) {
+    clearTimeout(historyMenuTimer)
+    historyMenuTimer = null
+  }
+}
+
+function onHistoryButtonContextMenu(side: 'back' | 'forward', event: MouseEvent) {
+  event.preventDefault()
+  openHistoryMenu(side)
+}
+
+function onHistoryButtonClick(side: 'back' | 'forward') {
+  if (historyLongPressTarget === side) {
+    historyLongPressTarget = null
+    return
+  }
+  historyLongPressTarget = null
+  closeHistoryMenu()
+  if (side === 'back') {
+    void goBackInHistory()
+    return
+  }
+  void goForwardInHistory()
+}
+
+function onHistoryTargetClick(targetIndex: number) {
+  closeHistoryMenu()
+  const previousIndex = documentHistory.currentIndex.value
+  const targetPath = documentHistory.jumpTo(targetIndex)
+  if (!targetPath) return
+  void openTabWithAutosave(targetPath, { recordHistory: false }).then(async (opened) => {
+    if (opened) {
+      await nextTick()
+      editorRef.value?.focusEditor()
+      return
+    }
+    documentHistory.jumpTo(previousIndex)
+  })
+}
+
+function onWindowResize() {
+  if (!historyMenuOpen.value) return
+  updateHistoryMenuPosition(historyMenuOpen.value)
+}
+
+function onGlobalPointerDown(event: MouseEvent) {
   const target = event.target as Node | null
   if (!target) return
-  if (overflowMenuRef.value?.contains(target)) return
-  closeOverflowMenu()
+
+  if (overflowMenuOpen.value && !overflowMenuRef.value?.contains(target)) {
+    closeOverflowMenu()
+  }
+
+  if (historyMenuOpen.value === 'back' && !backHistoryMenuRef.value?.contains(target)) {
+    closeHistoryMenu()
+  }
+
+  if (historyMenuOpen.value === 'forward' && !forwardHistoryMenuRef.value?.contains(target)) {
+    closeHistoryMenu()
+  }
 }
 
 function setThemeFromOverflow(next: ThemePreference) {
@@ -1705,6 +1830,12 @@ function onWindowKeydown(event: KeyboardEvent) {
   }
 
   if (isEscape) {
+    if (historyMenuOpen.value) {
+      event.preventDefault()
+      event.stopPropagation()
+      closeHistoryMenu()
+      return
+    }
     if (overflowMenuOpen.value) {
       event.preventDefault()
       event.stopPropagation()
@@ -1917,7 +2048,8 @@ onMounted(() => {
   applyTheme()
   mediaQuery?.addEventListener('change', onSystemThemeChanged)
   window.addEventListener('keydown', onWindowKeydown, true)
-  window.addEventListener('mousedown', onOverflowMenuPointerDown, true)
+  window.addEventListener('mousedown', onGlobalPointerDown, true)
+  window.addEventListener('resize', onWindowResize)
   window.addEventListener('mousemove', onPointerMove)
   window.addEventListener('mouseup', stopResize)
 
@@ -1937,9 +2069,14 @@ onBeforeUnmount(() => {
     clearTimeout(searchDebounceTimer)
     searchDebounceTimer = null
   }
+  if (historyMenuTimer) {
+    clearTimeout(historyMenuTimer)
+    historyMenuTimer = null
+  }
   mediaQuery?.removeEventListener('change', onSystemThemeChanged)
   window.removeEventListener('keydown', onWindowKeydown, true)
-  window.removeEventListener('mousedown', onOverflowMenuPointerDown, true)
+  window.removeEventListener('mousedown', onGlobalPointerDown, true)
+  window.removeEventListener('resize', onWindowResize)
   window.removeEventListener('mousemove', onPointerMove)
   window.removeEventListener('mouseup', stopResize)
 })
@@ -2089,16 +2226,36 @@ onBeforeUnmount(() => {
 
           <div class="global-actions">
             <div class="nav-actions">
-              <button
-                type="button"
-                class="toolbar-icon-btn"
-                :disabled="!documentHistory.canGoBack.value"
-                :title="`Back (${backShortcutLabel})`"
-                :aria-label="`Back (${backShortcutLabel})`"
-                @click="void goBackInHistory()"
-              >
-                <ArrowLeftIcon />
-              </button>
+              <div ref="backHistoryMenuRef" class="history-nav-wrap">
+                <button
+                  ref="backHistoryButtonRef"
+                  type="button"
+                  class="toolbar-icon-btn"
+                  :disabled="!documentHistory.canGoBack.value"
+                  :title="`Back (${backShortcutLabel})`"
+                  :aria-label="`Back (${backShortcutLabel})`"
+                  @click="onHistoryButtonClick('back')"
+                  @contextmenu.prevent="onHistoryButtonContextMenu('back', $event)"
+                  @pointerdown="onHistoryButtonPointerDown('back', $event)"
+                  @pointerup="cancelHistoryLongPress"
+                  @pointerleave="cancelHistoryLongPress"
+                  @pointercancel="cancelHistoryLongPress"
+                >
+                  <ArrowLeftIcon />
+                </button>
+                <div v-if="historyMenuOpen === 'back'" class="history-menu" :style="historyMenuStyle">
+                  <button
+                    v-for="target in documentHistory.backTargets.value.slice(0, 14)"
+                    :key="`back-${target.index}-${target.path}`"
+                    type="button"
+                    class="history-menu-item"
+                    @click="onHistoryTargetClick(target.index)"
+                  >
+                    {{ toRelativePath(target.path) }}
+                  </button>
+                  <div v-if="!documentHistory.backTargets.value.length" class="history-menu-empty">No back history</div>
+                </div>
+              </div>
               <button
                 type="button"
                 class="toolbar-icon-btn"
@@ -2109,16 +2266,36 @@ onBeforeUnmount(() => {
               >
                 <HomeIcon />
               </button>
-              <button
-                type="button"
-                class="toolbar-icon-btn"
-                :disabled="!documentHistory.canGoForward.value"
-                :title="`Forward (${forwardShortcutLabel})`"
-                :aria-label="`Forward (${forwardShortcutLabel})`"
-                @click="void goForwardInHistory()"
-              >
-                <ArrowRightIcon />
-              </button>
+              <div ref="forwardHistoryMenuRef" class="history-nav-wrap">
+                <button
+                  ref="forwardHistoryButtonRef"
+                  type="button"
+                  class="toolbar-icon-btn"
+                  :disabled="!documentHistory.canGoForward.value"
+                  :title="`Forward (${forwardShortcutLabel})`"
+                  :aria-label="`Forward (${forwardShortcutLabel})`"
+                  @click="onHistoryButtonClick('forward')"
+                  @contextmenu.prevent="onHistoryButtonContextMenu('forward', $event)"
+                  @pointerdown="onHistoryButtonPointerDown('forward', $event)"
+                  @pointerup="cancelHistoryLongPress"
+                  @pointerleave="cancelHistoryLongPress"
+                  @pointercancel="cancelHistoryLongPress"
+                >
+                  <ArrowRightIcon />
+                </button>
+                <div v-if="historyMenuOpen === 'forward'" class="history-menu history-menu-forward" :style="historyMenuStyle">
+                  <button
+                    v-for="target in documentHistory.forwardTargets.value.slice(0, 14)"
+                    :key="`forward-${target.index}-${target.path}`"
+                    type="button"
+                    class="history-menu-item"
+                    @click="onHistoryTargetClick(target.index)"
+                  >
+                    {{ toRelativePath(target.path) }}
+                  </button>
+                  <div v-if="!documentHistory.forwardTargets.value.length" class="history-menu-empty">No forward history</div>
+                </div>
+              </div>
             </div>
             <button
               type="button"
@@ -2574,6 +2751,54 @@ onBeforeUnmount(() => {
   border-right: 1px solid #e2e8f0;
 }
 
+.history-nav-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+}
+
+.history-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 90;
+  min-width: 220px;
+  max-width: 320px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+}
+
+.history-menu-item {
+  border: 0;
+  background: transparent;
+  color: #334155;
+  border-radius: 8px;
+  text-align: left;
+  padding: 7px 8px;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.history-menu-item:hover {
+  background: #f1f5f9;
+}
+
+.history-menu-empty {
+  padding: 7px 8px;
+  font-size: 12px;
+  color: #64748b;
+}
+
 .toolbar-icon-btn {
   width: 28px;
   height: 28px;
@@ -2629,6 +2854,24 @@ onBeforeUnmount(() => {
 
 .ide-root.dark .nav-actions {
   border-right-color: #1e293b;
+}
+
+.ide-root.dark .history-menu {
+  border-color: #334155;
+  background: #0b1220;
+  box-shadow: 0 12px 28px rgba(2, 6, 23, 0.5);
+}
+
+.ide-root.dark .history-menu-item {
+  color: #cbd5e1;
+}
+
+.ide-root.dark .history-menu-item:hover {
+  background: #1e293b;
+}
+
+.ide-root.dark .history-menu-empty {
+  color: #94a3b8;
 }
 
 .overflow-wrap {

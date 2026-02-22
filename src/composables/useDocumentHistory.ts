@@ -1,5 +1,10 @@
 import { computed, ref } from 'vue'
 
+type HistoryTarget = {
+  path: string
+  index: number
+}
+
 export function useDocumentHistory() {
   const entries = ref<string[]>([])
   const index = ref(-1)
@@ -11,6 +16,20 @@ export function useDocumentHistory() {
 
   const canGoBack = computed(() => index.value > 0)
   const canGoForward = computed(() => index.value >= 0 && index.value < entries.value.length - 1)
+  const backTargets = computed<HistoryTarget[]>(() => {
+    const out: HistoryTarget[] = []
+    for (let idx = index.value - 1; idx >= 0; idx -= 1) {
+      out.push({ index: idx, path: entries.value[idx] })
+    }
+    return out
+  })
+  const forwardTargets = computed<HistoryTarget[]>(() => {
+    const out: HistoryTarget[] = []
+    for (let idx = index.value + 1; idx < entries.value.length; idx += 1) {
+      out.push({ index: idx, path: entries.value[idx] })
+    }
+    return out
+  })
 
   function reset() {
     entries.value = []
@@ -43,6 +62,12 @@ export function useDocumentHistory() {
     return entries.value[index.value] ?? ''
   }
 
+  function jumpTo(targetIndex: number): string {
+    if (targetIndex < 0 || targetIndex >= entries.value.length) return ''
+    index.value = targetIndex
+    return entries.value[index.value] ?? ''
+  }
+
   function replacePath(fromPath: string, toPath: string) {
     if (!fromPath || !toPath || fromPath === toPath) return
 
@@ -60,12 +85,16 @@ export function useDocumentHistory() {
 
   return {
     currentPath,
+    currentIndex: index,
     canGoBack,
     canGoForward,
+    backTargets,
+    forwardTargets,
     reset,
     record,
     goBack,
     goForward,
+    jumpTo,
     replacePath
   }
 }
