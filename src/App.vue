@@ -17,6 +17,7 @@ import ExplorerTree from './components/explorer/ExplorerTree.vue'
 import UiButton from './components/ui/UiButton.vue'
 import {
   backlinksForPath,
+  clearWorkingFolder,
   createEntry,
   ftsSearch,
   initDb,
@@ -29,6 +30,7 @@ import {
   reindexMarkdownFile,
   readPropertyTypeSchema,
   revealInFileManager,
+  setWorkingFolder,
   selectWorkingFolder,
   updateWikilinksForRename,
   writePropertyTypeSchema,
@@ -395,7 +397,7 @@ function setThemeFromPalette(next: ThemePreference) {
   return true
 }
 
-function closeWorkspace() {
+async function closeWorkspace() {
   if (!filesystem.hasWorkspace.value) return
   workspace.closeAllTabs()
   editorState.setActiveOutline([])
@@ -405,6 +407,11 @@ function closeWorkspace() {
   backlinksLoading.value = false
   filesystem.selectedCount.value = 0
   filesystem.clearWorkspacePath()
+  try {
+    await clearWorkingFolder()
+  } catch (err) {
+    filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not close workspace.'
+  }
   window.localStorage.removeItem(WORKING_FOLDER_STORAGE_KEY)
   closeOverflowMenu()
 }
@@ -436,22 +443,29 @@ function stopResize() {
 
 async function onSelectWorkingFolder() {
   filesystem.errorMessage.value = ''
-  const path = await selectWorkingFolder()
-  if (!path) return false
-  await loadWorkingFolder(path)
-  return true
+  try {
+    const path = await selectWorkingFolder()
+    if (!path) return false
+    await loadWorkingFolder(path)
+    return true
+  } catch (err) {
+    filesystem.errorMessage.value =
+      err instanceof Error ? err.message : 'Could not open workspace. Protected folders are not allowed.'
+    return false
+  }
 }
 
 async function loadWorkingFolder(path: string) {
   try {
-    filesystem.setWorkspacePath(path)
+    const canonical = await setWorkingFolder(path)
+    filesystem.setWorkspacePath(canonical)
     filesystem.indexingState.value = 'indexing'
-    await initDb(path)
+    await initDb(canonical)
     searchHits.value = []
     allWorkspaceFiles.value = []
-    window.localStorage.setItem(WORKING_FOLDER_STORAGE_KEY, path)
+    window.localStorage.setItem(WORKING_FOLDER_STORAGE_KEY, canonical)
 
-    if (workspace.activeTabPath.value && !workspace.activeTabPath.value.startsWith(path)) {
+    if (workspace.activeTabPath.value && !workspace.activeTabPath.value.startsWith(canonical)) {
       workspace.closeAllTabs()
       editorState.setActiveOutline([])
     }
@@ -1458,7 +1472,7 @@ async function openWorkspaceFromPalette() {
 
 function closeWorkspaceFromPalette() {
   if (!filesystem.hasWorkspace.value) return false
-  closeWorkspace()
+  void closeWorkspace()
   return true
 }
 

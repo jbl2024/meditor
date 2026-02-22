@@ -15,6 +15,14 @@ export async function selectWorkingFolder(): Promise<string | null> {
   return await invoke('select_working_folder')
 }
 
+export async function clearWorkingFolder(): Promise<void> {
+  await invoke('clear_working_folder')
+}
+
+export async function setWorkingFolder(path: string): Promise<string> {
+  return await invoke('set_working_folder', { path })
+}
+
 export async function listChildren(folderPath: string, dirPath: string): Promise<TreeNode[]> {
   return await invoke('list_children', { folderPath, dirPath })
 }
