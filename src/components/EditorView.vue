@@ -156,9 +156,6 @@ const wikilinkResults = computed(() => {
 })
 
 const currentPath = computed(() => props.path?.trim() || '')
-const isDirty = computed(() => Boolean(dirtyByPath.value[currentPath.value]))
-const isSaving = computed(() => Boolean(savingByPath.value[currentPath.value]))
-const saveError = computed(() => saveErrorByPath.value[currentPath.value] ?? '')
 const propertyEditorMode = ref<'structured' | 'raw'>('structured')
 const frontmatterByPath = ref<Record<string, FrontmatterEnvelope>>({})
 const rawYamlByPath = ref<Record<string, string>>({})
@@ -198,14 +195,6 @@ const structuredPropertyKeys = computed(() =>
     .map((field) => field.key.trim().toLowerCase())
     .filter(Boolean)
 )
-
-const statusText = computed(() => {
-  if (!currentPath.value) return 'Select a file'
-  if (saveError.value) return saveError.value
-  if (isSaving.value) return 'Saving...'
-  if (isDirty.value) return 'Editing'
-  return 'Saved'
-})
 
 function noteTitleFromPath(path: string): string {
   const normalized = path.replace(/\\/g, '/')
@@ -2403,9 +2392,6 @@ defineExpose({
       </div>
     </div>
 
-    <div class="flex h-7 items-center border-t border-slate-200 px-3 text-xs text-slate-600 dark:border-slate-800 dark:text-slate-400">
-      {{ statusText }}
-    </div>
   </div>
 </template>
 
