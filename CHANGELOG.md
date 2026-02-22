@@ -21,6 +21,26 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.2.5] - 2026-02-22
+
+### Added
+- feat(command-palette): add theme switch actions (light/dark/system) (499ed98)
+- feat(shortcuts): add Cmd/Ctrl+E to open explorer sidebar (50184fb)
+- feat(search): debounce live query search and show empty state only after executed search (4e767fe)
+
+### Changed
+- style(menu): align theme actions with overflow item icon and typography standards (3fbee44)
+- refactor(ui): iconify activity bar and move command palette into overflow menu (d37b517)
+- refactor(topbar): use icon-only toolbar buttons for search, command palette, and overflow (557e187)
+- refactor(tabs): replace close text with Heroicons XMarkIcon (67ad9ca)
+
+### Fixed
+- fix(search-ui): use icon go button and suppress empty-state for blank query (08fd49d)
+- fix(properties): correct dark-mode styling for property dropdown and token input (83e44ba)
+- fix(editor): theme EditorJS popover variables for dark mode (013b2ce)
+- fix: restore caret position (f6699d6)
+- fix(editor): preserve per-tab scroll position when switching files (3681cb3)
+
 ## [0.2.4] - 2026-02-22
 
 ### Changed
