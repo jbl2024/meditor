@@ -38,7 +38,6 @@ import {
 
 const AUTOSAVE_IDLE_MS = 1800
 const VIRTUAL_TITLE_BLOCK_ID = '__virtual_title__'
-const WIKILINK_ARROW_DEBUG_STORAGE_KEY = 'meditor.debug.wikilink-arrows'
 type CorePropertyOption = {
   key: string
   label?: string
@@ -123,66 +122,6 @@ let titleLockTimer: ReturnType<typeof setTimeout> | null = null
 let suppressOnChange = false
 let suppressCollapseOnNextArrowKeyup = false
 let expandedLinkContext: ArrowLinkContext | null = null
-
-function isWikilinkArrowDebugEnabled(): boolean {
-  if (typeof window === 'undefined') return false
-  return window.localStorage.getItem(WIKILINK_ARROW_DEBUG_STORAGE_KEY) === '1'
-}
-
-function selectionDebugSnapshot() {
-  if (typeof window === 'undefined') return { hasSelection: false }
-  const selection = window.getSelection()
-  if (!selection || !selection.rangeCount) return { hasSelection: false }
-
-  const node = selection.focusNode
-  const offset = selection.focusOffset
-  const base = {
-    hasSelection: true,
-    isCollapsed: selection.isCollapsed,
-    offset,
-    nodeType: node?.nodeType ?? null
-  }
-
-  if (!node || node.nodeType !== Node.TEXT_NODE) {
-    return base
-  }
-
-  const textNode = node as Text
-  const text = textNode.data
-  const excerptStart = Math.max(0, offset - 12)
-  const excerptEnd = Math.min(text.length, offset + 12)
-  const aroundCaret = text.slice(excerptStart, excerptEnd).replace(/\n/g, '\\n')
-  return {
-    ...base,
-    textLength: text.length,
-    aroundCaret
-  }
-}
-
-function expandedLinkContextSnapshot() {
-  if (!expandedLinkContext) return null
-  const { textNode, range } = expandedLinkContext
-  const text = textNode.data
-  const safeStart = Math.max(0, Math.min(range.start, text.length))
-  const safeEnd = Math.max(safeStart, Math.min(range.end, text.length))
-  return {
-    start: range.start,
-    end: range.end,
-    textLength: text.length,
-    token: text.slice(safeStart, safeEnd).replace(/\n/g, '\\n')
-  }
-}
-
-function debugWikilinkArrow(event: string, payload: Record<string, unknown> = {}) {
-  if (!isWikilinkArrowDebugEnabled()) return
-  // eslint-disable-next-line no-console
-  console.debug('[meditor:wikilink-arrows]', event, {
-    ...payload,
-    suppressCollapseOnNextArrowKeyup,
-    selection: selectionDebugSnapshot(),
-    expanded: expandedLinkContextSnapshot()
-  })
-}
 
 const loadedTextByPath = ref<Record<string, string>>({})
 const dirtyByPath = ref<Record<string, boolean>>({})
@@ -1316,7 +1255,6 @@ function replaceActiveWikilinkQuery(target: string) {
   nextRange.collapse(true)
   selection.removeAllRanges()
   selection.addRange(nextRange)
-  debugWikilinkArrow('replace-query-with-raw-token', { target, rawToken })
   return true
 }
 
@@ -1377,22 +1315,13 @@ function adjacentEditableLinkAnchor(selection: Selection, direction: 'left' | 'r
 
 function expandAdjacentLinkForEditing(direction: 'left' | 'right'): boolean {
   const selection = window.getSelection()
-  if (!selection || !selection.rangeCount || !selection.isCollapsed) {
-    debugWikilinkArrow('expand-skip-no-collapsed-selection', { direction })
-    return false
-  }
+  if (!selection || !selection.rangeCount || !selection.isCollapsed) return false
 
   const anchor = adjacentEditableLinkAnchor(selection, direction)
-  if (!anchor || !anchor.parentNode) {
-    debugWikilinkArrow('expand-skip-no-adjacent-anchor', { direction })
-    return false
-  }
+  if (!anchor || !anchor.parentNode) return false
 
   const token = tokenForAnchor(anchor)
-  if (!token) {
-    debugWikilinkArrow('expand-skip-empty-token', { direction })
-    return false
-  }
+  if (!token) return false
 
   const textNode = document.createTextNode(token)
   anchor.parentNode.replaceChild(textNode, anchor)
@@ -1405,23 +1334,16 @@ function expandAdjacentLinkForEditing(direction: 'left' | 'right'): boolean {
   selection.addRange(range)
   expandedLinkContext = { textNode, range: { start: 0, end: token.length } }
   suppressCollapseOnNextArrowKeyup = true
-  debugWikilinkArrow('expand-success', { direction, tokenLength: token.length, nextOffset })
   return true
 }
 
 function replaceTokenRangeWithAnchor(textNode: Text, start: number, end: number, place: 'before' | 'after'): boolean {
   const token = textNode.data.slice(start, end)
   const parsed = parseEditableLinkToken(token)
-  if (!parsed) {
-    debugWikilinkArrow('collapse-skip-token-not-parseable', { start, end, place, token })
-    return false
-  }
+  if (!parsed) return false
 
   const selection = window.getSelection()
-  if (!selection) {
-    debugWikilinkArrow('collapse-skip-no-selection', { start, end, place })
-    return false
-  }
+  if (!selection) return false
 
   const range = document.createRange()
   range.setStart(textNode, start)
@@ -1448,7 +1370,6 @@ function replaceTokenRangeWithAnchor(textNode: Text, start: number, end: number,
   ) {
     expandedLinkContext = null
   }
-  debugWikilinkArrow('collapse-success', { start, end, place, token })
   return true
 }
 
@@ -1492,23 +1413,18 @@ function collapseExpandedLinkIfCaretOutside(): boolean {
   const context = expandedLinkContext
   const selection = window.getSelection()
   if (!selection || !selection.rangeCount || !selection.isCollapsed) {
-    debugWikilinkArrow('collapse-expanded-reset-no-collapsed-selection')
     expandedLinkContext = null
     return false
   }
 
   const relation = caretRelationToTokenRange(selection, context)
-  if (relation === 'inside') {
-    debugWikilinkArrow('collapse-expanded-stay-inside', { relation })
-    return false
-  }
+  if (relation === 'inside') return false
 
   const place = relation === 'before' ? 'before' : 'after'
   const collapsed = replaceTokenRangeWithAnchor(context.textNode, context.range.start, context.range.end, place)
   if (!collapsed) {
     expandedLinkContext = null
   }
-  debugWikilinkArrow('collapse-expanded-attempt', { relation, place, collapsed })
   return collapsed
 }
 
@@ -1557,9 +1473,7 @@ function collapseClosedLinkNearCaret(): boolean {
     if (start >= 0) {
       const close = text.indexOf(']]', start + 2)
       if (close >= 0 && close + 2 === offset) {
-        const collapsed = replaceTokenRangeWithAnchor(textNode, start, offset, 'after')
-        debugWikilinkArrow('collapse-closed-near-caret-right-edge', { collapsed, start, offset })
-        return collapsed
+        return replaceTokenRangeWithAnchor(textNode, start, offset, 'after')
       }
     }
   }
@@ -1567,24 +1481,18 @@ function collapseClosedLinkNearCaret(): boolean {
   if (text.slice(offset, offset + 2) === '[[') {
     const close = text.indexOf(']]', offset + 2)
     if (close >= 0) {
-      const collapsed = replaceTokenRangeWithAnchor(textNode, offset, close + 2, 'before')
-      debugWikilinkArrow('collapse-closed-near-caret-left-edge', { collapsed, offset, close })
-      return collapsed
+      return replaceTokenRangeWithAnchor(textNode, offset, close + 2, 'before')
     }
   }
 
   const endingMarkdown = findMarkdownLinkRangeEndingAt(text, offset)
   if (endingMarkdown) {
-    const collapsed = replaceTokenRangeWithAnchor(textNode, endingMarkdown.start, endingMarkdown.end, 'after')
-    debugWikilinkArrow('collapse-markdown-link-ending', { collapsed, ...endingMarkdown })
-    return collapsed
+    return replaceTokenRangeWithAnchor(textNode, endingMarkdown.start, endingMarkdown.end, 'after')
   }
 
   const startingMarkdown = findMarkdownLinkRangeStartingAt(text, offset)
   if (startingMarkdown) {
-    const collapsed = replaceTokenRangeWithAnchor(textNode, startingMarkdown.start, startingMarkdown.end, 'before')
-    debugWikilinkArrow('collapse-markdown-link-starting', { collapsed, ...startingMarkdown })
-    return collapsed
+    return replaceTokenRangeWithAnchor(textNode, startingMarkdown.start, startingMarkdown.end, 'before')
   }
 
   return false
@@ -1771,7 +1679,6 @@ function onEditorKeydown(event: KeyboardEvent) {
   }
 
   if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-    debugWikilinkArrow('keydown-arrow', { key: event.key })
     const direction = event.key === 'ArrowLeft' ? 'left' : 'right'
     if (expandAdjacentLinkForEditing(direction)) {
       event.preventDefault()
@@ -1781,7 +1688,6 @@ function onEditorKeydown(event: KeyboardEvent) {
       }
       return
     }
-    debugWikilinkArrow('keydown-arrow-no-expand', { key: event.key })
   }
 
   if (slashOpen.value) {
@@ -1871,19 +1777,15 @@ function onEditorKeyup(event: KeyboardEvent) {
     return
   }
   if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight') && suppressCollapseOnNextArrowKeyup) {
-    debugWikilinkArrow('keyup-arrow-skip-once', { key: event.key })
     suppressCollapseOnNextArrowKeyup = false
     return
   }
 
   if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-    debugWikilinkArrow('keyup-arrow', { key: event.key })
     if (collapseExpandedLinkIfCaretOutside()) {
-      debugWikilinkArrow('keyup-arrow-collapsed-expanded', { key: event.key })
       return
     }
-    const collapsedNearCaret = collapseClosedLinkNearCaret()
-    debugWikilinkArrow('keyup-arrow-collapse-near-caret', { key: event.key, collapsedNearCaret })
+    collapseClosedLinkNearCaret()
     return
   }
 
