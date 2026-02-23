@@ -133,6 +133,7 @@ const emit = defineEmits<{
 const holder = ref<HTMLDivElement | null>(null)
 const wikilinkMenuRef = ref<HTMLDivElement | null>(null)
 const checklistDebugOn = ref(false)
+const editorZoom = ref(1)
 let editor: EditorJS | null = null
 let codeUiObserver: MutationObserver | null = null
 let autosaveTimer: ReturnType<typeof setTimeout> | null = null
@@ -189,6 +190,7 @@ const wikilinkResults = computed(() => {
 })
 
 const currentPath = computed(() => props.path?.trim() || '')
+const editorZoomStyle = computed(() => ({ '--editor-zoom': String(editorZoom.value) }))
 const propertyEditorMode = ref<'structured' | 'raw'>('structured')
 const frontmatterByPath = ref<Record<string, FrontmatterEnvelope>>({})
 const rawYamlByPath = ref<Record<string, string>>({})
@@ -1025,6 +1027,23 @@ function focusEditor() {
   editable?.focus()
 }
 
+function clampEditorZoom(value: number): number {
+  return Math.max(0.8, Math.min(1.6, Number(value.toFixed(2))))
+}
+
+function setEditorZoom(next: number) {
+  editorZoom.value = clampEditorZoom(next)
+  window.localStorage.setItem('meditor:editor:zoom', String(editorZoom.value))
+}
+
+function zoomEditorBy(delta: number) {
+  setEditorZoom(editorZoom.value + delta)
+}
+
+function resetEditorZoom() {
+  setEditorZoom(1)
+}
+
 function autosizeCodeTextarea(textarea: HTMLTextAreaElement) {
   textarea.style.height = '0px'
   const next = Math.max(52, textarea.scrollHeight)
@@ -1830,11 +1849,55 @@ function applyMarkdownShortcut(marker: string) {
   return null
 }
 
+function isEditorZoomModifier(event: KeyboardEvent): boolean {
+  return (event.metaKey || event.ctrlKey) && !event.altKey
+}
+
+function isZoomInShortcut(event: KeyboardEvent): boolean {
+  return (
+    event.key === '=' ||
+    event.key === '+' ||
+    event.code === 'Equal' ||
+    event.code === 'NumpadAdd'
+  )
+}
+
+function isZoomOutShortcut(event: KeyboardEvent): boolean {
+  return (
+    event.key === '-' ||
+    event.key === '_' ||
+    event.code === 'Minus' ||
+    event.code === 'NumpadSubtract'
+  )
+}
+
+function isZoomResetShortcut(event: KeyboardEvent): boolean {
+  return event.key === '0' || event.code === 'Digit0' || event.code === 'Numpad0'
+}
+
 function onEditorKeydown(event: KeyboardEvent) {
   if (!editor) return
   const target = event.target as HTMLElement | null
   if (target?.closest('.meditor-mermaid')) {
     return
+  }
+
+  if (isEditorZoomModifier(event)) {
+    if (isZoomInShortcut(event)) {
+      event.preventDefault()
+      zoomEditorBy(0.1)
+      return
+    }
+    if (isZoomOutShortcut(event)) {
+      event.preventDefault()
+      zoomEditorBy(-0.1)
+      return
+    }
+    if (isZoomResetShortcut(event)) {
+      event.preventDefault()
+      resetEditorZoom()
+      return
+    }
   }
 
   if (wikilinkOpen.value) {
@@ -2501,6 +2564,10 @@ watch(
 onMounted(async () => {
   const debugFlag = window.localStorage.getItem('meditor:debug:checklist')
   checklistDebugOn.value = debugFlag === '1'
+  const savedZoom = Number.parseFloat(window.localStorage.getItem('meditor:editor:zoom') ?? '1')
+  if (Number.isFinite(savedZoom)) {
+    editorZoom.value = clampEditorZoom(savedZoom)
+  }
 
   if (currentPath.value) {
     await ensureEditor()
@@ -2670,6 +2737,7 @@ defineExpose({
         ref="holder"
         class="editor-holder relative min-h-0 flex-1 overflow-y-auto px-8 py-6"
         :class="{ 'meditor-debug-checklist': checklistDebugOn }"
+        :style="editorZoomStyle"
         @click="closeSlashMenu(); closeWikilinkMenu()"
       >
 

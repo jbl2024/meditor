@@ -186,6 +186,20 @@ html.dark .ce-popover-item--focused,
     background: transparent;
   }
 
+  .editor-holder {
+    --editor-zoom: 1;
+    --meditor-editor-font-size: calc(1rem * var(--editor-zoom));
+  }
+
+  .editor-holder .ce-paragraph,
+  .editor-holder .cdx-list,
+  .editor-holder .cdx-list__item,
+  .editor-holder .cdx-list__item-content,
+  .editor-holder .cdx-quote,
+  .editor-holder .meditor-callout-message {
+    font-size: var(--meditor-editor-font-size);
+  }
+
   .editor-holder .ce-paragraph {
     font-size: 1rem;
     color: #1a1a1a;
@@ -286,30 +300,30 @@ html.dark .ce-popover-item--focused,
   }
 
   .editor-holder h1.ce-header {
-    font-size: 2rem;
+    font-size: calc(2rem * var(--editor-zoom));
     font-weight: 600;
   }
 
   .editor-holder h2.ce-header {
-    font-size: 1.6rem;
+    font-size: calc(1.6rem * var(--editor-zoom));
     font-weight: 700;
   }
 
   .editor-holder h3.ce-header {
-    font-size: 1.35rem;
+    font-size: calc(1.35rem * var(--editor-zoom));
     font-weight: 680;
   }
 
   .editor-holder h4.ce-header {
-    font-size: 1.16rem;
+    font-size: calc(1.16rem * var(--editor-zoom));
   }
 
   .editor-holder h5.ce-header {
-    font-size: 1.04rem;
+    font-size: calc(1.04rem * var(--editor-zoom));
   }
 
   .editor-holder h6.ce-header {
-    font-size: 0.96rem;
+    font-size: calc(0.96rem * var(--editor-zoom));
   }
 
   .editor-holder .cdx-quote {
@@ -340,7 +354,7 @@ html.dark .ce-popover-item--focused,
     background: transparent !important;
     color: #1e293b !important;
     font-family: var(--font-mono);
-    font-size: 0.8rem !important;
+    font-size: calc(0.8rem * var(--editor-zoom)) !important;
     line-height: 1.5 !important;
     padding: 1.2rem 1rem 0.6rem !important;
     white-space: pre !important;
@@ -830,7 +844,7 @@ html.dark .ce-popover-item--focused,
     background: #ffffff;
     color: #0f172a;
     font-family: var(--font-mono);
-    font-size: 0.8rem;
+    font-size: calc(0.8rem * var(--editor-zoom));
     line-height: 1.55;
     padding: 0.7rem;
     resize: vertical;
