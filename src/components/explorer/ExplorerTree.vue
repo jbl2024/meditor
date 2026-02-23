@@ -10,6 +10,7 @@ import {
   FolderPlusIcon
 } from '@heroicons/vue/24/outline'
 import { useSelectionManager } from './composables/useSelectionManager'
+import { planWorkspaceFsActions } from './workspaceFsPlanner'
 import {
   copyEntry,
   duplicateEntry,
@@ -315,76 +316,17 @@ function queueWorkspaceChanges(sessionId: number, changes: WorkspaceFsChange[]) 
 async function flushWorkspaceChanges() {
   if (!props.folderPath || !pendingWorkspaceChanges.length) return
 
-  const root = normalizePath(props.folderPath)
   const changes = pendingWorkspaceChanges
   pendingWorkspaceChanges = []
 
-  const dirsToRefresh = new Set<string>()
   const loaded = new Set(Object.keys(childrenByDir.value))
+  const plan = planWorkspaceFsActions(props.folderPath, loaded, changes)
 
-  for (const change of changes) {
-    if (change.kind === 'created') {
-      const parentPath = change.parent || (change.path ? getParentPath(change.path) : '')
-      if (!parentPath) continue
-      const parent = normalizePath(parentPath)
-      if (parent === root || loaded.has(parent)) {
-        dirsToRefresh.add(parent)
-      }
-      continue
-    }
-
-    if (change.kind === 'removed') {
-      if (change.path) {
-        removePathFromCaches(change.path)
-      }
-      const parentPath = change.parent || (change.path ? getParentPath(change.path) : '')
-      if (parentPath) {
-        const parent = normalizePath(parentPath)
-        if (parent === root || loaded.has(parent)) {
-          dirsToRefresh.add(parent)
-        }
-      }
-      continue
-    }
-
-    if (change.kind === 'modified') {
-      if (change.path) {
-        const changedPath = normalizePath(change.path)
-        if (changedPath === root || loaded.has(changedPath)) {
-          dirsToRefresh.add(changedPath)
-        }
-      }
-      const parentPath = change.parent || (change.path ? getParentPath(change.path) : '')
-      if (!parentPath) continue
-      const parent = normalizePath(parentPath)
-      if (parent === root || loaded.has(parent)) {
-        dirsToRefresh.add(parent)
-      }
-      continue
-    }
-
-    if (change.kind === 'renamed') {
-      if (change.old_path) {
-        removePathFromCaches(change.old_path)
-      }
-      if (change.old_parent) {
-        const oldParent = normalizePath(change.old_parent)
-        if (oldParent === root || loaded.has(oldParent)) {
-          dirsToRefresh.add(oldParent)
-        }
-      }
-      if (change.new_parent) {
-        const newParent = normalizePath(change.new_parent)
-        if (newParent === root || loaded.has(newParent)) {
-          dirsToRefresh.add(newParent)
-        }
-      }
-    }
+  for (const removedPath of plan.pathsToPrune) {
+    removePathFromCaches(removedPath)
   }
 
-  // Root refresh guarantees consistency when OS backends emit partial metadata.
-  dirsToRefresh.add(root)
-  await refreshSpecificDirs(dirsToRefresh)
+  await refreshSpecificDirs(plan.dirsToRefresh)
 }
 
 async function expandAllDirs() {

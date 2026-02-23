@@ -19,7 +19,7 @@ const TRASH_DIR_NAME: &str = ".meditor-trash";
 const DB_FILE_NAME: &str = "meditor.sqlite";
 const FS_EVENT_NAME: &str = "workspace://fs-changed";
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum WorkspaceFsChangeKind {
     Created,
@@ -28,7 +28,7 @@ pub(crate) enum WorkspaceFsChangeKind {
     Modified,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub(crate) struct WorkspaceFsChange {
     pub kind: WorkspaceFsChangeKind,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -173,6 +173,15 @@ fn handle_notify_event(
     root_normalized: &str,
     event: notify::Event,
 ) {
+    let changes = map_notify_event_to_changes(root_path, root_normalized, event);
+    emit_changes(app_handle, session_id, root_normalized, changes);
+}
+
+fn map_notify_event_to_changes(
+    root_path: &Path,
+    root_normalized: &str,
+    event: notify::Event,
+) -> Vec<WorkspaceFsChange> {
     let mut changes: Vec<WorkspaceFsChange> = Vec::new();
 
     match event.kind {
@@ -223,16 +232,16 @@ fn handle_notify_event(
                 let old_raw = &event.paths[0];
                 let new_raw = &event.paths[1];
                 if should_skip_path(old_raw) || should_skip_path(new_raw) {
-                    return;
+                    return Vec::new();
                 }
 
                 let Some(old_path) = normalize_event_path(old_raw, root_path, root_normalized)
                 else {
-                    return;
+                    return Vec::new();
                 };
                 let Some(new_path) = normalize_event_path(new_raw, root_path, root_normalized)
                 else {
-                    return;
+                    return Vec::new();
                 };
 
                 changes.push(WorkspaceFsChange {
@@ -314,7 +323,7 @@ fn handle_notify_event(
         _ => {}
     }
 
-    emit_changes(app_handle, session_id, root_normalized, changes);
+    changes
 }
 
 pub(crate) fn start_workspace_watcher(app_handle: AppHandle, root_path: PathBuf) -> Result<()> {
@@ -366,4 +375,219 @@ pub(crate) fn stop_workspace_watcher() -> Result<()> {
     state.watcher = None;
     state.root = None;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        fs,
+        path::PathBuf,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    use notify::event::{CreateKind, ModifyKind, RemoveKind, RenameMode};
+    use notify::Event;
+
+    use super::*;
+
+    fn unique_test_dir() -> PathBuf {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|value| value.as_nanos())
+            .unwrap_or(0);
+        std::env::temp_dir().join(format!("meditor-watch-tests-{now}"))
+    }
+
+    fn mk_root() -> (PathBuf, String) {
+        let root = unique_test_dir();
+        fs::create_dir_all(&root).expect("create test root");
+        let root_normalized = normalize_slashes(&root);
+        (root, root_normalized)
+    }
+
+    fn test_event(kind: EventKind, paths: Vec<PathBuf>) -> Event {
+        Event {
+            kind,
+            paths,
+            attrs: Default::default(),
+        }
+    }
+
+    #[test]
+    fn root_contains_path_checks_boundary() {
+        assert!(root_contains_path("/ws", "/ws"));
+        assert!(root_contains_path("/ws", "/ws/a.md"));
+        assert!(!root_contains_path("/ws", "/wsx/a.md"));
+    }
+
+    #[test]
+    fn should_skip_path_skips_internal_dirs_and_db_files() {
+        assert!(should_skip_path(Path::new("/ws/.meditor/state.json")));
+        assert!(should_skip_path(Path::new("/ws/.meditor-trash/item.md")));
+        assert!(should_skip_path(Path::new("/ws/meditor.sqlite")));
+        assert!(should_skip_path(Path::new("/ws/meditor.sqlite-wal")));
+        assert!(!should_skip_path(Path::new("/ws/notes/file.md")));
+    }
+
+    #[test]
+    fn maps_create_event_for_absolute_path() {
+        let (root, root_norm) = mk_root();
+        let file = root.join("notes/new.md");
+        fs::create_dir_all(file.parent().expect("parent")).expect("create parent");
+        fs::write(&file, "hello").expect("create file");
+
+        let changes = map_notify_event_to_changes(
+            &root,
+            &root_norm,
+            test_event(EventKind::Create(CreateKind::Any), vec![file.clone()]),
+        );
+
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].kind, WorkspaceFsChangeKind::Created);
+        assert_eq!(changes[0].path, Some(normalize_slashes(&file)));
+        assert_eq!(
+            changes[0].parent,
+            Some(normalize_slashes(file.parent().expect("parent")))
+        );
+    }
+
+    #[test]
+    fn maps_create_event_for_relative_path() {
+        let (root, root_norm) = mk_root();
+        let relative = PathBuf::from("nested/file.md");
+        let absolute = root.join(&relative);
+        fs::create_dir_all(absolute.parent().expect("parent")).expect("create parent");
+        fs::write(&absolute, "ok").expect("create file");
+
+        let changes = map_notify_event_to_changes(
+            &root,
+            &root_norm,
+            test_event(EventKind::Create(CreateKind::Any), vec![relative]),
+        );
+
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].path, Some(normalize_slashes(&absolute)));
+    }
+
+    #[test]
+    fn ignores_paths_outside_workspace_root() {
+        let (root, root_norm) = mk_root();
+        let external = PathBuf::from("/tmp/somewhere-else.md");
+        let changes = map_notify_event_to_changes(
+            &root,
+            &root_norm,
+            test_event(EventKind::Create(CreateKind::Any), vec![external]),
+        );
+        assert!(changes.is_empty());
+    }
+
+    #[test]
+    fn maps_remove_event() {
+        let (root, root_norm) = mk_root();
+        let removed = root.join("gone.md");
+        let changes = map_notify_event_to_changes(
+            &root,
+            &root_norm,
+            test_event(EventKind::Remove(RemoveKind::Any), vec![removed.clone()]),
+        );
+
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].kind, WorkspaceFsChangeKind::Removed);
+        assert_eq!(changes[0].path, Some(normalize_slashes(&removed)));
+    }
+
+    #[test]
+    fn maps_rename_both_event() {
+        let (root, root_norm) = mk_root();
+        let old_path = root.join("old.md");
+        let new_path = root.join("new.md");
+        fs::write(&new_path, "renamed").expect("create renamed file");
+
+        let changes = map_notify_event_to_changes(
+            &root,
+            &root_norm,
+            test_event(
+                EventKind::Modify(ModifyKind::Name(RenameMode::Both)),
+                vec![old_path.clone(), new_path.clone()],
+            ),
+        );
+
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].kind, WorkspaceFsChangeKind::Renamed);
+        assert_eq!(changes[0].old_path, Some(normalize_slashes(&old_path)));
+        assert_eq!(changes[0].new_path, Some(normalize_slashes(&new_path)));
+        assert_eq!(changes[0].old_parent, Some(root_norm.clone()));
+        assert_eq!(changes[0].new_parent, Some(root_norm));
+    }
+
+    #[test]
+    fn maps_rename_from_event_as_removed() {
+        let (root, root_norm) = mk_root();
+        let old_path = root.join("old.md");
+        let changes = map_notify_event_to_changes(
+            &root,
+            &root_norm,
+            test_event(
+                EventKind::Modify(ModifyKind::Name(RenameMode::From)),
+                vec![old_path.clone()],
+            ),
+        );
+
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].kind, WorkspaceFsChangeKind::Removed);
+        assert_eq!(changes[0].path, Some(normalize_slashes(&old_path)));
+    }
+
+    #[test]
+    fn maps_rename_to_event_as_created() {
+        let (root, root_norm) = mk_root();
+        let new_path = root.join("new.md");
+        fs::write(&new_path, "created").expect("create file");
+        let changes = map_notify_event_to_changes(
+            &root,
+            &root_norm,
+            test_event(
+                EventKind::Modify(ModifyKind::Name(RenameMode::To)),
+                vec![new_path.clone()],
+            ),
+        );
+
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].kind, WorkspaceFsChangeKind::Created);
+        assert_eq!(changes[0].path, Some(normalize_slashes(&new_path)));
+    }
+
+    #[test]
+    fn rename_both_returns_empty_when_path_is_skipped() {
+        let (root, root_norm) = mk_root();
+        let old_path = root.join(".meditor/old.md");
+        let new_path = root.join("new.md");
+        let changes = map_notify_event_to_changes(
+            &root,
+            &root_norm,
+            test_event(
+                EventKind::Modify(ModifyKind::Name(RenameMode::Both)),
+                vec![old_path, new_path],
+            ),
+        );
+        assert!(changes.is_empty());
+    }
+
+    #[test]
+    fn maps_non_name_modify_event() {
+        let (root, root_norm) = mk_root();
+        let file = root.join("notes/changed.md");
+        fs::create_dir_all(file.parent().expect("parent")).expect("create parent");
+        fs::write(&file, "updated").expect("create file");
+
+        let changes = map_notify_event_to_changes(
+            &root,
+            &root_norm,
+            test_event(EventKind::Modify(ModifyKind::Any), vec![file.clone()]),
+        );
+
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].kind, WorkspaceFsChangeKind::Modified);
+        assert_eq!(changes[0].path, Some(normalize_slashes(&file)));
+    }
 }
