@@ -131,6 +131,7 @@ const emit = defineEmits<{
 }>()
 
 const holder = ref<HTMLDivElement | null>(null)
+const wikilinkMenuRef = ref<HTMLDivElement | null>(null)
 let editor: EditorJS | null = null
 let autosaveTimer: ReturnType<typeof setTimeout> | null = null
 let outlineTimer: ReturnType<typeof setTimeout> | null = null
@@ -1116,7 +1117,23 @@ function openWikilinkMenuAtCaret(query: string, keepSelection = false) {
     left: wikilinkLeft.value,
     top: wikilinkTop.value
   })
+  void nextTick().then(() => repositionWikilinkMenu())
   void refreshWikilinkHeadingResults(query)
+}
+
+function repositionWikilinkMenu() {
+  if (!holder.value || !wikilinkMenuRef.value) return
+  const holderRect = holder.value.getBoundingClientRect()
+  const menuRect = wikilinkMenuRef.value.getBoundingClientRect()
+  const padding = 8
+
+  const maxLeft = Math.max(padding, holderRect.width - menuRect.width - padding)
+  wikilinkLeft.value = Math.min(Math.max(padding, wikilinkLeft.value), maxLeft)
+
+  const maxTop = Math.max(padding, holderRect.height - menuRect.height - padding)
+  if (wikilinkTop.value > maxTop) {
+    wikilinkTop.value = Math.max(padding, maxTop)
+  }
 }
 
 function parseWikilinkQuery(raw: string): { notePart: string; headingPart: string | null } {
@@ -2661,6 +2678,7 @@ defineExpose({
 
       <div
         v-if="wikilinkOpen"
+        ref="wikilinkMenuRef"
         class="absolute z-20 w-80 max-w-[calc(100%-1rem)] rounded-md border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-800 dark:bg-slate-900"
         :style="{ left: `${wikilinkLeft}px`, top: `${wikilinkTop}px` }"
       >
