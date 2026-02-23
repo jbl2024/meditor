@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.2.9] - 2026-02-23
+
+### Fixed
+- fix(editor): align ordered and unordered list markers to text baseline (43a983b)
+
 ## [0.2.8] - 2026-02-23
 
 ### Added
