@@ -94,7 +94,8 @@ function parseInlineSegment(value: string): string {
   html = html.replace(/\*\*(?=\S)([\s\S]*?\S)\*\*/g, '<strong>$1</strong>')
   html = html.replace(/__(?=\S)([\s\S]*?\S)__/g, '<strong>$1</strong>')
   html = html.replace(/(^|[^*])\*(?=\S)([\s\S]*?\S)\*(?!\*)/g, '$1<em>$2</em>')
-  html = html.replace(/(^|[^_])_(?=\S)([\s\S]*?\S)_(?!_)/g, '$1<em>$2</em>')
+  // Keep intraword underscores (for example note_path/file_name) as plain text.
+  html = html.replace(/(^|[^\w])_(?=\S)([^_]*?\S)_((?=[^\w])|$)/g, '$1<em>$2</em>')
 
   codeTokens.forEach((tokenHtml, index) => {
     html = html.split(`\u0000MDCODE${index}\u0000`).join(tokenHtml)

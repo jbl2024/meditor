@@ -90,3 +90,14 @@ describe('nested lists', () => {
     expect(reparsed.blocks[0]).toEqual(parsed.blocks[0])
   })
 })
+
+describe('wikilinks with underscores', () => {
+  it('does not interpret intraword underscores as italic', () => {
+    const markdown = '[[showcase/folder_with_underscore/note_in_folder.md]]'
+    const parsed = markdownToEditorData(markdown)
+    expect(parsed.blocks).toHaveLength(1)
+    expect(parsed.blocks[0].type).toBe('paragraph')
+    expect(String(parsed.blocks[0].data.text)).toContain('showcase/folder_with_underscore/note_in_folder.md')
+    expect(String(parsed.blocks[0].data.text)).not.toContain('<em>')
+  })
+})
