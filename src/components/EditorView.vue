@@ -83,10 +83,26 @@ type CaretSnapshot =
   | { kind: 'contenteditable'; blockIndex: number; offset: number }
   | { kind: 'text-input'; blockIndex: number; offset: number }
 
+type ListStyle = 'unordered' | 'ordered' | 'checklist'
+
+function emptyListData(style: ListStyle, checked = false) {
+  return {
+    style,
+    meta: {},
+    items: [
+      {
+        content: '',
+        meta: style === 'checklist' ? { checked } : {},
+        items: []
+      }
+    ]
+  }
+}
+
 const SLASH_COMMANDS: SlashCommand[] = [
   { id: 'heading', label: 'Heading', type: 'header', data: { text: '', level: 2 } },
-  { id: 'bullet', label: 'List', type: 'list', data: { style: 'unordered', items: [] } },
-  { id: 'checklist', label: 'Checklist', type: 'list', data: { style: 'checklist', items: [] } },
+  { id: 'bullet', label: 'List', type: 'list', data: emptyListData('unordered') },
+  { id: 'checklist', label: 'Checklist', type: 'list', data: emptyListData('checklist') },
   { id: 'table', label: 'Table', type: 'table', data: { withHeadings: true, content: [['', ''], ['', '']] } },
   { id: 'callout', label: 'Callout', type: 'callout', data: { kind: 'NOTE', message: '' } },
   { id: 'mermaid', label: 'Mermaid', type: 'mermaid', data: { code: 'flowchart TD\n  A[Start] --> B[End]' } },
@@ -1572,13 +1588,26 @@ async function syncWikilinkMenuFromCaret() {
   openWikilinkMenuAtCaret(query, true)
 }
 
-async function replaceCurrentBlock(type: string, data: Record<string, unknown>) {
-  if (!editor) return
+function replaceCurrentBlock(type: string, data: Record<string, unknown>): boolean {
+  if (!editor) return false
   const index = editor.blocks.getCurrentBlockIndex()
-  if (index < 0) return
+  if (index < 0) return false
 
-  const inserted = editor.blocks.insert(type, data, undefined, index, true, true)
-  placeCaretInBlock(inserted.id)
+  try {
+    const inserted = editor.blocks.insert(type, data, undefined, index, true, true)
+    const blockId = inserted?.id ?? editor.blocks.getBlockByIndex(index)?.id ?? null
+    if (blockId) {
+      if (!editor.caret.setToBlock(blockId, 'start')) {
+        placeCaretInBlock(blockId)
+      }
+    } else {
+      editor.caret.focus()
+    }
+    return true
+  } catch (error) {
+    console.error('Failed to replace current block', error)
+    return false
+  }
 }
 
 function applyMarkdownShortcut(marker: string) {
@@ -1586,10 +1615,7 @@ function applyMarkdownShortcut(marker: string) {
   if (checklistMatch) {
     return {
       type: 'list',
-      data: {
-        style: 'checklist',
-        items: [{ content: '', meta: { checked: checklistMatch[2].toLowerCase() === 'x' }, items: [] }]
-      }
+      data: emptyListData('checklist', checklistMatch[2].toLowerCase() === 'x')
     }
   }
 
@@ -1597,9 +1623,9 @@ function applyMarkdownShortcut(marker: string) {
     case '-':
     case '*':
     case '+':
-      return { type: 'list', data: { style: 'unordered', items: [] } }
+      return { type: 'list', data: emptyListData('unordered') }
     case '1.':
-      return { type: 'list', data: { style: 'ordered', items: [] } }
+      return { type: 'list', data: emptyListData('ordered') }
     case '>':
       return { type: 'quote', data: { text: '', caption: '', alignment: 'left' } }
     case '```':
@@ -1705,7 +1731,7 @@ function onEditorKeydown(event: KeyboardEvent) {
       event.preventDefault()
       const command = SLASH_COMMANDS[slashIndex.value]
       closeSlashMenu()
-      void replaceCurrentBlock(command.type, command.data)
+      replaceCurrentBlock(command.type, command.data)
       return
     }
     if (event.key === 'Escape') {
@@ -1737,14 +1763,15 @@ function onEditorKeydown(event: KeyboardEvent) {
     return
   }
 
-  if (event.key === ' ' && block.name === 'paragraph') {
+  if ((event.key === ' ' || event.code === 'Space') && block.name === 'paragraph') {
     const marker = getCurrentBlockText(block)
     const transform = applyMarkdownShortcut(marker)
     if (transform) {
-      event.preventDefault()
-      closeSlashMenu()
-      void replaceCurrentBlock(transform.type, transform.data)
-      return
+      if (replaceCurrentBlock(transform.type, transform.data)) {
+        event.preventDefault()
+        closeSlashMenu()
+        return
+      }
     }
   }
 
@@ -1753,7 +1780,7 @@ function onEditorKeydown(event: KeyboardEvent) {
     if (marker === '```') {
       event.preventDefault()
       closeSlashMenu()
-      void replaceCurrentBlock('code', { code: '' })
+      replaceCurrentBlock('code', { code: '' })
       return
     }
   }
@@ -1767,7 +1794,7 @@ function onEditorKeydown(event: KeyboardEvent) {
     }
     event.preventDefault()
     closeSlashMenu()
-    void replaceCurrentBlock('paragraph', { text: '' })
+    replaceCurrentBlock('paragraph', { text: '' })
   }
 }
 
