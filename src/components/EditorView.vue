@@ -1274,9 +1274,22 @@ function replaceActiveWikilinkQuery(target: string) {
   return true
 }
 
+function defaultWikilinkLabel(target: string): string {
+  const parsed = parseWikilinkTarget(target)
+  if (parsed.anchor?.heading && !parsed.notePath) return parsed.anchor.heading
+  return target
+}
+
 function tokenForAnchor(anchor: HTMLAnchorElement): string {
   const target = readWikilinkTargetFromAnchor(anchor)
-  if (target) return `[[${target}]]`
+  if (target) {
+    const label = anchor.textContent?.trim() ?? ''
+    const defaultLabel = defaultWikilinkLabel(target)
+    if (label && label !== defaultLabel) {
+      return `[[${target}|${label}]]`
+    }
+    return `[[${target}]]`
+  }
 
   const href = anchor.getAttribute('href')?.trim() ?? ''
   if (!href) return ''
