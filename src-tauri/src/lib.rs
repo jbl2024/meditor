@@ -1,4 +1,5 @@
 mod fs_ops;
+mod workspace_watch;
 
 use std::{
     collections::{HashMap, HashSet},

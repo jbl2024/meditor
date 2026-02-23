@@ -14,14 +14,17 @@ import {
   copyEntry,
   duplicateEntry,
   listChildren,
+  listenWorkspaceFsChanged,
   moveEntry,
   openPathExternal,
+  pathExists,
   renameEntry,
   revealInFileManager,
   trashEntry,
   type ConflictStrategy,
   type EntryKind,
-  type TreeNode
+  type TreeNode,
+  type WorkspaceFsChange
 } from '../../lib/api'
 import UiButton from '../ui/UiButton.vue'
 
@@ -46,6 +49,7 @@ const nodeByPath = ref<Record<string, TreeNode>>({})
 const parentByPath = ref<Record<string, string>>({})
 const expandedPaths = ref<Set<string>>(new Set())
 const loadingDirs = ref<Set<string>>(new Set())
+const pendingReloadDirs = ref<Set<string>>(new Set())
 const focusedPath = ref<string>('')
 const treeRef = ref<HTMLElement | null>(null)
 
@@ -168,7 +172,10 @@ function loadExpandedState() {
 
 async function loadChildren(dirPath: string) {
   if (!props.folderPath) return
-  if (loadingDirs.value.has(dirPath)) return
+  if (loadingDirs.value.has(dirPath)) {
+    pendingReloadDirs.value = new Set(pendingReloadDirs.value).add(dirPath)
+    return
+  }
 
   const nextLoading = new Set(loadingDirs.value)
   nextLoading.add(dirPath)
@@ -186,6 +193,13 @@ async function loadChildren(dirPath: string) {
     const done = new Set(loadingDirs.value)
     done.delete(dirPath)
     loadingDirs.value = done
+
+    if (pendingReloadDirs.value.has(dirPath)) {
+      const nextPending = new Set(pendingReloadDirs.value)
+      nextPending.delete(dirPath)
+      pendingReloadDirs.value = nextPending
+      await loadChildren(dirPath)
+    }
   }
 }
 
@@ -197,9 +211,180 @@ async function refreshLoadedDirs() {
     try {
       await loadChildren(dir)
     } catch {
-      // Skip transient refresh errors.
+      try {
+        const exists = await pathExists(dir)
+        if (!exists) {
+          removePathFromCaches(dir)
+        }
+      } catch {
+        // Skip transient refresh errors.
+      }
     }
   }
+}
+
+async function refreshSpecificDirs(dirs: Iterable<string>) {
+  if (!props.folderPath) return
+
+  const loaded = new Set(Object.keys(childrenByDir.value))
+  for (const dir of dirs) {
+    if (dir !== props.folderPath && !loaded.has(dir)) {
+      continue
+    }
+
+    try {
+      await loadChildren(dir)
+    } catch {
+      try {
+        const exists = await pathExists(dir)
+        if (!exists) {
+          removePathFromCaches(dir)
+        }
+      } catch {
+        // Skip transient refresh errors.
+      }
+    }
+  }
+}
+
+function removePathFromCaches(path: string) {
+  const normalizedPath = normalizePath(path)
+  const descendants = Object.keys(nodeByPath.value).filter(
+    (candidate) => candidate === normalizedPath || candidate.startsWith(`${normalizedPath}/`)
+  )
+
+  for (const candidate of descendants) {
+    delete nodeByPath.value[candidate]
+    delete parentByPath.value[candidate]
+    delete childrenByDir.value[candidate]
+  }
+
+  for (const dirPath of Object.keys(childrenByDir.value)) {
+    const currentChildren = childrenByDir.value[dirPath] ?? []
+    const filteredChildren = currentChildren.filter(
+      (node) => node.path !== normalizedPath && !node.path.startsWith(`${normalizedPath}/`)
+    )
+    if (filteredChildren.length !== currentChildren.length) {
+      childrenByDir.value[dirPath] = filteredChildren
+    }
+  }
+
+  expandedPaths.value = new Set(
+    Array.from(expandedPaths.value).filter(
+      (candidate) => candidate !== normalizedPath && !candidate.startsWith(`${normalizedPath}/`)
+    )
+  )
+
+  const nextSelection = selectionPaths.value.filter(
+    (selected) => selected !== normalizedPath && !selected.startsWith(`${normalizedPath}/`)
+  )
+  if (nextSelection.length !== selectionPaths.value.length) {
+    selectionManager.setSelection(nextSelection)
+    emit('select', nextSelection)
+  }
+
+  if (focusedPath.value === normalizedPath || focusedPath.value.startsWith(`${normalizedPath}/`)) {
+    focusedPath.value = ''
+  }
+}
+
+function workspaceRootMatches(rootPath: string): boolean {
+  const folder = normalizePath(props.folderPath)
+  if (!folder) return false
+  return normalizePath(rootPath) === folder
+}
+
+let pendingWorkspaceChanges: WorkspaceFsChange[] = []
+let workspaceChangeFlushTimer: number | null = null
+let latestWatcherSessionId = 0
+
+function queueWorkspaceChanges(sessionId: number, changes: WorkspaceFsChange[]) {
+  if (!props.folderPath || !changes.length) return
+  if (sessionId < latestWatcherSessionId) return
+  latestWatcherSessionId = sessionId
+
+  pendingWorkspaceChanges.push(...changes)
+  if (workspaceChangeFlushTimer !== null) return
+
+  workspaceChangeFlushTimer = window.setTimeout(() => {
+    workspaceChangeFlushTimer = null
+    void flushWorkspaceChanges()
+  }, 120)
+}
+
+async function flushWorkspaceChanges() {
+  if (!props.folderPath || !pendingWorkspaceChanges.length) return
+
+  const root = normalizePath(props.folderPath)
+  const changes = pendingWorkspaceChanges
+  pendingWorkspaceChanges = []
+
+  const dirsToRefresh = new Set<string>()
+  const loaded = new Set(Object.keys(childrenByDir.value))
+
+  for (const change of changes) {
+    if (change.kind === 'created') {
+      const parentPath = change.parent || (change.path ? getParentPath(change.path) : '')
+      if (!parentPath) continue
+      const parent = normalizePath(parentPath)
+      if (parent === root || loaded.has(parent)) {
+        dirsToRefresh.add(parent)
+      }
+      continue
+    }
+
+    if (change.kind === 'removed') {
+      if (change.path) {
+        removePathFromCaches(change.path)
+      }
+      const parentPath = change.parent || (change.path ? getParentPath(change.path) : '')
+      if (parentPath) {
+        const parent = normalizePath(parentPath)
+        if (parent === root || loaded.has(parent)) {
+          dirsToRefresh.add(parent)
+        }
+      }
+      continue
+    }
+
+    if (change.kind === 'modified') {
+      if (change.path) {
+        const changedPath = normalizePath(change.path)
+        if (changedPath === root || loaded.has(changedPath)) {
+          dirsToRefresh.add(changedPath)
+        }
+      }
+      const parentPath = change.parent || (change.path ? getParentPath(change.path) : '')
+      if (!parentPath) continue
+      const parent = normalizePath(parentPath)
+      if (parent === root || loaded.has(parent)) {
+        dirsToRefresh.add(parent)
+      }
+      continue
+    }
+
+    if (change.kind === 'renamed') {
+      if (change.old_path) {
+        removePathFromCaches(change.old_path)
+      }
+      if (change.old_parent) {
+        const oldParent = normalizePath(change.old_parent)
+        if (oldParent === root || loaded.has(oldParent)) {
+          dirsToRefresh.add(oldParent)
+        }
+      }
+      if (change.new_parent) {
+        const newParent = normalizePath(change.new_parent)
+        if (newParent === root || loaded.has(newParent)) {
+          dirsToRefresh.add(newParent)
+        }
+      }
+    }
+  }
+
+  // Root refresh guarantees consistency when OS backends emit partial metadata.
+  dirsToRefresh.add(root)
+  await refreshSpecificDirs(dirsToRefresh)
 }
 
 async function expandAllDirs() {
@@ -752,6 +937,7 @@ async function initializeExplorer() {
     nodeByPath.value = {}
     parentByPath.value = {}
     expandedPaths.value = new Set()
+    pendingReloadDirs.value = new Set()
     selectionManager.clearSelection()
     focusedPath.value = ''
     return
@@ -791,21 +977,7 @@ async function revealPath(path: string) {
   focusedPath.value = path
 }
 
-let refreshTimer: number | null = null
-
-function startExternalRefresh() {
-  stopExternalRefresh()
-  refreshTimer = window.setInterval(() => {
-    void refreshLoadedDirs()
-  }, 2000)
-}
-
-function stopExternalRefresh() {
-  if (refreshTimer) {
-    window.clearInterval(refreshTimer)
-    refreshTimer = null
-  }
-}
+let unlistenWorkspaceFsChanged: (() => void) | null = null
 
 function closeConflictPrompt() {
   conflictPrompt.value = null
@@ -853,11 +1025,8 @@ watch(
   () => props.folderPath,
   async () => {
     await initializeExplorer()
-    if (props.folderPath) {
-      startExternalRefresh()
-    } else {
-      stopExternalRefresh()
-    }
+    pendingWorkspaceChanges = []
+    latestWatcherSessionId = 0
   },
   { immediate: true }
 )
@@ -873,12 +1042,27 @@ watch(
 
 onMounted(() => {
   window.addEventListener('click', closeContextMenu)
+  void listenWorkspaceFsChanged((payload) => {
+    if (!workspaceRootMatches(payload.root)) return
+    queueWorkspaceChanges(payload.session_id, payload.changes)
+  }).then((unlisten) => {
+    unlistenWorkspaceFsChanged = unlisten
+  })
   focusTree()
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('click', closeContextMenu)
-  stopExternalRefresh()
+  if (workspaceChangeFlushTimer !== null) {
+    window.clearTimeout(workspaceChangeFlushTimer)
+    workspaceChangeFlushTimer = null
+  }
+  pendingWorkspaceChanges = []
+  pendingReloadDirs.value = new Set()
+  if (unlistenWorkspaceFsChanged) {
+    unlistenWorkspaceFsChanged()
+    unlistenWorkspaceFsChanged = null
+  }
 })
 </script>
 

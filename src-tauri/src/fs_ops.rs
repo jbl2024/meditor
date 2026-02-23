@@ -8,7 +8,8 @@ use rfd::FileDialog;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    active_workspace_root, clear_active_workspace, set_active_workspace, AppError, Result,
+    active_workspace_root, clear_active_workspace, set_active_workspace, workspace_watch, AppError,
+    Result,
 };
 
 const TRASH_DIR_NAME: &str = ".meditor-trash";
@@ -338,22 +339,25 @@ fn collect_markdown_files_recursive(root: &Path, dir: &Path, out: &mut Vec<Strin
 }
 
 #[tauri::command]
-pub fn select_working_folder() -> Result<Option<String>> {
+pub fn select_working_folder(app_handle: tauri::AppHandle) -> Result<Option<String>> {
     let Some(path) = FileDialog::new().pick_folder() else {
         return Ok(None);
     };
     let canonical = set_active_workspace(&path.to_string_lossy())?;
+    workspace_watch::start_workspace_watcher(app_handle, canonical.clone())?;
     Ok(Some(canonical.to_string_lossy().to_string()))
 }
 
 #[tauri::command]
 pub fn clear_working_folder() -> Result<()> {
+    workspace_watch::stop_workspace_watcher()?;
     clear_active_workspace()
 }
 
 #[tauri::command]
-pub fn set_working_folder(path: String) -> Result<String> {
+pub fn set_working_folder(path: String, app_handle: tauri::AppHandle) -> Result<String> {
     let canonical = set_active_workspace(&path)?;
+    workspace_watch::start_workspace_watcher(app_handle, canonical.clone())?;
     Ok(canonical.to_string_lossy().to_string())
 }
 

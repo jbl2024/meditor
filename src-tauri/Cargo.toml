@@ -21,3 +21,4 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 directories = "5"
 rfd = "0.15"
 open = "5"
+notify = "6"

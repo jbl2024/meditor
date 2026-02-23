@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
 export type TreeNode = {
   name: string
@@ -10,6 +11,25 @@ export type TreeNode = {
 
 export type ConflictStrategy = 'fail' | 'rename' | 'overwrite'
 export type EntryKind = 'file' | 'folder'
+export type WorkspaceFsChangeKind = 'created' | 'removed' | 'renamed' | 'modified'
+
+export type WorkspaceFsChange = {
+  kind: WorkspaceFsChangeKind
+  path?: string
+  old_path?: string
+  new_path?: string
+  parent?: string
+  old_parent?: string
+  new_parent?: string
+  is_dir?: boolean
+}
+
+export type WorkspaceFsChangedPayload = {
+  session_id: number
+  root: string
+  changes: WorkspaceFsChange[]
+  ts_ms: number
+}
 
 export async function selectWorkingFolder(): Promise<string | null> {
   return await invoke('select_working_folder')
@@ -128,4 +148,12 @@ export async function readPropertyTypeSchema(): Promise<Record<string, string>> 
 
 export async function writePropertyTypeSchema(schema: Record<string, string>): Promise<void> {
   await invoke('write_property_type_schema', { schema })
+}
+
+export async function listenWorkspaceFsChanged(
+  handler: (payload: WorkspaceFsChangedPayload) => void
+): Promise<UnlistenFn> {
+  return await listen<WorkspaceFsChangedPayload>('workspace://fs-changed', (event) => {
+    handler(event.payload)
+  })
 }
