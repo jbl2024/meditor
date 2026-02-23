@@ -122,3 +122,20 @@ describe('indented blocks', () => {
     })
   })
 })
+
+describe('html-like lines', () => {
+  it('treats unknown html markup as paragraph text', () => {
+    const markdown = `
+<h1>hello</h1>
+
+sddsd
+`.trim()
+
+    const parsed = markdownToEditorData(markdown)
+    expect(parsed.blocks).toHaveLength(2)
+    expect(parsed.blocks[0].type).toBe('paragraph')
+    expect(String(parsed.blocks[0].data.text)).toContain('&lt;h1&gt;hello&lt;/h1&gt;')
+    expect(parsed.blocks[1].type).toBe('paragraph')
+    expect(String(parsed.blocks[1].data.text)).toBe('sddsd')
+  })
+})

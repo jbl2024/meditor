@@ -253,7 +253,7 @@ function normalizeMultiline(value: string): string {
 
 function isRawFallbackStart(line: string): boolean {
   const trimmed = line.trimStart()
-  if (trimmed.startsWith('|') || trimmed.startsWith('<')) return true
+  if (trimmed.startsWith('|')) return true
   return false
 }
 
