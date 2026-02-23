@@ -1,10 +1,11 @@
 use std::{
     fs,
     path::{Path, PathBuf},
-    sync::{Mutex, OnceLock},
+    sync::{Arc, Mutex, OnceLock},
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use notify::{
     event::{EventKind, ModifyKind, RenameMode},
     RecommendedWatcher, RecursiveMode, Watcher,
@@ -17,6 +18,8 @@ use crate::{AppError, Result};
 const INTERNAL_DIR_NAME: &str = ".meditor";
 const TRASH_DIR_NAME: &str = ".meditor-trash";
 const DB_FILE_NAME: &str = "meditor.sqlite";
+const GITIGNORE_FILE_NAME: &str = ".gitignore";
+const MEDITOR_IGNORE_FILE_NAME: &str = ".meditorignore";
 const FS_EVENT_NAME: &str = "workspace://fs-changed";
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -108,6 +111,59 @@ fn should_skip_path(path: &Path) -> bool {
     })
 }
 
+fn build_ignore_matcher(root: &Path) -> Option<Gitignore> {
+    let mut builder = GitignoreBuilder::new(root);
+
+    let gitignore = root.join(GITIGNORE_FILE_NAME);
+    if gitignore.is_file() {
+        builder.add(gitignore);
+    }
+
+    let meditor_ignore = root.join(MEDITOR_IGNORE_FILE_NAME);
+    if meditor_ignore.is_file() {
+        builder.add(meditor_ignore);
+    }
+
+    builder.build().ok()
+}
+
+fn is_ignored_by_matcher(
+    root: &Path,
+    matcher: Option<&Gitignore>,
+    path: &Path,
+    is_dir: bool,
+) -> bool {
+    let Some(matcher) = matcher else {
+        return false;
+    };
+
+    let canonical_root = fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+
+    let candidate = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        canonical_root.join(path)
+    };
+
+    let canonical_candidate = fs::canonicalize(&candidate).unwrap_or(candidate);
+    let Ok(relative) = canonical_candidate.strip_prefix(&canonical_root) else {
+        return false;
+    };
+
+    matcher
+        .matched_path_or_any_parents(relative, is_dir)
+        .is_ignore()
+}
+
+fn should_skip_event_path(
+    root: &Path,
+    matcher: Option<&Gitignore>,
+    path: &Path,
+    is_dir: bool,
+) -> bool {
+    should_skip_path(path) || is_ignored_by_matcher(root, matcher, path, is_dir)
+}
+
 fn normalize_event_path(raw: &Path, root_path: &Path, root_normalized: &str) -> Option<String> {
     let candidate = if raw.is_absolute() {
         raw.to_path_buf()
@@ -171,15 +227,17 @@ fn handle_notify_event(
     session_id: u64,
     root_path: &Path,
     root_normalized: &str,
+    matcher: Option<&Gitignore>,
     event: notify::Event,
 ) {
-    let changes = map_notify_event_to_changes(root_path, root_normalized, event);
+    let changes = map_notify_event_to_changes(root_path, root_normalized, matcher, event);
     emit_changes(app_handle, session_id, root_normalized, changes);
 }
 
 fn map_notify_event_to_changes(
     root_path: &Path,
     root_normalized: &str,
+    matcher: Option<&Gitignore>,
     event: notify::Event,
 ) -> Vec<WorkspaceFsChange> {
     let mut changes: Vec<WorkspaceFsChange> = Vec::new();
@@ -187,7 +245,12 @@ fn map_notify_event_to_changes(
     match event.kind {
         EventKind::Create(_) => {
             for path in event.paths {
-                if should_skip_path(&path) {
+                if should_skip_event_path(
+                    root_path,
+                    matcher,
+                    &path,
+                    maybe_is_dir(&path).unwrap_or(false),
+                ) {
                     continue;
                 }
                 let Some(normalized) = normalize_event_path(&path, root_path, root_normalized)
@@ -208,7 +271,12 @@ fn map_notify_event_to_changes(
         }
         EventKind::Remove(_) => {
             for path in event.paths {
-                if should_skip_path(&path) {
+                if should_skip_event_path(
+                    root_path,
+                    matcher,
+                    &path,
+                    maybe_is_dir(&path).unwrap_or(false),
+                ) {
                     continue;
                 }
                 let Some(normalized) = normalize_event_path(&path, root_path, root_normalized)
@@ -231,7 +299,17 @@ fn map_notify_event_to_changes(
             RenameMode::Both if event.paths.len() >= 2 => {
                 let old_raw = &event.paths[0];
                 let new_raw = &event.paths[1];
-                if should_skip_path(old_raw) || should_skip_path(new_raw) {
+                if should_skip_event_path(
+                    root_path,
+                    matcher,
+                    old_raw,
+                    maybe_is_dir(old_raw).unwrap_or(false),
+                ) || should_skip_event_path(
+                    root_path,
+                    matcher,
+                    new_raw,
+                    maybe_is_dir(new_raw).unwrap_or(false),
+                ) {
                     return Vec::new();
                 }
 
@@ -257,7 +335,12 @@ fn map_notify_event_to_changes(
             }
             RenameMode::From => {
                 for path in event.paths {
-                    if should_skip_path(&path) {
+                    if should_skip_event_path(
+                        root_path,
+                        matcher,
+                        &path,
+                        maybe_is_dir(&path).unwrap_or(false),
+                    ) {
                         continue;
                     }
                     let Some(normalized) = normalize_event_path(&path, root_path, root_normalized)
@@ -278,7 +361,12 @@ fn map_notify_event_to_changes(
             }
             RenameMode::To => {
                 for path in event.paths {
-                    if should_skip_path(&path) {
+                    if should_skip_event_path(
+                        root_path,
+                        matcher,
+                        &path,
+                        maybe_is_dir(&path).unwrap_or(false),
+                    ) {
                         continue;
                     }
                     let Some(normalized) = normalize_event_path(&path, root_path, root_normalized)
@@ -301,7 +389,12 @@ fn map_notify_event_to_changes(
         },
         EventKind::Modify(_) => {
             for path in event.paths {
-                if should_skip_path(&path) {
+                if should_skip_event_path(
+                    root_path,
+                    matcher,
+                    &path,
+                    maybe_is_dir(&path).unwrap_or(false),
+                ) {
                     continue;
                 }
                 let Some(normalized) = normalize_event_path(&path, root_path, root_normalized)
@@ -342,6 +435,7 @@ pub(crate) fn start_workspace_watcher(app_handle: AppHandle, root_path: PathBuf)
     let callback_app_handle = app_handle.clone();
     let callback_root = root_canonical.clone();
     let callback_root_normalized = root_normalized.clone();
+    let callback_ignore_matcher = build_ignore_matcher(&root_canonical).map(Arc::new);
 
     let mut watcher = notify::recommended_watcher(move |result: notify::Result<notify::Event>| {
         let Ok(event) = result else {
@@ -353,6 +447,7 @@ pub(crate) fn start_workspace_watcher(app_handle: AppHandle, root_path: PathBuf)
             session_id,
             &callback_root,
             &callback_root_normalized,
+            callback_ignore_matcher.as_deref(),
             event,
         );
     })
@@ -430,6 +525,43 @@ mod tests {
     }
 
     #[test]
+    fn gitignore_rules_filter_watcher_events() {
+        let (root, root_norm) = mk_root();
+        fs::write(root.join(".gitignore"), "ignored.md\n").expect("write gitignore");
+        let matcher = build_ignore_matcher(&root);
+        let ignored = root.join("ignored.md");
+        fs::write(&ignored, "x").expect("write ignored file");
+
+        let changes = map_notify_event_to_changes(
+            &root,
+            &root_norm,
+            matcher.as_ref(),
+            test_event(EventKind::Create(CreateKind::Any), vec![ignored]),
+        );
+
+        assert!(changes.is_empty());
+    }
+
+    #[test]
+    fn meditorignore_rules_filter_watcher_events() {
+        let (root, root_norm) = mk_root();
+        fs::write(root.join(".meditorignore"), "private/**\n").expect("write meditorignore");
+        fs::create_dir_all(root.join("private")).expect("create private dir");
+        let matcher = build_ignore_matcher(&root);
+        let ignored = root.join("private/secret.md");
+        fs::write(&ignored, "x").expect("write ignored file");
+
+        let changes = map_notify_event_to_changes(
+            &root,
+            &root_norm,
+            matcher.as_ref(),
+            test_event(EventKind::Create(CreateKind::Any), vec![ignored]),
+        );
+
+        assert!(changes.is_empty());
+    }
+
+    #[test]
     fn maps_create_event_for_absolute_path() {
         let (root, root_norm) = mk_root();
         let file = root.join("notes/new.md");
@@ -439,6 +571,7 @@ mod tests {
         let changes = map_notify_event_to_changes(
             &root,
             &root_norm,
+            None,
             test_event(EventKind::Create(CreateKind::Any), vec![file.clone()]),
         );
 
@@ -462,6 +595,7 @@ mod tests {
         let changes = map_notify_event_to_changes(
             &root,
             &root_norm,
+            None,
             test_event(EventKind::Create(CreateKind::Any), vec![relative]),
         );
 
@@ -476,6 +610,7 @@ mod tests {
         let changes = map_notify_event_to_changes(
             &root,
             &root_norm,
+            None,
             test_event(EventKind::Create(CreateKind::Any), vec![external]),
         );
         assert!(changes.is_empty());
@@ -488,6 +623,7 @@ mod tests {
         let changes = map_notify_event_to_changes(
             &root,
             &root_norm,
+            None,
             test_event(EventKind::Remove(RemoveKind::Any), vec![removed.clone()]),
         );
 
@@ -506,6 +642,7 @@ mod tests {
         let changes = map_notify_event_to_changes(
             &root,
             &root_norm,
+            None,
             test_event(
                 EventKind::Modify(ModifyKind::Name(RenameMode::Both)),
                 vec![old_path.clone(), new_path.clone()],
@@ -527,6 +664,7 @@ mod tests {
         let changes = map_notify_event_to_changes(
             &root,
             &root_norm,
+            None,
             test_event(
                 EventKind::Modify(ModifyKind::Name(RenameMode::From)),
                 vec![old_path.clone()],
@@ -546,6 +684,7 @@ mod tests {
         let changes = map_notify_event_to_changes(
             &root,
             &root_norm,
+            None,
             test_event(
                 EventKind::Modify(ModifyKind::Name(RenameMode::To)),
                 vec![new_path.clone()],
@@ -565,6 +704,7 @@ mod tests {
         let changes = map_notify_event_to_changes(
             &root,
             &root_norm,
+            None,
             test_event(
                 EventKind::Modify(ModifyKind::Name(RenameMode::Both)),
                 vec![old_path, new_path],
@@ -583,6 +723,7 @@ mod tests {
         let changes = map_notify_event_to_changes(
             &root,
             &root_norm,
+            None,
             test_event(EventKind::Modify(ModifyKind::Any), vec![file.clone()]),
         );
 

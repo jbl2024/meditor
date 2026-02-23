@@ -4,6 +4,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use rfd::FileDialog;
 use serde::{Deserialize, Serialize};
 
@@ -15,6 +16,8 @@ use crate::{
 const TRASH_DIR_NAME: &str = ".meditor-trash";
 const INTERNAL_DIR_NAME: &str = ".meditor";
 const DB_FILE_NAME: &str = "meditor.sqlite";
+const GITIGNORE_FILE_NAME: &str = ".gitignore";
+const MEDITOR_IGNORE_FILE_NAME: &str = ".meditorignore";
 
 #[derive(Debug, Clone, Serialize)]
 pub struct TreeNode {
@@ -57,6 +60,68 @@ fn should_skip_file(path: &Path) -> bool {
 
 fn should_skip_dir_name(name: &str) -> bool {
     name == TRASH_DIR_NAME || name == INTERNAL_DIR_NAME
+}
+
+fn build_ignore_matcher(root: &Path) -> Option<Gitignore> {
+    let mut builder = GitignoreBuilder::new(root);
+
+    let gitignore = root.join(GITIGNORE_FILE_NAME);
+    if gitignore.is_file() {
+        builder.add(gitignore);
+    }
+
+    let meditor_ignore = root.join(MEDITOR_IGNORE_FILE_NAME);
+    if meditor_ignore.is_file() {
+        builder.add(meditor_ignore);
+    }
+
+    builder.build().ok()
+}
+
+fn skip_by_ignore_rules(
+    root: &Path,
+    matcher: Option<&Gitignore>,
+    path: &Path,
+    is_dir: bool,
+) -> bool {
+    let Some(matcher) = matcher else {
+        return false;
+    };
+
+    let canonical_root = fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+
+    let candidate = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        canonical_root.join(path)
+    };
+
+    let canonical_candidate = fs::canonicalize(&candidate).unwrap_or(candidate);
+    let Ok(relative) = canonical_candidate.strip_prefix(&canonical_root) else {
+        return false;
+    };
+
+    matcher
+        .matched_path_or_any_parents(relative, is_dir)
+        .is_ignore()
+}
+
+fn should_skip_dir(root: &Path, matcher: Option<&Gitignore>, path: &Path) -> bool {
+    if let Some(name) = path.file_name().and_then(|value| value.to_str()) {
+        if should_skip_dir_name(name) {
+            return true;
+        }
+    }
+
+    skip_by_ignore_rules(root, matcher, path, true)
+}
+
+fn should_skip_non_dir_file(root: &Path, matcher: Option<&Gitignore>, path: &Path) -> bool {
+    if should_skip_file(path) {
+        return true;
+    }
+
+    skip_by_ignore_rules(root, matcher, path, false)
 }
 
 fn normalize_existing_dir(path: &str) -> Result<PathBuf> {
@@ -251,25 +316,28 @@ fn duplicate_file_name(path: &Path) -> Result<String> {
     Ok(format!("{stem} copy{ext}"))
 }
 
-fn directory_has_visible_children(dir: &Path) -> Result<bool> {
+fn directory_has_visible_children(
+    root: &Path,
+    dir: &Path,
+    matcher: Option<&Gitignore>,
+) -> Result<bool> {
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
-        let name = entry.file_name().to_string_lossy().to_string();
-        if should_skip_dir_name(&name) {
+        if should_skip_dir(root, matcher, &path) {
             continue;
         }
         if path.is_dir() {
             return Ok(true);
         }
-        if path.is_file() && !should_skip_file(&path) {
+        if path.is_file() && !should_skip_non_dir_file(root, matcher, &path) {
             return Ok(true);
         }
     }
     Ok(false)
 }
 
-fn collect_children(dir: &Path) -> Result<Vec<TreeNode>> {
+fn collect_children(root: &Path, dir: &Path, matcher: Option<&Gitignore>) -> Result<Vec<TreeNode>> {
     let mut directories: Vec<TreeNode> = Vec::new();
     let mut files: Vec<TreeNode> = Vec::new();
 
@@ -278,7 +346,7 @@ fn collect_children(dir: &Path) -> Result<Vec<TreeNode>> {
         let path = entry.path();
         let name = entry.file_name().to_string_lossy().to_string();
 
-        if should_skip_dir_name(&name) {
+        if should_skip_dir(root, matcher, &path) {
             continue;
         }
 
@@ -288,12 +356,12 @@ fn collect_children(dir: &Path) -> Result<Vec<TreeNode>> {
                 path: path.to_string_lossy().to_string(),
                 is_dir: true,
                 is_markdown: false,
-                has_children: directory_has_visible_children(&path)?,
+                has_children: directory_has_visible_children(root, &path, matcher)?,
             });
             continue;
         }
 
-        if should_skip_file(&path) {
+        if should_skip_non_dir_file(root, matcher, &path) {
             continue;
         }
 
@@ -312,22 +380,25 @@ fn collect_children(dir: &Path) -> Result<Vec<TreeNode>> {
     Ok(directories)
 }
 
-fn collect_markdown_files_recursive(root: &Path, dir: &Path, out: &mut Vec<String>) -> Result<()> {
+fn collect_markdown_files_recursive(
+    root: &Path,
+    dir: &Path,
+    out: &mut Vec<String>,
+    matcher: Option<&Gitignore>,
+) -> Result<()> {
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
-        let name = entry.file_name().to_string_lossy().to_string();
-
-        if should_skip_dir_name(&name) {
-            continue;
-        }
 
         if path.is_dir() {
-            collect_markdown_files_recursive(root, &path, out)?;
+            if should_skip_dir(root, matcher, &path) {
+                continue;
+            }
+            collect_markdown_files_recursive(root, &path, out, matcher)?;
             continue;
         }
 
-        if should_skip_file(&path) || !is_markdown_file(&path) {
+        if should_skip_non_dir_file(root, matcher, &path) || !is_markdown_file(&path) {
             continue;
         }
 
@@ -366,14 +437,16 @@ pub fn list_children(dir_path: String) -> Result<Vec<TreeNode>> {
     let root = active_workspace_root()?;
     let dir = normalize_existing_dir(&dir_path)?;
     ensure_within_root(&root, &dir)?;
-    collect_children(&dir)
+    let matcher = build_ignore_matcher(&root);
+    collect_children(&root, &dir, matcher.as_ref())
 }
 
 #[tauri::command]
 pub fn list_markdown_files() -> Result<Vec<String>> {
     let root_canonical = active_workspace_root()?;
     let mut out = Vec::new();
-    collect_markdown_files_recursive(&root_canonical, &root_canonical, &mut out)?;
+    let matcher = build_ignore_matcher(&root_canonical);
+    collect_markdown_files_recursive(&root_canonical, &root_canonical, &mut out, matcher.as_ref())?;
     out.sort_by_key(|path| path.to_ascii_lowercase());
     Ok(out)
 }
@@ -763,6 +836,31 @@ mod tests {
     }
 
     #[test]
+    fn list_tree_respects_gitignore_and_meditorignore() {
+        let dir = make_temp_dir();
+        activate_workspace(&dir);
+        let root = dir.as_path();
+        fs::write(root.join(".gitignore"), "ignored.md\n").expect("write gitignore");
+        fs::write(root.join(".meditorignore"), "secret/\n").expect("write meditorignore");
+        fs::create_dir_all(root.join("secret")).expect("create secret dir");
+        fs::write(root.join("visible.md"), "x").expect("write visible");
+        fs::write(root.join("ignored.md"), "x").expect("write ignored");
+        fs::write(root.join("secret").join("hidden.md"), "x").expect("write hidden");
+
+        let tree = list_children(root.to_string_lossy().to_string()).expect("list tree");
+        let names: Vec<String> = tree.into_iter().map(|node| node.name).collect();
+        assert_eq!(
+            names,
+            vec![
+                ".gitignore".to_string(),
+                ".meditorignore".to_string(),
+                "visible.md".to_string()
+            ]
+        );
+        fs::remove_dir_all(dir).expect("cleanup");
+    }
+
+    #[test]
     fn list_markdown_files_is_recursive() {
         let dir = make_temp_dir();
         activate_workspace(&dir);
@@ -780,6 +878,26 @@ mod tests {
             files,
             vec!["a.md".to_string(), "docs/b.markdown".to_string()]
         );
+        fs::remove_dir_all(dir).expect("cleanup");
+    }
+
+    #[test]
+    fn list_markdown_files_respects_ignore_rules() {
+        let dir = make_temp_dir();
+        activate_workspace(&dir);
+        let root = dir.as_path();
+        let nested = root.join("docs");
+        fs::create_dir_all(&nested).expect("mkdir");
+        fs::create_dir_all(root.join("private")).expect("mkdir private");
+        fs::write(root.join(".gitignore"), "docs/skip.md\n").expect("write gitignore");
+        fs::write(root.join(".meditorignore"), "private/**\n").expect("write meditorignore");
+        fs::write(root.join("a.md"), "x").expect("write a");
+        fs::write(nested.join("ok.md"), "x").expect("write ok");
+        fs::write(nested.join("skip.md"), "x").expect("write skip");
+        fs::write(root.join("private").join("secret.md"), "x").expect("write secret");
+
+        let files = list_markdown_files().expect("list markdown");
+        assert_eq!(files, vec!["a.md".to_string(), "docs/ok.md".to_string()]);
         fs::remove_dir_all(dir).expect("cleanup");
     }
 
