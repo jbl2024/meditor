@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.2.11] - 2026-02-23
+
+### Added
+- feat(editor): add editor-only zoom shortcuts with persisted typography scaling (5d808bd)
+
 ## [0.2.10] - 2026-02-23
 
 ### Added
