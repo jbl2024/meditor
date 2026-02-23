@@ -18,6 +18,28 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.2.10] - 2026-02-23
+
+### Added
+- feat(editor): augment EditorJS code tool with autosize, copy feedback, and improved styling (d372862)
+
+### Changed
+- chore(fonts): confirm JetBrains Mono is loaded from Google Fonts (202235f)
+- chore(editor): remove wikilink debug logging instrumentation (440c2d9)
+
+### Fixed
+- fix(markdown): render html-like unknown markup as escaped paragraph text (808481f)
+- fix(editor): restore checklist checkbox vertical offset formula to plugin baseline (99a65c2)
+- fix(markdown): parse indented blocks as code instead of unsupported raw (f01c709)
+- fix(editor): make wikilink completion popup positioning scroll-aware (cb74d52)
+- fix(editor): clamp wikilink popup position to editor viewport (7ad57d6)
+- fix(editor): prevent wikilink suggestion popover text overflow (18ef08f)
+- fix(markdown): avoid italic parsing for intraword underscores in wikilinks (2d5e0a7)
+- fix(editor): ensure stable non-empty caret node after wikilink collapse in lists (89c2b27)
+- fix(editor): preserve wikilink alias when re-editing existing links (b6747b3)
+- fix(markdown): preserve nested list hierarchy when loading and round-tripping (eb192b2)
+- fix(markdown): parse tables with empty header rows correctly (d9dd9d2)
+
 ## [0.2.9] - 2026-02-23
 
 ### Fixed
