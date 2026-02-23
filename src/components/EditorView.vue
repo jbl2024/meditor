@@ -134,12 +134,14 @@ const holder = ref<HTMLDivElement | null>(null)
 const wikilinkMenuRef = ref<HTMLDivElement | null>(null)
 const checklistDebugOn = ref(false)
 let editor: EditorJS | null = null
+let codeUiObserver: MutationObserver | null = null
 let autosaveTimer: ReturnType<typeof setTimeout> | null = null
 let outlineTimer: ReturnType<typeof setTimeout> | null = null
 let titleLockTimer: ReturnType<typeof setTimeout> | null = null
 let suppressOnChange = false
 let suppressCollapseOnNextArrowKeyup = false
 let expandedLinkContext: ArrowLinkContext | null = null
+const codeCopyResetTimers = new WeakMap<HTMLButtonElement, number>()
 
 const loadedTextByPath = ref<Record<string, string>>({})
 const dirtyByPath = ref<Record<string, boolean>>({})
@@ -1021,6 +1023,84 @@ function focusEditor() {
   if (!holder.value) return
   const editable = holder.value.querySelector('[contenteditable="true"]') as HTMLElement | null
   editable?.focus()
+}
+
+function autosizeCodeTextarea(textarea: HTMLTextAreaElement) {
+  textarea.style.height = 'auto'
+  const next = Math.max(86, textarea.scrollHeight)
+  textarea.style.height = `${next}px`
+}
+
+function setCodeCopyState(button: HTMLButtonElement, copied: boolean) {
+  if (copied) {
+    button.classList.add('is-copied')
+    button.setAttribute('aria-label', 'Copied')
+  } else {
+    button.classList.remove('is-copied')
+    button.setAttribute('aria-label', 'Copy code')
+  }
+}
+
+async function copyCodeFromBlock(block: HTMLElement, button: HTMLButtonElement) {
+  const textarea = block.querySelector('.ce-code__textarea') as HTMLTextAreaElement | null
+  if (!textarea) return
+  const text = textarea.value ?? ''
+
+  try {
+    await navigator.clipboard.writeText(text)
+    setCodeCopyState(button, true)
+    const prev = codeCopyResetTimers.get(button)
+    if (typeof prev === 'number') window.clearTimeout(prev)
+    const timer = window.setTimeout(() => {
+      setCodeCopyState(button, false)
+      codeCopyResetTimers.delete(button)
+    }, 2000)
+    codeCopyResetTimers.set(button, timer)
+  } catch {
+    setCodeCopyState(button, false)
+  }
+}
+
+function ensureCodeBlockUi() {
+  if (!holder.value) return
+
+  const textareas = Array.from(holder.value.querySelectorAll('.ce-code__textarea')) as HTMLTextAreaElement[]
+  textareas.forEach((textarea) => {
+    if (textarea.dataset.meditorCodeInit !== '1') {
+      textarea.dataset.meditorCodeInit = '1'
+      textarea.wrap = 'off'
+      textarea.spellcheck = false
+      textarea.addEventListener('input', () => autosizeCodeTextarea(textarea))
+    }
+    autosizeCodeTextarea(textarea)
+  })
+
+  const codeBlocks = Array.from(holder.value.querySelectorAll('.ce-code')) as HTMLElement[]
+  codeBlocks.forEach((block) => {
+    if (block.querySelector('.meditor-code-copy-btn')) return
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'meditor-code-copy-btn'
+    button.setAttribute('aria-label', 'Copy code')
+    button.innerHTML = `
+      <span class="icon-copy" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" focusable="false" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125H4.5a1.125 1.125 0 0 1-1.125-1.125V8.25c0-.621.504-1.125 1.125-1.125h3.375"/>
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 3.375c0-.621.504-1.125 1.125-1.125h9.125c.621 0 1.125.504 1.125 1.125v12.25c0 .621-.504 1.125-1.125 1.125h-9.125a1.125 1.125 0 0 1-1.125-1.125V3.375Z"/>
+        </svg>
+      </span>
+      <span class="icon-check" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" focusable="false" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5"/>
+        </svg>
+      </span>
+      <span class="copy-toast" aria-hidden="true">Copied!</span>
+    `
+    button.addEventListener('click', () => {
+      void copyCodeFromBlock(block, button)
+    })
+    block.appendChild(button)
+  })
 }
 
 async function focusFirstContentBlock() {
@@ -2232,6 +2312,7 @@ async function ensureEditor() {
       scheduleAutosave()
       scheduleVirtualTitleLock()
       emitOutlineSoon()
+      ensureCodeBlockUi()
     }
   })
 
@@ -2241,6 +2322,9 @@ async function ensureEditor() {
   holder.value.addEventListener('click', onEditorClick, true)
   holder.value.addEventListener('contextmenu', onEditorContextMenu, true)
   holder.value.addEventListener('paste', onEditorPaste, true)
+  codeUiObserver = new MutationObserver(() => ensureCodeBlockUi())
+  codeUiObserver.observe(holder.value, { childList: true, subtree: true })
+  ensureCodeBlockUi()
 }
 
 async function destroyEditor() {
@@ -2255,6 +2339,10 @@ async function destroyEditor() {
     holder.value.removeEventListener('click', onEditorClick, true)
     holder.value.removeEventListener('contextmenu', onEditorContextMenu, true)
     holder.value.removeEventListener('paste', onEditorPaste, true)
+  }
+  if (codeUiObserver) {
+    codeUiObserver.disconnect()
+    codeUiObserver = null
   }
 
   if (!editor) return
@@ -2291,6 +2379,7 @@ async function loadCurrentFile(path: string) {
       blocks: normalized.blocks
     })
     setDirty(path, false)
+    ensureCodeBlockUi()
 
     await nextTick()
     const remembered = scrollTopByPath.value[path]

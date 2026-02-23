@@ -325,15 +325,107 @@ html.dark .ce-popover-item--focused,
     padding: 0.05rem 0.3rem;
   }
 
-  .editor-holder .ce-code__textarea {
-    min-height: 180px;
+  .editor-holder .ce-code {
+    position: relative;
     border-radius: 0.85rem;
-    border: 1px solid #cbd5e1;
-    background: #f8fafc;
+    border: 1px solid #d0d7de;
+    background: #f6f8fa;
+    overflow: hidden;
+  }
+
+  .editor-holder .ce-code__textarea {
+    min-height: 86px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: #1e293b;
     font-family: var(--font-mono);
-    font-size: 0.86rem;
-    line-height: 1.6;
-    padding: 0.95rem;
+    font-size: 1rem;
+    line-height: 1.56;
+    padding: 2.35rem 1rem 0.95rem;
+    white-space: pre;
+    overflow-x: auto;
+    overflow-y: hidden;
+    resize: vertical;
+  }
+
+  .editor-holder .ce-code__textarea::placeholder {
+    color: #6b7280;
+    opacity: 1;
+  }
+
+  .editor-holder .ce-code__textarea::-webkit-scrollbar {
+    height: 8px;
+    width: 8px;
+  }
+
+  .editor-holder .ce-code__textarea::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 999px;
+  }
+
+  .editor-holder .ce-code__textarea::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .editor-holder .meditor-code-copy-btn {
+    position: absolute;
+    top: 0.45rem;
+    right: 0.5rem;
+    height: 1.65rem;
+    width: 1.65rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 0.45rem;
+    background: #fff;
+    color: #334155;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  .editor-holder .meditor-code-copy-btn svg {
+    width: 0.92rem;
+    height: 0.92rem;
+    fill: none;
+    stroke: currentColor;
+  }
+
+  .editor-holder .meditor-code-copy-btn .icon-check {
+    display: none;
+  }
+
+  .editor-holder .meditor-code-copy-btn .copy-toast {
+    position: absolute;
+    right: 2.1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: #1e293b;
+    color: #f8fafc;
+    border-radius: 0.35rem;
+    font-size: 0.72rem;
+    padding: 0.15rem 0.4rem;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .editor-holder .meditor-code-copy-btn.is-copied {
+    border-color: #86efac;
+    color: #166534;
+    background: #f0fdf4;
+  }
+
+  .editor-holder .meditor-code-copy-btn.is-copied .icon-copy {
+    display: none;
+  }
+
+  .editor-holder .meditor-code-copy-btn.is-copied .icon-check {
+    display: inline;
+  }
+
+  .editor-holder .meditor-code-copy-btn.is-copied .copy-toast {
+    opacity: 1;
   }
 
   .editor-holder .ce-delimiter {
@@ -372,10 +464,38 @@ html.dark .ce-popover-item--focused,
     border-left-color: #475569;
   }
 
-  html.dark .editor-holder .ce-code__textarea {
+  html.dark .editor-holder .ce-code {
     border-color: #334155;
     background: #0f172a;
+  }
+
+  html.dark .editor-holder .ce-code__textarea {
     color: #e2e8f0;
+  }
+
+  html.dark .editor-holder .ce-code__textarea::placeholder {
+    color: #94a3b8;
+  }
+
+  html.dark .editor-holder .ce-code__textarea::-webkit-scrollbar-thumb {
+    background: #475569;
+  }
+
+  html.dark .editor-holder .meditor-code-copy-btn {
+    border-color: #475569;
+    background: #1e293b;
+    color: #cbd5e1;
+  }
+
+  html.dark .editor-holder .meditor-code-copy-btn.is-copied {
+    border-color: #16a34a;
+    background: #14532d;
+    color: #dcfce7;
+  }
+
+  html.dark .editor-holder .meditor-code-copy-btn .copy-toast {
+    background: #0b1220;
+    color: #dbeafe;
   }
 
   html.dark .editor-holder .ce-inline-code {
