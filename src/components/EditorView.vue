@@ -186,46 +186,6 @@ const wikilinkResults = computed(() => {
   return base
 })
 
-function selectionDebugSnapshot(): { nodeType: string; offset: number; textPreview: string } {
-  const selection = window.getSelection()
-  if (!selection || !selection.rangeCount) {
-    return { nodeType: 'none', offset: -1, textPreview: '' }
-  }
-
-  const node = selection.focusNode
-  const offset = selection.focusOffset
-  if (!node) {
-    return { nodeType: 'null', offset, textPreview: '' }
-  }
-
-  if (node.nodeType === Node.TEXT_NODE) {
-    const text = (node.textContent ?? '').replace(/\s+/g, ' ')
-    const preview = text.length > 80 ? `${text.slice(0, 77)}...` : text
-    return { nodeType: 'text', offset, textPreview: preview }
-  }
-
-  if (node.nodeType === Node.ELEMENT_NODE) {
-    const text = ((node as HTMLElement).innerText ?? '').replace(/\s+/g, ' ')
-    const preview = text.length > 80 ? `${text.slice(0, 77)}...` : text
-    return { nodeType: 'element', offset, textPreview: preview }
-  }
-
-  return { nodeType: String(node.nodeType), offset, textPreview: '' }
-}
-
-function logWikilinkDebug(event: string, details: Record<string, unknown> = {}) {
-  if (!import.meta.env.DEV) return
-  const caret = selectionDebugSnapshot()
-  console.debug('[wikilink]', event, {
-    ...details,
-    menuOpen: wikilinkOpen.value,
-    query: wikilinkQuery.value,
-    selectedIndex: wikilinkIndex.value,
-    resultsCount: wikilinkResults.value.length,
-    caret
-  })
-}
-
 const currentPath = computed(() => props.path?.trim() || '')
 const propertyEditorMode = ref<'structured' | 'raw'>('structured')
 const frontmatterByPath = ref<Record<string, FrontmatterEnvelope>>({})
@@ -980,7 +940,6 @@ function closeSlashMenu() {
 }
 
 function closeWikilinkMenu() {
-  logWikilinkDebug('menu.close')
   wikilinkOpen.value = false
   wikilinkIndex.value = 0
   wikilinkQuery.value = ''
@@ -991,25 +950,17 @@ function closeWikilinkMenu() {
 
 async function refreshWikilinkTargets() {
   const token = ++wikilinkLoadToken
-  logWikilinkDebug('targets.refresh.start', { token })
   try {
     const paths = await props.loadLinkTargets()
     if (token !== wikilinkLoadToken) {
-      logWikilinkDebug('targets.refresh.stale', { token, activeToken: wikilinkLoadToken })
       return
     }
     wikilinkTargets.value = paths
-    logWikilinkDebug('targets.refresh.success', { token, count: paths.length })
   } catch (error) {
     if (token !== wikilinkLoadToken) {
-      logWikilinkDebug('targets.refresh.error.stale', { token, activeToken: wikilinkLoadToken })
       return
     }
     wikilinkTargets.value = []
-    logWikilinkDebug('targets.refresh.error', {
-      token,
-      error: error instanceof Error ? error.message : String(error)
-    })
   }
 }
 
@@ -1116,12 +1067,6 @@ function openWikilinkMenuAtCaret(query: string, keepSelection = false) {
     wikilinkIndex.value = 0
   }
   wikilinkOpen.value = true
-  logWikilinkDebug('menu.open', {
-    query,
-    keepSelection,
-    left: wikilinkLeft.value,
-    top: wikilinkTop.value
-  })
   void nextTick().then(() => repositionWikilinkMenu())
   void refreshWikilinkHeadingResults(query)
 }
@@ -1187,36 +1132,27 @@ function headingResultsFor(baseTarget: string, headingQuery: string, headings: s
 
 async function refreshWikilinkHeadingResults(rawQuery: string) {
   if (!wikilinkOpen.value) return
-  logWikilinkDebug('headings.refresh.start', { rawQuery })
   const parsed = parseWikilinkQuery(rawQuery)
   if (parsed.headingPart === null) {
     wikilinkHeadingResults.value = []
-    logWikilinkDebug('headings.refresh.skip.no-heading', { rawQuery })
     return
   }
 
   if (!parsed.notePart) {
     const headings = parseOutlineFromDom().map((item) => item.text)
     wikilinkHeadingResults.value = headingResultsFor('', parsed.headingPart, headings)
-    logWikilinkDebug('headings.refresh.from-outline', { count: headings.length })
     return
   }
 
   const cacheKey = parsed.notePart.toLowerCase()
   if (wikilinkHeadingCache.value[cacheKey]) {
     wikilinkHeadingResults.value = headingResultsFor(parsed.notePart, parsed.headingPart, wikilinkHeadingCache.value[cacheKey])
-    logWikilinkDebug('headings.refresh.cache-hit', {
-      notePart: parsed.notePart,
-      count: wikilinkHeadingCache.value[cacheKey].length
-    })
     return
   }
 
   const token = ++wikilinkHeadingLoadToken
-  logWikilinkDebug('headings.refresh.fetch', { token, notePart: parsed.notePart })
   const headings = await props.loadLinkHeadings(parsed.notePart)
   if (token !== wikilinkHeadingLoadToken) {
-    logWikilinkDebug('headings.refresh.stale', { token, activeToken: wikilinkHeadingLoadToken })
     return
   }
   wikilinkHeadingCache.value = {
@@ -1224,7 +1160,6 @@ async function refreshWikilinkHeadingResults(rawQuery: string) {
     [cacheKey]: headings
   }
   wikilinkHeadingResults.value = headingResultsFor(parsed.notePart, parsed.headingPart, headings)
-  logWikilinkDebug('headings.refresh.success', { token, notePart: parsed.notePart, count: headings.length })
 }
 
 function readWikilinkQueryAtCaret(): string | null {
@@ -1246,7 +1181,6 @@ function readWikilinkQueryAtCaret(): string | null {
   const query = text.slice(start + 2, queryEnd)
   if (query.includes('\n')) return null
   if (query.includes('[') || query.includes(']')) return null
-  logWikilinkDebug('query.detected', { query })
   return query
 }
 
@@ -1365,7 +1299,6 @@ function replaceActiveWikilinkQuery(target: string) {
   nextRange.collapse(true)
   selection.removeAllRanges()
   selection.addRange(nextRange)
-  logWikilinkDebug('query.replace', { target, rawToken, start, end })
   return true
 }
 
@@ -1458,7 +1391,6 @@ function expandAdjacentLinkForEditing(direction: 'left' | 'right'): boolean {
   selection.addRange(range)
   expandedLinkContext = { textNode, range: { start: 0, end: token.length } }
   suppressCollapseOnNextArrowKeyup = true
-  logWikilinkDebug('link.expand-for-edit', { direction, token })
   return true
 }
 
@@ -1468,7 +1400,6 @@ function placeCaretAdjacentToAnchor(anchor: HTMLAnchorElement, place: 'before' |
 
   let textNode: Text | null = null
   let offset = 0
-  let insertedSpacer = false
 
   if (place === 'after') {
     const next = anchor.nextSibling
@@ -1476,7 +1407,6 @@ function placeCaretAdjacentToAnchor(anchor: HTMLAnchorElement, place: 'before' |
       textNode = next as Text
       if ((textNode.textContent ?? '').length === 0) {
         textNode.textContent = ' '
-        insertedSpacer = true
         offset = 1
       } else {
         offset = 0
@@ -1484,7 +1414,6 @@ function placeCaretAdjacentToAnchor(anchor: HTMLAnchorElement, place: 'before' |
     } else {
       textNode = document.createTextNode(' ')
       parent.insertBefore(textNode, next)
-      insertedSpacer = true
       offset = 1
     }
   } else {
@@ -1493,13 +1422,11 @@ function placeCaretAdjacentToAnchor(anchor: HTMLAnchorElement, place: 'before' |
       textNode = prev as Text
       if ((textNode.textContent ?? '').length === 0) {
         textNode.textContent = ' '
-        insertedSpacer = true
       }
       offset = (textNode.textContent ?? '').length
     } else {
       textNode = document.createTextNode(' ')
       parent.insertBefore(textNode, anchor)
-      insertedSpacer = true
       offset = 1
     }
   }
@@ -1509,29 +1436,24 @@ function placeCaretAdjacentToAnchor(anchor: HTMLAnchorElement, place: 'before' |
   range.collapse(true)
   selection.removeAllRanges()
   selection.addRange(range)
-  logWikilinkDebug('caret.place-adjacent-anchor', { place, insertedSpacer, offset, textLength: textNode.data.length })
   return true
 }
 
 function replaceTokenRangeWithAnchor(textNode: Text, start: number, end: number, place: 'before' | 'after'): boolean {
   if (!textNode.parentNode) {
-    logWikilinkDebug('token.collapse.skip.detached-node')
     return false
   }
   if (start < 0 || end <= start || end > textNode.data.length) {
-    logWikilinkDebug('token.collapse.skip.invalid-range', { start, end, length: textNode.data.length })
     return false
   }
   const token = textNode.data.slice(start, end)
   const parsed = parseEditableLinkToken(token)
   if (!parsed) {
-    logWikilinkDebug('token.collapse.skip.unparsed-token', { token })
     return false
   }
 
   const selection = window.getSelection()
   if (!selection) {
-    logWikilinkDebug('token.collapse.skip.no-selection', { token })
     return false
   }
 
@@ -1544,13 +1466,11 @@ function replaceTokenRangeWithAnchor(textNode: Text, start: number, end: number,
   range.insertNode(anchor)
 
   if (!placeCaretAdjacentToAnchor(anchor, place, selection)) {
-    logWikilinkDebug('token.collapse.skip.unable-to-place-caret', { place, token })
     return false
   }
   if (expandedLinkContext) {
     expandedLinkContext = null
   }
-  logWikilinkDebug('token.collapse.success', { token, place, kind: parsed.kind })
   return true
 }
 
@@ -1592,16 +1512,10 @@ function collapseExpandedLinkIfCaretOutside(): boolean {
   const context = expandedLinkContext
   if (!context.textNode.isConnected) {
     expandedLinkContext = null
-    logWikilinkDebug('expanded.collapse.skip.stale-context')
     return false
   }
   if (context.range.start < 0 || context.range.end < context.range.start || context.range.end > context.textNode.data.length) {
     expandedLinkContext = null
-    logWikilinkDebug('expanded.collapse.skip.invalid-context-range', {
-      start: context.range.start,
-      end: context.range.end,
-      textLength: context.textNode.data.length
-    })
     return false
   }
 
@@ -1616,9 +1530,6 @@ function collapseExpandedLinkIfCaretOutside(): boolean {
     relation = caretRelationToTokenRange(selection, context)
   } catch (error) {
     expandedLinkContext = null
-    logWikilinkDebug('expanded.collapse.error.caret-relation', {
-      error: error instanceof Error ? error.message : String(error)
-    })
     return false
   }
   if (relation === 'inside') return false
@@ -1628,7 +1539,6 @@ function collapseExpandedLinkIfCaretOutside(): boolean {
   if (!collapsed) {
     expandedLinkContext = null
   }
-  logWikilinkDebug('expanded.collapse-on-caret-leave', { relation, collapsed })
   return collapsed
 }
 
@@ -1678,7 +1588,6 @@ function collapseClosedLinkNearCaret(): boolean {
       const close = text.indexOf(']]', start + 2)
       if (close >= 0 && close + 2 === offset) {
         const collapsed = replaceTokenRangeWithAnchor(textNode, start, offset, 'after')
-        if (collapsed) logWikilinkDebug('token.collapse.detect.trailing-wikilink', { start, end: offset })
         return collapsed
       }
     }
@@ -1688,7 +1597,6 @@ function collapseClosedLinkNearCaret(): boolean {
     const close = text.indexOf(']]', offset + 2)
     if (close >= 0) {
       const collapsed = replaceTokenRangeWithAnchor(textNode, offset, close + 2, 'before')
-      if (collapsed) logWikilinkDebug('token.collapse.detect.leading-wikilink', { start: offset, end: close + 2 })
       return collapsed
     }
   }
@@ -1696,14 +1604,12 @@ function collapseClosedLinkNearCaret(): boolean {
   const endingMarkdown = findMarkdownLinkRangeEndingAt(text, offset)
   if (endingMarkdown) {
     const collapsed = replaceTokenRangeWithAnchor(textNode, endingMarkdown.start, endingMarkdown.end, 'after')
-    if (collapsed) logWikilinkDebug('token.collapse.detect.trailing-link', endingMarkdown)
     return collapsed
   }
 
   const startingMarkdown = findMarkdownLinkRangeStartingAt(text, offset)
   if (startingMarkdown) {
     const collapsed = replaceTokenRangeWithAnchor(textNode, startingMarkdown.start, startingMarkdown.end, 'before')
-    if (collapsed) logWikilinkDebug('token.collapse.detect.leading-link', startingMarkdown)
     return collapsed
   }
 
@@ -1711,11 +1617,9 @@ function collapseClosedLinkNearCaret(): boolean {
 }
 
 async function applyWikilinkSelection(target: string) {
-  logWikilinkDebug('selection.apply.start', { target })
   const replaced = replaceActiveWikilinkQuery(target)
   closeWikilinkMenu()
   if (!replaced) {
-    logWikilinkDebug('selection.apply.abort.replace-failed', { target })
     return
   }
 
@@ -1726,8 +1630,7 @@ async function applyWikilinkSelection(target: string) {
     scheduleAutosave()
   }
   await nextTick()
-  const collapsed = collapseClosedLinkNearCaret()
-  logWikilinkDebug('selection.apply.done', { target, collapsed })
+  collapseClosedLinkNearCaret()
 }
 
 function extractTokenAtCaret(): string {
@@ -1781,7 +1684,6 @@ async function openLinkTargetWithAutosave(target: string) {
 async function syncWikilinkMenuFromCaret() {
   const query = readWikilinkQueryAtCaret()
   if (query === null) {
-    if (wikilinkOpen.value) logWikilinkDebug('menu.sync.close.no-query')
     closeWikilinkMenu()
     return
   }
@@ -1855,7 +1757,6 @@ function onEditorKeydown(event: KeyboardEvent) {
   }
 
   if (wikilinkOpen.value) {
-    logWikilinkDebug('keydown.menu', { key: event.key })
     if (event.key === 'ArrowDown') {
       event.preventDefault()
       event.stopPropagation()
@@ -1889,7 +1790,6 @@ function onEditorKeydown(event: KeyboardEvent) {
     if (event.key === 'Enter' || event.key === 'Tab') {
       const selected = wikilinkResults.value[wikilinkIndex.value]
       if (!selected) return
-      logWikilinkDebug('keydown.menu.confirm', { key: event.key, selected })
       event.preventDefault()
       event.stopPropagation()
       if (typeof event.stopImmediatePropagation === 'function') {
@@ -2022,7 +1922,6 @@ function onEditorKeyup(event: KeyboardEvent) {
   }
 
   if (['ArrowUp', 'ArrowDown', 'Enter', 'Tab', 'Escape'].includes(event.key)) {
-    if (wikilinkOpen.value) logWikilinkDebug('keyup.menu-ignored', { key: event.key })
     return
   }
 
