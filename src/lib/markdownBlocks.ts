@@ -255,14 +255,15 @@ function isRawFallbackStart(line: string): boolean {
   return false
 }
 
-function parseTableCells(line: string): string[] | null {
+function parseTableCells(line: string, options?: { allowEmptyRow?: boolean }): string[] | null {
   const trimmed = line.trim()
   if (!trimmed || !trimmed.includes('|')) return null
   if (!trimmed.startsWith('|') && !trimmed.endsWith('|')) return null
 
   const inner = trimmed.replace(/^\|/, '').replace(/\|$/, '')
   const cells = inner.split('|').map((cell) => cell.trim().replace(/\\\|/g, '|'))
-  if (!cells.length || cells.every((cell) => cell.length === 0)) return null
+  if (!cells.length) return null
+  if (!options?.allowEmptyRow && cells.every((cell) => cell.length === 0)) return null
   return cells
 }
 
@@ -274,7 +275,7 @@ function isTableSeparatorLine(line: string, expectedColumns: number): boolean {
 
 function isMarkdownTableStart(lines: string[], index: number): boolean {
   if (index + 1 >= lines.length) return false
-  const header = parseTableCells(lines[index])
+  const header = parseTableCells(lines[index], { allowEmptyRow: true })
   if (!header || header.length < 2) return false
   return isTableSeparatorLine(lines[index + 1], header.length)
 }
@@ -388,12 +389,12 @@ export function markdownToEditorData(markdown: string): EditorDocument {
     }
 
     if (isMarkdownTableStart(lines, i)) {
-      const header = parseTableCells(lines[i]) ?? []
+      const header = parseTableCells(lines[i], { allowEmptyRow: true }) ?? []
       const rows: string[][] = [header]
       i += 2
 
       while (i < lines.length) {
-        const row = parseTableCells(lines[i])
+        const row = parseTableCells(lines[i], { allowEmptyRow: true })
         if (!row) break
         rows.push(row)
         i += 1

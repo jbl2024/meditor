@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { sanitizeExternalHref } from './markdownBlocks'
+import { markdownToEditorData, sanitizeExternalHref } from './markdownBlocks'
 
 describe('sanitizeExternalHref', () => {
   it('allows http/https/mailto', () => {
@@ -15,5 +15,30 @@ describe('sanitizeExternalHref', () => {
     expect(sanitizeExternalHref('file:///etc/passwd')).toBeNull()
     expect(sanitizeExternalHref('/relative/path')).toBeNull()
     expect(sanitizeExternalHref('')).toBeNull()
+  })
+})
+
+describe('markdownToEditorData tables', () => {
+  it('parses tables that have an empty header row', () => {
+    const markdown = `
+|  |  |  |
+| --- | --- | --- |
+| a | b | e |
+| c | d | f |
+`.trim()
+
+    const parsed = markdownToEditorData(markdown)
+    expect(parsed.blocks).toHaveLength(1)
+    expect(parsed.blocks[0]).toEqual({
+      type: 'table',
+      data: {
+        withHeadings: true,
+        content: [
+          ['', '', ''],
+          ['a', 'b', 'e'],
+          ['c', 'd', 'f']
+        ]
+      }
+    })
   })
 })
