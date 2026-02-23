@@ -2661,19 +2661,20 @@ defineExpose({
 
       <div
         v-if="wikilinkOpen"
-        class="absolute z-20 w-80 rounded-md border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-800 dark:bg-slate-900"
+        class="absolute z-20 w-80 max-w-[calc(100%-1rem)] rounded-md border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-800 dark:bg-slate-900"
         :style="{ left: `${wikilinkLeft}px`, top: `${wikilinkTop}px` }"
       >
         <button
           v-for="(item, idx) in wikilinkResults"
           :key="item.id"
           type="button"
-          class="block w-full rounded px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+          class="block w-full min-w-0 overflow-hidden rounded px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
           :class="idx === wikilinkIndex ? 'bg-slate-100 dark:bg-slate-800' : ''"
+          :title="item.label"
           @mousedown.prevent="wikilinkIndex = idx"
           @click.prevent="applyWikilinkSelection(item.target)"
         >
-          {{ item.label }}
+          <span class="block min-w-0 truncate">{{ item.label }}</span>
         </button>
         <div v-if="!wikilinkResults.length" class="px-3 py-1.5 text-sm text-slate-500 dark:text-slate-400">No matches</div>
       </div>
