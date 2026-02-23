@@ -1026,8 +1026,8 @@ function focusEditor() {
 }
 
 function autosizeCodeTextarea(textarea: HTMLTextAreaElement) {
-  textarea.style.height = 'auto'
-  const next = Math.max(86, textarea.scrollHeight)
+  textarea.style.height = '0px'
+  const next = Math.max(52, textarea.scrollHeight)
   textarea.style.height = `${next}px`
 }
 
@@ -1069,6 +1069,7 @@ function ensureCodeBlockUi() {
     if (textarea.dataset.meditorCodeInit !== '1') {
       textarea.dataset.meditorCodeInit = '1'
       textarea.wrap = 'off'
+      textarea.rows = 1
       textarea.spellcheck = false
       textarea.addEventListener('input', () => autosizeCodeTextarea(textarea))
     }

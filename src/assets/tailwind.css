@@ -334,19 +334,19 @@ html.dark .ce-popover-item--focused,
   }
 
   .editor-holder .ce-code__textarea {
-    min-height: 86px;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    color: #1e293b;
+    min-height: 52px !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    color: #1e293b !important;
     font-family: var(--font-mono);
-    font-size: 1rem;
-    line-height: 1.56;
-    padding: 2.35rem 1rem 0.95rem;
-    white-space: pre;
-    overflow-x: auto;
-    overflow-y: hidden;
-    resize: vertical;
+    font-size: 0.8rem !important;
+    line-height: 1.5 !important;
+    padding: 1.2rem 1rem 0.6rem !important;
+    white-space: pre !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    resize: none !important;
   }
 
   .editor-holder .ce-code__textarea::placeholder {
@@ -370,7 +370,7 @@ html.dark .ce-popover-item--focused,
 
   .editor-holder .meditor-code-copy-btn {
     position: absolute;
-    top: 0.45rem;
+    top: 0.35rem;
     right: 0.5rem;
     height: 1.65rem;
     width: 1.65rem;
@@ -470,7 +470,7 @@ html.dark .ce-popover-item--focused,
   }
 
   html.dark .editor-holder .ce-code__textarea {
-    color: #e2e8f0;
+    color: #e2e8f0 !important;
   }
 
   html.dark .editor-holder .ce-code__textarea::placeholder {
