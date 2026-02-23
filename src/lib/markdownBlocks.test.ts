@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { markdownToEditorData, sanitizeExternalHref } from './markdownBlocks'
+import { editorDataToMarkdown, markdownToEditorData, sanitizeExternalHref } from './markdownBlocks'
 
 describe('sanitizeExternalHref', () => {
   it('allows http/https/mailto', () => {
@@ -40,5 +40,53 @@ describe('markdownToEditorData tables', () => {
         ]
       }
     })
+  })
+})
+
+describe('nested lists', () => {
+  it('parses nested unordered lists from indentation', () => {
+    const markdown = `
+- a
+- b
+  - nest1
+  - nest2
+- c
+`.trim()
+
+    const parsed = markdownToEditorData(markdown)
+    expect(parsed.blocks).toHaveLength(1)
+    expect(parsed.blocks[0]).toEqual({
+      type: 'list',
+      data: {
+        style: 'unordered',
+        items: [
+          { content: 'a', items: [] },
+          {
+            content: 'b',
+            items: [
+              { content: 'nest1', items: [] },
+              { content: 'nest2', items: [] }
+            ]
+          },
+          { content: 'c', items: [] }
+        ]
+      }
+    })
+  })
+
+  it('preserves nested unordered lists in markdown round-trip', () => {
+    const input = `
+- a
+- b
+  - nest1
+  - nest2
+- c
+`.trim()
+
+    const parsed = markdownToEditorData(input)
+    const markdown = editorDataToMarkdown(parsed)
+    expect(markdown).toContain('- b\n  - nest1\n  - nest2')
+    const reparsed = markdownToEditorData(markdown)
+    expect(reparsed.blocks[0]).toEqual(parsed.blocks[0])
   })
 })

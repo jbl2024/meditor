@@ -27,6 +27,8 @@ type RichListItem = {
   items?: RichListItem[]
 }
 
+type ListStyle = 'ordered' | 'unordered' | 'checklist'
+
 function normalizeInput(markdown: string): string {
   return markdown.replace(/\r\n?/g, '\n')
 }
@@ -291,6 +293,67 @@ function isBlockStarter(line: string): boolean {
   )
 }
 
+function indentWidth(raw: string): number {
+  let width = 0
+  for (const ch of raw) width += ch === '\t' ? 2 : 1
+  return width
+}
+
+function parseListLine(
+  line: string,
+  style: ListStyle
+): { indent: number; content: string; checked?: boolean } | null {
+  if (style === 'ordered') {
+    const match = line.match(/^(\s*)\d+\.\s+(.+)$/)
+    if (!match) return null
+    return { indent: indentWidth(match[1]), content: match[2].trim() }
+  }
+
+  if (style === 'checklist') {
+    const match = line.match(/^(\s*)[-*+]\s+\[([ xX])\]\s*(.*)$/)
+    if (!match) return null
+    return {
+      indent: indentWidth(match[1]),
+      content: match[3].trim(),
+      checked: match[2].toLowerCase() === 'x'
+    }
+  }
+
+  const match = line.match(/^(\s*)[-*+]\s+(?!\[[ xX]\]\s*)(.+)$/)
+  if (!match) return null
+  return { indent: indentWidth(match[1]), content: match[2].trim() }
+}
+
+function parseRichList(lines: string[], start: number, style: ListStyle): { items: RichListItem[]; next: number } {
+  const items: RichListItem[] = []
+  const stack: Array<{ indent: number; items: RichListItem[] }> = [{ indent: -1, items }]
+  let i = start
+
+  while (i < lines.length) {
+    const parsed = parseListLine(lines[i], style)
+    if (!parsed) break
+
+    while (stack.length > 1 && parsed.indent <= stack[stack.length - 1].indent) {
+      stack.pop()
+    }
+
+    const item: RichListItem = {
+      content: blockTextToHtml(parsed.content),
+      items: []
+    }
+    if (style === 'checklist') {
+      item.meta = { checked: Boolean(parsed.checked) }
+    }
+
+    const parent = stack[stack.length - 1]
+    parent.items.push(item)
+    stack.push({ indent: parsed.indent, items: item.items as RichListItem[] })
+    i += 1
+  }
+
+  return { items, next: i }
+}
+
 export function markdownToEditorData(markdown: string): EditorDocument {
   const normalized = normalizeInput(markdown)
   const lines = normalized.split('\n')
@@ -411,51 +474,23 @@ export function markdownToEditorData(markdown: string): EditorDocument {
     }
 
     if (ORDERED_LIST_RE.test(line)) {
-      const items: RichListItem[] = []
-      while (i < lines.length) {
-        const match = lines[i].match(ORDERED_LIST_RE)
-        if (!match) break
-        items.push({
-          content: blockTextToHtml(match[1].trim()),
-          items: []
-        })
-        i += 1
-      }
-      blocks.push({ type: 'list', data: { style: 'ordered', items } })
+      const parsed = parseRichList(lines, i, 'ordered')
+      blocks.push({ type: 'list', data: { style: 'ordered', items: parsed.items } })
+      i = parsed.next
       continue
     }
 
     if (TASK_LIST_RE.test(line)) {
-      const items: RichListItem[] = []
-      while (i < lines.length) {
-        const match = lines[i].match(TASK_LIST_RE)
-        if (!match) break
-
-        items.push({
-          content: blockTextToHtml(match[2].trim()),
-          meta: { checked: match[1].toLowerCase() === 'x' },
-          items: []
-        })
-        i += 1
-      }
-      blocks.push({ type: 'list', data: { style: 'checklist', items } })
+      const parsed = parseRichList(lines, i, 'checklist')
+      blocks.push({ type: 'list', data: { style: 'checklist', items: parsed.items } })
+      i = parsed.next
       continue
     }
 
     if (UNORDERED_LIST_RE.test(line) && !TASK_LIST_RE.test(line)) {
-      const items: RichListItem[] = []
-      while (i < lines.length) {
-        const current = lines[i]
-        if (TASK_LIST_RE.test(current)) break
-        const match = current.match(UNORDERED_LIST_RE)
-        if (!match) break
-        items.push({
-          content: blockTextToHtml(match[1].trim()),
-          items: []
-        })
-        i += 1
-      }
-      blocks.push({ type: 'list', data: { style: 'unordered', items } })
+      const parsed = parseRichList(lines, i, 'unordered')
+      blocks.push({ type: 'list', data: { style: 'unordered', items: parsed.items } })
+      i = parsed.next
       continue
     }
 
