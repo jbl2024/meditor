@@ -101,3 +101,24 @@ describe('wikilinks with underscores', () => {
     expect(String(parsed.blocks[0].data.text)).not.toContain('<em>')
   })
 })
+
+describe('indented blocks', () => {
+  it('parses four-space indented content as code block (not raw)', () => {
+    const markdown = `
+2026-02-22 test
+
+    [[showcase/folder_with_underscore/note_in_folder.md]]
+`.trim()
+
+    const parsed = markdownToEditorData(markdown)
+    expect(parsed.blocks).toHaveLength(2)
+    expect(parsed.blocks[0].type).toBe('paragraph')
+    expect(parsed.blocks[1]).toEqual({
+      type: 'code',
+      data: {
+        code: '[[showcase/folder_with_underscore/note_in_folder.md]]',
+        language: ''
+      }
+    })
+  })
+})

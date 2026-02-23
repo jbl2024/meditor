@@ -253,7 +253,6 @@ function normalizeMultiline(value: string): string {
 
 function isRawFallbackStart(line: string): boolean {
   const trimmed = line.trimStart()
-  if (line.startsWith('    ') || line.startsWith('\t')) return true
   if (trimmed.startsWith('|') || trimmed.startsWith('<')) return true
   return false
 }
@@ -492,6 +491,29 @@ export function markdownToEditorData(markdown: string): EditorDocument {
       const parsed = parseRichList(lines, i, 'unordered')
       blocks.push({ type: 'list', data: { style: 'unordered', items: parsed.items } })
       i = parsed.next
+      continue
+    }
+
+    if (line.startsWith('    ') || line.startsWith('\t')) {
+      const codeLines: string[] = []
+      while (i < lines.length && lines[i].trim()) {
+        const current = lines[i]
+        if (current.startsWith('    ')) {
+          codeLines.push(current.slice(4))
+        } else if (current.startsWith('\t')) {
+          codeLines.push(current.slice(1))
+        } else {
+          codeLines.push(current)
+        }
+        i += 1
+      }
+      blocks.push({
+        type: 'code',
+        data: {
+          code: codeLines.join('\n'),
+          language: ''
+        }
+      })
       continue
     }
 
