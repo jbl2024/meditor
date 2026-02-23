@@ -18,6 +18,19 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.2.8] - 2026-02-23
+
+### Added
+- feat(ignore): apply .gitignore and .meditorignore to watcher events and explorer listing (613a910)
+
+### Changed
+- test(watcher): add exhaustive rust and vue watcher event planning test suites (0806c90)
+- Suggested commit message: feat(workspace): replace explorer polling with recursive native fs watcher events (077e8e5)
+- chore: changelog (bdd3e23)
+
+### Fixed
+- fix(editor): restore auto list conversion for dash and ordered shortcuts (121d836)
+
 ## [0.2.7] - 2026-02-22
 
 ### Added
