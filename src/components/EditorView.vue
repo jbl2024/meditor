@@ -1094,13 +1094,17 @@ async function focusFirstContentBlock() {
 
 function openWikilinkMenuAtCaret(query: string, keepSelection = false) {
   if (!holder.value) return
+  const holderEl = holder.value
   const selection = window.getSelection()
   const range = selection?.rangeCount ? selection.getRangeAt(0) : null
   const caretRect = range?.getBoundingClientRect()
-  const holderRect = holder.value.getBoundingClientRect()
+  const holderRect = holderEl.getBoundingClientRect()
+  const padding = 8
+  const baseLeft = (caretRect?.left ?? holderRect.left) - holderRect.left + holderEl.scrollLeft
+  const baseTop = (caretRect?.bottom ?? holderRect.top) - holderRect.top + holderEl.scrollTop + padding
 
-  wikilinkLeft.value = Math.max(8, (caretRect?.left ?? holderRect.left) - holderRect.left)
-  wikilinkTop.value = Math.max(8, (caretRect?.bottom ?? holderRect.top) - holderRect.top + 8)
+  wikilinkLeft.value = Math.max(holderEl.scrollLeft + padding, baseLeft)
+  wikilinkTop.value = Math.max(holderEl.scrollTop + padding, baseTop)
   const previousCount = wikilinkResults.value.length
   const previousIndex = wikilinkIndex.value
   wikilinkQuery.value = query
@@ -1123,17 +1127,17 @@ function openWikilinkMenuAtCaret(query: string, keepSelection = false) {
 
 function repositionWikilinkMenu() {
   if (!holder.value || !wikilinkMenuRef.value) return
-  const holderRect = holder.value.getBoundingClientRect()
+  const holderEl = holder.value
   const menuRect = wikilinkMenuRef.value.getBoundingClientRect()
   const padding = 8
 
-  const maxLeft = Math.max(padding, holderRect.width - menuRect.width - padding)
-  wikilinkLeft.value = Math.min(Math.max(padding, wikilinkLeft.value), maxLeft)
+  const minLeft = holderEl.scrollLeft + padding
+  const maxLeft = Math.max(minLeft, holderEl.scrollLeft + holderEl.clientWidth - menuRect.width - padding)
+  wikilinkLeft.value = Math.min(Math.max(minLeft, wikilinkLeft.value), maxLeft)
 
-  const maxTop = Math.max(padding, holderRect.height - menuRect.height - padding)
-  if (wikilinkTop.value > maxTop) {
-    wikilinkTop.value = Math.max(padding, maxTop)
-  }
+  const minTop = holderEl.scrollTop + padding
+  const maxTop = Math.max(minTop, holderEl.scrollTop + holderEl.clientHeight - menuRect.height - padding)
+  wikilinkTop.value = Math.min(Math.max(minTop, wikilinkTop.value), maxTop)
 }
 
 function parseWikilinkQuery(raw: string): { notePart: string; headingPart: string | null } {
@@ -1542,12 +1546,7 @@ function replaceTokenRangeWithAnchor(textNode: Text, start: number, end: number,
     logWikilinkDebug('token.collapse.skip.unable-to-place-caret', { place, token })
     return false
   }
-  if (
-    expandedLinkContext &&
-    expandedLinkContext.textNode === textNode &&
-    expandedLinkContext.range.start === start &&
-    expandedLinkContext.range.end === end
-  ) {
+  if (expandedLinkContext) {
     expandedLinkContext = null
   }
   logWikilinkDebug('token.collapse.success', { token, place, kind: parsed.kind })
@@ -1556,8 +1555,14 @@ function replaceTokenRangeWithAnchor(textNode: Text, start: number, end: number,
 
 function caretRelationToTokenRange(selection: Selection, context: ArrowLinkContext): 'before' | 'inside' | 'after' {
   if (!selection.rangeCount || !selection.isCollapsed) return 'after'
+  if (!context.textNode.isConnected) return 'after'
+  if (context.range.start < 0 || context.range.end < context.range.start || context.range.end > context.textNode.data.length) {
+    return 'after'
+  }
+  if (!selection.focusNode) return 'after'
+  if (selection.focusNode.ownerDocument !== context.textNode.ownerDocument) return 'after'
 
-  const tokenRange = document.createRange()
+  const tokenRange = context.textNode.ownerDocument.createRange()
   tokenRange.setStart(context.textNode, context.range.start)
   tokenRange.setEnd(context.textNode, context.range.end)
 
@@ -1576,29 +1581,45 @@ function caretRelationToTokenRange(selection: Selection, context: ArrowLinkConte
     if (position > 0) return 'after'
     return 'inside'
   } catch {
-    // Keep a defensive fallback for browsers/editors that may throw on comparePoint.
+    return 'after'
   }
-
-  const caretRange = selection.getRangeAt(0)
-  const startCmp = caretRange.compareBoundaryPoints(Range.END_TO_START, tokenRange)
-  const endCmp = caretRange.compareBoundaryPoints(Range.START_TO_END, tokenRange)
-
-  if (startCmp < 0) return 'before'
-  if (endCmp > 0) return 'after'
-  return 'inside'
 }
 
 function collapseExpandedLinkIfCaretOutside(): boolean {
   if (!expandedLinkContext) return false
 
   const context = expandedLinkContext
+  if (!context.textNode.isConnected) {
+    expandedLinkContext = null
+    logWikilinkDebug('expanded.collapse.skip.stale-context')
+    return false
+  }
+  if (context.range.start < 0 || context.range.end < context.range.start || context.range.end > context.textNode.data.length) {
+    expandedLinkContext = null
+    logWikilinkDebug('expanded.collapse.skip.invalid-context-range', {
+      start: context.range.start,
+      end: context.range.end,
+      textLength: context.textNode.data.length
+    })
+    return false
+  }
+
   const selection = window.getSelection()
   if (!selection || !selection.rangeCount || !selection.isCollapsed) {
     expandedLinkContext = null
     return false
   }
 
-  const relation = caretRelationToTokenRange(selection, context)
+  let relation: 'before' | 'inside' | 'after' = 'after'
+  try {
+    relation = caretRelationToTokenRange(selection, context)
+  } catch (error) {
+    expandedLinkContext = null
+    logWikilinkDebug('expanded.collapse.error.caret-relation', {
+      error: error instanceof Error ? error.message : String(error)
+    })
+    return false
+  }
   if (relation === 'inside') return false
 
   const place = relation === 'before' ? 'before' : 'after'
