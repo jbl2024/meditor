@@ -132,6 +132,7 @@ const emit = defineEmits<{
 
 const holder = ref<HTMLDivElement | null>(null)
 const wikilinkMenuRef = ref<HTMLDivElement | null>(null)
+const checklistDebugOn = ref(false)
 let editor: EditorJS | null = null
 let autosaveTimer: ReturnType<typeof setTimeout> | null = null
 let outlineTimer: ReturnType<typeof setTimeout> | null = null
@@ -2509,6 +2510,9 @@ watch(
 )
 
 onMounted(async () => {
+  const debugFlag = window.localStorage.getItem('meditor:debug:checklist')
+  checklistDebugOn.value = debugFlag === '1'
+
   if (currentPath.value) {
     await ensureEditor()
     await loadCurrentFile(currentPath.value)
@@ -2676,6 +2680,7 @@ defineExpose({
       <div
         ref="holder"
         class="editor-holder relative min-h-0 flex-1 overflow-y-auto px-8 py-6"
+        :class="{ 'meditor-debug-checklist': checklistDebugOn }"
         @click="closeSlashMenu(); closeWikilinkMenu()"
       >
 

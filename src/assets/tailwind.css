@@ -203,6 +203,7 @@ html.dark .ce-popover-item--focused,
     margin: 0.05rem 0 0.2rem;
     --spacing-s: 2px;
     --spacing-xs: 0px;
+    --line-height: 1.26em;
     --meditor-list-marker-gap: 0.32rem;
     gap: 2px !important;
     padding-top: 0 !important;
@@ -246,6 +247,30 @@ html.dark .ce-popover-item--focused,
 
   .editor-holder .cdx-list__checkbox {
     justify-self: end;
+  }
+
+  .editor-holder ul.cdx-list.cdx-list-checklist .cdx-list__checkbox {
+    padding-top: calc((var(--line-height) - var(--size-checkbox)) / 2);
+  }
+
+  .editor-holder ul.cdx-list.cdx-list-checklist .cdx-list__item-content,
+  .editor-holder ul.cdx-list.cdx-list-checklist .cdx-list__item-content[contenteditable="true"] {
+    line-height: var(--line-height) !important;
+  }
+
+  .editor-holder.meditor-debug-checklist ul.cdx-list.cdx-list-checklist .cdx-list__item {
+    outline: 1px dashed rgba(220, 38, 38, 0.6);
+    background: rgba(220, 38, 38, 0.04);
+  }
+
+  .editor-holder.meditor-debug-checklist ul.cdx-list.cdx-list-checklist .cdx-list__checkbox {
+    outline: 1px solid rgba(37, 99, 235, 0.85);
+    background: rgba(37, 99, 235, 0.08);
+  }
+
+  .editor-holder.meditor-debug-checklist ul.cdx-list.cdx-list-checklist .cdx-list__item-content {
+    outline: 1px solid rgba(22, 163, 74, 0.85);
+    background: rgba(22, 163, 74, 0.08);
   }
 
   .editor-holder .cdx-list__item-children {
