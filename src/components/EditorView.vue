@@ -48,6 +48,7 @@ import {
 const AUTOSAVE_IDLE_MS = 1800
 const AUTOSAVE_TITLE_IDLE_MS = 5000
 const AUTOSAVE_TITLE_RETRY_MS = 1200
+const LARGE_DOC_LOAD_THRESHOLD = 50_000
 const VIRTUAL_TITLE_BLOCK_ID = '__virtual_title__'
 type CorePropertyOption = {
   key: string
@@ -155,6 +156,7 @@ let codeUiFrame: number | null = null
 let dateLinkHighlightFrame: number | null = null
 let codeUiNeedsGlobalRefresh = false
 let suppressOnChange = false
+let activeLoadSequence = 0
 let suppressCollapseOnNextArrowKeyup = false
 let expandedLinkContext: ArrowLinkContext | null = null
 const codeCopyResetTimers = new WeakMap<HTMLButtonElement, number>()
@@ -217,6 +219,11 @@ const propertySchema = ref<PropertyTypeSchema>({})
 const propertySchemaLoaded = ref(false)
 const propertySchemaSaving = ref(false)
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/
+const isLoadingLargeDocument = ref(false)
+const loadStageLabel = ref('')
+const loadProgressPercent = ref(0)
+const loadProgressIndeterminate = ref(false)
+const loadDocumentStats = ref<{ chars: number; lines: number } | null>(null)
 const mermaidReplaceDialog = ref<{
   visible: boolean
   templateLabel: string
@@ -2663,6 +2670,47 @@ function emitOutlineSoon() {
   }, 120)
 }
 
+async function flushUiFrame() {
+  await nextTick()
+  await new Promise<void>((resolve) => {
+    window.requestAnimationFrame(() => resolve())
+  })
+}
+
+function countLines(input: string): number {
+  if (!input) return 0
+  return input.replace(/\r\n?/g, '\n').split('\n').length
+}
+
+function startLargeDocumentLoadOverlay() {
+  isLoadingLargeDocument.value = true
+  loadDocumentStats.value = null
+  loadStageLabel.value = 'Reading file...'
+  loadProgressPercent.value = 5
+  loadProgressIndeterminate.value = true
+}
+
+function setLargeDocumentLoadStats(body: string) {
+  if (!isLoadingLargeDocument.value) return
+  loadDocumentStats.value = { chars: body.length, lines: countLines(body) }
+}
+
+async function setLargeDocumentLoadStage(stage: string, percent: number) {
+  if (!isLoadingLargeDocument.value) return
+  loadStageLabel.value = stage
+  loadProgressPercent.value = Math.max(0, Math.min(100, Math.round(percent)))
+  loadProgressIndeterminate.value = false
+  await flushUiFrame()
+}
+
+function finishLargeDocumentLoadOverlay() {
+  isLoadingLargeDocument.value = false
+  loadStageLabel.value = ''
+  loadProgressPercent.value = 0
+  loadProgressIndeterminate.value = false
+  loadDocumentStats.value = null
+}
+
 function getVisibleText(input: string): string {
   return input
     .replace(/<[^>]*>/g, ' ')
@@ -2812,31 +2860,58 @@ async function destroyEditor() {
 async function loadCurrentFile(path: string) {
   if (!path) return
 
+  const loadSequence = ++activeLoadSequence
+  const isStaleLoad = () => loadSequence !== activeLoadSequence
+
   await ensureEditor()
   await ensurePropertySchemaLoaded()
-  if (!editor) return
+  if (!editor || isStaleLoad()) return
 
   clearAutosaveTimer()
   closeSlashMenu()
   closeWikilinkMenu()
   setSaveError(path, '')
 
+  let shouldShowLargeDocOverlay = false
+
   try {
+    startLargeDocumentLoadOverlay()
+    await flushUiFrame()
+    if (isStaleLoad()) return
+
     const txt = await props.openFile(path)
+    if (isStaleLoad()) return
     parseAndStoreFrontmatter(path, txt)
     const body = frontmatterByPath.value[path]?.body ?? txt
+    shouldShowLargeDocOverlay = txt.length >= LARGE_DOC_LOAD_THRESHOLD
+    if (!shouldShowLargeDocOverlay) {
+      if (!isStaleLoad()) finishLargeDocumentLoadOverlay()
+    } else {
+      setLargeDocumentLoadStats(body)
+      await setLargeDocumentLoadStage('Parsing markdown blocks...', 35)
+      if (isStaleLoad()) return
+    }
+
     const parsed = markdownToEditorData(body)
+    if (isStaleLoad()) return
     const normalized = withVirtualTitle(parsed.blocks as OutputBlockData[], noteTitleFromPath(path))
     suppressOnChange = true
     loadedTextByPath.value = {
       ...loadedTextByPath.value,
       [path]: txt
     }
+    if (shouldShowLargeDocOverlay) {
+      await setLargeDocumentLoadStage('Rendering blocks in editor...', 70)
+    }
     await editor.render({
       time: Date.now(),
       version: parsed.version,
       blocks: normalized.blocks
     })
+    if (isStaleLoad()) return
+    if (shouldShowLargeDocOverlay) {
+      await setLargeDocumentLoadStage('Finalizing view...', 95)
+    }
     setDirty(path, false)
     ensureCodeBlockUi()
 
@@ -2855,10 +2930,18 @@ async function loadCurrentFile(path: string) {
     if (dateLinkModifierActive.value) {
       syncDateLinkHighlightsSoon()
     }
+    if (shouldShowLargeDocOverlay) {
+      loadProgressPercent.value = 100
+    }
   } catch (err) {
-    setSaveError(path, err instanceof Error ? err.message : 'Could not read file.')
+    if (!isStaleLoad()) {
+      setSaveError(path, err instanceof Error ? err.message : 'Could not read file.')
+    }
   } finally {
-    suppressOnChange = false
+    if (!isStaleLoad()) {
+      suppressOnChange = false
+      finishLargeDocumentLoadOverlay()
+    }
   }
 }
 
@@ -3154,13 +3237,14 @@ defineExpose({
         </div>
       </section>
 
-      <div
-        ref="holder"
-        class="editor-holder relative min-h-0 flex-1 overflow-y-auto px-8 py-6"
-        :class="{ 'meditor-debug-checklist': checklistDebugOn }"
-        :style="editorZoomStyle"
-        @click="closeSlashMenu(); closeWikilinkMenu()"
-      >
+      <div class="relative min-h-0 flex-1 overflow-hidden">
+        <div
+          ref="holder"
+          class="editor-holder relative h-full min-h-0 overflow-y-auto px-8 py-6"
+          :class="{ 'meditor-debug-checklist': checklistDebugOn }"
+          :style="editorZoomStyle"
+          @click="closeSlashMenu(); closeWikilinkMenu()"
+        >
       <div
         v-if="slashOpen"
         class="absolute z-20 w-52 rounded-md border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-800 dark:bg-slate-900"
@@ -3203,6 +3287,29 @@ defineExpose({
         </button>
         <div v-if="!wikilinkResults.length" class="px-3 py-1.5 text-sm text-slate-500 dark:text-slate-400">No matches</div>
       </div>
+        </div>
+        <div
+          v-if="isLoadingLargeDocument"
+          class="pointer-events-none absolute inset-0 z-30 flex items-start justify-center bg-white/75 px-6 py-6 backdrop-blur-[1px] dark:bg-slate-950/75"
+        >
+          <div class="pointer-events-auto w-full max-w-md rounded-xl border border-slate-200 bg-white/95 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/95">
+            <div class="text-sm font-medium text-slate-800 dark:text-slate-100">Loading large document</div>
+            <div class="mt-1 text-xs text-slate-600 dark:text-slate-300">{{ loadStageLabel }}</div>
+            <div v-if="loadDocumentStats" class="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+              {{ loadDocumentStats.lines.toLocaleString() }} lines · {{ loadDocumentStats.chars.toLocaleString() }} chars
+            </div>
+            <div class="mt-3 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+              <div
+                class="h-full rounded-full bg-blue-600 transition-[width] duration-200 ease-out dark:bg-blue-500"
+                :class="{ 'meditor-load-indeterminate': loadProgressIndeterminate }"
+                :style="loadProgressIndeterminate ? undefined : { width: `${loadProgressPercent}%` }"
+              ></div>
+            </div>
+            <div class="mt-2 text-right text-[11px] text-slate-600 dark:text-slate-300">
+              {{ loadProgressIndeterminate ? 'Working...' : `${loadProgressPercent}%` }}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -3254,6 +3361,24 @@ defineExpose({
 
 .dark .editor-holder :deep(a.md-wikilink) {
   color: var(--meditor-link-color);
+}
+
+.meditor-load-indeterminate {
+  width: 45%;
+  background-image: linear-gradient(90deg, #2563eb 0%, #3b82f6 50%, #2563eb 100%);
+  background-size: 200% 100%;
+  animation: meditor-load-slide 1.1s linear infinite;
+}
+
+@keyframes meditor-load-slide {
+  from {
+    transform: translateX(-120%);
+    background-position: 0% 0%;
+  }
+  to {
+    transform: translateX(260%);
+    background-position: 100% 0%;
+  }
 }
 
 :global(::highlight(meditor-date-links)) {
