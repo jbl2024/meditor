@@ -2937,8 +2937,12 @@ defineExpose({
           v-for="(item, idx) in wikilinkResults"
           :key="item.id"
           type="button"
-          class="block w-full min-w-0 overflow-hidden rounded px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-          :class="idx === wikilinkIndex ? 'bg-slate-100 dark:bg-slate-800' : ''"
+          class="block w-full min-w-0 overflow-hidden rounded px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-900"
+          :class="
+            idx === wikilinkIndex
+              ? 'bg-slate-100 ring-1 ring-inset ring-slate-300 dark:bg-slate-800 dark:ring-slate-600'
+              : ''
+          "
           :title="item.label"
           @mousedown.prevent="wikilinkIndex = idx"
           @click.prevent="applyWikilinkSelection(item.target)"
