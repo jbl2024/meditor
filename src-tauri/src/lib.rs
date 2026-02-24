@@ -370,13 +370,14 @@ fn parse_wikilink_targets(markdown: &str) -> Vec<String> {
 
         let content_end = content_start + end_rel;
         let content = &markdown[content_start..content_end];
-        let target = content
+        let target_with_optional_heading = content
             .split_once('|')
             .map(|(left, _)| left)
-            .unwrap_or(content)
+            .unwrap_or(content);
+        let target = target_with_optional_heading
             .split_once('#')
             .map(|(left, _)| left)
-            .unwrap_or(content)
+            .unwrap_or(target_with_optional_heading)
             .trim();
 
         if !target.is_empty() {
@@ -1530,6 +1531,14 @@ mod tests {
         let targets = parse_note_targets(markdown);
         assert_eq!(targets.len(), 1);
         assert!(targets.iter().any(|item| item == "bodynote"));
+    }
+
+    #[test]
+    fn parse_note_targets_extracts_target_from_wikilink_with_alias() {
+        let markdown = "See [[Folder/Note|Displayed Label]]";
+        let targets = parse_note_targets(markdown);
+        assert_eq!(targets.len(), 1);
+        assert!(targets.iter().any(|item| item == "folder/note"));
     }
 
     #[test]
