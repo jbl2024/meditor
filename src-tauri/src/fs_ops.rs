@@ -111,6 +111,9 @@ fn should_skip_dir(root: &Path, matcher: Option<&Gitignore>, path: &Path) -> boo
         if should_skip_dir_name(name) {
             return true;
         }
+        if path.is_dir() && name.starts_with('.') && name != "." && name != ".." {
+            return true;
+        }
     }
 
     skip_by_ignore_rules(root, matcher, path, true)
@@ -871,6 +874,21 @@ mod tests {
         let tree = list_children(root.to_string_lossy().to_string()).expect("list tree");
         assert_eq!(tree.len(), 1);
         assert_eq!(tree[0].name, "doc.md");
+        fs::remove_dir_all(dir).expect("cleanup");
+    }
+
+    #[test]
+    fn list_tree_excludes_hidden_directories() {
+        let dir = make_temp_dir();
+        activate_workspace(&dir);
+        let root = dir.as_path();
+        fs::create_dir_all(root.join(".git")).expect("git dir");
+        fs::create_dir_all(root.join(".obsidian")).expect("hidden dir");
+        fs::create_dir_all(root.join("notes")).expect("visible dir");
+
+        let tree = list_children(root.to_string_lossy().to_string()).expect("list tree");
+        let names: Vec<String> = tree.into_iter().map(|node| node.name).collect();
+        assert_eq!(names, vec!["notes".to_string()]);
         fs::remove_dir_all(dir).expect("cleanup");
     }
 
