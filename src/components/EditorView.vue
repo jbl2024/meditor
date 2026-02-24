@@ -7,10 +7,10 @@ import Header from '@editorjs/header'
 import InlineCode from '@editorjs/inline-code'
 import List from '@editorjs/list'
 import Paragraph from '@editorjs/paragraph'
-import Quote from '@editorjs/quote'
 import Table from '@editorjs/table'
 import CalloutTool from '../lib/editorjs/CalloutTool'
 import MermaidTool from '../lib/editorjs/MermaidTool'
+import QuoteTool from '../lib/editorjs/QuoteTool'
 import { editorDataToMarkdown, markdownToEditorData, type EditorBlock } from '../lib/markdownBlocks'
 import PropertyAddDropdown from './properties/PropertyAddDropdown.vue'
 import PropertyTokenInput from './properties/PropertyTokenInput.vue'
@@ -107,7 +107,7 @@ const SLASH_COMMANDS: SlashCommand[] = [
   { id: 'callout', label: 'Callout', type: 'callout', data: { kind: 'NOTE', message: '' } },
   { id: 'mermaid', label: 'Mermaid', type: 'mermaid', data: { code: 'flowchart TD\n  A[Start] --> B[End]' } },
   { id: 'code', label: 'Code', type: 'code', data: { code: '' } },
-  { id: 'quote', label: 'Quote', type: 'quote', data: { text: '', caption: '', alignment: 'left' } },
+  { id: 'quote', label: 'Quote', type: 'quote', data: { text: '' } },
   { id: 'divider', label: 'Divider', type: 'delimiter', data: {} }
 ]
 
@@ -1889,7 +1889,7 @@ function applyMarkdownShortcut(marker: string) {
     case '1.':
       return { type: 'list', data: emptyListData('ordered') }
     case '>':
-      return { type: 'quote', data: { text: '', caption: '', alignment: 'left' } }
+      return { type: 'quote', data: { text: '' } }
     case '```':
       return { type: 'code', data: { code: '' } }
     default:
@@ -2401,7 +2401,7 @@ async function ensureEditor() {
         }
       },
       quote: {
-        class: Quote,
+        class: QuoteTool as unknown as never,
         inlineToolbar: ['bold', 'italic', 'link', 'inlineCode']
       },
       table: {

@@ -327,8 +327,104 @@ html.dark .ce-popover-item--focused,
   }
 
   .editor-holder .cdx-quote {
-    border-left: 3px solid #94a3b8;
-    padding-left: 1rem;
+    margin: 0.4rem 0;
+    padding: 0.92rem 1rem 0.9rem 1.08rem;
+    border-left: 4px solid #7ba9d6;
+    border-radius: 0.28rem;
+    background: #f8fafc;
+    color: #374151;
+    line-height: 1.65;
+  }
+
+  .editor-holder .meditor-quote {
+    margin: 0.4rem 0;
+    padding-left: 0.95rem;
+    border-left: 4px solid #7ba9d6;
+  }
+
+  .editor-holder .meditor-quote-preview {
+    border-radius: 0.35rem;
+    background: #f8fafc;
+    color: #374151;
+    padding: 0.92rem 1rem 0.9rem;
+    cursor: text;
+  }
+
+  .editor-holder .meditor-quote-preview-content {
+    min-height: 1.4rem;
+  }
+
+  .editor-holder .meditor-quote-paragraph {
+    margin: 0;
+    font-size: calc(1.01rem * var(--editor-zoom));
+    line-height: 1.65;
+  }
+
+  .editor-holder .meditor-quote-paragraph + .meditor-quote-paragraph {
+    margin-top: 0.68rem;
+  }
+
+  .editor-holder .meditor-quote-list {
+    margin: 0.45rem 0 0.15rem 1.38rem;
+    padding: 0;
+    font-size: calc(1.01rem * var(--editor-zoom));
+    line-height: 1.65;
+  }
+
+  .editor-holder .meditor-quote-list li + li {
+    margin-top: 0.16rem;
+  }
+
+  .editor-holder .meditor-quote-nested {
+    margin: 0.62rem 0 0.25rem 0.92rem;
+    padding-left: 0.85rem;
+    border-left: 4px solid #7ba9d6;
+  }
+
+  .editor-holder .meditor-quote-source {
+    width: 100%;
+    min-height: 94px;
+    border: 0;
+    border-radius: 0.35rem;
+    background: #f8fafc;
+    color: #374151;
+    font: inherit;
+    font-size: calc(1.01rem * var(--editor-zoom));
+    line-height: 1.65;
+    padding: 0.92rem 1rem;
+    resize: none;
+    white-space: pre-wrap;
+    overflow-x: hidden;
+    overflow-y: hidden;
+    outline: none;
+  }
+
+  .editor-holder .meditor-quote.is-editing .meditor-quote-preview {
+    display: none;
+  }
+
+  .editor-holder .meditor-quote:not(.is-editing) .meditor-quote-source {
+    display: none;
+  }
+
+  .editor-holder .cdx-quote .cdx-quote__text {
+    font-size: calc(1.01rem * var(--editor-zoom));
+    line-height: 1.65;
+    color: inherit;
+  }
+
+  .editor-holder .cdx-quote .cdx-quote__caption {
+    display: none !important;
+  }
+
+  .editor-holder .cdx-quote ul,
+  .editor-holder .cdx-quote ol {
+    margin: 0.35rem 0 0.1rem 1.35rem;
+    padding: 0;
+  }
+
+  .editor-holder .cdx-quote li + li {
+    margin-top: 0.16rem;
   }
 
   .editor-holder .ce-inline-code {
@@ -547,7 +643,27 @@ html.dark .ce-popover-item--focused,
   }
 
   html.dark .editor-holder .cdx-quote {
-    border-left-color: #475569;
+    border-left-color: #5f90c1;
+    background: #0f172a;
+    color: #cbd5e1;
+  }
+
+  html.dark .editor-holder .meditor-quote {
+    border-left-color: #5f90c1;
+  }
+
+  html.dark .editor-holder .meditor-quote-preview {
+    background: #0f172a;
+    color: #cbd5e1;
+  }
+
+  html.dark .editor-holder .meditor-quote-source {
+    background: #0f172a;
+    color: #cbd5e1;
+  }
+
+  html.dark .editor-holder .meditor-quote-nested {
+    border-left-color: #5f90c1;
   }
 
   html.dark .editor-holder .ce-code {

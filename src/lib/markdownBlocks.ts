@@ -152,6 +152,10 @@ function inlineMarkdownToHtml(value: string): string {
   return html
 }
 
+export function inlineTextToHtml(value: string): string {
+  return inlineMarkdownToHtml(value)
+}
+
 export function sanitizeExternalHref(raw: string): string | null {
   const value = String(raw ?? '').trim()
   if (!value) return null
@@ -443,9 +447,7 @@ export function markdownToEditorData(markdown: string): EditorDocument {
       blocks.push({
         type: 'quote',
         data: {
-          text: quoteLines.join('\n'),
-          caption: '',
-          alignment: 'left'
+          text: normalizeMultiline(quoteLines.join('\n'))
         }
       })
       continue
@@ -620,7 +622,7 @@ function blockToMarkdown(block: EditorBlock): string {
       return listToMarkdown(block.data)
 
     case 'quote': {
-      const text = normalizeMultiline(String(block.data?.text ?? ''))
+      const text = normalizeParagraphMarkdown(block.data?.text)
       if (!text) return ''
       return text
         .split('\n')

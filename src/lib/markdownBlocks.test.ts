@@ -170,3 +170,35 @@ sddsd
     expect(String(parsed.blocks[1].data.text)).toBe('sddsd')
   })
 })
+
+describe('blockquote parsing', () => {
+  it('keeps multiline quote structure including list lines', () => {
+    const markdown = `
+> Une citation principale.
+>
+> Un second paragraphe dans la citation.
+>
+> - Une liste dans la citation
+> - Un second point
+`.trim()
+
+    const parsed = markdownToEditorData(markdown)
+    expect(parsed.blocks).toHaveLength(1)
+    expect(parsed.blocks[0].type).toBe('quote')
+    expect(String(parsed.blocks[0].data.text)).toContain('\n\n')
+    expect(String(parsed.blocks[0].data.text)).toContain('- Une liste dans la citation')
+  })
+
+  it('round-trips nested quote markers in quote content', () => {
+    const markdown = `
+> > Citation imbriquée niveau 2
+> >
+> > > Citation niveau 3
+`.trim()
+
+    const parsed = markdownToEditorData(markdown)
+    const output = editorDataToMarkdown(parsed)
+    expect(output).toContain('> > Citation imbriquée niveau 2')
+    expect(output).toContain('> > > Citation niveau 3')
+  })
+})
