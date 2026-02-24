@@ -134,6 +134,7 @@ const holder = ref<HTMLDivElement | null>(null)
 const wikilinkMenuRef = ref<HTMLDivElement | null>(null)
 const checklistDebugOn = ref(false)
 const editorZoom = ref(1)
+const codeWrapEnabled = ref(true)
 let editor: EditorJS | null = null
 let codeUiObserver: MutationObserver | null = null
 let autosaveTimer: ReturnType<typeof setTimeout> | null = null
@@ -1050,6 +1051,11 @@ function autosizeCodeTextarea(textarea: HTMLTextAreaElement) {
   textarea.style.height = `${next}px`
 }
 
+function setCodeWrapEnabled(next: boolean) {
+  codeWrapEnabled.value = next
+  window.localStorage.setItem('meditor:editor:code-wrap', next ? '1' : '0')
+}
+
 function setCodeCopyState(button: HTMLButtonElement, copied: boolean) {
   if (copied) {
     button.classList.add('is-copied')
@@ -1058,6 +1064,29 @@ function setCodeCopyState(button: HTMLButtonElement, copied: boolean) {
     button.classList.remove('is-copied')
     button.setAttribute('aria-label', 'Copy code')
   }
+}
+
+function setCodeWrapButtonState(button: HTMLButtonElement) {
+  button.classList.toggle('is-active', codeWrapEnabled.value)
+  button.setAttribute('aria-pressed', codeWrapEnabled.value ? 'true' : 'false')
+  button.setAttribute('aria-label', codeWrapEnabled.value ? 'Disable word wrap' : 'Enable word wrap')
+  button.title = codeWrapEnabled.value ? 'Disable word wrap' : 'Enable word wrap'
+}
+
+function applyCodeWrapToBlock(block: HTMLElement) {
+  block.classList.toggle('meditor-code-wrap-enabled', codeWrapEnabled.value)
+  const textarea = block.querySelector('.ce-code__textarea') as HTMLTextAreaElement | null
+  if (!textarea) return
+  textarea.wrap = codeWrapEnabled.value ? 'soft' : 'off'
+  autosizeCodeTextarea(textarea)
+}
+
+function refreshCodeWrapUi() {
+  if (!holder.value) return
+  const codeBlocks = Array.from(holder.value.querySelectorAll('.ce-code')) as HTMLElement[]
+  codeBlocks.forEach((block) => applyCodeWrapToBlock(block))
+  const buttons = Array.from(holder.value.querySelectorAll('.meditor-code-wrap-btn')) as HTMLButtonElement[]
+  buttons.forEach((button) => setCodeWrapButtonState(button))
 }
 
 async function copyCodeFromBlock(block: HTMLElement, button: HTMLButtonElement) {
@@ -1087,22 +1116,38 @@ function ensureCodeBlockUi() {
   textareas.forEach((textarea) => {
     if (textarea.dataset.meditorCodeInit !== '1') {
       textarea.dataset.meditorCodeInit = '1'
-      textarea.wrap = 'off'
       textarea.rows = 1
       textarea.spellcheck = false
       textarea.addEventListener('input', () => autosizeCodeTextarea(textarea))
     }
+    textarea.wrap = codeWrapEnabled.value ? 'soft' : 'off'
     autosizeCodeTextarea(textarea)
   })
 
   const codeBlocks = Array.from(holder.value.querySelectorAll('.ce-code')) as HTMLElement[]
   codeBlocks.forEach((block) => {
+    applyCodeWrapToBlock(block)
+
+    let wrapButton = block.querySelector('.meditor-code-wrap-btn') as HTMLButtonElement | null
+    if (!wrapButton) {
+      wrapButton = document.createElement('button')
+      wrapButton.type = 'button'
+      wrapButton.className = 'meditor-code-wrap-btn'
+      wrapButton.innerHTML = `<span aria-hidden="true">Wrap</span>`
+      wrapButton.addEventListener('click', () => {
+        setCodeWrapEnabled(!codeWrapEnabled.value)
+        refreshCodeWrapUi()
+      })
+      block.appendChild(wrapButton)
+    }
+    setCodeWrapButtonState(wrapButton)
+
     if (block.querySelector('.meditor-code-copy-btn')) return
-    const button = document.createElement('button')
-    button.type = 'button'
-    button.className = 'meditor-code-copy-btn'
-    button.setAttribute('aria-label', 'Copy code')
-    button.innerHTML = `
+    const copyButton = document.createElement('button')
+    copyButton.type = 'button'
+    copyButton.className = 'meditor-code-copy-btn'
+    copyButton.setAttribute('aria-label', 'Copy code')
+    copyButton.innerHTML = `
       <span class="icon-copy" aria-hidden="true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" focusable="false" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125H4.5a1.125 1.125 0 0 1-1.125-1.125V8.25c0-.621.504-1.125 1.125-1.125h3.375"/>
@@ -1116,10 +1161,10 @@ function ensureCodeBlockUi() {
       </span>
       <span class="copy-toast" aria-hidden="true">Copied!</span>
     `
-    button.addEventListener('click', () => {
-      void copyCodeFromBlock(block, button)
+    copyButton.addEventListener('click', () => {
+      void copyCodeFromBlock(block, copyButton)
     })
-    block.appendChild(button)
+    block.appendChild(copyButton)
   })
 }
 
@@ -2564,6 +2609,7 @@ watch(
 onMounted(async () => {
   const debugFlag = window.localStorage.getItem('meditor:debug:checklist')
   checklistDebugOn.value = debugFlag === '1'
+  codeWrapEnabled.value = window.localStorage.getItem('meditor:editor:code-wrap') !== '0'
   const savedZoom = Number.parseFloat(window.localStorage.getItem('meditor:editor:zoom') ?? '1')
   if (Number.isFinite(savedZoom)) {
     editorZoom.value = clampEditorZoom(savedZoom)
