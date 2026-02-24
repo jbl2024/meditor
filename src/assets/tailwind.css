@@ -449,7 +449,7 @@ html.dark .ce-popover-item--focused,
     border-radius: 0 !important;
     background: transparent !important;
     color: #1e293b !important;
-    font-family: var(--font-mono);
+    font-family: var(--font-mono) !important;
     font-size: calc(0.8rem * var(--editor-zoom)) !important;
     line-height: 1.5 !important;
     padding: 1.2rem 1rem 0.6rem !important;
