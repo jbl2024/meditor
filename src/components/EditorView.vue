@@ -30,6 +30,7 @@ import {
   type PropertyTypeSchema
 } from '../lib/propertyTypes'
 import {
+  buildWikilinkToken,
   parseWikilinkTarget,
   normalizeBlockId,
   normalizeHeadingAnchor,
@@ -1491,13 +1492,16 @@ function replaceActiveWikilinkQuery(target: string) {
   if (start < 0) return false
   const close = text.indexOf(']]', start + 2)
   const end = close >= 0 ? close + 2 : offset
+  const currentQueryEnd = close >= 0 ? close : offset
+  const currentQuery = text.slice(start + 2, currentQueryEnd)
+  const explicitAlias = (currentQuery.split('|', 2)[1] ?? '').trim()
 
   const range = document.createRange()
   range.setStart(textNode, start)
   range.setEnd(textNode, end)
   range.deleteContents()
 
-  const rawToken = `[[${target}]]`
+  const rawToken = buildWikilinkToken(target, explicitAlias || null)
   const insertedText = document.createTextNode(rawToken)
   range.insertNode(insertedText)
   expandedLinkContext = { textNode: insertedText, range: { start: 0, end: rawToken.length } }

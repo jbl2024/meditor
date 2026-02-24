@@ -47,3 +47,36 @@ export function slugifyHeading(value: string): string {
     .replace(/-+/g, '-')
     .replace(/^-+|-+$/g, '')
 }
+
+function stripMarkdownExtension(value: string): string {
+  return value.replace(/\.(md|markdown)$/i, '')
+}
+
+export function inferDeepWikilinkAlias(target: string): string | null {
+  const parsed = parseWikilinkTarget(target)
+  const notePath = parsed.notePath.replace(/\\/g, '/').trim()
+  if (!notePath || !notePath.includes('/')) return null
+
+  const segments = notePath.split('/').filter(Boolean)
+  const rawLast = segments[segments.length - 1]?.trim() ?? ''
+  if (!rawLast) return null
+
+  const alias = stripMarkdownExtension(rawLast).trim()
+  return alias || null
+}
+
+export function buildWikilinkToken(target: string, alias?: string | null): string {
+  const normalizedTarget = String(target ?? '').trim()
+  const normalizedAlias = String(alias ?? '').trim()
+  if (!normalizedTarget) return '[[]]'
+
+  if (normalizedAlias) {
+    return `[[${normalizedTarget}|${normalizedAlias}]]`
+  }
+
+  const inferred = inferDeepWikilinkAlias(normalizedTarget)
+  if (inferred && inferred !== normalizedTarget) {
+    return `[[${normalizedTarget}|${inferred}]]`
+  }
+  return `[[${normalizedTarget}]]`
+}
