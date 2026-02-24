@@ -1133,7 +1133,19 @@ function ensureCodeBlockUi() {
       wrapButton = document.createElement('button')
       wrapButton.type = 'button'
       wrapButton.className = 'meditor-code-wrap-btn'
-      wrapButton.innerHTML = `<span aria-hidden="true">Wrap</span>`
+      wrapButton.innerHTML = `
+        <span class="icon-wrap-on" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" focusable="false" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h10.5" />
+          </svg>
+        </span>
+        <span class="icon-wrap-off" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" focusable="false" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="m16.5 16.5 3 3m0-3-3 3" />
+          </svg>
+        </span>
+      `
       wrapButton.addEventListener('click', () => {
         setCodeWrapEnabled(!codeWrapEnabled.value)
         refreshCodeWrapUi()

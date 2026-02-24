@@ -402,6 +402,10 @@ html.dark .ce-popover-item--focused,
     align-items: center;
     justify-content: center;
     cursor: pointer;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-2px);
+    transition: opacity 120ms ease, transform 120ms ease;
   }
 
   .editor-holder .meditor-code-wrap-btn {
@@ -417,16 +421,53 @@ html.dark .ce-popover-item--focused,
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    font-size: 0.62rem;
-    font-weight: 700;
-    letter-spacing: 0.02em;
     padding: 0 0.35rem;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-2px);
+    transition: opacity 120ms ease, transform 120ms ease;
+  }
+
+  .editor-holder .meditor-code-wrap-btn svg {
+    width: 0.92rem;
+    height: 0.92rem;
+    fill: none;
+    stroke: currentColor;
+  }
+
+  .editor-holder .meditor-code-wrap-btn .icon-wrap-off {
+    display: none;
   }
 
   .editor-holder .meditor-code-wrap-btn.is-active {
     border-color: #93c5fd;
     background: #eff6ff;
     color: #1d4ed8;
+  }
+
+  .editor-holder .meditor-code-wrap-btn.is-active .icon-wrap-on {
+    display: inline-flex;
+  }
+
+  .editor-holder .meditor-code-wrap-btn.is-active .icon-wrap-off {
+    display: none;
+  }
+
+  .editor-holder .meditor-code-wrap-btn:not(.is-active) .icon-wrap-on {
+    display: none;
+  }
+
+  .editor-holder .meditor-code-wrap-btn:not(.is-active) .icon-wrap-off {
+    display: inline-flex;
+  }
+
+  .editor-holder .ce-code:hover .meditor-code-copy-btn,
+  .editor-holder .ce-code:focus-within .meditor-code-copy-btn,
+  .editor-holder .ce-code:hover .meditor-code-wrap-btn,
+  .editor-holder .ce-code:focus-within .meditor-code-wrap-btn {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
   }
 
   .editor-holder .meditor-code-copy-btn svg {
