@@ -18,6 +18,19 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.3.2] - 2026-02-24
+
+### Added
+- feat(editor): show date tokens as blue underlined links while Cmd/Ctrl is held (4a14c41)
+
+### Fixed
+- fix(editor): use indeterminate loading state during main-thread-blocking phases (06f0b54)
+- fix(explorer): hide hidden directories from tree listing (168092c)
+- fix(backlinks): detect wikilink targets correctly when alias is present (8d75bd5)
+- fix(editor): delay autosave while editing virtual title (c87b3c4)
+- fix(editor): open external links via system browser with tauri allowlisted command (3c2994f)
+- fix(editor): force JetBrains Mono for code block textarea (7c25109)
+
 ## [0.3.1] - 2026-02-24
 
 ### Added
