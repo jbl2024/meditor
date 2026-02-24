@@ -18,6 +18,21 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.3.0] - 2026-02-24
+
+### Added
+- feat(code): enable word wrap by default and add wrap toggle button (2f971d7)
+
+### Changed
+- perf(editor): batch code block UI refresh and gate wikilink sync on large notes (6f5a457)
+- test(quote): cover inline markdown formatting in custom quote renderer (94d2b25)
+- refactor(quote): replace editorjs quote plugin with custom multiline quote tool (8c22756)
+- style(lists): increase line-height and spacing for unordered, ordered, and checklist items (544185f)
+- style(code): show code block action buttons only on hover or focus (e4249d5)
+
+### Fixed
+- fix(tables): support inline markdown formatting in table cells (c92ad3c)
+
 ## [0.2.12] - 2026-02-24
 
 ### Added
