@@ -207,6 +207,9 @@ type PaletteAction = {
 const paletteActions = computed<PaletteAction[]>(() => [
   { id: 'open-workspace', label: 'Open Workspace', run: () => openWorkspaceFromPalette() },
   { id: 'close-workspace', label: 'Close Workspace', run: () => closeWorkspaceFromPalette() },
+  { id: 'zoom-in', label: 'Zoom In (Editor)', run: () => zoomInFromPalette() },
+  { id: 'zoom-out', label: 'Zoom Out (Editor)', run: () => zoomOutFromPalette() },
+  { id: 'zoom-reset', label: 'Reset Zoom (Editor)', run: () => resetZoomFromPalette() },
   { id: 'theme-light', label: 'Theme: Light', run: () => setThemeFromPalette('light') },
   { id: 'theme-dark', label: 'Theme: Dark', run: () => setThemeFromPalette('dark') },
   { id: 'theme-system', label: 'Theme: System', run: () => setThemeFromPalette('system') },
@@ -443,6 +446,21 @@ function zoomOutFromOverflow() {
 function resetZoomFromOverflow() {
   const next = editorRef.value?.resetZoom()
   editorZoom.value = clampEditorZoom(typeof next === 'number' ? next : 1)
+}
+
+function zoomInFromPalette() {
+  zoomInFromOverflow()
+  return false
+}
+
+function zoomOutFromPalette() {
+  zoomOutFromOverflow()
+  return false
+}
+
+function resetZoomFromPalette() {
+  resetZoomFromOverflow()
+  return false
 }
 
 function closeHistoryMenu() {
