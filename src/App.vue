@@ -134,6 +134,8 @@ const newFolderModalError = ref('')
 const openDateModalVisible = ref(false)
 const openDateInput = ref('')
 const openDateModalError = ref('')
+const shortcutsModalVisible = ref(false)
+const shortcutsFilterQuery = ref('')
 const wikilinkRewriteQueue: Array<{
   fromPath: string
   toPath: string
@@ -207,6 +209,7 @@ type PaletteAction = {
 const paletteActions = computed<PaletteAction[]>(() => [
   { id: 'open-workspace', label: 'Open Workspace', run: () => openWorkspaceFromPalette() },
   { id: 'close-workspace', label: 'Close Workspace', run: () => closeWorkspaceFromPalette() },
+  { id: 'show-shortcuts', label: 'Show Keyboard Shortcuts', run: () => openShortcutsFromPalette() },
   { id: 'zoom-in', label: 'Zoom In (Editor)', run: () => zoomInFromPalette() },
   { id: 'zoom-out', label: 'Zoom Out (Editor)', run: () => zoomOutFromPalette() },
   { id: 'zoom-reset', label: 'Reset Zoom (Editor)', run: () => resetZoomFromPalette() },
@@ -222,6 +225,59 @@ const paletteActions = computed<PaletteAction[]>(() => [
   { id: 'open-file', label: 'Open File', run: () => (quickOpenQuery.value = '', false) },
   { id: 'reveal-in-explorer', label: 'Reveal in Explorer', run: () => revealActiveInExplorer() }
 ])
+
+const shortcutSections = computed(() => {
+  const mod = primaryModLabel.value
+  return [
+    {
+      title: 'General',
+      items: [
+        { keys: `${mod}+P`, action: 'Quick open' },
+        { keys: `${mod}+Shift+P`, action: 'Command palette' },
+        { keys: `${mod}+S`, action: 'Save note' },
+        { keys: `${mod}+W`, action: 'Close current tab' },
+        { keys: `${mod}+Tab`, action: 'Next tab' },
+        { keys: `${mod}+Shift+F`, action: 'Search panel' }
+      ]
+    },
+    {
+      title: 'Navigation',
+      items: [
+        { keys: `${mod}+[`, action: 'Back in history' },
+        { keys: `${mod}+]`, action: 'Forward in history' },
+        { keys: `${mod}+D`, action: 'Open today note' },
+        { keys: `${mod}+Shift+H`, action: 'Open today note (home)' },
+        { keys: `${mod}+E`, action: 'Show explorer' },
+        { keys: `${mod}+B`, action: 'Toggle sidebar' },
+        { keys: `${mod}+J`, action: 'Toggle right pane' }
+      ]
+    },
+    {
+      title: 'Editor Zoom',
+      items: [
+        { keys: `${mod}++`, action: 'Zoom in' },
+        { keys: `${mod}+-`, action: 'Zoom out' },
+        { keys: `${mod}+0`, action: 'Reset zoom' }
+      ]
+    }
+  ]
+})
+
+const filteredShortcutSections = computed(() => {
+  const query = shortcutsFilterQuery.value.trim().toLowerCase()
+  if (!query) return shortcutSections.value
+
+  return shortcutSections.value
+    .map((section) => {
+      const titleMatches = section.title.toLowerCase().includes(query)
+      if (titleMatches) return section
+      const items = section.items.filter((item) =>
+        item.keys.toLowerCase().includes(query) || item.action.toLowerCase().includes(query)
+      )
+      return { ...section, items }
+    })
+    .filter((section) => section.items.length > 0)
+})
 
 const quickOpenIsActionMode = computed(() => quickOpenQuery.value.trimStart().startsWith('>'))
 const quickOpenActionQuery = computed(() => quickOpenQuery.value.trimStart().slice(1).trim().toLowerCase())
@@ -289,6 +345,7 @@ const backShortcutLabel = computed(() => (isMacOs ? 'Cmd+[' : 'Ctrl+['))
 const forwardShortcutLabel = computed(() => (isMacOs ? 'Cmd+]' : 'Ctrl+]'))
 const homeShortcutLabel = computed(() => (isMacOs ? 'Cmd+Shift+H' : 'Ctrl+Shift+H'))
 const zoomPercentLabel = computed(() => `${Math.round(editorZoom.value * 100)}%`)
+const primaryModLabel = computed(() => (isMacOs ? 'Cmd' : 'Ctrl'))
 
 const WINDOWS_RESERVED_NAME_RE = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i
 const FORBIDDEN_FILE_CHARS_RE = /[<>:"/\\|?*\u0000-\u001f]/g
@@ -413,6 +470,28 @@ function toggleOverflowMenu() {
 
 function closeOverflowMenu() {
   overflowMenuOpen.value = false
+}
+
+function openShortcutsModal() {
+  shortcutsFilterQuery.value = ''
+  shortcutsModalVisible.value = true
+  void nextTick(() => {
+    document.querySelector<HTMLInputElement>('[data-shortcuts-filter=\"true\"]')?.focus()
+  })
+}
+
+function closeShortcutsModal() {
+  shortcutsModalVisible.value = false
+}
+
+function openShortcutsFromOverflow() {
+  closeOverflowMenu()
+  openShortcutsModal()
+}
+
+function openShortcutsFromPalette() {
+  openShortcutsModal()
+  return true
 }
 
 function clampEditorZoom(value: number): number {
@@ -1494,7 +1573,12 @@ async function runQuickOpenAction(id: string) {
   if (!shouldClose) return
   closeQuickOpen()
   nextTick(() => {
-    if (!newFileModalVisible.value && !newFolderModalVisible.value && !openDateModalVisible.value) {
+    if (
+      !newFileModalVisible.value &&
+      !newFolderModalVisible.value &&
+      !openDateModalVisible.value &&
+      !shortcutsModalVisible.value
+    ) {
       editorRef.value?.focusEditor()
     }
   })
@@ -1866,6 +1950,12 @@ function onWindowKeydown(event: KeyboardEvent) {
     event.preventDefault()
     event.stopPropagation()
     closeOpenDateModal()
+    return
+  }
+  if (isEscape && shortcutsModalVisible.value) {
+    event.preventDefault()
+    event.stopPropagation()
+    closeShortcutsModal()
     return
   }
 
@@ -2395,6 +2485,18 @@ onBeforeUnmount(() => {
                 <button
                   type="button"
                   class="overflow-item"
+                  @click="openShortcutsFromOverflow"
+                >
+                  <svg class="overflow-item-icon" viewBox="0 0 16 16" aria-hidden="true">
+                    <rect x="1.5" y="2.5" width="13" height="10.5" rx="1.6" ry="1.6" />
+                    <line x1="4" y1="6" x2="12" y2="6" />
+                    <line x1="4" y1="9" x2="8.5" y2="9" />
+                  </svg>
+                  Keyboard shortcuts
+                </button>
+                <button
+                  type="button"
+                  class="overflow-item"
                   :disabled="!filesystem.hasWorkspace.value || filesystem.indexingState.value === 'indexing'"
                   @click="void rebuildIndexFromOverflow()"
                 >
@@ -2686,6 +2788,33 @@ onBeforeUnmount(() => {
         <div class="confirm-actions">
           <UiButton size="sm" variant="ghost" @click="closeOpenDateModal">Cancel</UiButton>
           <UiButton size="sm" @click="submitOpenDateFromModal">Open</UiButton>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="shortcutsModalVisible" class="modal-overlay" @click.self="closeShortcutsModal">
+      <div class="modal shortcuts-modal">
+        <h3 class="confirm-title">Keyboard Shortcuts</h3>
+        <input
+          v-model="shortcutsFilterQuery"
+          data-shortcuts-filter="true"
+          class="tool-input shortcuts-filter-input"
+          placeholder="Filter shortcuts (ex: zoom, save, Ctrl+P)"
+        />
+        <div class="shortcuts-sections">
+          <section v-for="section in filteredShortcutSections" :key="section.title" class="shortcuts-section">
+            <h4 class="shortcuts-title">{{ section.title }}</h4>
+            <div class="shortcuts-grid">
+              <template v-for="item in section.items" :key="`${section.title}-${item.keys}-${item.action}`">
+                <span class="shortcut-keys">{{ item.keys }}</span>
+                <span class="shortcut-action">{{ item.action }}</span>
+              </template>
+            </div>
+          </section>
+          <div v-if="!filteredShortcutSections.length" class="placeholder">No matching shortcuts</div>
+        </div>
+        <div class="confirm-actions">
+          <UiButton size="sm" @click="closeShortcutsModal">Close</UiButton>
         </div>
       </div>
     </div>
@@ -3554,6 +3683,83 @@ onBeforeUnmount(() => {
 .ide-root.dark .modal {
   border-color: #334155;
   background: #020617;
+}
+
+.shortcuts-modal {
+  width: min(900px, calc(100vw - 32px));
+  max-height: calc(100vh - 120px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.shortcuts-filter-input {
+  flex: 0 0 auto;
+}
+
+.shortcuts-sections {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+  margin-top: 2px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.shortcuts-section {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px;
+  min-width: 0;
+}
+
+.ide-root.dark .shortcuts-section {
+  border-color: #334155;
+}
+
+.shortcuts-title {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ide-root.dark .shortcuts-title {
+  color: #94a3b8;
+}
+
+.shortcuts-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 12px;
+  align-items: start;
+}
+
+.shortcut-keys {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 11px;
+  color: #0f172a;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 3px 6px;
+  white-space: nowrap;
+}
+
+.ide-root.dark .shortcut-keys {
+  color: #e2e8f0;
+  background: #0f172a;
+  border-color: #334155;
+}
+
+.shortcut-action {
+  font-size: 12px;
+  color: #334155;
+}
+
+.ide-root.dark .shortcut-action {
+  color: #cbd5e1;
 }
 
 .modal-list {
