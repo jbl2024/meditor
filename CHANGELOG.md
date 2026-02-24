@@ -18,6 +18,15 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.3.1] - 2026-02-24
+
+### Added
+- feat(wikilinks): make Tab insert draft link text instead of finalizing completion (fd4e279)
+- feat(wikilinks): auto-alias deep targets to last path segment on completion (8007705)
+
+### Fixed
+- fix(wikilink-menu): differentiate keyboard selection from hover state (d44e799)
+
 ## [0.3.0] - 2026-02-24
 
 ### Added
