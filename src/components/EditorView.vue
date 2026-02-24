@@ -30,6 +30,7 @@ import {
   type PropertyTypeSchema
 } from '../lib/propertyTypes'
 import {
+  buildWikilinkDraftToken,
   buildWikilinkToken,
   parseWikilinkTarget,
   normalizeBlockId,
@@ -1479,7 +1480,7 @@ function readWikilinkTargetFromAnchor(anchor: HTMLAnchorElement): string {
   return ''
 }
 
-function replaceActiveWikilinkQuery(target: string) {
+function replaceActiveWikilinkQuery(target: string, mode: 'final' | 'draft' = 'final') {
   const selection = window.getSelection()
   if (!selection || !selection.rangeCount || !selection.isCollapsed) return false
   const node = selection.focusNode
@@ -1501,7 +1502,9 @@ function replaceActiveWikilinkQuery(target: string) {
   range.setEnd(textNode, end)
   range.deleteContents()
 
-  const rawToken = buildWikilinkToken(target, explicitAlias || null)
+  const rawToken = mode === 'final'
+    ? buildWikilinkToken(target, explicitAlias || null)
+    : buildWikilinkDraftToken(target)
   const insertedText = document.createTextNode(rawToken)
   range.insertNode(insertedText)
   expandedLinkContext = { textNode: insertedText, range: { start: 0, end: rawToken.length } }
@@ -1830,7 +1833,7 @@ function collapseClosedLinkNearCaret(): boolean {
 }
 
 async function applyWikilinkSelection(target: string) {
-  const replaced = replaceActiveWikilinkQuery(target)
+  const replaced = replaceActiveWikilinkQuery(target, 'final')
   closeWikilinkMenu()
   if (!replaced) {
     return
@@ -1844,6 +1847,21 @@ async function applyWikilinkSelection(target: string) {
   }
   await nextTick()
   collapseClosedLinkNearCaret()
+}
+
+async function applyWikilinkDraftSelection(target: string) {
+  const replaced = replaceActiveWikilinkQuery(target, 'draft')
+  closeWikilinkMenu()
+  if (!replaced) {
+    return
+  }
+
+  const path = currentPath.value
+  if (path) {
+    setDirty(path, true)
+    setSaveError(path, '')
+    scheduleAutosave()
+  }
 }
 
 function extractTokenAtCaret(): string {
@@ -2052,7 +2070,11 @@ function onEditorKeydown(event: KeyboardEvent) {
       if (typeof event.stopImmediatePropagation === 'function') {
         event.stopImmediatePropagation()
       }
-      void applyWikilinkSelection(selected.target)
+      if (event.key === 'Tab') {
+        void applyWikilinkDraftSelection(selected.target)
+      } else {
+        void applyWikilinkSelection(selected.target)
+      }
       return
     }
     if (event.key === 'Escape') {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildWikilinkToken, inferDeepWikilinkAlias, parseWikilinkTarget } from './wikilinks'
+import { buildWikilinkDraftToken, buildWikilinkToken, inferDeepWikilinkAlias, parseWikilinkTarget } from './wikilinks'
 
 describe('wikilinks', () => {
   it('parses note and heading anchors', () => {
@@ -24,5 +24,9 @@ describe('wikilinks', () => {
 
   it('keeps explicit alias when provided', () => {
     expect(buildWikilinkToken('folder1/foo', 'custom')).toBe('[[folder1/foo|custom]]')
+  })
+
+  it('builds draft token without closing markers', () => {
+    expect(buildWikilinkDraftToken('folder1/foo')).toBe('[[folder1/foo')
   })
 })

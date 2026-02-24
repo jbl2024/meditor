@@ -80,3 +80,8 @@ export function buildWikilinkToken(target: string, alias?: string | null): strin
   }
   return `[[${normalizedTarget}]]`
 }
+
+export function buildWikilinkDraftToken(target: string): string {
+  const normalizedTarget = String(target ?? '').trim()
+  return `[[${normalizedTarget}`
+}
