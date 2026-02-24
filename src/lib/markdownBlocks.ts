@@ -459,7 +459,7 @@ export function markdownToEditorData(markdown: string): EditorDocument {
       while (i < lines.length) {
         const row = parseTableCells(lines[i], { allowEmptyRow: true })
         if (!row) break
-        rows.push(row)
+        rows.push(row.map((cell) => blockTextToHtml(cell)))
         i += 1
       }
 
@@ -655,8 +655,9 @@ function blockToMarkdown(block: EditorBlock): string {
       const withHeadings = Boolean(block.data?.withHeadings)
       const columnCount = Math.max(...rows.map((row) => row.length), 2)
       const pad = (row: string[]) => Array.from({ length: columnCount }, (_, idx) => row[idx] ?? '')
+      const cellToMarkdown = (value: string) => normalizeParagraphMarkdown(value)
       const escapeCell = (value: string) => value.replace(/\|/g, '\\|').replace(/\r\n?/g, '\n').replace(/\n/g, '<br>')
-      const rowToLine = (row: string[]) => `| ${row.map((cell) => escapeCell(cell.trim())).join(' | ')} |`
+      const rowToLine = (row: string[]) => `| ${row.map((cell) => escapeCell(cellToMarkdown(cell))).join(' | ')} |`
 
       const normalizedRows = rows.map(pad)
       const header = withHeadings ? normalizedRows[0] : Array.from({ length: columnCount }, () => '')

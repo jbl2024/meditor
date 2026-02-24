@@ -41,6 +41,37 @@ describe('markdownToEditorData tables', () => {
       }
     })
   })
+
+  it('renders inline markdown inside table cells', () => {
+    const markdown = `
+| Feature | Value |
+| --- | --- |
+| **Deployment** | Single binary |
+`.trim()
+
+    const parsed = markdownToEditorData(markdown)
+    expect(parsed.blocks).toHaveLength(1)
+    expect(parsed.blocks[0].type).toBe('table')
+    expect(parsed.blocks[0].data).toEqual({
+      withHeadings: true,
+      content: [
+        ['Feature', 'Value'],
+        ['<strong>Deployment</strong>', 'Single binary']
+      ]
+    })
+  })
+
+  it('preserves table inline formatting when saving back to markdown', () => {
+    const markdown = `
+| Feature | Value |
+| --- | --- |
+| **Deployment** | Single binary |
+`.trim()
+
+    const parsed = markdownToEditorData(markdown)
+    const output = editorDataToMarkdown(parsed)
+    expect(output).toContain('| **Deployment** | Single binary |')
+  })
 })
 
 describe('nested lists', () => {
