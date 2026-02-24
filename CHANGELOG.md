@@ -18,6 +18,13 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.2.12] - 2026-02-24
+
+### Added
+- feat(ui): add platform-aware keyboard shortcuts modal accessible from palette and overflow menu (817cc0c)
+- feat(palette): add editor zoom in/out/reset actions to command palette (cd39888)
+- feat(ui): add zoom section to overflow menu and wire editor zoom actions (f31cfa8)
+
 ## [0.2.11] - 2026-02-23
 
 ### Added
