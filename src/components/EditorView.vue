@@ -46,6 +46,8 @@ import {
 } from '../lib/wikilinks'
 
 const AUTOSAVE_IDLE_MS = 1800
+const AUTOSAVE_TITLE_IDLE_MS = 5000
+const AUTOSAVE_TITLE_RETRY_MS = 1200
 const VIRTUAL_TITLE_BLOCK_ID = '__virtual_title__'
 type CorePropertyOption = {
   key: string
@@ -916,9 +918,31 @@ function requestMermaidReplaceConfirm(payload: { templateLabel: string }): Promi
 
 function scheduleAutosave() {
   clearAutosaveTimer()
+  const delay = isEditingVirtualTitle() ? AUTOSAVE_TITLE_IDLE_MS : AUTOSAVE_IDLE_MS
   autosaveTimer = setTimeout(() => {
+    if (isEditingVirtualTitle()) {
+      autosaveTimer = setTimeout(() => {
+        void saveCurrentFile(false)
+      }, AUTOSAVE_TITLE_RETRY_MS)
+      return
+    }
     void saveCurrentFile(false)
-  }, AUTOSAVE_IDLE_MS)
+  }, delay)
+}
+
+function isEditingVirtualTitle(): boolean {
+  if (!holder.value) return false
+  const selection = window.getSelection()
+  if (!selection?.focusNode) return false
+
+  const focusedElement =
+    selection.focusNode.nodeType === Node.ELEMENT_NODE
+      ? (selection.focusNode as Element)
+      : selection.focusNode.parentElement
+  if (!focusedElement) return false
+
+  const block = focusedElement.closest('.ce-block') as HTMLElement | null
+  return block?.dataset.id === VIRTUAL_TITLE_BLOCK_ID
 }
 
 function isVirtualTitleDomValid(): boolean {
