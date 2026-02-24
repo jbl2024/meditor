@@ -58,6 +58,10 @@ type EditorViewExposed = {
   revealSnippet: (snippet: string) => Promise<void>
   revealOutlineHeading: (index: number) => Promise<void>
   revealAnchor: (anchor: WikilinkAnchor) => Promise<boolean>
+  zoomIn: () => number
+  zoomOut: () => number
+  resetZoom: () => number
+  getZoom: () => number
 }
 
 type SaveFileOptions = {
@@ -84,6 +88,7 @@ type VirtualDoc = {
 
 const THEME_STORAGE_KEY = 'meditor.theme.preference'
 const WORKING_FOLDER_STORAGE_KEY = 'meditor.working-folder.path'
+const EDITOR_ZOOM_STORAGE_KEY = 'meditor:editor:zoom'
 
 const workspace = useWorkspaceState()
 const editorState = useEditorState()
@@ -118,6 +123,7 @@ const propertiesPreview = ref<PropertyPreviewRow[]>([])
 const propertyParseErrorCount = ref(0)
 const virtualDocs = ref<Record<string, VirtualDoc>>({})
 const overflowMenuOpen = ref(false)
+const editorZoom = ref(1)
 const wikilinkRewritePrompt = ref<{ fromPath: string; toPath: string } | null>(null)
 const newFileModalVisible = ref(false)
 const newFilePathInput = ref('')
@@ -279,6 +285,7 @@ const mediaQuery = typeof window !== 'undefined'
 const backShortcutLabel = computed(() => (isMacOs ? 'Cmd+[' : 'Ctrl+['))
 const forwardShortcutLabel = computed(() => (isMacOs ? 'Cmd+]' : 'Ctrl+]'))
 const homeShortcutLabel = computed(() => (isMacOs ? 'Cmd+Shift+H' : 'Ctrl+Shift+H'))
+const zoomPercentLabel = computed(() => `${Math.round(editorZoom.value * 100)}%`)
 
 const WINDOWS_RESERVED_NAME_RE = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i
 const FORBIDDEN_FILE_CHARS_RE = /[<>:"/\\|?*\u0000-\u001f]/g
@@ -395,11 +402,47 @@ function onSystemThemeChanged() {
 
 function toggleOverflowMenu() {
   closeHistoryMenu()
+  if (!overflowMenuOpen.value) {
+    syncEditorZoom()
+  }
   overflowMenuOpen.value = !overflowMenuOpen.value
 }
 
 function closeOverflowMenu() {
   overflowMenuOpen.value = false
+}
+
+function clampEditorZoom(value: number): number {
+  return Math.max(0.8, Math.min(1.6, Number(value.toFixed(2))))
+}
+
+function readStoredEditorZoom(): number {
+  const raw = Number.parseFloat(window.localStorage.getItem(EDITOR_ZOOM_STORAGE_KEY) ?? '1')
+  return Number.isFinite(raw) ? clampEditorZoom(raw) : 1
+}
+
+function syncEditorZoom() {
+  const viaEditor = editorRef.value?.getZoom()
+  if (typeof viaEditor === 'number' && Number.isFinite(viaEditor)) {
+    editorZoom.value = clampEditorZoom(viaEditor)
+    return
+  }
+  editorZoom.value = readStoredEditorZoom()
+}
+
+function zoomInFromOverflow() {
+  const next = editorRef.value?.zoomIn()
+  editorZoom.value = clampEditorZoom(typeof next === 'number' ? next : readStoredEditorZoom())
+}
+
+function zoomOutFromOverflow() {
+  const next = editorRef.value?.zoomOut()
+  editorZoom.value = clampEditorZoom(typeof next === 'number' ? next : readStoredEditorZoom())
+}
+
+function resetZoomFromOverflow() {
+  const next = editorRef.value?.resetZoom()
+  editorZoom.value = clampEditorZoom(typeof next === 'number' ? next : 1)
 }
 
 function closeHistoryMenu() {
@@ -2046,6 +2089,7 @@ watch(
 onMounted(() => {
   loadThemePreference()
   applyTheme()
+  editorZoom.value = readStoredEditorZoom()
   mediaQuery?.addEventListener('change', onSystemThemeChanged)
   window.addEventListener('keydown', onWindowKeydown, true)
   window.addEventListener('mousedown', onGlobalPointerDown, true)
@@ -2340,7 +2384,7 @@ onBeforeUnmount(() => {
                     <path d="M8 2.5a5.5 5.5 0 1 1-4.4 2.2" />
                     <polyline points="1.8,2.6 4.9,2.6 4.9,5.7" />
                   </svg>
-                  Rebuild index
+                  Reindex workspace
                 </button>
                 <button
                   type="button"
@@ -2354,6 +2398,33 @@ onBeforeUnmount(() => {
                   </svg>
                   Close workspace
                 </button>
+                <div class="overflow-divider"></div>
+                <div class="overflow-label">Zoom</div>
+                <button
+                  type="button"
+                  class="overflow-item"
+                  @click="zoomInFromOverflow"
+                >
+                  <span class="overflow-item-icon overflow-glyph">+</span>
+                  Zoom in
+                </button>
+                <button
+                  type="button"
+                  class="overflow-item"
+                  @click="zoomOutFromOverflow"
+                >
+                  <span class="overflow-item-icon overflow-glyph">-</span>
+                  Zoom out
+                </button>
+                <button
+                  type="button"
+                  class="overflow-item"
+                  @click="resetZoomFromOverflow"
+                >
+                  <span class="overflow-item-icon overflow-glyph">100</span>
+                  Reset zoom
+                </button>
+                <div class="overflow-zoom-state">Editor zoom: {{ zoomPercentLabel }}</div>
                 <div class="overflow-divider"></div>
                 <div class="overflow-label">Theme</div>
                 <button
@@ -2953,6 +3024,27 @@ onBeforeUnmount(() => {
   stroke: currentColor;
   stroke-width: 1.6;
   flex: 0 0 auto;
+}
+
+.overflow-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+}
+
+.overflow-zoom-state {
+  padding: 2px 10px 4px;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.ide-root.dark .overflow-zoom-state {
+  color: #94a3b8;
 }
 
 .overflow-divider {

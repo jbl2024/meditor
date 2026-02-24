@@ -2596,7 +2596,20 @@ defineExpose({
   focusFirstContentBlock,
   revealSnippet,
   revealOutlineHeading,
-  revealAnchor
+  revealAnchor,
+  zoomIn: () => {
+    zoomEditorBy(0.1)
+    return editorZoom.value
+  },
+  zoomOut: () => {
+    zoomEditorBy(-0.1)
+    return editorZoom.value
+  },
+  resetZoom: () => {
+    resetEditorZoom()
+    return editorZoom.value
+  },
+  getZoom: () => editorZoom.value
 })
 </script>
 
