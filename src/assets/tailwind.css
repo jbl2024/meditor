@@ -214,12 +214,12 @@ html.dark .ce-popover-item--focused,
   }
 
   .editor-holder .cdx-list {
-    margin: 0.05rem 0 0.2rem;
-    --spacing-s: 2px;
+    margin: 0.12rem 0 0.32rem;
+    --spacing-s: 4px;
     --spacing-xs: 0px;
-    --line-height: 1.26em;
+    --line-height: 1.45em;
     --meditor-list-marker-gap: 0.32rem;
-    gap: 2px !important;
+    gap: 4px !important;
     padding-top: 0 !important;
     padding-bottom: 0 !important;
   }
@@ -227,7 +227,7 @@ html.dark .ce-popover-item--focused,
   .editor-holder .cdx-list__item {
     margin: 0;
     padding: 0;
-    line-height: 1.26;
+    line-height: var(--line-height);
     grid-template-columns: var(--meditor-list-marker-col) minmax(0, 1fr);
     column-gap: var(--meditor-list-marker-gap);
     align-items: start;
@@ -247,16 +247,16 @@ html.dark .ce-popover-item--focused,
   .editor-holder .cdx-list-ordered .cdx-list__item::before,
   .editor-holder .cdx-list-unordered .cdx-list__item::before {
     align-self: baseline;
-    line-height: 1.26;
+    line-height: var(--line-height);
   }
 
   .editor-holder .cdx-list__item + .cdx-list__item {
-    margin-top: 0.01rem;
+    margin-top: 0.14rem;
   }
 
   .editor-holder .cdx-list__item-content {
     padding-left: 0 !important;
-    line-height: 1.26;
+    line-height: var(--line-height);
   }
 
   .editor-holder .cdx-list__checkbox {
