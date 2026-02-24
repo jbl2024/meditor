@@ -247,6 +247,7 @@ const shortcutSections = computed(() => {
         { keys: `${mod}+]`, action: 'Forward in history' },
         { keys: `${mod}+D`, action: 'Open today note' },
         { keys: `${mod}+Shift+H`, action: 'Open today note (home)' },
+        { keys: `${mod}+Click`, action: 'Open date token (YYYY-MM-DD) in editor' },
         { keys: `${mod}+E`, action: 'Show explorer' },
         { keys: `${mod}+B`, action: 'Toggle sidebar' },
         { keys: `${mod}+J`, action: 'Toggle right pane' }
