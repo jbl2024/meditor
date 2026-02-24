@@ -694,6 +694,45 @@ pub fn open_path_external(path: String) -> Result<()> {
     Ok(())
 }
 
+fn sanitize_external_url(raw: &str) -> Result<String> {
+    let value = raw.trim();
+    if value.is_empty() {
+        return Err(AppError::InvalidPath);
+    }
+
+    if value.chars().any(|ch| ch.is_control()) {
+        return Err(AppError::InvalidPath);
+    }
+
+    let lower = value.to_ascii_lowercase();
+    let is_http = lower.starts_with("http://");
+    let is_https = lower.starts_with("https://");
+    let is_mailto = lower.starts_with("mailto:");
+
+    if !is_http && !is_https && !is_mailto {
+        return Err(AppError::InvalidPath);
+    }
+
+    if is_http || is_https {
+        let scheme_len = if is_https { "https://".len() } else { "http://".len() };
+        let host = value[scheme_len..].split(['/', '?', '#']).next().unwrap_or("");
+        if host.trim().is_empty() {
+            return Err(AppError::InvalidPath);
+        }
+    } else if value["mailto:".len()..].trim().is_empty() {
+        return Err(AppError::InvalidPath);
+    }
+
+    Ok(value.to_string())
+}
+
+#[tauri::command]
+pub fn open_external_url(url: String) -> Result<()> {
+    let safe_url = sanitize_external_url(&url)?;
+    open::that_detached(safe_url).map_err(|_| AppError::OperationFailed)?;
+    Ok(())
+}
+
 #[tauri::command]
 pub fn reveal_in_file_manager(path: String) -> Result<()> {
     let root = active_workspace_root()?;
@@ -718,8 +757,8 @@ mod tests {
 
     use super::{
         copy_entry, create_entry, duplicate_entry, list_children, list_markdown_files, move_entry,
-        open_path_external, read_text_file, rename_entry, reveal_in_file_manager, trash_entry,
-        ConflictStrategy, EntryKind,
+        open_external_url, open_path_external, read_text_file, rename_entry,
+        reveal_in_file_manager, sanitize_external_url, trash_entry, ConflictStrategy, EntryKind,
     };
 
     fn make_temp_dir() -> PathBuf {
@@ -1008,5 +1047,41 @@ mod tests {
         fs::remove_file(outside).expect("cleanup outside file");
         fs::remove_dir_all(outside_dir).expect("cleanup outside dir");
         fs::remove_dir_all(workspace).expect("cleanup workspace");
+    }
+
+    #[test]
+    fn sanitize_external_url_allows_expected_schemes() {
+        assert_eq!(
+            sanitize_external_url("https://example.com/path").expect("https url"),
+            "https://example.com/path"
+        );
+        assert_eq!(
+            sanitize_external_url("http://example.com").expect("http url"),
+            "http://example.com"
+        );
+        assert_eq!(
+            sanitize_external_url("mailto:test@example.com").expect("mailto url"),
+            "mailto:test@example.com"
+        );
+    }
+
+    #[test]
+    fn sanitize_external_url_rejects_invalid_schemes() {
+        assert!(sanitize_external_url("javascript:alert(1)").is_err());
+        assert!(sanitize_external_url("file:///tmp/foo").is_err());
+        assert!(sanitize_external_url("www.example.com").is_err());
+    }
+
+    #[test]
+    fn sanitize_external_url_rejects_missing_host_and_payload() {
+        assert!(sanitize_external_url("https://").is_err());
+        assert!(sanitize_external_url("http:///path").is_err());
+        assert!(sanitize_external_url("mailto:").is_err());
+    }
+
+    #[test]
+    fn open_external_url_rejects_invalid_scheme() {
+        let result = open_external_url("javascript:alert(1)".to_string());
+        assert!(result.is_err());
     }
 }

@@ -11,8 +11,14 @@ import Table from '@editorjs/table'
 import CalloutTool from '../lib/editorjs/CalloutTool'
 import MermaidTool from '../lib/editorjs/MermaidTool'
 import QuoteTool from '../lib/editorjs/QuoteTool'
-import { editorDataToMarkdown, markdownToEditorData, type EditorBlock } from '../lib/markdownBlocks'
+import {
+  editorDataToMarkdown,
+  markdownToEditorData,
+  sanitizeExternalHref,
+  type EditorBlock
+} from '../lib/markdownBlocks'
 import { collectAffectedCodeBlocks, hasWikilinkHint } from '../lib/editorPerf'
+import { openExternalUrl } from '../lib/api'
 import PropertyAddDropdown from './properties/PropertyAddDropdown.vue'
 import PropertyTokenInput from './properties/PropertyTokenInput.vue'
 import {
@@ -2228,6 +2234,16 @@ function onEditorClick(event: MouseEvent) {
     event.stopPropagation()
     void openLinkTargetWithAutosave(wikilinkTarget)
     return
+  }
+  if (anchor) {
+    const href = anchor.getAttribute('href')?.trim() ?? ''
+    const safeHref = sanitizeExternalHref(href)
+    if (safeHref) {
+      event.preventDefault()
+      event.stopPropagation()
+      void openExternalUrl(safeHref)
+      return
+    }
   }
   collapseClosedLinkNearCaret()
   captureCaret(currentPath.value)

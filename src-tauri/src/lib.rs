@@ -16,9 +16,9 @@ use thiserror::Error;
 
 use fs_ops::{
     clear_working_folder, copy_entry, create_entry, duplicate_entry, list_children,
-    list_markdown_files, move_entry, open_path_external, path_exists, read_text_file, rename_entry,
-    reveal_in_file_manager, select_working_folder, set_working_folder, trash_entry,
-    write_text_file,
+    list_markdown_files, move_entry, open_external_url, open_path_external, path_exists,
+    read_text_file, rename_entry, reveal_in_file_manager, select_working_folder,
+    set_working_folder, trash_entry, write_text_file,
 };
 
 const INTERNAL_DIR_NAME: &str = ".meditor";
@@ -1462,6 +1462,7 @@ pub fn run() {
             move_entry,
             trash_entry,
             open_path_external,
+            open_external_url,
             reveal_in_file_manager,
             init_db,
             reindex_markdown_file,

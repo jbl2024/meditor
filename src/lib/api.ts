@@ -115,6 +115,10 @@ export async function openPathExternal(path: string): Promise<void> {
   await invoke('open_path_external', { path })
 }
 
+export async function openExternalUrl(url: string): Promise<void> {
+  await invoke('open_external_url', { url })
+}
+
 export async function revealInFileManager(path: string): Promise<void> {
   await invoke('reveal_in_file_manager', { path })
 }
