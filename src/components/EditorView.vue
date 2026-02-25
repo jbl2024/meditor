@@ -49,6 +49,7 @@ import { useEditorSaveLifecycle } from '../composables/useEditorSaveLifecycle'
 import { useVirtualTitleBehavior } from '../composables/useVirtualTitleBehavior'
 import { useEditorCaret, type EditorCaretSnapshot } from '../composables/useEditorCaret'
 import { useEditorOutlineNavigation } from '../composables/useEditorOutlineNavigation'
+import { useEditorZoom } from '../composables/useEditorZoom'
 import {
   normalizeBlockId,
   normalizeHeadingAnchor,
@@ -132,7 +133,6 @@ const emit = defineEmits<{
 
 const holder = ref<HTMLDivElement | null>(null)
 const checklistDebugOn = ref(false)
-const editorZoom = ref(1)
 let editor: EditorJS | null = null
 let suppressOnChange = false
 
@@ -142,8 +142,8 @@ const slashLeft = ref(0)
 const slashTop = ref(0)
 
 const currentPath = computed(() => props.path?.trim() || '')
-const editorZoomStyle = computed(() => ({ '--editor-zoom': String(editorZoom.value) }))
 const isMacOs = typeof navigator !== 'undefined' && /(Mac|iPhone|iPad|iPod)/i.test(navigator.platform || navigator.userAgent)
+const { editorZoomStyle, initFromStorage: initEditorZoomFromStorage, zoomBy: zoomEditorBy, resetZoom: resetEditorZoom, getZoom } = useEditorZoom()
 const {
   parseOutlineFromDom,
   revealAnchor,
@@ -396,23 +396,6 @@ function focusEditor() {
   if (!holder.value) return
   const editable = holder.value.querySelector('[contenteditable="true"]') as HTMLElement | null
   editable?.focus()
-}
-
-function clampEditorZoom(value: number): number {
-  return Math.max(0.8, Math.min(1.6, Number(value.toFixed(2))))
-}
-
-function setEditorZoom(next: number) {
-  editorZoom.value = clampEditorZoom(next)
-  window.localStorage.setItem('meditor:editor:zoom', String(editorZoom.value))
-}
-
-function zoomEditorBy(delta: number) {
-  setEditorZoom(editorZoom.value + delta)
-}
-
-function resetEditorZoom() {
-  setEditorZoom(1)
 }
 
 async function focusFirstContentBlock() {
@@ -759,10 +742,7 @@ onMounted(async () => {
   const debugFlag = window.localStorage.getItem('meditor:debug:checklist')
   checklistDebugOn.value = debugFlag === '1'
   initCodeUiFromStorage()
-  const savedZoom = Number.parseFloat(window.localStorage.getItem('meditor:editor:zoom') ?? '1')
-  if (Number.isFinite(savedZoom)) {
-    editorZoom.value = clampEditorZoom(savedZoom)
-  }
+  initEditorZoomFromStorage()
 
   if (currentPath.value) {
     await ensureEditor()
@@ -793,18 +773,15 @@ defineExpose({
   revealOutlineHeading,
   revealAnchor,
   zoomIn: () => {
-    zoomEditorBy(0.1)
-    return editorZoom.value
+    return zoomEditorBy(0.1)
   },
   zoomOut: () => {
-    zoomEditorBy(-0.1)
-    return editorZoom.value
+    return zoomEditorBy(-0.1)
   },
   resetZoom: () => {
-    resetEditorZoom()
-    return editorZoom.value
+    return resetEditorZoom()
   },
-  getZoom: () => editorZoom.value
+  getZoom
 })
 </script>
 
