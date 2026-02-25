@@ -45,6 +45,7 @@ import { useCodeBlockUi } from '../composables/useCodeBlockUi'
 import { useWikilinkBehavior } from '../composables/useWikilinkBehavior'
 import { useEditorInteraction } from '../composables/useEditorInteraction'
 import { useEditorDocumentLifecycle } from '../composables/useEditorDocumentLifecycle'
+import { useEditorSaveLifecycle } from '../composables/useEditorSaveLifecycle'
 import {
   normalizeBlockId,
   normalizeHeadingAnchor,
@@ -1023,74 +1024,56 @@ const {
   }
 })
 
-async function saveCurrentFile(manual = true) {
-  const initialPath = currentPath.value
-  if (!initialPath || !editor || savingByPath.value[initialPath]) return
-
-  let savePath = initialPath
-  setSaving(savePath, true)
-  if (manual) setSaveError(savePath, '')
-
-  try {
+const saveLifecycle = useEditorSaveLifecycle({
+  getCurrentPath: () => currentPath.value,
+  hasActiveEditor: () => Boolean(editor),
+  isSavingPath: (path) => Boolean(savingByPath.value[path]),
+  setSaving,
+  setSaveError,
+  setDirty,
+  saveEditorData: async () => {
+    if (!editor) return { blocks: [] as OutputBlockData[] }
     const data = await editor.save()
-    const rawBlocks = (data.blocks ?? []) as OutputBlockData[]
-    const requestedTitle = readVirtualTitle(rawBlocks) || blockTextCandidate(rawBlocks[0]) || noteTitleFromPath(initialPath)
-    const lastLoaded = loadedTextByPath.value[initialPath] ?? ''
-
-    const latestOnDisk = await props.openFile(initialPath)
-    if (latestOnDisk !== lastLoaded) {
-      throw new Error('File changed on disk. Reload before saving to avoid overwrite.')
-    }
-
-    const renameResult = await props.renameFileFromTitle(initialPath, requestedTitle)
-    savePath = renameResult.path
-    const normalized = withVirtualTitle(rawBlocks, renameResult.title)
-    const markdownBlocks = stripVirtualTitle(normalized.blocks)
-    const bodyMarkdown = editorDataToMarkdown({ blocks: markdownBlocks as unknown as EditorBlock[] })
+    return { blocks: (data.blocks ?? []) as OutputBlockData[] }
+  },
+  resolveRequestedTitle: (blocks, initialPath) => readVirtualTitle(blocks) || blockTextCandidate(blocks[0]) || noteTitleFromPath(initialPath),
+  getLoadedText: (path) => loadedTextByPath.value[path] ?? '',
+  openFile: props.openFile,
+  renameFileFromTitle: props.renameFileFromTitle,
+  normalizeBlocksForTitle: withVirtualTitle,
+  stripVirtualTitle,
+  editorBlocksToMarkdown: (blocks) => editorDataToMarkdown({ blocks: blocks as unknown as EditorBlock[] }),
+  resolveFrontmatterYaml: (savePath, initialPath) => {
     const frontmatterState = frontmatterByPath.value[savePath] ?? frontmatterByPath.value[initialPath]
-    const frontmatterYaml = propertyEditorMode.value === 'raw'
-      ? (rawYamlByPath.value[savePath] ?? rawYamlByPath.value[initialPath] ?? '')
-      : serializeFrontmatter(serializableFrontmatterFields(frontmatterState?.fields ?? []))
-    const markdown = composeMarkdownDocument(bodyMarkdown, frontmatterYaml)
-
-    if (!manual && savePath === initialPath && markdown === lastLoaded) {
-      setDirty(savePath, false)
-      return
+    if (propertyEditorMode.value === 'raw') {
+      return rawYamlByPath.value[savePath] ?? rawYamlByPath.value[initialPath] ?? ''
     }
-
-    if (savePath !== initialPath) {
-      movePersistencePathState(initialPath, savePath)
-      moveFrontmatterPathState(initialPath, savePath)
-      emit('path-renamed', { from: initialPath, to: savePath, manual })
-    }
-
-    if (normalized.changed) {
-      await renderBlocks(normalized.blocks)
-    }
-
-    const result = await props.saveFile(savePath, markdown, { explicit: manual })
-    if (!result.persisted) {
-      setDirty(savePath, true)
-      return
-    }
-
+    return serializeFrontmatter(serializableFrontmatterFields(frontmatterState?.fields ?? []))
+  },
+  composeMarkdownDocument,
+  movePersistencePathState,
+  moveFrontmatterPathState,
+  emitPathRenamed: (payload) => emit('path-renamed', payload),
+  renderBlocks,
+  saveFile: props.saveFile,
+  setLoadedText: (path, markdown) => {
     loadedTextByPath.value = {
       ...loadedTextByPath.value,
-      [savePath]: markdown
+      [path]: markdown
     }
-    parseAndStoreFrontmatter(savePath, markdown)
-    if (savePath !== initialPath) {
-      const nextLoaded = { ...loadedTextByPath.value }
-      delete nextLoaded[initialPath]
-      loadedTextByPath.value = nextLoaded
-    }
-    setDirty(savePath, false)
-  } catch (err) {
-    setSaveError(savePath, err instanceof Error ? err.message : 'Could not save file.')
-  } finally {
-    setSaving(savePath, false)
-    emitOutlineSoon()
-  }
+  },
+  deleteLoadedText: (path) => {
+    if (!(path in loadedTextByPath.value)) return
+    const nextLoaded = { ...loadedTextByPath.value }
+    delete nextLoaded[path]
+    loadedTextByPath.value = nextLoaded
+  },
+  parseAndStoreFrontmatter,
+  emitOutlineSoon
+})
+
+async function saveCurrentFile(manual = true) {
+  await saveLifecycle.saveCurrentFile(manual)
 }
 
 watch(
