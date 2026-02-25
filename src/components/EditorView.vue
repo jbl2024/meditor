@@ -47,6 +47,7 @@ import { useEditorInteraction } from '../composables/useEditorInteraction'
 import { useEditorDocumentLifecycle } from '../composables/useEditorDocumentLifecycle'
 import { useEditorSaveLifecycle } from '../composables/useEditorSaveLifecycle'
 import { useVirtualTitleBehavior } from '../composables/useVirtualTitleBehavior'
+import { useEditorCaret, type EditorCaretSnapshot } from '../composables/useEditorCaret'
 import {
   normalizeBlockId,
   normalizeHeadingAnchor,
@@ -81,10 +82,6 @@ type HeadingNode = {
   level: 1 | 2 | 3
   text: string
 }
-
-type CaretSnapshot =
-  | { kind: 'contenteditable'; blockIndex: number; offset: number }
-  | { kind: 'text-input'; blockIndex: number; offset: number }
 
 type ListStyle = 'unordered' | 'ordered' | 'checklist'
 
@@ -182,10 +179,14 @@ const {
   clearAutosaveTimer,
   scheduleAutosave,
   movePathState: movePersistencePathState
-} = useEditorPersistence<CaretSnapshot>({
+} = useEditorPersistence<EditorCaretSnapshot>({
   emitStatus: (payload) => emit('status', payload),
   isEditingVirtualTitle,
   saveCurrentFile
+})
+const { captureCaret, restoreCaret } = useEditorCaret({
+  holder,
+  caretByPath
 })
 const {
   propertyEditorMode,
@@ -275,127 +276,6 @@ const mermaidReplaceDialog = ref<{
   templateLabel: '',
   resolve: null
 })
-
-function textOffsetWithinRoot(selection: Selection, root: HTMLElement): number | null {
-  if (!selection.rangeCount || !selection.isCollapsed) return null
-  const node = selection.focusNode
-  if (!node || !root.contains(node)) return null
-
-  const range = document.createRange()
-  range.selectNodeContents(root)
-  range.setEnd(node, selection.focusOffset)
-  return range.toString().length
-}
-
-function resolveTextPosition(root: HTMLElement, offset: number): { node: Text; offset: number } | null {
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
-  let remaining = Math.max(0, offset)
-  let current = walker.nextNode() as Text | null
-
-  while (current) {
-    const length = current.data.length
-    if (remaining <= length) {
-      return { node: current, offset: remaining }
-    }
-    remaining -= length
-    current = walker.nextNode() as Text | null
-  }
-
-  if (!root.lastChild || root.lastChild.nodeType !== Node.TEXT_NODE) {
-    root.appendChild(document.createTextNode(''))
-  }
-  const tail = root.lastChild as Text
-  return { node: tail, offset: tail.data.length }
-}
-
-function isTextEntryElement(element: HTMLElement): element is HTMLTextAreaElement | HTMLInputElement {
-  if (element instanceof HTMLTextAreaElement) return true
-  if (!(element instanceof HTMLInputElement)) return false
-  const type = (element.type || 'text').toLowerCase()
-  return ['text', 'search', 'url', 'tel', 'password', 'email', 'number'].includes(type)
-}
-
-function captureCaret(path: string) {
-  if (!path || !holder.value) return
-  const blocks = Array.from(holder.value.querySelectorAll('.ce-block')) as HTMLElement[]
-
-  const activeElement = document.activeElement as HTMLElement | null
-  if (activeElement && holder.value.contains(activeElement)) {
-    if (isTextEntryElement(activeElement)) {
-      const block = activeElement.closest('.ce-block') as HTMLElement | null
-      if (!block) return
-      const blockIndex = blocks.indexOf(block)
-      if (blockIndex < 0) return
-      caretByPath.value = {
-        ...caretByPath.value,
-        [path]: {
-          kind: 'text-input',
-          blockIndex,
-          offset: activeElement.selectionStart ?? 0
-        }
-      }
-      return
-    }
-  }
-
-  const selection = window.getSelection()
-  if (!selection || !selection.rangeCount || !selection.isCollapsed) return
-  const node = selection.focusNode
-  if (!node) return
-  const parent = node.nodeType === Node.ELEMENT_NODE ? (node as HTMLElement) : node.parentElement
-  const block = parent?.closest('.ce-block') as HTMLElement | null
-  if (!block) return
-  const blockIndex = blocks.indexOf(block)
-  if (blockIndex < 0) return
-  const editable = block.querySelector('[contenteditable="true"]') as HTMLElement | null
-  if (!editable) return
-  const offset = textOffsetWithinRoot(selection, editable)
-  if (offset === null) return
-
-  caretByPath.value = {
-    ...caretByPath.value,
-    [path]: {
-      kind: 'contenteditable',
-      blockIndex,
-      offset
-    }
-  }
-}
-
-function restoreCaret(path: string): boolean {
-  if (!path || !holder.value) return false
-  const snapshot = caretByPath.value[path]
-  if (!snapshot) return false
-  const blocks = Array.from(holder.value.querySelectorAll('.ce-block')) as HTMLElement[]
-  const block = blocks[snapshot.blockIndex]
-  if (!block) return false
-
-  if (snapshot.kind === 'text-input') {
-    const input = Array.from(block.querySelectorAll('textarea, input'))
-      .find((element) => isTextEntryElement(element as HTMLElement)) as HTMLTextAreaElement | HTMLInputElement | undefined
-    if (!input) return false
-    const max = input.value.length
-    const offset = Math.max(0, Math.min(snapshot.offset, max))
-    input.focus()
-    input.setSelectionRange(offset, offset)
-    return true
-  }
-
-  const editable = block.querySelector('[contenteditable="true"]') as HTMLElement | null
-  if (!editable) return false
-  const resolved = resolveTextPosition(editable, snapshot.offset)
-  if (!resolved) return false
-
-  editable.focus()
-  const selection = window.getSelection()
-  if (!selection) return false
-  const range = document.createRange()
-  range.setStart(resolved.node, resolved.offset)
-  range.collapse(true)
-  selection.removeAllRanges()
-  selection.addRange(range)
-  return true
-}
 
 async function renderBlocks(blocks: OutputBlockData[]) {
   if (!editor) return
