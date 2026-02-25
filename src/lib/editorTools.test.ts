@@ -27,6 +27,7 @@ describe('createEditorTools', () => {
     expect(tools.header.inlineToolbar).toEqual(['bold', 'italic', 'strikethrough', 'underline', 'link', 'inlineCode'])
     expect(tools.list.inlineToolbar).toEqual(['bold', 'italic', 'strikethrough', 'underline', 'link', 'inlineCode'])
     expect(tools.quote.inlineToolbar).toEqual(['bold', 'italic', 'strikethrough', 'underline', 'link', 'inlineCode'])
+    expect(tools.table.inlineToolbar).toEqual(['bold', 'italic', 'strikethrough', 'underline', 'link', 'inlineCode'])
   })
 
   it('forwards mermaid confirmation callback into tool config', async () => {

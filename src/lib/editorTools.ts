@@ -57,6 +57,7 @@ export function createEditorTools(confirmMermaidReplace: MermaidReplaceConfirm) 
     },
     table: {
       class: TableTool as unknown as never,
+      inlineToolbar: richInlineTools,
       config: {
         rows: 2,
         cols: 2,
