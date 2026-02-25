@@ -34,8 +34,11 @@ import {
 } from '../lib/markdownBlocks'
 import { hasWikilinkHint } from '../lib/editorPerf'
 import { openExternalUrl } from '../lib/api'
-import PropertyAddDropdown from './properties/PropertyAddDropdown.vue'
-import PropertyTokenInput from './properties/PropertyTokenInput.vue'
+import EditorPropertiesPanel from './editor/EditorPropertiesPanel.vue'
+import EditorSlashMenu from './editor/EditorSlashMenu.vue'
+import EditorWikilinkMenu from './editor/EditorWikilinkMenu.vue'
+import EditorLargeDocOverlay from './editor/EditorLargeDocOverlay.vue'
+import EditorMermaidReplaceDialog from './editor/EditorMermaidReplaceDialog.vue'
 import { composeMarkdownDocument, serializeFrontmatter } from '../lib/frontmatter'
 import { useEditorPersistence } from '../composables/useEditorPersistence'
 import { useFrontmatterProperties } from '../composables/useFrontmatterProperties'
@@ -457,18 +460,6 @@ function restoreCaret(path: string): boolean {
   selection.removeAllRanges()
   selection.addRange(range)
   return true
-}
-
-function inputValue(event: Event): string {
-  return (event.target as HTMLInputElement | HTMLTextAreaElement | null)?.value ?? ''
-}
-
-function selectValue(event: Event): string {
-  return (event.target as HTMLSelectElement | null)?.value ?? ''
-}
-
-function checkboxValue(event: Event): boolean {
-  return (event.target as HTMLInputElement | null)?.checked ?? false
 }
 
 async function renderBlocks(blocks: OutputBlockData[]) {
@@ -2312,128 +2303,28 @@ defineExpose({
     </div>
 
     <div v-else class="editor-shell flex min-h-0 flex-1 flex-col overflow-hidden bg-white dark:bg-slate-950">
-      <section
-        class="properties-panel border-b border-slate-200 dark:border-slate-800"
-        :class="propertiesExpanded(path) ? 'px-8 py-3' : 'px-8 py-2'"
-      >
-        <div class="flex items-center justify-between gap-3" :class="propertiesExpanded(path) ? 'mb-2' : 'mb-0'">
-          <button
-            type="button"
-            class="inline-flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100"
-            @click="togglePropertiesVisibility"
-          >
-            <span aria-hidden="true">{{ propertiesExpanded(path) ? '▾' : '▸' }}</span>
-            <span>Properties</span>
-          </button>
-          <div v-if="propertiesExpanded(path)" class="flex items-center gap-1.5">
-            <button
-              type="button"
-              class="rounded border border-slate-300 px-2 py-0.5 text-[11px] text-slate-700 dark:border-slate-700 dark:text-slate-200"
-              :class="propertyEditorMode === 'structured' ? 'bg-slate-100 dark:bg-slate-800' : ''"
-              :disabled="!canUseStructuredProperties"
-              @click="propertyEditorMode = 'structured'"
-            >
-              Structured
-            </button>
-            <button
-              type="button"
-              class="rounded border border-slate-300 px-2 py-0.5 text-[11px] text-slate-700 dark:border-slate-700 dark:text-slate-200"
-              :class="propertyEditorMode === 'raw' ? 'bg-slate-100 dark:bg-slate-800' : ''"
-              @click="propertyEditorMode = 'raw'"
-            >
-              Raw YAML
-            </button>
-          </div>
-        </div>
-
-        <div v-if="propertiesExpanded(path) && propertyEditorMode === 'structured'" class="space-y-2">
-          <div
-            v-for="(field, index) in structuredPropertyFields"
-            :key="index"
-            class="property-row grid grid-cols-[1fr_auto_2fr_auto] items-center gap-2"
-          >
-            <input
-              :value="field.key"
-              class="rounded border border-slate-300 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              placeholder="key"
-              @input="void onPropertyKeyInput(index, inputValue($event))"
-            />
-            <select
-              :value="effectiveTypeForField(field)"
-              class="rounded border border-slate-300 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              :disabled="isPropertyTypeLocked(field.key)"
-              @change="void onPropertyTypeChange(index, selectValue($event))"
-            >
-              <option value="text">Text</option>
-              <option value="list">List</option>
-              <option value="number">Number</option>
-              <option value="checkbox">Checkbox</option>
-              <option value="date">Date</option>
-              <option value="tags">Tags</option>
-            </select>
-            <div class="min-w-0">
-              <input
-                v-if="effectiveTypeForField(field) === 'text' || effectiveTypeForField(field) === 'date'"
-                :value="String(field.value ?? '')"
-                class="w-full rounded border border-slate-300 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                :placeholder="effectiveTypeForField(field) === 'date' ? 'YYYY-MM-DD' : 'value'"
-                @input="onPropertyValueInput(index, inputValue($event))"
-              />
-              <input
-                v-else-if="effectiveTypeForField(field) === 'number'"
-                :value="String(field.value ?? 0)"
-                class="w-full rounded border border-slate-300 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                type="number"
-                @input="onPropertyValueInput(index, inputValue($event))"
-              />
-              <PropertyTokenInput
-                v-else-if="effectiveTypeForField(field) === 'list' || effectiveTypeForField(field) === 'tags'"
-                :model-value="Array.isArray(field.value) ? field.value : []"
-                :placeholder="effectiveTypeForField(field) === 'tags' ? 'add tag' : 'add value'"
-                @update:modelValue="onPropertyTokensChange(index, $event)"
-              />
-              <label v-else class="inline-flex items-center gap-2 text-xs text-slate-700 dark:text-slate-200">
-                <input
-                  type="checkbox"
-                  :checked="Boolean(field.value)"
-                  @change="onPropertyCheckboxInput(index, checkboxValue($event))"
-                />
-                true / false
-              </label>
-            </div>
-            <button
-              type="button"
-              class="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 dark:border-slate-700 dark:text-slate-200"
-              @click="removePropertyField(index)"
-            >
-              Remove
-            </button>
-          </div>
-
-          <div class="flex items-center gap-2">
-            <PropertyAddDropdown
-              :options="CORE_PROPERTY_OPTIONS"
-              :existing-keys="structuredPropertyKeys"
-              @select="addPropertyField"
-            />
-          </div>
-        </div>
-
-        <div v-else-if="propertiesExpanded(path)">
-          <textarea
-            class="font-mono min-h-28 w-full rounded border border-slate-300 p-2 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            :value="activeRawYaml"
-            placeholder="title: My note"
-            @input="onRawYamlInput(inputValue($event))"
-          ></textarea>
-        </div>
-
-        <div v-if="propertiesExpanded(path) && activeParseErrors.length" class="mt-2 text-xs text-red-600 dark:text-red-400">
-          <div v-for="(error, index) in activeParseErrors" :key="`${error.line}-${index}`">
-            Line {{ error.line }}: {{ error.message }}
-          </div>
-        </div>
-      </section>
+      <EditorPropertiesPanel
+        :expanded="propertiesExpanded(path)"
+        :mode="propertyEditorMode"
+        :can-use-structured-properties="canUseStructuredProperties"
+        :structured-property-fields="structuredPropertyFields"
+        :structured-property-keys="structuredPropertyKeys"
+        :active-raw-yaml="activeRawYaml"
+        :active-parse-errors="activeParseErrors"
+        :core-property-options="CORE_PROPERTY_OPTIONS"
+        :effective-type-for-field="effectiveTypeForField"
+        :is-property-type-locked="isPropertyTypeLocked"
+        @toggle-visibility="togglePropertiesVisibility"
+        @set-mode="propertyEditorMode = $event"
+        @property-key-input="void onPropertyKeyInput($event.index, $event.value)"
+        @property-type-change="void onPropertyTypeChange($event.index, $event.value)"
+        @property-value-input="onPropertyValueInput($event.index, $event.value)"
+        @property-checkbox-input="onPropertyCheckboxInput($event.index, $event.checked)"
+        @property-tokens-change="onPropertyTokensChange($event.index, $event.tokens)"
+        @remove-property="removePropertyField($event)"
+        @add-property="addPropertyField($event)"
+        @raw-yaml-input="onRawYamlInput($event)"
+      />
 
       <div class="relative min-h-0 flex-1 overflow-hidden">
         <div
@@ -2443,102 +2334,43 @@ defineExpose({
           :style="editorZoomStyle"
           @click="closeSlashMenu(); closeWikilinkMenu()"
         >
-      <div
-        v-if="slashOpen"
-        class="absolute z-20 w-52 rounded-md border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-800 dark:bg-slate-900"
-        :style="{ left: `${slashLeft}px`, top: `${slashTop}px` }"
-      >
-        <button
-          v-for="(command, idx) in SLASH_COMMANDS"
-          :key="command.id"
-          type="button"
-          class="block w-full rounded px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-          :class="idx === slashIndex ? 'bg-slate-100 dark:bg-slate-800' : ''"
-          @mousedown.prevent="slashIndex = idx"
-          @click.prevent="closeSlashMenu(); replaceCurrentBlock(command.type, command.data)"
-        >
-          {{ command.label }}
-        </button>
-      </div>
+          <EditorSlashMenu
+            :open="slashOpen"
+            :index="slashIndex"
+            :left="slashLeft"
+            :top="slashTop"
+            :commands="SLASH_COMMANDS"
+            @update:index="slashIndex = $event"
+            @select="closeSlashMenu(); replaceCurrentBlock($event.type, $event.data)"
+          />
 
-      <div
-        v-if="wikilinkOpen"
-        ref="wikilinkMenuRef"
-        class="absolute z-20 w-80 max-w-[calc(100%-1rem)] rounded-md border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-800 dark:bg-slate-900"
-        :style="{ left: `${wikilinkLeft}px`, top: `${wikilinkTop}px` }"
-      >
-        <button
-          v-for="(item, idx) in wikilinkResults"
-          :key="item.id"
-          type="button"
-          class="block w-full min-w-0 overflow-hidden rounded px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-900"
-          :class="
-            idx === wikilinkIndex
-              ? 'bg-slate-100 ring-1 ring-inset ring-slate-300 dark:bg-slate-800 dark:ring-slate-600'
-              : ''
-          "
-          :title="item.label"
-          @mousedown.prevent="wikilinkIndex = idx"
-          @click.prevent="applyWikilinkSelection(item.target)"
-        >
-          <span class="block min-w-0 truncate">{{ item.label }}</span>
-        </button>
-        <div v-if="!wikilinkResults.length" class="px-3 py-1.5 text-sm text-slate-500 dark:text-slate-400">No matches</div>
-      </div>
+          <EditorWikilinkMenu
+            :open="wikilinkOpen"
+            :index="wikilinkIndex"
+            :left="wikilinkLeft"
+            :top="wikilinkTop"
+            :results="wikilinkResults"
+            @menu-el="wikilinkMenuRef = $event"
+            @update:index="wikilinkIndex = $event"
+            @select="applyWikilinkSelection($event)"
+          />
         </div>
-        <div
-          v-if="isLoadingLargeDocument"
-          class="pointer-events-none absolute inset-0 z-30 flex items-start justify-center bg-white/75 px-6 py-6 backdrop-blur-[1px] dark:bg-slate-950/75"
-        >
-          <div class="pointer-events-auto w-full max-w-md rounded-xl border border-slate-200 bg-white/95 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/95">
-            <div class="text-sm font-medium text-slate-800 dark:text-slate-100">Loading large document</div>
-            <div class="mt-1 text-xs text-slate-600 dark:text-slate-300">{{ loadStageLabel }}</div>
-            <div v-if="loadDocumentStats" class="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-              {{ loadDocumentStats.lines.toLocaleString() }} lines · {{ loadDocumentStats.chars.toLocaleString() }} chars
-            </div>
-            <div class="mt-3 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
-              <div
-                class="h-full rounded-full bg-blue-600 transition-[width] duration-200 ease-out dark:bg-blue-500"
-                :class="{ 'meditor-load-indeterminate': loadProgressIndeterminate }"
-                :style="loadProgressIndeterminate ? undefined : { width: `${loadProgressPercent}%` }"
-              ></div>
-            </div>
-            <div class="mt-2 text-right text-[11px] text-slate-600 dark:text-slate-300">
-              {{ loadProgressIndeterminate ? 'Working...' : `${loadProgressPercent}%` }}
-            </div>
-          </div>
-        </div>
+        <EditorLargeDocOverlay
+          :visible="isLoadingLargeDocument"
+          :stage-label="loadStageLabel"
+          :progress-percent="loadProgressPercent"
+          :progress-indeterminate="loadProgressIndeterminate"
+          :stats="loadDocumentStats"
+        />
       </div>
     </div>
 
-    <div
-      v-if="mermaidReplaceDialog.visible"
-      class="fixed inset-0 z-30 flex items-center justify-center bg-slate-950/45 px-4"
-      @click.self="resolveMermaidReplaceDialog(false)"
-    >
-      <div class="w-full max-w-sm rounded-2xl border border-slate-300/80 bg-white p-4 shadow-xl dark:border-slate-700/80 dark:bg-slate-900">
-        <h3 class="text-sm font-semibold text-slate-900 dark:text-slate-100">Replace Mermaid diagram?</h3>
-        <p class="mt-1 text-xs text-slate-600 dark:text-slate-400">
-          Replace current Mermaid content with template "{{ mermaidReplaceDialog.templateLabel }}"?
-        </p>
-        <div class="mt-4 flex justify-end gap-2">
-          <button
-            type="button"
-            class="rounded border border-slate-300 px-3 py-1.5 text-xs text-slate-700 dark:border-slate-700 dark:text-slate-200"
-            @click="resolveMermaidReplaceDialog(false)"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            class="rounded border border-[#1d4ed8] bg-[#1d4ed8] px-3 py-1.5 text-xs font-semibold text-white"
-            @click="resolveMermaidReplaceDialog(true)"
-          >
-            Replace
-          </button>
-        </div>
-      </div>
-    </div>
+    <EditorMermaidReplaceDialog
+      :visible="mermaidReplaceDialog.visible"
+      :template-label="mermaidReplaceDialog.templateLabel"
+      @cancel="resolveMermaidReplaceDialog(false)"
+      @confirm="resolveMermaidReplaceDialog(true)"
+    />
 
   </div>
 </template>
@@ -2559,24 +2391,6 @@ defineExpose({
 
 .dark .editor-holder :deep(a.md-wikilink) {
   color: var(--meditor-link-color);
-}
-
-.meditor-load-indeterminate {
-  width: 45%;
-  background-image: linear-gradient(90deg, #2563eb 0%, #3b82f6 50%, #2563eb 100%);
-  background-size: 200% 100%;
-  animation: meditor-load-slide 1.1s linear infinite;
-}
-
-@keyframes meditor-load-slide {
-  from {
-    transform: translateX(-120%);
-    background-position: 0% 0%;
-  }
-  to {
-    transform: translateX(260%);
-    background-position: 100% 0%;
-  }
 }
 
 </style>
