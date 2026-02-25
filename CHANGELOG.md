@@ -18,6 +18,39 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.4.0] - 2026-02-25
+
+### Added
+- feat(editor): enable rich inline formatting in table cells and enforce heading mode at creation (4dee4cc)
+- feat(editor): add strikethrough and underline inline formatting with markdown round-trip support (deafedd)
+
+### Changed
+- docs(design): add EditorView implementation architecture and composables guide (52be6bd)
+- refactor(editor): remove obsolete checklist debug mode and styles (61a3684)
+- refactor(editor): extract tools slash commands and mermaid dialog with documented modules and wiring tests (aa8baa0)
+- refactor(editor): extract block mutation and caret placement helpers into composable with insertion tests (a1b651f)
+- refactor(editor): extract EditorJS instance lifecycle into composable with wiring tests (b04ca41)
+- refactor(editor): extract zoom state and persistence into useEditorZoom with bounds tests (73dc24a)
+- refactor(editor): extract outline and anchor navigation into composable with retry tests (ce52b58)
+- refactor(editor): extract caret snapshot/restore into useEditorCaret with round-trip tests (47ea8ef)
+- refactor(editor): extract virtual title behavior into composable with invariant tests (41848a6)
+- refactor(editor): extract save lifecycle into composable with focused branch tests (566a064)
+- refactor(editor): extract document load lifecycle into composable with deterministic vitest coverage (bb69e4d)
+- docs(history): add TSDoc for useDocumentHistory behavior and invariants (688a1de)
+- refactor(editor): extract input interaction handlers into useEditorInteraction with focused vitest coverage (8ccbfb1)
+- docs(editor): document editorPerf module and mutation helpers (58ed9c0)
+- refactor(editor): extract wikilink behavior and interaction helpers with vitest coverage (05fbf1d)
+- refactor(editor): extract wikilink behavior into composable with vitest coverage (99a452f)
+- test(editor): add vitest coverage for useCodeBlockUi behavior and observer wiring (8e5fb42)
+- refactor(editor): extract editor ui panels and overlays into dedicated components (2b2fcb4)
+- refactor(editor): extract code block UI behavior into useCodeBlockUi composable (dd088d1)
+- refactor(editor): extract persistence/frontmatter behaviors, add vitest coverage, and standardize docs/comments (73cac92)
+
+### Fixed
+- fix(editor): enforce table headers on creation and save with custom TableTool wrapper (d5c4d5d)
+- fix(docs): rename docs (7a86643)
+- fix(editor): prevent code-block scroll jump on unrelated sibling mutations (558f33f)
+
 ## [0.3.3] - 2026-02-25
 
 ### Changed
