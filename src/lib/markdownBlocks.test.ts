@@ -133,6 +133,22 @@ describe('wikilinks with underscores', () => {
   })
 })
 
+describe('underline formatting', () => {
+  it('parses inline <u> tags as underline html', () => {
+    const parsed = markdownToEditorData('This is <u>important</u>.')
+    expect(parsed.blocks).toHaveLength(1)
+    expect(parsed.blocks[0].type).toBe('paragraph')
+    expect(String(parsed.blocks[0].data.text)).toContain('<u>important</u>')
+  })
+
+  it('preserves underline tags in markdown round-trip', () => {
+    const markdown = 'This is <u>important</u>.'
+    const parsed = markdownToEditorData(markdown)
+    const output = editorDataToMarkdown(parsed)
+    expect(output).toContain('<u>important</u>')
+  })
+})
+
 describe('indented blocks', () => {
   it('parses four-space indented content as code block (not raw)', () => {
     const markdown = `

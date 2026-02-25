@@ -334,7 +334,7 @@ const { ensureEditor, destroyEditor } = useEditorInstance({
     holder: holderElement,
     autofocus: false,
     defaultBlock: 'paragraph',
-    inlineToolbar: ['bold', 'italic', 'link', 'inlineCode'],
+    inlineToolbar: ['bold', 'italic', 'strikethrough', 'underline', 'link', 'inlineCode'],
     placeholder: 'Write here...',
     tools: createEditorTools(requestMermaidReplaceConfirm),
     onChange: onEditorChange

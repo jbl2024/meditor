@@ -8,6 +8,8 @@ import Table from '@editorjs/table'
 import CalloutTool from './editorjs/CalloutTool'
 import MermaidTool from './editorjs/MermaidTool'
 import QuoteTool from './editorjs/QuoteTool'
+import StrikethroughInlineTool from './editorjs/StrikethroughInlineTool'
+import UnderlineInlineTool from './editorjs/UnderlineInlineTool'
 
 /**
  * editorTools
@@ -25,6 +27,8 @@ type MermaidReplaceConfirm = (payload: { templateLabel: string }) => Promise<boo
  * Creates EditorJS tool configuration used by the note editor.
  */
 export function createEditorTools(confirmMermaidReplace: MermaidReplaceConfirm) {
+  const richInlineTools = ['bold', 'italic', 'strikethrough', 'underline', 'link', 'inlineCode']
+
   return {
     paragraph: {
       // EditorJS tool typings are broad/inconsistent across packages; this cast keeps a strongly typed factory surface.
@@ -34,7 +38,7 @@ export function createEditorTools(confirmMermaidReplace: MermaidReplaceConfirm) 
     },
     header: {
       class: Header as unknown as never,
-      inlineToolbar: ['bold', 'italic', 'link', 'inlineCode'],
+      inlineToolbar: richInlineTools,
       config: {
         levels: [1, 2, 3, 4, 5, 6],
         defaultLevel: 2
@@ -42,14 +46,14 @@ export function createEditorTools(confirmMermaidReplace: MermaidReplaceConfirm) 
     },
     list: {
       class: List,
-      inlineToolbar: ['bold', 'italic', 'link', 'inlineCode'],
+      inlineToolbar: richInlineTools,
       config: {
         defaultStyle: 'unordered'
       }
     },
     quote: {
       class: QuoteTool as unknown as never,
-      inlineToolbar: ['bold', 'italic', 'link', 'inlineCode']
+      inlineToolbar: richInlineTools
     },
     table: {
       class: Table as unknown as never,
@@ -70,6 +74,8 @@ export function createEditorTools(confirmMermaidReplace: MermaidReplaceConfirm) 
     },
     code: CodeTool,
     delimiter: Delimiter,
-    inlineCode: InlineCode
+    inlineCode: InlineCode,
+    strikethrough: StrikethroughInlineTool as unknown as never,
+    underline: UnderlineInlineTool as unknown as never
   }
 }

@@ -77,6 +77,17 @@ function extractCodeSpans(value: string): { text: string; tokens: string[] } {
   return { text: out, tokens }
 }
 
+function extractUnderlineSpans(value: string): { text: string; tokens: string[] } {
+  const tokens: string[] = []
+  // Detects raw underline HTML spans, e.g. "<u>important</u>".
+  const text = value.replace(/<u>([\s\S]*?)<\/u>/gi, (_full: string, inner: string) => {
+    const token = `\u0000MDUNDERLINE${tokens.length}\u0000`
+    tokens.push(`<u>${parseInlineSegment(inner)}</u>`)
+    return token
+  })
+  return { text, tokens }
+}
+
 function parseInlineSegment(value: string): string {
   if (!value) return ''
 
@@ -87,8 +98,9 @@ function parseInlineSegment(value: string): string {
     return token
   })
 
-  const { text, tokens: codeTokens } = extractCodeSpans(escapedValue)
-  let html = escapeHtml(text)
+  const { text: codeProtected, tokens: codeTokens } = extractCodeSpans(escapedValue)
+  const { text: underlineProtected, tokens: underlineTokens } = extractUnderlineSpans(codeProtected)
+  let html = escapeHtml(underlineProtected)
 
   html = html.replace(/~~(?=\S)([\s\S]*?\S)~~/g, '<s>$1</s>')
   html = html.replace(/\*\*(?=\S)([\s\S]*?\S)\*\*/g, '<strong>$1</strong>')
@@ -99,6 +111,9 @@ function parseInlineSegment(value: string): string {
 
   codeTokens.forEach((tokenHtml, index) => {
     html = html.split(`\u0000MDCODE${index}\u0000`).join(tokenHtml)
+  })
+  underlineTokens.forEach((tokenHtml, index) => {
+    html = html.split(`\u0000MDUNDERLINE${index}\u0000`).join(tokenHtml)
   })
   escapes.forEach((escapedChar, index) => {
     html = html.split(`\u0000MDESC${index}\u0000`).join(escapedChar)
@@ -197,6 +212,7 @@ function elementToMarkdown(node: Node): string {
   if (tag === 'strong' || tag === 'b') return `**${children}**`
   if (tag === 'em' || tag === 'i') return `*${children}*`
   if (tag === 's' || tag === 'strike') return `~~${children}~~`
+  if (tag === 'u') return `<u>${children}</u>`
   if (tag === 'code') return `\`${children.replace(/`/g, '\\`')}\``
 
   if (tag === 'a') {
