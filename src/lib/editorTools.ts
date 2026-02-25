@@ -4,11 +4,11 @@ import Header from '@editorjs/header'
 import InlineCode from '@editorjs/inline-code'
 import List from '@editorjs/list'
 import Paragraph from '@editorjs/paragraph'
-import Table from '@editorjs/table'
 import CalloutTool from './editorjs/CalloutTool'
 import MermaidTool from './editorjs/MermaidTool'
 import QuoteTool from './editorjs/QuoteTool'
 import StrikethroughInlineTool from './editorjs/StrikethroughInlineTool'
+import TableTool from './editorjs/TableTool'
 import UnderlineInlineTool from './editorjs/UnderlineInlineTool'
 
 /**
@@ -56,7 +56,7 @@ export function createEditorTools(confirmMermaidReplace: MermaidReplaceConfirm) 
       inlineToolbar: richInlineTools
     },
     table: {
-      class: Table as unknown as never,
+      class: TableTool as unknown as never,
       config: {
         rows: 2,
         cols: 2,
