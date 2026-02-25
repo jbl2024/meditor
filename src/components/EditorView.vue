@@ -93,7 +93,6 @@ const emit = defineEmits<{
 }>()
 
 const holder = ref<HTMLDivElement | null>(null)
-const checklistDebugOn = ref(false)
 let editor: EditorJS | null = null
 let suppressOnChange = false
 
@@ -503,8 +502,6 @@ watch(
 )
 
 onMounted(async () => {
-  const debugFlag = window.localStorage.getItem('meditor:debug:checklist')
-  checklistDebugOn.value = debugFlag === '1'
   initCodeUiFromStorage()
   initEditorZoomFromStorage()
 
@@ -586,7 +583,6 @@ defineExpose({
         <div
           ref="holder"
           class="editor-holder relative h-full min-h-0 overflow-y-auto px-8 py-6"
-          :class="{ 'meditor-debug-checklist': checklistDebugOn }"
           :style="editorZoomStyle"
           @click="closeSlashMenu(); closeWikilinkMenu()"
         >
