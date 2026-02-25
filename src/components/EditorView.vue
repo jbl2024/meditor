@@ -32,6 +32,14 @@ import {
   sanitizeExternalHref,
   type EditorBlock
 } from '../lib/markdownBlocks'
+import {
+  applyMarkdownShortcut,
+  isEditorZoomModifier,
+  isLikelyMarkdownPaste,
+  isZoomInShortcut,
+  isZoomOutShortcut,
+  isZoomResetShortcut
+} from '../lib/editorInteractions'
 import { openExternalUrl } from '../lib/api'
 import EditorPropertiesPanel from './editor/EditorPropertiesPanel.vue'
 import EditorSlashMenu from './editor/EditorSlashMenu.vue'
@@ -668,68 +676,6 @@ function replaceCurrentBlock(type: string, data: Record<string, unknown>): boole
   }
 }
 
-function applyMarkdownShortcut(marker: string) {
-  // Detects checklist markers, e.g. "[ ]", "[x]", "- [x]".
-  const checklistMatch = marker.match(/^(-\s*)?\[([ xX]?)\]$/)
-  if (checklistMatch) {
-    return {
-      type: 'list',
-      data: emptyListData('checklist', checklistMatch[2].toLowerCase() === 'x')
-    }
-  }
-
-  switch (marker) {
-    case '-':
-    case '*':
-    case '+':
-      return { type: 'list', data: emptyListData('unordered') }
-    case '1.':
-      return { type: 'list', data: emptyListData('ordered') }
-    case '>':
-      return { type: 'quote', data: { text: '' } }
-    case '```':
-      return { type: 'code', data: { code: '' } }
-    default:
-      break
-  }
-
-  // Detects ATX heading markers, e.g. "#", "##", "######".
-  if (/^#{1,6}$/.test(marker)) {
-    return {
-      type: 'header',
-      data: { text: '', level: marker.length }
-    }
-  }
-
-  return null
-}
-
-function isEditorZoomModifier(event: KeyboardEvent): boolean {
-  return (event.metaKey || event.ctrlKey) && !event.altKey
-}
-
-function isZoomInShortcut(event: KeyboardEvent): boolean {
-  return (
-    event.key === '=' ||
-    event.key === '+' ||
-    event.code === 'Equal' ||
-    event.code === 'NumpadAdd'
-  )
-}
-
-function isZoomOutShortcut(event: KeyboardEvent): boolean {
-  return (
-    event.key === '-' ||
-    event.key === '_' ||
-    event.code === 'Minus' ||
-    event.code === 'NumpadSubtract'
-  )
-}
-
-function isZoomResetShortcut(event: KeyboardEvent): boolean {
-  return event.key === '0' || event.code === 'Digit0' || event.code === 'Numpad0'
-}
-
 function onEditorKeydown(event: KeyboardEvent) {
   if (!editor) return
   const target = event.target as HTMLElement | null
@@ -977,18 +923,6 @@ function onEditorContextMenu(event: MouseEvent) {
   if (!block || block.dataset.id !== VIRTUAL_TITLE_BLOCK_ID) return
   event.preventDefault()
   event.stopPropagation()
-}
-
-function looksLikeMarkdown(text: string): boolean {
-  // Detects common markdown starters, e.g. "# h1", "- item", "1. item", "> quote", "```", "[a](b)".
-  return /(^#{1,6}\s)|(^\s*[-*+]\s)|(^\s*[-*+]\s+\[[ xX]?\])|(^\s*\d+\.\s)|(^>\s)|(```)|(\[[^\]]+\]\([^)]+\))/m.test(text)
-}
-
-function isLikelyMarkdownPaste(plain: string, html: string): boolean {
-  if (!plain.trim()) return false
-  if (!looksLikeMarkdown(plain)) return false
-  if (!html) return true
-  return true
 }
 
 function insertParsedMarkdownBlocks(parsedBlocks: OutputBlockData[]) {
