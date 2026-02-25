@@ -46,6 +46,7 @@ import { useWikilinkBehavior } from '../composables/useWikilinkBehavior'
 import { useEditorInteraction } from '../composables/useEditorInteraction'
 import { useEditorDocumentLifecycle } from '../composables/useEditorDocumentLifecycle'
 import { useEditorSaveLifecycle } from '../composables/useEditorSaveLifecycle'
+import { useVirtualTitleBehavior } from '../composables/useVirtualTitleBehavior'
 import {
   normalizeBlockId,
   normalizeHeadingAnchor,
@@ -137,7 +138,6 @@ const checklistDebugOn = ref(false)
 const editorZoom = ref(1)
 let editor: EditorJS | null = null
 let outlineTimer: ReturnType<typeof setTimeout> | null = null
-let titleLockTimer: ReturnType<typeof setTimeout> | null = null
 let suppressOnChange = false
 
 const slashOpen = ref(false)
@@ -148,6 +148,28 @@ const slashTop = ref(0)
 const currentPath = computed(() => props.path?.trim() || '')
 const editorZoomStyle = computed(() => ({ '--editor-zoom': String(editorZoom.value) }))
 const isMacOs = typeof navigator !== 'undefined' && /(Mac|iPhone|iPad|iPod)/i.test(navigator.platform || navigator.userAgent)
+const {
+  noteTitleFromPath,
+  blockTextCandidate,
+  stripVirtualTitle,
+  readVirtualTitle,
+  withVirtualTitle,
+  isEditingVirtualTitle,
+  scheduleVirtualTitleLock,
+  clearVirtualTitleLock
+} = useVirtualTitleBehavior({
+  virtualTitleBlockId: VIRTUAL_TITLE_BLOCK_ID,
+  holder,
+  currentPath,
+  hasActiveEditor: () => Boolean(editor),
+  isSuppressOnChange: () => suppressOnChange,
+  saveEditorData: async () => {
+    if (!editor) return { blocks: [] as OutputBlockData[] }
+    const data = await editor.save()
+    return { blocks: (data.blocks ?? []) as OutputBlockData[] }
+  },
+  renderBlocks
+})
 const {
   loadedTextByPath,
   dirtyByPath,
@@ -253,72 +275,6 @@ const mermaidReplaceDialog = ref<{
   templateLabel: '',
   resolve: null
 })
-
-function noteTitleFromPath(path: string): string {
-  const normalized = path.replace(/\\/g, '/')
-  const parts = normalized.split('/')
-  const name = parts[parts.length - 1] || normalized
-  const stem = name.replace(/\.(md|markdown)$/i, '').trim()
-  return stem || 'Untitled'
-}
-
-function extractPlainText(value: unknown): string {
-  const html = String(value ?? '')
-  if (!html.trim()) return ''
-  const container = document.createElement('div')
-  container.innerHTML = html
-  return container.innerText.replace(/\u200B/g, ' ').replace(/\s+/g, ' ').trim()
-}
-
-function blockTextCandidate(block: OutputBlockData | undefined): string {
-  if (!block) return ''
-  const data = (block.data as Record<string, unknown>) ?? {}
-  if (typeof data.text !== 'undefined') return extractPlainText(data.text)
-  if (typeof data.code === 'string') return data.code.trim()
-  return ''
-}
-
-function virtualTitleBlock(title: string): OutputBlockData {
-  return {
-    id: VIRTUAL_TITLE_BLOCK_ID,
-    type: 'header',
-    data: { level: 1, text: title.trim() || 'Untitled' }
-  } as OutputBlockData
-}
-
-function stripVirtualTitle(blocks: OutputBlockData[]): OutputBlockData[] {
-  return blocks.filter((block) => block.id !== VIRTUAL_TITLE_BLOCK_ID)
-}
-
-function readVirtualTitle(blocks: OutputBlockData[]): string {
-  const virtual = blocks.find((block) => block.id === VIRTUAL_TITLE_BLOCK_ID)
-  return blockTextCandidate(virtual)
-}
-
-function withVirtualTitle(blocks: OutputBlockData[], title: string): { blocks: OutputBlockData[]; changed: boolean } {
-  const content = stripVirtualTitle(
-    blocks.map((block) => ({
-      ...block,
-      data: { ...(block.data as Record<string, unknown>) }
-    }))
-  )
-  const desired = title.trim() || 'Untitled'
-  const next = [virtualTitleBlock(desired), ...content]
-
-  const first = blocks[0]
-  const firstLevel = Number(((first?.data as Record<string, unknown>)?.level ?? 0))
-  const firstText = blockTextCandidate(first)
-  const hasSingleLeadingVirtual =
-    Boolean(first) &&
-    first.id === VIRTUAL_TITLE_BLOCK_ID &&
-    first.type === 'header' &&
-    firstLevel === 1 &&
-    firstText === desired &&
-    !blocks.slice(1).some((block) => block.id === VIRTUAL_TITLE_BLOCK_ID)
-
-  const changed = !hasSingleLeadingVirtual || blocks.length !== next.length
-  return { blocks: next, changed }
-}
 
 function textOffsetWithinRoot(selection: Selection, root: HTMLElement): number | null {
   if (!selection.rangeCount || !selection.isCollapsed) return null
@@ -466,12 +422,6 @@ function clearOutlineTimer() {
   outlineTimer = null
 }
 
-function clearTitleLockTimer() {
-  if (!titleLockTimer) return
-  clearTimeout(titleLockTimer)
-  titleLockTimer = null
-}
-
 function resolveMermaidReplaceDialog(approved: boolean) {
   const resolver = mermaidReplaceDialog.value.resolve
   mermaidReplaceDialog.value = {
@@ -493,51 +443,6 @@ function requestMermaidReplaceConfirm(payload: { templateLabel: string }): Promi
       resolve
     }
   })
-}
-
-function isEditingVirtualTitle(): boolean {
-  if (!holder.value) return false
-  const selection = window.getSelection()
-  if (!selection?.focusNode) return false
-
-  const focusedElement =
-    selection.focusNode.nodeType === Node.ELEMENT_NODE
-      ? (selection.focusNode as Element)
-      : selection.focusNode.parentElement
-  if (!focusedElement) return false
-
-  const block = focusedElement.closest('.ce-block') as HTMLElement | null
-  return block?.dataset.id === VIRTUAL_TITLE_BLOCK_ID
-}
-
-function isVirtualTitleDomValid(): boolean {
-  if (!holder.value) return true
-  const firstBlock = holder.value.querySelector('.ce-block') as HTMLElement | null
-  if (!firstBlock) return false
-  if (firstBlock.dataset.id !== VIRTUAL_TITLE_BLOCK_ID) return false
-  const header = firstBlock.querySelector('.ce-header') as HTMLElement | null
-  return Boolean(header && header.tagName.toLowerCase() === 'h1')
-}
-
-async function enforceVirtualTitleStructure() {
-  if (!editor || suppressOnChange) return
-  const path = currentPath.value
-  if (!path) return
-
-  const data = await editor.save()
-  const rawBlocks = (data.blocks ?? []) as OutputBlockData[]
-  const title = readVirtualTitle(rawBlocks) || blockTextCandidate(rawBlocks[0]) || noteTitleFromPath(path)
-  const normalized = withVirtualTitle(rawBlocks, title)
-  if (!normalized.changed) return
-  await renderBlocks(normalized.blocks)
-}
-
-function scheduleVirtualTitleLock() {
-  clearTitleLockTimer()
-  titleLockTimer = setTimeout(() => {
-    if (isVirtualTitleDomValid()) return
-    void enforceVirtualTitleStructure()
-  }, 80)
 }
 
 function closeSlashMenu() {
@@ -949,7 +854,7 @@ async function ensureEditor() {
 
 async function destroyEditor() {
   clearAutosaveTimer()
-  clearTitleLockTimer()
+  clearVirtualTitleLock()
   closeSlashMenu()
   closeWikilinkMenu()
 
@@ -1120,7 +1025,7 @@ onMounted(async () => {
 
 onBeforeUnmount(async () => {
   clearOutlineTimer()
-  clearTitleLockTimer()
+  clearVirtualTitleLock()
   if (mermaidReplaceDialog.value.resolve) {
     mermaidReplaceDialog.value.resolve(false)
   }
