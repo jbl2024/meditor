@@ -50,6 +50,7 @@ import { useVirtualTitleBehavior } from '../composables/useVirtualTitleBehavior'
 import { useEditorCaret, type EditorCaretSnapshot } from '../composables/useEditorCaret'
 import { useEditorOutlineNavigation } from '../composables/useEditorOutlineNavigation'
 import { useEditorZoom } from '../composables/useEditorZoom'
+import { useEditorInstance } from '../composables/useEditorInstance'
 import {
   normalizeBlockId,
   normalizeHeadingAnchor,
@@ -507,11 +508,14 @@ const { onEditorKeydown, onEditorKeyup, onEditorClick, onEditorContextMenu, onEd
   captureCaret
 })
 
-async function ensureEditor() {
-  if (!holder.value || editor) return
-
-  editor = new EditorJS({
-    holder: holder.value,
+const { ensureEditor, destroyEditor } = useEditorInstance({
+  holder,
+  getEditor: () => editor,
+  setEditor: (instance) => {
+    editor = instance
+  },
+  createEditor: (holderElement, onEditorChange) => new EditorJS({
+    holder: holderElement,
     autofocus: false,
     defaultBlock: 'paragraph',
     inlineToolbar: ['bold', 'italic', 'link', 'inlineCode'],
@@ -562,45 +566,33 @@ async function ensureEditor() {
       delimiter: Delimiter,
       inlineCode: InlineCode
     },
-    async onChange() {
-      const path = currentPath.value
-      if (suppressOnChange || !path) return
-      setDirty(path, true)
-      setSaveError(path, '')
-      scheduleAutosave()
-      scheduleVirtualTitleLock()
-      emitOutlineSoon()
-    }
-  })
-
-  await editor.isReady
-  holder.value.addEventListener('keydown', onEditorKeydown, true)
-  holder.value.addEventListener('keyup', onEditorKeyup, true)
-  holder.value.addEventListener('click', onEditorClick, true)
-  holder.value.addEventListener('contextmenu', onEditorContextMenu, true)
-  holder.value.addEventListener('paste', onEditorPaste, true)
-  startCodeUiObservers()
-}
-
-async function destroyEditor() {
-  clearAutosaveTimer()
-  clearVirtualTitleLock()
-  closeSlashMenu()
-  closeWikilinkMenu()
-
-  if (holder.value) {
-    holder.value.removeEventListener('keydown', onEditorKeydown, true)
-    holder.value.removeEventListener('keyup', onEditorKeyup, true)
-    holder.value.removeEventListener('click', onEditorClick, true)
-    holder.value.removeEventListener('contextmenu', onEditorContextMenu, true)
-    holder.value.removeEventListener('paste', onEditorPaste, true)
+    onChange: onEditorChange
+  }),
+  onEditorChange: async () => {
+    const path = currentPath.value
+    if (suppressOnChange || !path) return
+    setDirty(path, true)
+    setSaveError(path, '')
+    scheduleAutosave()
+    scheduleVirtualTitleLock()
+    emitOutlineSoon()
+  },
+  listeners: [
+    { type: 'keydown', handler: onEditorKeydown as EventListener, useCapture: true },
+    { type: 'keyup', handler: onEditorKeyup as EventListener, useCapture: true },
+    { type: 'click', handler: onEditorClick as EventListener, useCapture: true },
+    { type: 'contextmenu', handler: onEditorContextMenu as EventListener, useCapture: true },
+    { type: 'paste', handler: onEditorPaste as EventListener, useCapture: true }
+  ],
+  startObservers: startCodeUiObservers,
+  stopObservers: stopCodeUiObservers,
+  beforeDestroy: () => {
+    clearAutosaveTimer()
+    clearVirtualTitleLock()
+    closeSlashMenu()
+    closeWikilinkMenu()
   }
-  stopCodeUiObservers()
-
-  if (!editor) return
-  await editor.destroy()
-  editor = null
-}
+})
 
 const {
   isLoadingLargeDocument,
