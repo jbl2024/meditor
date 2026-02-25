@@ -32,14 +32,6 @@ import {
   sanitizeExternalHref,
   type EditorBlock
 } from '../lib/markdownBlocks'
-import {
-  applyMarkdownShortcut,
-  isEditorZoomModifier,
-  isLikelyMarkdownPaste,
-  isZoomInShortcut,
-  isZoomOutShortcut,
-  isZoomResetShortcut
-} from '../lib/editorInteractions'
 import { openExternalUrl } from '../lib/api'
 import EditorPropertiesPanel from './editor/EditorPropertiesPanel.vue'
 import EditorSlashMenu from './editor/EditorSlashMenu.vue'
@@ -51,6 +43,7 @@ import { useEditorPersistence } from '../composables/useEditorPersistence'
 import { useFrontmatterProperties } from '../composables/useFrontmatterProperties'
 import { useCodeBlockUi } from '../composables/useCodeBlockUi'
 import { useWikilinkBehavior } from '../composables/useWikilinkBehavior'
+import { useEditorInteraction } from '../composables/useEditorInteraction'
 import {
   normalizeBlockId,
   normalizeHeadingAnchor,
@@ -676,255 +669,6 @@ function replaceCurrentBlock(type: string, data: Record<string, unknown>): boole
   }
 }
 
-function onEditorKeydown(event: KeyboardEvent) {
-  if (!editor) return
-  const target = event.target as HTMLElement | null
-  if (target?.closest('.meditor-mermaid')) {
-    return
-  }
-
-  if (isEditorZoomModifier(event)) {
-    if (isZoomInShortcut(event)) {
-      event.preventDefault()
-      zoomEditorBy(0.1)
-      return
-    }
-    if (isZoomOutShortcut(event)) {
-      event.preventDefault()
-      zoomEditorBy(-0.1)
-      return
-    }
-    if (isZoomResetShortcut(event)) {
-      event.preventDefault()
-      resetEditorZoom()
-      return
-    }
-  }
-
-  if (wikilinkOpen.value) {
-    if (event.key === 'ArrowDown') {
-      event.preventDefault()
-      event.stopPropagation()
-      if (typeof event.stopImmediatePropagation === 'function') {
-        event.stopImmediatePropagation()
-      }
-      if (wikilinkResults.value.length) {
-        wikilinkIndex.value = (wikilinkIndex.value + 1) % wikilinkResults.value.length
-      }
-      return
-    }
-    if (event.key === 'ArrowUp') {
-      event.preventDefault()
-      event.stopPropagation()
-      if (typeof event.stopImmediatePropagation === 'function') {
-        event.stopImmediatePropagation()
-      }
-      if (wikilinkResults.value.length) {
-        wikilinkIndex.value = (wikilinkIndex.value - 1 + wikilinkResults.value.length) % wikilinkResults.value.length
-      }
-      return
-    }
-    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-      event.preventDefault()
-      event.stopPropagation()
-      if (typeof event.stopImmediatePropagation === 'function') {
-        event.stopImmediatePropagation()
-      }
-      return
-    }
-    if (event.key === 'Enter' || event.key === 'Tab') {
-      const selected = wikilinkResults.value[wikilinkIndex.value]
-      if (!selected) return
-      event.preventDefault()
-      event.stopPropagation()
-      if (typeof event.stopImmediatePropagation === 'function') {
-        event.stopImmediatePropagation()
-      }
-      if (event.key === 'Tab') {
-        void applyWikilinkDraftSelection(selected.target)
-      } else {
-        void applyWikilinkSelection(selected.target)
-      }
-      return
-    }
-    if (event.key === 'Escape') {
-      event.preventDefault()
-      event.stopPropagation()
-      if (typeof event.stopImmediatePropagation === 'function') {
-        event.stopImmediatePropagation()
-      }
-      closeWikilinkMenu()
-      return
-    }
-  }
-
-  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-    const direction = event.key === 'ArrowLeft' ? 'left' : 'right'
-    if (expandAdjacentLinkForEditing(direction)) {
-      event.preventDefault()
-      event.stopPropagation()
-      if (typeof event.stopImmediatePropagation === 'function') {
-        event.stopImmediatePropagation()
-      }
-      return
-    }
-  }
-
-  if (slashOpen.value) {
-    if (event.key === 'ArrowDown') {
-      event.preventDefault()
-      slashIndex.value = (slashIndex.value + 1) % SLASH_COMMANDS.length
-      return
-    }
-    if (event.key === 'ArrowUp') {
-      event.preventDefault()
-      slashIndex.value = (slashIndex.value - 1 + SLASH_COMMANDS.length) % SLASH_COMMANDS.length
-      return
-    }
-    if (event.key === 'Enter') {
-      event.preventDefault()
-      const command = SLASH_COMMANDS[slashIndex.value]
-      closeSlashMenu()
-      replaceCurrentBlock(command.type, command.data)
-      return
-    }
-    if (event.key === 'Escape') {
-      event.preventDefault()
-      closeSlashMenu()
-      return
-    }
-  }
-
-  const block = getCurrentBlock()
-  if (!block) return
-
-  if (block.id === VIRTUAL_TITLE_BLOCK_ID) {
-    if (event.key === 'Backspace' && getCurrentBlockText(block).length === 0) {
-      event.preventDefault()
-      return
-    }
-  }
-
-  if (event.key === '[' && !event.metaKey && !event.ctrlKey && !event.altKey) {
-    window.setTimeout(() => {
-      void syncWikilinkMenuFromCaret()
-    }, 0)
-  }
-
-  if (event.key === '/' && block.name === 'paragraph' && isCurrentBlockEmpty()) {
-    // Let EditorJS handle the native slash menu to avoid duplicate popovers.
-    closeSlashMenu()
-    return
-  }
-
-  if ((event.key === ' ' || event.code === 'Space') && block.name === 'paragraph') {
-    const marker = getCurrentBlockText(block)
-    const transform = applyMarkdownShortcut(marker)
-    if (transform) {
-      if (replaceCurrentBlock(transform.type, transform.data)) {
-        event.preventDefault()
-        closeSlashMenu()
-        return
-      }
-    }
-  }
-
-  if (event.key === 'Enter' && block.name === 'paragraph') {
-    const marker = getCurrentBlockText(block)
-    if (marker === '```') {
-      event.preventDefault()
-      closeSlashMenu()
-      replaceCurrentBlock('code', { code: '' })
-      return
-    }
-  }
-
-  if (event.key === 'Backspace' && block.name === 'header' && getCurrentBlockText(block).length === 0) {
-    const index = editor.blocks.getCurrentBlockIndex()
-    if (index === 0) {
-      event.preventDefault()
-      closeSlashMenu()
-      return
-    }
-    event.preventDefault()
-    closeSlashMenu()
-    replaceCurrentBlock('paragraph', { text: '' })
-  }
-}
-
-function onEditorKeyup(event: KeyboardEvent) {
-  const target = event.target as HTMLElement | null
-  if (target?.closest('.meditor-mermaid')) {
-    return
-  }
-  if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight') && consumeSuppressCollapseOnArrowKeyup()) {
-    return
-  }
-
-  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-    if (collapseExpandedLinkIfCaretOutside()) {
-      return
-    }
-    collapseClosedLinkNearCaret()
-    return
-  }
-
-  if (['ArrowUp', 'ArrowDown', 'Enter', 'Tab', 'Escape'].includes(event.key)) {
-    return
-  }
-
-  collapseClosedLinkNearCaret()
-  captureCaret(currentPath.value)
-  if (!wikilinkOpen.value && !isWikilinkRelevantKey(event) && !shouldSyncWikilinkFromSelection()) {
-    return
-  }
-  void syncWikilinkMenuFromCaret()
-}
-
-function onEditorClick(event: MouseEvent) {
-  const target = event.target as HTMLElement | null
-  if (!target?.closest('.ce-block')) {
-    return
-  }
-  if (target.closest('.meditor-mermaid')) {
-    return
-  }
-  collapseExpandedLinkIfCaretOutside()
-  const anchor = target.closest('a') as HTMLAnchorElement | null
-  const wikilinkTarget = anchor ? readWikilinkTargetFromAnchor(anchor) : ''
-  if (anchor && wikilinkTarget) {
-    event.preventDefault()
-    event.stopPropagation()
-    void openLinkTargetWithAutosave(wikilinkTarget)
-    return
-  }
-  if (anchor) {
-    const href = anchor.getAttribute('href')?.trim() ?? ''
-    const safeHref = sanitizeExternalHref(href)
-    if (safeHref) {
-      event.preventDefault()
-      event.stopPropagation()
-      void openExternalUrl(safeHref)
-      return
-    }
-  }
-  collapseClosedLinkNearCaret()
-  captureCaret(currentPath.value)
-  void syncWikilinkMenuFromCaret()
-  if (isDateLinkModifierPressed(event)) {
-    void openLinkedTokenAtCaret()
-  }
-}
-
-function onEditorContextMenu(event: MouseEvent) {
-  const target = event.target as HTMLElement | null
-  if (!target) return
-  const block = target.closest('.ce-block') as HTMLElement | null
-  if (!block || block.dataset.id !== VIRTUAL_TITLE_BLOCK_ID) return
-  event.preventDefault()
-  event.stopPropagation()
-}
-
 function insertParsedMarkdownBlocks(parsedBlocks: OutputBlockData[]) {
   if (!editor || parsedBlocks.length === 0) return
 
@@ -953,31 +697,43 @@ function insertParsedMarkdownBlocks(parsedBlocks: OutputBlockData[]) {
   }
   placeCaretInBlock(inserted.id)
 }
-
-function onEditorPaste(event: ClipboardEvent) {
-  if (!editor) return
-  const target = event.target as HTMLElement | null
-  if (target?.closest('.meditor-mermaid')) {
-    return
-  }
-
-  const plain = event.clipboardData?.getData('text/plain') ?? ''
-  const html = event.clipboardData?.getData('text/html') ?? ''
-
-  if (!isLikelyMarkdownPaste(plain, html)) {
-    return
-  }
-
-  const parsed = markdownToEditorData(plain)
-  if (!parsed.blocks.length) return
-
-  event.preventDefault()
-  event.stopPropagation()
-  if (typeof event.stopImmediatePropagation === 'function') {
-    event.stopImmediatePropagation()
-  }
-  insertParsedMarkdownBlocks(parsed.blocks as OutputBlockData[])
-}
+const { onEditorKeydown, onEditorKeyup, onEditorClick, onEditorContextMenu, onEditorPaste } = useEditorInteraction({
+  getEditor: () => editor,
+  currentPath,
+  wikilinkOpen,
+  wikilinkIndex,
+  wikilinkResults,
+  slashOpen,
+  slashIndex,
+  slashCommands: SLASH_COMMANDS,
+  virtualTitleBlockId: VIRTUAL_TITLE_BLOCK_ID,
+  getCurrentBlock,
+  getCurrentBlockText,
+  isCurrentBlockEmpty,
+  replaceCurrentBlock,
+  insertParsedMarkdownBlocks,
+  closeSlashMenu,
+  closeWikilinkMenu,
+  applyWikilinkSelection,
+  applyWikilinkDraftSelection,
+  expandAdjacentLinkForEditing,
+  consumeSuppressCollapseOnArrowKeyup,
+  collapseExpandedLinkIfCaretOutside,
+  collapseClosedLinkNearCaret,
+  shouldSyncWikilinkFromSelection,
+  isWikilinkRelevantKey,
+  syncWikilinkMenuFromCaret,
+  readWikilinkTargetFromAnchor,
+  openLinkTargetWithAutosave,
+  isDateLinkModifierPressed,
+  openLinkedTokenAtCaret,
+  zoomEditorBy,
+  resetEditorZoom,
+  sanitizeExternalHref,
+  openExternalUrl,
+  markdownToEditorData,
+  captureCaret
+})
 
 function parseOutlineFromDom(): HeadingNode[] {
   if (!holder.value) return []
