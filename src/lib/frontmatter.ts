@@ -25,7 +25,9 @@ export type FrontmatterEnvelope = {
   parseErrors: FrontmatterError[]
 }
 
+// Detects YAML-like "key: value" pairs, e.g. "title: My note".
 const KEY_VALUE_RE = /^([A-Za-z0-9_-][A-Za-z0-9_\- ]*?):\s*(.*)$/
+// Detects ISO date-only strings, e.g. "2026-02-25".
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/
 
 function normalizeNewlines(input: string): string {
@@ -54,6 +56,7 @@ function parseScalar(raw: string): string | number | boolean {
   const trimmed = raw.trim()
   if (trimmed === 'true') return true
   if (trimmed === 'false') return false
+  // Detects integer/float scalar values, e.g. "-2", "3.14".
   if (/^-?\d+(\.\d+)?$/.test(trimmed)) return Number(trimmed)
   return unquote(trimmed)
 }
@@ -198,7 +201,10 @@ function parseYamlFields(rawYaml: string, schema: PropertyTypeSchema): { fields:
 function quoteIfNeeded(value: string): string {
   if (!value) return '""'
   if (DATE_ONLY_RE.test(value)) return value
+  // Detects wiki tokens that must stay quoted in YAML, e.g. "[[notes/today]]".
   if (/^\[\[.*\]\]$/.test(value)) return `"${value.replace(/"/g, '\\"')}"`
+  // Detects leading/trailing spaces, YAML-significant chars, booleans, and numeric-like values.
+  // Examples: " hello", "a:b", "true", "42".
   if (/^\s|\s$/.test(value) || /[:#\-\[\]{}!,&*?]|^true$|^false$|^-?\d+(\.\d+)?$/i.test(value)) {
     return `"${value.replace(/"/g, '\\"')}"`
   }
@@ -271,6 +277,7 @@ export function composeMarkdownDocument(body: string, frontmatterYaml: string): 
     return normalizedBody
   }
 
+  // Trims only outer blank lines in frontmatter payload, e.g. "\n\ntitle: A\n\n" -> "title: A".
   const normalizedYaml = normalizeNewlines(frontmatterYaml).replace(/^\n+|\n+$/g, '')
   return `---\n${normalizedYaml}\n---\n${normalizedBody}`
 }

@@ -35,6 +35,12 @@ This file defines repository-wide agent behavior for `/Users/jbl2024/jbl42/medit
 - Use ASCII unless file content already requires Unicode.
 - Add comments only when code intent is not obvious.
 
+## Documentation Standards
+- Use TSDoc/JSDoc for exported TypeScript APIs (`export function`, `export type`, `export class`) with concise intent-focused descriptions.
+- For internal/private helpers, add comments only when behavior is non-obvious, stateful, or has side effects/invariants.
+- Prefer short "why/invariant" notes over line-by-line narration.
+- For regexes that drive behavior, add a short comment with at least one concrete detection example.
+
 ## Verification
 - Run relevant checks after meaningful changes when feasible.
 - Backend changes: run `cargo check` in `/Users/jbl2024/jbl42/meditor/src-tauri`.
