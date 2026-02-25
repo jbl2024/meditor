@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.3.3] - 2026-02-25
+
+### Changed
+- refactor(editor): remove date highlight mode and keep Cmd/Ctrl-gated date navigation (a509caa)
+
 ## [0.3.2] - 2026-02-24
 
 ### Added
