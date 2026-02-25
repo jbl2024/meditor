@@ -16,22 +16,14 @@
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import EditorJS, { type OutputBlockData } from '@editorjs/editorjs'
-import CodeTool from '@editorjs/code'
-import Delimiter from '@editorjs/delimiter'
-import Header from '@editorjs/header'
-import InlineCode from '@editorjs/inline-code'
-import List from '@editorjs/list'
-import Paragraph from '@editorjs/paragraph'
-import Table from '@editorjs/table'
-import CalloutTool from '../lib/editorjs/CalloutTool'
-import MermaidTool from '../lib/editorjs/MermaidTool'
-import QuoteTool from '../lib/editorjs/QuoteTool'
 import {
   editorDataToMarkdown,
   markdownToEditorData,
   sanitizeExternalHref,
   type EditorBlock
 } from '../lib/markdownBlocks'
+import { EDITOR_SLASH_COMMANDS } from '../lib/editorSlashCommands'
+import { createEditorTools } from '../lib/editorTools'
 import { openExternalUrl } from '../lib/api'
 import EditorPropertiesPanel from './editor/EditorPropertiesPanel.vue'
 import EditorSlashMenu from './editor/EditorSlashMenu.vue'
@@ -52,6 +44,7 @@ import { useEditorOutlineNavigation } from '../composables/useEditorOutlineNavig
 import { useEditorZoom } from '../composables/useEditorZoom'
 import { useEditorInstance } from '../composables/useEditorInstance'
 import { useEditorBlocks } from '../composables/useEditorBlocks'
+import { useMermaidReplaceDialog } from '../composables/useMermaidReplaceDialog'
 import {
   normalizeBlockId,
   normalizeHeadingAnchor,
@@ -74,45 +67,11 @@ const CORE_PROPERTY_OPTIONS: CorePropertyOption[] = [
   { key: 'published', label: 'published', description: 'Publish flag' }
 ]
 
-type SlashCommand = {
-  id: string
-  label: string
-  type: string
-  data: Record<string, unknown>
-}
-
 type HeadingNode = {
   level: 1 | 2 | 3
   text: string
 }
-
-type ListStyle = 'unordered' | 'ordered' | 'checklist'
-
-function emptyListData(style: ListStyle, checked = false) {
-  return {
-    style,
-    meta: {},
-    items: [
-      {
-        content: '',
-        meta: style === 'checklist' ? { checked } : {},
-        items: []
-      }
-    ]
-  }
-}
-
-const SLASH_COMMANDS: SlashCommand[] = [
-  { id: 'heading', label: 'Heading', type: 'header', data: { text: '', level: 2 } },
-  { id: 'bullet', label: 'List', type: 'list', data: emptyListData('unordered') },
-  { id: 'checklist', label: 'Checklist', type: 'list', data: emptyListData('checklist') },
-  { id: 'table', label: 'Table', type: 'table', data: { withHeadings: true, content: [['', ''], ['', '']] } },
-  { id: 'callout', label: 'Callout', type: 'callout', data: { kind: 'NOTE', message: '' } },
-  { id: 'mermaid', label: 'Mermaid', type: 'mermaid', data: { code: 'flowchart TD\n  A[Start] --> B[End]' } },
-  { id: 'code', label: 'Code', type: 'code', data: { code: '' } },
-  { id: 'quote', label: 'Quote', type: 'quote', data: { text: '' } },
-  { id: 'divider', label: 'Divider', type: 'delimiter', data: {} }
-]
+const SLASH_COMMANDS = EDITOR_SLASH_COMMANDS
 
 const props = defineProps<{
   path: string
@@ -284,15 +243,7 @@ const {
   scheduleAutosave,
   parseOutlineFromDom
 })
-const mermaidReplaceDialog = ref<{
-  visible: boolean
-  templateLabel: string
-  resolve: ((approved: boolean) => void) | null
-}>({
-  visible: false,
-  templateLabel: '',
-  resolve: null
-})
+const { mermaidReplaceDialog, resolveMermaidReplaceDialog, requestMermaidReplaceConfirm } = useMermaidReplaceDialog()
 
 async function renderBlocks(blocks: OutputBlockData[]) {
   if (!editor) return
@@ -311,29 +262,6 @@ async function renderBlocks(blocks: OutputBlockData[]) {
   if (holder.value) {
     holder.value.scrollTop = rememberedScroll
   }
-}
-
-function resolveMermaidReplaceDialog(approved: boolean) {
-  const resolver = mermaidReplaceDialog.value.resolve
-  mermaidReplaceDialog.value = {
-    visible: false,
-    templateLabel: '',
-    resolve: null
-  }
-  resolver?.(approved)
-}
-
-function requestMermaidReplaceConfirm(payload: { templateLabel: string }): Promise<boolean> {
-  return new Promise<boolean>((resolve) => {
-    if (mermaidReplaceDialog.value.resolve) {
-      mermaidReplaceDialog.value.resolve(false)
-    }
-    mermaidReplaceDialog.value = {
-      visible: true,
-      templateLabel: payload.templateLabel,
-      resolve
-    }
-  })
 }
 
 function closeSlashMenu() {
@@ -409,52 +337,7 @@ const { ensureEditor, destroyEditor } = useEditorInstance({
     defaultBlock: 'paragraph',
     inlineToolbar: ['bold', 'italic', 'link', 'inlineCode'],
     placeholder: 'Write here...',
-    tools: {
-      paragraph: {
-        class: Paragraph as unknown as never,
-        inlineToolbar: true,
-        config: { preserveBlank: false }
-      },
-      header: {
-        class: Header as unknown as never,
-        inlineToolbar: ['bold', 'italic', 'link', 'inlineCode'],
-        config: {
-          levels: [1, 2, 3, 4, 5, 6],
-          defaultLevel: 2
-        }
-      },
-      list: {
-        class: List,
-        inlineToolbar: ['bold', 'italic', 'link', 'inlineCode'],
-        config: {
-          defaultStyle: 'unordered'
-        }
-      },
-      quote: {
-        class: QuoteTool as unknown as never,
-        inlineToolbar: ['bold', 'italic', 'link', 'inlineCode']
-      },
-      table: {
-        class: Table as unknown as never,
-        config: {
-          rows: 2,
-          cols: 2,
-          withHeadings: true
-        }
-      },
-      callout: {
-        class: CalloutTool as unknown as never
-      },
-      mermaid: {
-        class: MermaidTool as unknown as never,
-        config: {
-          confirmReplace: requestMermaidReplaceConfirm
-        }
-      },
-      code: CodeTool,
-      delimiter: Delimiter,
-      inlineCode: InlineCode
-    },
+    tools: createEditorTools(requestMermaidReplaceConfirm),
     onChange: onEditorChange
   }),
   onEditorChange: async () => {
