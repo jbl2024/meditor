@@ -153,7 +153,6 @@ let autosaveTimer: ReturnType<typeof setTimeout> | null = null
 let outlineTimer: ReturnType<typeof setTimeout> | null = null
 let titleLockTimer: ReturnType<typeof setTimeout> | null = null
 let codeUiFrame: number | null = null
-let dateLinkHighlightFrame: number | null = null
 let codeUiNeedsGlobalRefresh = false
 let suppressOnChange = false
 let activeLoadSequence = 0
@@ -210,7 +209,6 @@ const wikilinkResults = computed(() => {
 const currentPath = computed(() => props.path?.trim() || '')
 const editorZoomStyle = computed(() => ({ '--editor-zoom': String(editorZoom.value) }))
 const isMacOs = typeof navigator !== 'undefined' && /(Mac|iPhone|iPad|iPod)/i.test(navigator.platform || navigator.userAgent)
-const dateLinkModifierActive = ref(false)
 const propertyEditorMode = ref<'structured' | 'raw'>('structured')
 const frontmatterByPath = ref<Record<string, FrontmatterEnvelope>>({})
 const rawYamlByPath = ref<Record<string, string>>({})
@@ -1927,23 +1925,6 @@ function extractTokenAtCaret(): string {
   return text.slice(start, end).trim()
 }
 
-function extractTokenAtOffset(text: string, offset: number): string {
-  const isBoundary = (value: string) => /[^\w\-\[\]\/|#]/.test(value)
-  const boundedOffset = Math.max(0, Math.min(offset, text.length))
-
-  let start = boundedOffset
-  while (start > 0 && !isBoundary(text[start - 1])) {
-    start -= 1
-  }
-
-  let end = boundedOffset
-  while (end < text.length && !isBoundary(text[end])) {
-    end += 1
-  }
-
-  return text.slice(start, end).trim()
-}
-
 async function openLinkedTokenAtCaret() {
   const token = extractTokenAtCaret()
   if (!token) return
@@ -1961,169 +1942,6 @@ async function openLinkedTokenAtCaret() {
 
 function isDateLinkModifierPressed(event: Pick<KeyboardEvent, 'metaKey' | 'ctrlKey'> | Pick<MouseEvent, 'metaKey' | 'ctrlKey'>): boolean {
   return isMacOs ? Boolean(event.metaKey) : Boolean(event.ctrlKey)
-}
-
-function onWindowKeydownForDateLinks(event: KeyboardEvent) {
-  if (isDateLinkModifierPressed(event)) {
-    const wasActive = dateLinkModifierActive.value
-    dateLinkModifierActive.value = true
-    if (!wasActive) {
-      syncDateLinkHighlightsSoon()
-    }
-  }
-}
-
-function onWindowKeyupForDateLinks(event: KeyboardEvent) {
-  dateLinkModifierActive.value = isDateLinkModifierPressed(event)
-  if (dateLinkModifierActive.value) {
-    syncDateLinkHighlightsSoon()
-  } else {
-    if (holder.value) {
-      holder.value.style.cursor = ''
-    }
-    clearDateLinkHighlights()
-  }
-}
-
-function onWindowBlurForDateLinks() {
-  dateLinkModifierActive.value = false
-  if (holder.value) {
-    holder.value.style.cursor = ''
-  }
-  clearDateLinkHighlights()
-}
-
-function clearDateLinkHighlightFrame() {
-  if (dateLinkHighlightFrame !== null) {
-    window.cancelAnimationFrame(dateLinkHighlightFrame)
-    dateLinkHighlightFrame = null
-  }
-}
-
-function getCssHighlightRegistry():
-  | { set: (name: string, highlight: unknown) => void; delete: (name: string) => void }
-  | null {
-  if (typeof window === 'undefined') return null
-  const cssObj = window.CSS as unknown as {
-    highlights?: { set: (name: string, highlight: unknown) => void; delete: (name: string) => void }
-  }
-  return cssObj.highlights ?? null
-}
-
-function clearDateLinkHighlights() {
-  clearDateLinkHighlightFrame()
-  if (holder.value) {
-    holder.value.style.cursor = ''
-  }
-  const registry = getCssHighlightRegistry()
-  if (!registry) return
-  registry.delete('meditor-date-links')
-}
-
-function syncDateLinkHighlights() {
-  const registry = getCssHighlightRegistry()
-  if (!registry) return
-  if (!dateLinkModifierActive.value || !holder.value) {
-    registry.delete('meditor-date-links')
-    return
-  }
-
-  const HighlightCtor = (window as unknown as { Highlight?: new (...ranges: Range[]) => unknown }).Highlight
-  if (!HighlightCtor) return
-
-  const ranges: Range[] = []
-  const walker = document.createTreeWalker(holder.value, NodeFilter.SHOW_TEXT)
-  const dateRe = /\b\d{4}-\d{2}-\d{2}\b/g
-
-  let current = walker.nextNode()
-  while (current) {
-    const textNode = current as Text
-    const parent = textNode.parentElement
-    const text = textNode.data
-    if (parent && !parent.closest('a') && text) {
-      dateRe.lastIndex = 0
-      let match = dateRe.exec(text)
-      while (match) {
-        const range = document.createRange()
-        range.setStart(textNode, match.index)
-        range.setEnd(textNode, match.index + match[0].length)
-        ranges.push(range)
-        match = dateRe.exec(text)
-      }
-    }
-    current = walker.nextNode()
-  }
-
-  if (!ranges.length) {
-    registry.delete('meditor-date-links')
-    return
-  }
-  registry.set('meditor-date-links', new HighlightCtor(...ranges))
-}
-
-function syncDateLinkHighlightsSoon() {
-  if (!dateLinkModifierActive.value) return
-  if (dateLinkHighlightFrame !== null) return
-  dateLinkHighlightFrame = window.requestAnimationFrame(() => {
-    dateLinkHighlightFrame = null
-    syncDateLinkHighlights()
-  })
-}
-
-function readTextPositionFromPoint(event: MouseEvent): { node: Text; offset: number } | null {
-  const doc = document as Document & {
-    caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null
-    caretRangeFromPoint?: (x: number, y: number) => Range | null
-  }
-
-  const position = doc.caretPositionFromPoint?.(event.clientX, event.clientY)
-  if (position && position.offsetNode.nodeType === Node.TEXT_NODE) {
-    return { node: position.offsetNode as Text, offset: position.offset }
-  }
-
-  const range = doc.caretRangeFromPoint?.(event.clientX, event.clientY)
-  if (range && range.startContainer.nodeType === Node.TEXT_NODE) {
-    return { node: range.startContainer as Text, offset: range.startOffset }
-  }
-
-  return null
-}
-
-function updateDateLinkCursor(event: MouseEvent) {
-  if (!holder.value) return
-  if (!dateLinkModifierActive.value) {
-    holder.value.style.cursor = ''
-    return
-  }
-
-  const target = event.target as HTMLElement | null
-  if (target?.closest('a')) {
-    holder.value.style.cursor = ''
-    return
-  }
-
-  const point = readTextPositionFromPoint(event)
-  if (!point) {
-    holder.value.style.cursor = ''
-    return
-  }
-  if (point.node.parentElement?.closest('a')) {
-    holder.value.style.cursor = ''
-    return
-  }
-
-  const token = extractTokenAtOffset(point.node.data, point.offset)
-  const isDateToken = /^\d{4}-\d{2}-\d{2}$/.test(token)
-  holder.value.style.cursor = isDateToken ? 'pointer' : ''
-}
-
-function onEditorMousemove(event: MouseEvent) {
-  updateDateLinkCursor(event)
-}
-
-function onEditorMouseleave() {
-  if (!holder.value) return
-  holder.value.style.cursor = ''
 }
 
 async function openLinkTargetWithAutosave(target: string) {
@@ -2431,15 +2249,9 @@ function onEditorKeyup(event: KeyboardEvent) {
   collapseClosedLinkNearCaret()
   captureCaret(currentPath.value)
   if (!wikilinkOpen.value && !isWikilinkRelevantKey(event) && !shouldSyncWikilinkFromSelection()) {
-    if (dateLinkModifierActive.value) {
-      syncDateLinkHighlightsSoon()
-    }
     return
   }
   void syncWikilinkMenuFromCaret()
-  if (dateLinkModifierActive.value) {
-    syncDateLinkHighlightsSoon()
-  }
 }
 
 function onEditorClick(event: MouseEvent) {
@@ -2472,7 +2284,7 @@ function onEditorClick(event: MouseEvent) {
   collapseClosedLinkNearCaret()
   captureCaret(currentPath.value)
   void syncWikilinkMenuFromCaret()
-  if (dateLinkModifierActive.value || isDateLinkModifierPressed(event)) {
+  if (isDateLinkModifierPressed(event)) {
     void openLinkedTokenAtCaret()
   }
 }
@@ -2804,8 +2616,6 @@ async function ensureEditor() {
   holder.value.addEventListener('keydown', onEditorKeydown, true)
   holder.value.addEventListener('keyup', onEditorKeyup, true)
   holder.value.addEventListener('click', onEditorClick, true)
-  holder.value.addEventListener('mousemove', onEditorMousemove, true)
-  holder.value.addEventListener('mouseleave', onEditorMouseleave, true)
   holder.value.addEventListener('contextmenu', onEditorContextMenu, true)
   holder.value.addEventListener('paste', onEditorPaste, true)
   codeUiObserver = new MutationObserver((records) => {
@@ -2834,11 +2644,8 @@ async function destroyEditor() {
     holder.value.removeEventListener('keydown', onEditorKeydown, true)
     holder.value.removeEventListener('keyup', onEditorKeyup, true)
     holder.value.removeEventListener('click', onEditorClick, true)
-    holder.value.removeEventListener('mousemove', onEditorMousemove, true)
-    holder.value.removeEventListener('mouseleave', onEditorMouseleave, true)
     holder.value.removeEventListener('contextmenu', onEditorContextMenu, true)
     holder.value.removeEventListener('paste', onEditorPaste, true)
-    holder.value.style.cursor = ''
   }
   if (codeUiObserver) {
     codeUiObserver.disconnect()
@@ -2848,7 +2655,6 @@ async function destroyEditor() {
     window.cancelAnimationFrame(codeUiFrame)
     codeUiFrame = null
   }
-  clearDateLinkHighlights()
   pendingCodeUiBlocks.clear()
   codeUiNeedsGlobalRefresh = false
 
@@ -2927,9 +2733,6 @@ async function loadCurrentFile(path: string) {
       await focusFirstContentBlock()
     }
     emitOutlineSoon()
-    if (dateLinkModifierActive.value) {
-      syncDateLinkHighlightsSoon()
-    }
     if (shouldShowLargeDocOverlay) {
       loadProgressPercent.value = 100
     }
@@ -3055,10 +2858,6 @@ onMounted(async () => {
     await ensureEditor()
     await loadCurrentFile(currentPath.value)
   }
-
-  window.addEventListener('keydown', onWindowKeydownForDateLinks, true)
-  window.addEventListener('keyup', onWindowKeyupForDateLinks, true)
-  window.addEventListener('blur', onWindowBlurForDateLinks, true)
 })
 
 onBeforeUnmount(async () => {
@@ -3067,11 +2866,6 @@ onBeforeUnmount(async () => {
   if (mermaidReplaceDialog.value.resolve) {
     mermaidReplaceDialog.value.resolve(false)
   }
-  window.removeEventListener('keydown', onWindowKeydownForDateLinks, true)
-  window.removeEventListener('keyup', onWindowKeyupForDateLinks, true)
-  window.removeEventListener('blur', onWindowBlurForDateLinks, true)
-  dateLinkModifierActive.value = false
-  clearDateLinkHighlights()
   await destroyEditor()
 })
 
@@ -3381,14 +3175,4 @@ defineExpose({
   }
 }
 
-:global(::highlight(meditor-date-links)) {
-  color: var(--meditor-link-color);
-  text-decoration: underline;
-  text-decoration-color: var(--meditor-link-color);
-}
-
-:global(.dark ::highlight(meditor-date-links)) {
-  color: var(--meditor-link-color);
-  text-decoration-color: var(--meditor-link-color);
-}
 </style>
