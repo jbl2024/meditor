@@ -30,7 +30,7 @@ describe('hasWikilinkHint', () => {
 })
 
 describe('collectAffectedCodeBlocks', () => {
-  it('collects direct and nested code blocks from mutation targets and added nodes', () => {
+  it('collects code blocks from direct targets and added nodes', () => {
     const root = document.createElement('div')
     root.innerHTML = `
       <div class="ce-code" id="code-a"><textarea class="ce-code__textarea"></textarea></div>
@@ -51,6 +51,23 @@ describe('collectAffectedCodeBlocks', () => {
     const blocks = collectAffectedCodeBlocks(records, root)
     const ids = blocks.map((node) => node.id).sort()
     expect(ids).toEqual(['code-a', 'code-b'])
+  })
+
+  it('does not mark existing code blocks when a non-code sibling is added or removed', () => {
+    const root = document.createElement('div')
+    root.innerHTML = `
+      <div class="ce-code" id="code-a"></div>
+      <div class="ce-block" id="paragraph"></div>
+    `
+
+    const paragraph = root.querySelector('#paragraph') as HTMLElement
+    const records = [
+      mutationRecordLike({ target: root, addedNodes: [paragraph] }),
+      mutationRecordLike({ target: root, removedNodes: [paragraph] })
+    ]
+
+    const blocks = collectAffectedCodeBlocks(records, root)
+    expect(blocks).toHaveLength(0)
   })
 
   it('ignores mutations outside the editor root', () => {

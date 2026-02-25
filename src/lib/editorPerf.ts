@@ -11,7 +11,7 @@ function elementFromNode(node: Node | null): Element | null {
 export function collectAffectedCodeBlocks(records: readonly MutationRecord[], root: HTMLElement): HTMLElement[] {
   const out = new Set<HTMLElement>()
 
-  const addBlockFromNode = (node: Node | null) => {
+  const addBlockFromNode = (node: Node | null, includeNested: boolean) => {
     const element = elementFromNode(node)
     if (!element || !root.contains(element)) return
 
@@ -19,6 +19,8 @@ export function collectAffectedCodeBlocks(records: readonly MutationRecord[], ro
     if (direct && root.contains(direct)) {
       out.add(direct as HTMLElement)
     }
+
+    if (!includeNested) return
 
     if ('querySelectorAll' in element) {
       const nested = Array.from(element.querySelectorAll('.ce-code')) as HTMLElement[]
@@ -29,8 +31,8 @@ export function collectAffectedCodeBlocks(records: readonly MutationRecord[], ro
   }
 
   records.forEach((record) => {
-    addBlockFromNode(record.target)
-    record.addedNodes.forEach((node) => addBlockFromNode(node))
+    addBlockFromNode(record.target, false)
+    record.addedNodes.forEach((node) => addBlockFromNode(node, true))
   })
 
   return [...out]

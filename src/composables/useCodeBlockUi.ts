@@ -211,11 +211,7 @@ export function useCodeBlockUi(options: { holder: Ref<HTMLDivElement | null> }) 
     codeUiObserver = new MutationObserver((records) => {
       if (!options.holder.value) return
       const blocks = collectAffectedCodeBlocks(records, options.holder.value)
-      if (!blocks.length) {
-        codeUiNeedsGlobalRefresh = true
-        scheduleCodeUiRefresh()
-        return
-      }
+      if (!blocks.length) return
       blocks.forEach((block) => pendingCodeUiBlocks.add(block))
       scheduleCodeUiRefresh()
     })

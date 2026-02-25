@@ -103,10 +103,13 @@ describe('useCodeBlockUi', () => {
   })
 
   it('starts and stops observers and performs initial global refresh', async () => {
+    let mutationCallback: MutationCallback | null = null
     const observe = vi.fn()
     const disconnect = vi.fn()
     class FakeMutationObserver {
-      constructor(_callback: MutationCallback) {}
+      constructor(callback: MutationCallback) {
+        mutationCallback = callback
+      }
       observe = observe
       disconnect = disconnect
     }
@@ -133,6 +136,28 @@ describe('useCodeBlockUi', () => {
     expect(observe).toHaveBeenCalledTimes(1)
     expect(observe).toHaveBeenCalledWith(holderEl, { childList: true, subtree: true })
     expect(rafSpy).toHaveBeenCalled()
+
+    const rafCallsAfterInitial = rafSpy.mock.calls.length
+    const paragraph = document.createElement('div')
+    paragraph.className = 'ce-paragraph'
+    holderEl.appendChild(paragraph)
+    mutationCallback?.(
+      [
+        {
+          type: 'childList',
+          target: paragraph,
+          addedNodes: [document.createTextNode('x')] as unknown as NodeList,
+          removedNodes: [] as unknown as NodeList,
+          previousSibling: null,
+          nextSibling: null,
+          attributeName: null,
+          attributeNamespace: null,
+          oldValue: null
+        } as MutationRecord
+      ],
+      {} as MutationObserver
+    )
+    expect(rafSpy.mock.calls.length).toBe(rafCallsAfterInitial)
 
     api.stopObservers()
     expect(disconnect).toHaveBeenCalledTimes(1)
