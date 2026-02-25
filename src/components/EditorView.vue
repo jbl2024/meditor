@@ -51,6 +51,7 @@ import { useEditorCaret, type EditorCaretSnapshot } from '../composables/useEdit
 import { useEditorOutlineNavigation } from '../composables/useEditorOutlineNavigation'
 import { useEditorZoom } from '../composables/useEditorZoom'
 import { useEditorInstance } from '../composables/useEditorInstance'
+import { useEditorBlocks } from '../composables/useEditorBlocks'
 import {
   normalizeBlockId,
   normalizeHeadingAnchor,
@@ -340,136 +341,24 @@ function closeSlashMenu() {
   slashIndex.value = 0
 }
 
-function getCurrentBlock() {
-  if (!editor) return null
-  const index = editor.blocks.getCurrentBlockIndex()
-  if (index < 0) return null
-  return editor.blocks.getBlockByIndex(index) ?? null
-}
+const {
+  getCurrentBlock,
+  getCurrentBlockText,
+  isCurrentBlockEmpty,
+  replaceCurrentBlock,
+  insertParsedMarkdownBlocks,
+  focusFirstContentBlock,
+  focusEditor
+} = useEditorBlocks({
+  holder,
+  getEditor: () => editor,
+  virtualTitleBlockId: VIRTUAL_TITLE_BLOCK_ID,
+  setSuppressOnChange: (value) => {
+    suppressOnChange = value
+  },
+  nextUiTick: nextTick
+})
 
-function getEditableElement(block: { holder: HTMLElement }) {
-  return block.holder.querySelector('[contenteditable="true"]') as HTMLElement | null
-}
-
-function getCurrentBlockText(block: { holder: HTMLElement }) {
-  const editable = getEditableElement(block)
-  return (editable?.innerText ?? '').replace(/\u200B/g, '').trim()
-}
-
-function isCurrentBlockEmpty() {
-  const block = getCurrentBlock()
-  if (!block) return false
-  return getCurrentBlockText(block).length === 0
-}
-
-function placeCaretInBlock(blockId: string) {
-  if (!editor) return
-  const block = editor.blocks.getById(blockId)
-  if (!block) return
-
-  const editable = getEditableElement(block)
-  if (!editable) return
-
-  editable.focus()
-  const selection = window.getSelection()
-  if (!selection) return
-
-  const range = document.createRange()
-  range.selectNodeContents(editable)
-  range.collapse(true)
-  selection.removeAllRanges()
-  selection.addRange(range)
-}
-
-function firstEditableNonVirtualBlockId(): string | null {
-  if (!holder.value) return null
-  const blocks = Array.from(holder.value.querySelectorAll('.ce-block')) as HTMLElement[]
-  for (const block of blocks) {
-    const id = block.dataset.id ?? ''
-    if (!id || id === VIRTUAL_TITLE_BLOCK_ID) continue
-    const editable = block.querySelector('[contenteditable="true"]') as HTMLElement | null
-    if (editable) return id
-  }
-  return null
-}
-
-function focusEditor() {
-  if (!holder.value) return
-  const editable = holder.value.querySelector('[contenteditable="true"]') as HTMLElement | null
-  editable?.focus()
-}
-
-async function focusFirstContentBlock() {
-  if (!editor) return
-
-  const existing = firstEditableNonVirtualBlockId()
-  if (existing) {
-    placeCaretInBlock(existing)
-    return
-  }
-
-  // New/empty notes have only the virtual title block. Create one real paragraph
-  // block for typing, but don't mark the document dirty until the user edits.
-  suppressOnChange = true
-  try {
-    const inserted = editor.blocks.insert('paragraph', { text: '' }, undefined, 1, true, false)
-    await nextTick()
-    placeCaretInBlock(inserted.id)
-  } finally {
-    suppressOnChange = false
-  }
-}
-
-function replaceCurrentBlock(type: string, data: Record<string, unknown>): boolean {
-  if (!editor) return false
-  const index = editor.blocks.getCurrentBlockIndex()
-  if (index < 0) return false
-
-  try {
-    const inserted = editor.blocks.insert(type, data, undefined, index, true, true)
-    const blockId = inserted?.id ?? editor.blocks.getBlockByIndex(index)?.id ?? null
-    if (blockId) {
-      if (!editor.caret.setToBlock(blockId, 'start')) {
-        placeCaretInBlock(blockId)
-      }
-    } else {
-      editor.caret.focus()
-    }
-    return true
-  } catch (error) {
-    console.error('Failed to replace current block', error)
-    return false
-  }
-}
-
-function insertParsedMarkdownBlocks(parsedBlocks: OutputBlockData[]) {
-  if (!editor || parsedBlocks.length === 0) return
-
-  const index = editor.blocks.getCurrentBlockIndex()
-  if (index < 0) return
-
-  const current = editor.blocks.getBlockByIndex(index)
-  const currentIsEmptyParagraph =
-    Boolean(current) && current?.name === 'paragraph' && getCurrentBlockText(current).length === 0
-
-  const [first, ...rest] = parsedBlocks
-
-  if (currentIsEmptyParagraph) {
-    const inserted = editor.blocks.insert(first.type, first.data, undefined, index, true, true)
-    if (rest.length > 0) {
-      editor.blocks.insertMany(rest, index + 1)
-    }
-    placeCaretInBlock(inserted.id)
-    return
-  }
-
-  const insertionIndex = index + 1
-  const inserted = editor.blocks.insert(first.type, first.data, undefined, insertionIndex, true, false)
-  if (rest.length > 0) {
-    editor.blocks.insertMany(rest, insertionIndex + 1)
-  }
-  placeCaretInBlock(inserted.id)
-}
 const { onEditorKeydown, onEditorKeyup, onEditorClick, onEditorContextMenu, onEditorPaste } = useEditorInteraction({
   getEditor: () => editor,
   currentPath,
