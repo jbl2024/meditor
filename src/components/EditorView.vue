@@ -44,6 +44,7 @@ import { useFrontmatterProperties } from '../composables/useFrontmatterPropertie
 import { useCodeBlockUi } from '../composables/useCodeBlockUi'
 import { useWikilinkBehavior } from '../composables/useWikilinkBehavior'
 import { useEditorInteraction } from '../composables/useEditorInteraction'
+import { useEditorDocumentLifecycle } from '../composables/useEditorDocumentLifecycle'
 import {
   normalizeBlockId,
   normalizeHeadingAnchor,
@@ -51,7 +52,6 @@ import {
   type WikilinkAnchor
 } from '../lib/wikilinks'
 
-const LARGE_DOC_LOAD_THRESHOLD = 50_000
 const VIRTUAL_TITLE_BLOCK_ID = '__virtual_title__'
 type CorePropertyOption = {
   key: string
@@ -138,7 +138,6 @@ let editor: EditorJS | null = null
 let outlineTimer: ReturnType<typeof setTimeout> | null = null
 let titleLockTimer: ReturnType<typeof setTimeout> | null = null
 let suppressOnChange = false
-let activeLoadSequence = 0
 
 const slashOpen = ref(false)
 const slashIndex = ref(0)
@@ -244,11 +243,6 @@ const {
   scheduleAutosave,
   parseOutlineFromDom
 })
-const isLoadingLargeDocument = ref(false)
-const loadStageLabel = ref('')
-const loadProgressPercent = ref(0)
-const loadProgressIndeterminate = ref(false)
-const loadDocumentStats = ref<{ chars: number; lines: number } | null>(null)
 const mermaidReplaceDialog = ref<{
   visible: boolean
   templateLabel: string
@@ -854,47 +848,6 @@ function emitOutlineSoon() {
   }, 120)
 }
 
-async function flushUiFrame() {
-  await nextTick()
-  await new Promise<void>((resolve) => {
-    window.requestAnimationFrame(() => resolve())
-  })
-}
-
-function countLines(input: string): number {
-  if (!input) return 0
-  return input.replace(/\r\n?/g, '\n').split('\n').length
-}
-
-function startLargeDocumentLoadOverlay() {
-  isLoadingLargeDocument.value = true
-  loadDocumentStats.value = null
-  loadStageLabel.value = 'Reading file...'
-  loadProgressPercent.value = 5
-  loadProgressIndeterminate.value = true
-}
-
-function setLargeDocumentLoadStats(body: string) {
-  if (!isLoadingLargeDocument.value) return
-  loadDocumentStats.value = { chars: body.length, lines: countLines(body) }
-}
-
-async function setLargeDocumentLoadStage(stage: string, percent: number) {
-  if (!isLoadingLargeDocument.value) return
-  loadStageLabel.value = stage
-  loadProgressPercent.value = Math.max(0, Math.min(100, Math.round(percent)))
-  loadProgressIndeterminate.value = false
-  await flushUiFrame()
-}
-
-function finishLargeDocumentLoadOverlay() {
-  isLoadingLargeDocument.value = false
-  loadStageLabel.value = ''
-  loadProgressPercent.value = 0
-  loadProgressIndeterminate.value = false
-  loadDocumentStats.value = null
-}
-
 function getVisibleText(input: string): string {
   return input
     .replace(/<[^>]*>/g, ' ')
@@ -1013,90 +966,62 @@ async function destroyEditor() {
   editor = null
 }
 
-async function loadCurrentFile(path: string) {
-  if (!path) return
-
-  const loadSequence = ++activeLoadSequence
-  const isStaleLoad = () => loadSequence !== activeLoadSequence
-
-  await ensureEditor()
-  await ensurePropertySchemaLoaded()
-  if (!editor || isStaleLoad()) return
-
-  clearAutosaveTimer()
-  closeSlashMenu()
-  closeWikilinkMenu()
-  setSaveError(path, '')
-
-  let shouldShowLargeDocOverlay = false
-
-  try {
-    startLargeDocumentLoadOverlay()
-    await flushUiFrame()
-    if (isStaleLoad()) return
-
-    const txt = await props.openFile(path)
-    if (isStaleLoad()) return
-    parseAndStoreFrontmatter(path, txt)
-    const body = frontmatterByPath.value[path]?.body ?? txt
-    shouldShowLargeDocOverlay = txt.length >= LARGE_DOC_LOAD_THRESHOLD
-    if (!shouldShowLargeDocOverlay) {
-      if (!isStaleLoad()) finishLargeDocumentLoadOverlay()
-    } else {
-      setLargeDocumentLoadStats(body)
-      await setLargeDocumentLoadStage('Parsing markdown blocks...', 35)
-      if (isStaleLoad()) return
-    }
-
-    const parsed = markdownToEditorData(body)
-    if (isStaleLoad()) return
-    const normalized = withVirtualTitle(parsed.blocks as OutputBlockData[], noteTitleFromPath(path))
-    suppressOnChange = true
+const {
+  isLoadingLargeDocument,
+  loadStageLabel,
+  loadProgressPercent,
+  loadProgressIndeterminate,
+  loadDocumentStats,
+  loadCurrentFile
+} = useEditorDocumentLifecycle({
+  ensureEditor,
+  ensurePropertySchemaLoaded,
+  hasActiveEditor: () => Boolean(editor),
+  clearAutosaveTimer,
+  closeSlashMenu,
+  closeWikilinkMenu,
+  setSaveError,
+  openFile: props.openFile,
+  parseAndStoreFrontmatter,
+  resolveEditorBody: (path, rawMarkdown) => frontmatterByPath.value[path]?.body ?? rawMarkdown,
+  markdownToEditorData,
+  normalizeLoadedBlocks: (blocks, path) => withVirtualTitle(blocks, noteTitleFromPath(path)).blocks,
+  setLoadedText: (path, markdown) => {
     loadedTextByPath.value = {
       ...loadedTextByPath.value,
-      [path]: txt
+      [path]: markdown
     }
-    if (shouldShowLargeDocOverlay) {
-      await setLargeDocumentLoadStage('Rendering blocks in editor...', 70)
-    }
+  },
+  setSuppressOnChange: (value) => {
+    suppressOnChange = value
+  },
+  renderEditor: async ({ version, blocks }) => {
+    if (!editor) return
     await editor.render({
       time: Date.now(),
-      version: parsed.version,
-      blocks: normalized.blocks
+      version,
+      blocks
     })
-    if (isStaleLoad()) return
-    if (shouldShowLargeDocOverlay) {
-      await setLargeDocumentLoadStage('Finalizing view...', 95)
-    }
-    setDirty(path, false)
-    ensureCodeBlockUi()
-
-    await nextTick()
-    const remembered = scrollTopByPath.value[path]
-    const hasRememberedScroll = typeof remembered === 'number'
-    const targetScrollTop = remembered ?? 0
+  },
+  setDirty,
+  ensureCodeBlockUi,
+  nextUiTick: nextTick,
+  getRememberedScrollTop: (path) => scrollTopByPath.value[path],
+  setEditorScrollTop: (value) => {
     if (holder.value) {
-      holder.value.scrollTop = targetScrollTop
+      holder.value.scrollTop = value
     }
-    const restoredCaret = restoreCaret(path)
-    if (!restoredCaret && (!hasRememberedScroll || targetScrollTop <= 1)) {
-      await focusFirstContentBlock()
-    }
-    emitOutlineSoon()
-    if (shouldShowLargeDocOverlay) {
-      loadProgressPercent.value = 100
-    }
-  } catch (err) {
-    if (!isStaleLoad()) {
-      setSaveError(path, err instanceof Error ? err.message : 'Could not read file.')
-    }
-  } finally {
-    if (!isStaleLoad()) {
-      suppressOnChange = false
-      finishLargeDocumentLoadOverlay()
-    }
+  },
+  restoreCaret,
+  focusFirstContentBlock,
+  emitOutlineSoon,
+  flushUiFrame: async () => {
+    await nextTick()
+    await new Promise<void>((resolve) => {
+      window.requestAnimationFrame(() => resolve())
+    })
   }
-}
+})
 
 async function saveCurrentFile(manual = true) {
   const initialPath = currentPath.value
