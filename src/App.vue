@@ -147,6 +147,7 @@ const historyMenuStyle = ref<Record<string, string>>({})
 let historyMenuTimer: ReturnType<typeof setTimeout> | null = null
 let historyLongPressTarget: 'back' | 'forward' | null = null
 let unlistenWorkspaceFsChanged: (() => void) | null = null
+let modalFocusReturnTarget: HTMLElement | null = null
 
 const resizeState = ref<{
   side: 'left' | 'right'
@@ -521,6 +522,7 @@ function closeOverflowMenu() {
 }
 
 function openShortcutsModal() {
+  modalFocusReturnTarget = document.activeElement instanceof HTMLElement ? document.activeElement : null
   shortcutsFilterQuery.value = ''
   shortcutsModalVisible.value = true
   void nextTick(() => {
@@ -530,6 +532,9 @@ function openShortcutsModal() {
 
 function closeShortcutsModal() {
   shortcutsModalVisible.value = false
+  void nextTick(() => {
+    restoreFocusAfterModalClose()
+  })
 }
 
 function openShortcutsFromOverflow() {
@@ -977,6 +982,7 @@ function openNextWikilinkRewritePrompt() {
   if (wikilinkRewritePrompt.value || wikilinkRewriteQueue.length === 0) return
   const next = wikilinkRewriteQueue.shift()
   if (!next) return
+  modalFocusReturnTarget = document.activeElement instanceof HTMLElement ? document.activeElement : null
   wikilinkRewritePrompt.value = {
     fromPath: next.fromPath,
     toPath: next.toPath
@@ -1000,6 +1006,9 @@ function resolveWikilinkRewritePrompt(approved: boolean) {
   wikilinkRewriteResolver = null
   wikilinkRewritePrompt.value = null
   resolve?.(approved)
+  void nextTick(() => {
+    restoreFocusAfterModalClose()
+  })
   openNextWikilinkRewritePrompt()
 }
 
@@ -1370,6 +1379,7 @@ async function openYesterdayNote() {
 }
 
 async function openSpecificDateNote() {
+  modalFocusReturnTarget = document.activeElement instanceof HTMLElement ? document.activeElement : null
   openDateInput.value = formatIsoDate(new Date())
   openDateModalError.value = ''
   openDateModalVisible.value = true
@@ -1382,6 +1392,9 @@ function closeOpenDateModal() {
   openDateModalVisible.value = false
   openDateInput.value = ''
   openDateModalError.value = ''
+  void nextTick(() => {
+    restoreFocusAfterModalClose()
+  })
 }
 
 async function submitOpenDateFromModal() {
@@ -1580,6 +1593,7 @@ async function loadAllFiles() {
 }
 
 async function openQuickOpen(initialQuery = '') {
+  modalFocusReturnTarget = document.activeElement instanceof HTMLElement ? document.activeElement : null
   quickOpenVisible.value = true
   quickOpenQuery.value = initialQuery
   quickOpenActiveIndex.value = 0
@@ -1594,6 +1608,9 @@ function closeQuickOpen() {
   quickOpenVisible.value = false
   quickOpenQuery.value = ''
   quickOpenActiveIndex.value = 0
+  void nextTick(() => {
+    restoreFocusAfterModalClose()
+  })
 }
 
 async function openQuickResult(item: QuickOpenResult) {
@@ -1642,9 +1659,13 @@ function closeNewFileModal() {
   newFileModalVisible.value = false
   newFilePathInput.value = ''
   newFileModalError.value = ''
+  void nextTick(() => {
+    restoreFocusAfterModalClose()
+  })
 }
 
 async function openNewFileModal(prefill = '') {
+  modalFocusReturnTarget = document.activeElement instanceof HTMLElement ? document.activeElement : null
   newFilePathInput.value = prefill
   newFileModalError.value = ''
   newFileModalVisible.value = true
@@ -1656,9 +1677,13 @@ function closeNewFolderModal() {
   newFolderModalVisible.value = false
   newFolderPathInput.value = ''
   newFolderModalError.value = ''
+  void nextTick(() => {
+    restoreFocusAfterModalClose()
+  })
 }
 
 async function openNewFolderModal(prefill = '') {
+  modalFocusReturnTarget = document.activeElement instanceof HTMLElement ? document.activeElement : null
   newFolderPathInput.value = prefill
   newFolderModalError.value = ''
   newFolderModalVisible.value = true
@@ -1928,6 +1953,7 @@ function isEditableEventTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
   const tag = target.tagName.toLowerCase()
   if (tag === 'input' || tag === 'textarea' || tag === 'select') return true
+  if (target.closest('.editor-shell')) return false
   return target.isContentEditable || Boolean(target.closest('[contenteditable="true"]'))
 }
 
@@ -1939,6 +1965,16 @@ function activeModalSelector(): string | null {
   if (newFileModalVisible.value) return '[data-modal="new-file"]'
   if (quickOpenVisible.value) return '[data-modal="quick-open"]'
   return null
+}
+
+function restoreFocusAfterModalClose() {
+  if (activeModalSelector()) return
+  if (modalFocusReturnTarget && document.contains(modalFocusReturnTarget)) {
+    modalFocusReturnTarget.focus()
+  } else {
+    editorRef.value?.focusEditor()
+  }
+  modalFocusReturnTarget = null
 }
 
 function trapTabWithinActiveModal(event: KeyboardEvent): boolean {
