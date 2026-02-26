@@ -389,24 +389,51 @@ function normalizePath(path: string): string {
   return path.replace(/\\/g, '/')
 }
 
+function normalizePathKey(path: string): string {
+  return normalizePath(path).toLowerCase()
+}
+
 function isMarkdownPath(path: string): boolean {
   return /\.(md|markdown)$/i.test(path)
 }
 
 function upsertWorkspaceFilePath(path: string) {
   if (!isMarkdownPath(path)) return
-  const normalized = normalizePath(path)
-  const exists = allWorkspaceFiles.value.some((item) => normalizePath(item).toLowerCase() === normalized.toLowerCase())
+  const normalized = normalizePathKey(path)
+  const exists = allWorkspaceFiles.value.some((item) => normalizePathKey(item) === normalized)
   if (exists) return
   allWorkspaceFiles.value = [...allWorkspaceFiles.value, path].sort((a, b) => a.localeCompare(b))
 }
 
 function removeWorkspaceFilePath(path: string) {
-  const normalized = normalizePath(path)
+  const normalized = normalizePathKey(path)
+  const normalizedPrefix = `${normalized}/`
   allWorkspaceFiles.value = allWorkspaceFiles.value.filter((item) => {
-    const candidate = normalizePath(item)
-    return candidate !== normalized && !candidate.startsWith(`${normalized}/`)
+    const candidate = normalizePathKey(item)
+    return candidate !== normalized && !candidate.startsWith(normalizedPrefix)
   })
+}
+
+function replaceWorkspaceFilePath(oldPath: string, newPath: string) {
+  if (!oldPath || !newPath) return
+  const oldNormalized = normalizePath(oldPath)
+  const newNormalized = normalizePath(newPath)
+  const oldKey = oldNormalized.toLowerCase()
+  const newKey = newNormalized.toLowerCase()
+  if (oldKey === newKey) return
+
+  const next = allWorkspaceFiles.value.map((entry) => {
+    const entryNormalized = normalizePath(entry)
+    const entryKey = entryNormalized.toLowerCase()
+    if (entryKey === oldKey) {
+      return `${newNormalized}${entryNormalized.slice(oldNormalized.length)}`
+    }
+    if (entryKey.startsWith(`${oldKey}/`)) {
+      return `${newNormalized}${entryNormalized.slice(oldNormalized.length)}`
+    }
+    return entry
+  })
+  allWorkspaceFiles.value = Array.from(new Set(next)).sort((a, b) => a.localeCompare(b))
 }
 
 function applyWorkspaceFsChanges(changes: WorkspaceFsChange[]) {
@@ -417,10 +444,11 @@ function applyWorkspaceFsChanges(changes: WorkspaceFsChange[]) {
       continue
     }
     if (change.kind === 'renamed') {
-      if (change.old_path) {
+      if (change.old_path && change.new_path) {
+        replaceWorkspaceFilePath(change.old_path, change.new_path)
+      } else if (change.old_path) {
         removeWorkspaceFilePath(change.old_path)
-      }
-      if (!change.is_dir && change.new_path) {
+      } else if (!change.is_dir && change.new_path) {
         upsertWorkspaceFilePath(change.new_path)
       }
       continue
@@ -967,13 +995,7 @@ function applyPathRenameLocally(payload: { from: string; to: string }) {
     virtualDocs.value = nextVirtual
   }
 
-  if (allWorkspaceFiles.value.includes(fromPath) || !allWorkspaceFiles.value.includes(toPath)) {
-    const moved = allWorkspaceFiles.value
-      .map((path) => (path === fromPath ? toPath : path))
-      .filter((path, index, source) => source.indexOf(path) === index)
-      .sort((a, b) => a.localeCompare(b))
-    allWorkspaceFiles.value = moved
-  }
+  replaceWorkspaceFilePath(fromPath, toPath)
 
   backlinks.value = backlinks.value.map((path) => (path === fromPath ? toPath : path))
 }
@@ -1153,9 +1175,7 @@ async function saveFile(path: string, txt: string, options: SaveFileOptions): Pr
     virtualDocs.value = nextVirtual
   }
 
-  if (/\.(md|markdown)$/i.test(path) && !allWorkspaceFiles.value.includes(path)) {
-    allWorkspaceFiles.value = [...allWorkspaceFiles.value, path].sort((a, b) => a.localeCompare(b))
-  }
+  upsertWorkspaceFilePath(path)
 
   filesystem.indexingState.value = 'indexing'
   try {
@@ -1360,9 +1380,7 @@ async function openDailyNote(date: string) {
   if (!exists) {
     await ensureParentFolders(path)
     await writeTextFile(path, '')
-    if (!allWorkspaceFiles.value.includes(path)) {
-      allWorkspaceFiles.value = [...allWorkspaceFiles.value, path].sort((a, b) => a.localeCompare(b))
-    }
+    upsertWorkspaceFilePath(path)
   }
 
   return await openTabWithAutosave(path)
@@ -1796,9 +1814,7 @@ async function submitNewFileFromModal() {
     const created = await createEntry(parentPath, name, 'file', 'fail')
     const opened = await openTabWithAutosave(created)
     if (!opened) return false
-    if (/\.(md|markdown)$/i.test(created) && !allWorkspaceFiles.value.includes(created)) {
-      allWorkspaceFiles.value = [...allWorkspaceFiles.value, created].sort((a, b) => a.localeCompare(b))
-    }
+    upsertWorkspaceFilePath(created)
     closeNewFileModal()
     return true
   } catch (err) {
