@@ -8,10 +8,8 @@ import {
   EllipsisHorizontalIcon,
   FolderIcon,
   HomeIcon,
-  LinkIcon,
   MagnifyingGlassIcon,
   MoonIcon,
-  StarIcon,
   SunIcon,
   XMarkIcon
 } from '@heroicons/vue/24/outline'
@@ -36,6 +34,8 @@ import {
   revealInFileManager,
   setWorkingFolder,
   selectWorkingFolder,
+  type WorkspaceFsChange,
+  listenWorkspaceFsChanged,
   updateWikilinksForRename,
   writePropertyTypeSchema,
   writeTextFile
@@ -146,6 +146,7 @@ const historyMenuOpen = ref<'back' | 'forward' | null>(null)
 const historyMenuStyle = ref<Record<string, string>>({})
 let historyMenuTimer: ReturnType<typeof setTimeout> | null = null
 let historyLongPressTarget: 'back' | 'forward' | null = null
+let unlistenWorkspaceFsChanged: (() => void) | null = null
 
 const resizeState = ref<{
   side: 'left' | 'right'
@@ -381,6 +382,52 @@ function toRelativePath(path: string): string {
     return path.slice(root.length + 1)
   }
   return path
+}
+
+function normalizePath(path: string): string {
+  return path.replace(/\\/g, '/')
+}
+
+function isMarkdownPath(path: string): boolean {
+  return /\.(md|markdown)$/i.test(path)
+}
+
+function upsertWorkspaceFilePath(path: string) {
+  if (!isMarkdownPath(path)) return
+  const normalized = normalizePath(path)
+  const exists = allWorkspaceFiles.value.some((item) => normalizePath(item).toLowerCase() === normalized.toLowerCase())
+  if (exists) return
+  allWorkspaceFiles.value = [...allWorkspaceFiles.value, path].sort((a, b) => a.localeCompare(b))
+}
+
+function removeWorkspaceFilePath(path: string) {
+  const normalized = normalizePath(path)
+  allWorkspaceFiles.value = allWorkspaceFiles.value.filter((item) => {
+    const candidate = normalizePath(item)
+    return candidate !== normalized && !candidate.startsWith(`${normalized}/`)
+  })
+}
+
+function applyWorkspaceFsChanges(changes: WorkspaceFsChange[]) {
+  if (!changes.length) return
+  for (const change of changes) {
+    if (change.kind === 'removed' && change.path) {
+      removeWorkspaceFilePath(change.path)
+      continue
+    }
+    if (change.kind === 'renamed') {
+      if (change.old_path) {
+        removeWorkspaceFilePath(change.old_path)
+      }
+      if (!change.is_dir && change.new_path) {
+        upsertWorkspaceFilePath(change.new_path)
+      }
+      continue
+    }
+    if ((change.kind === 'created' || change.kind === 'modified') && !change.is_dir && change.path) {
+      upsertWorkspaceFilePath(change.path)
+    }
+  }
 }
 
 function normalizeDatePart(value: number): string {
@@ -1877,6 +1924,64 @@ function onOpenDateInputKeydown(event: KeyboardEvent) {
   }
 }
 
+function isEditableEventTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  const tag = target.tagName.toLowerCase()
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') return true
+  return target.isContentEditable || Boolean(target.closest('[contenteditable="true"]'))
+}
+
+function activeModalSelector(): string | null {
+  if (wikilinkRewritePrompt.value) return '[data-modal="wikilink-rewrite"]'
+  if (shortcutsModalVisible.value) return '[data-modal="shortcuts"]'
+  if (openDateModalVisible.value) return '[data-modal="open-date"]'
+  if (newFolderModalVisible.value) return '[data-modal="new-folder"]'
+  if (newFileModalVisible.value) return '[data-modal="new-file"]'
+  if (quickOpenVisible.value) return '[data-modal="quick-open"]'
+  return null
+}
+
+function trapTabWithinActiveModal(event: KeyboardEvent): boolean {
+  if (event.key !== 'Tab') return false
+  const selector = activeModalSelector()
+  if (!selector) return false
+  const modal = document.querySelector<HTMLElement>(selector)
+  if (!modal) return false
+
+  const focusable = Array.from(
+    modal.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )
+  ).filter((el) => el.tabIndex >= 0 && !el.hasAttribute('disabled'))
+
+  if (!focusable.length) {
+    event.preventDefault()
+    modal.focus()
+    return true
+  }
+
+  const first = focusable[0]
+  const last = focusable[focusable.length - 1]
+  const active = document.activeElement as HTMLElement | null
+  const isInsideModal = Boolean(active && modal.contains(active))
+
+  if (event.shiftKey) {
+    if (!isInsideModal || active === first) {
+      event.preventDefault()
+      last.focus()
+      return true
+    }
+    return false
+  }
+
+  if (!isInsideModal || active === last) {
+    event.preventDefault()
+    first.focus()
+    return true
+  }
+  return false
+}
+
 function onNewFileInputKeydown(event: KeyboardEvent) {
   if (event.metaKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
     event.stopPropagation()
@@ -2001,6 +2106,13 @@ function onWindowKeydown(event: KeyboardEvent) {
       return
     }
   }
+
+  if (trapTabWithinActiveModal(event)) {
+    event.stopPropagation()
+    return
+  }
+
+  if (isEditableEventTarget(event.target)) return
 
   const isMod = event.metaKey || event.ctrlKey
   if (!isMod) return
@@ -2205,6 +2317,16 @@ onMounted(() => {
   window.addEventListener('resize', onWindowResize)
   window.addEventListener('mousemove', onPointerMove)
   window.addEventListener('mouseup', stopResize)
+  void listenWorkspaceFsChanged((payload) => {
+    const root = filesystem.workingFolderPath.value
+    if (!root) return
+    if (normalizePath(payload.root).toLowerCase() !== normalizePath(root).toLowerCase()) return
+    applyWorkspaceFsChanges(payload.changes)
+  }).then((unlisten) => {
+    unlistenWorkspaceFsChanged = unlisten
+  }).catch(() => {
+    unlistenWorkspaceFsChanged = null
+  })
 
   const savedFolder = window.localStorage.getItem(WORKING_FOLDER_STORAGE_KEY)
   if (savedFolder) {
@@ -2232,6 +2354,10 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', onWindowResize)
   window.removeEventListener('mousemove', onPointerMove)
   window.removeEventListener('mouseup', stopResize)
+  if (unlistenWorkspaceFsChanged) {
+    unlistenWorkspaceFsChanged()
+    unlistenWorkspaceFsChanged = null
+  }
 })
 </script>
 
@@ -2258,26 +2384,6 @@ onBeforeUnmount(() => {
           @click="setSidebarMode('search')"
         >
           <MagnifyingGlassIcon class="activity-btn-icon" />
-        </button>
-        <button
-          class="activity-btn"
-          :class="{ active: workspace.sidebarMode.value === 'backlinks' && workspace.sidebarVisible.value }"
-          type="button"
-          title="Backlinks"
-          aria-label="Backlinks"
-          @click="setSidebarMode('backlinks')"
-        >
-          <LinkIcon class="activity-btn-icon" />
-        </button>
-        <button
-          class="activity-btn"
-          :class="{ active: workspace.sidebarMode.value === 'favorites' && workspace.sidebarVisible.value }"
-          type="button"
-          title="Favorites"
-          aria-label="Favorites"
-          @click="setSidebarMode('favorites')"
-        >
-          <StarIcon class="activity-btn-icon" />
         </button>
       </aside>
 
@@ -2342,7 +2448,7 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <div v-else class="placeholder">Coming soon</div>
+          <div v-else class="placeholder">No panel selected</div>
         </div>
       </aside>
 
@@ -2697,7 +2803,7 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-if="quickOpenVisible" class="modal-overlay" @click.self="closeQuickOpen">
-      <div class="modal quick-open">
+      <div class="modal quick-open" data-modal="quick-open" role="dialog" aria-modal="true" aria-label="Quick open" tabindex="-1">
         <input
           v-model="quickOpenQuery"
           data-quick-open-input="true"
@@ -2737,7 +2843,7 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-if="newFileModalVisible" class="modal-overlay" @click.self="closeNewFileModal">
-      <div class="modal confirm-modal">
+      <div class="modal confirm-modal" data-modal="new-file" role="dialog" aria-modal="true" aria-label="New note" tabindex="-1">
         <h3 class="confirm-title">New Note</h3>
         <p class="confirm-text">Enter a workspace-relative note path. `.md` is added automatically.</p>
         <input
@@ -2756,7 +2862,7 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-if="newFolderModalVisible" class="modal-overlay" @click.self="closeNewFolderModal">
-      <div class="modal confirm-modal">
+      <div class="modal confirm-modal" data-modal="new-folder" role="dialog" aria-modal="true" aria-label="New folder" tabindex="-1">
         <h3 class="confirm-title">New Folder</h3>
         <p class="confirm-text">Enter a workspace-relative folder path.</p>
         <input
@@ -2775,7 +2881,7 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-if="openDateModalVisible" class="modal-overlay" @click.self="closeOpenDateModal">
-      <div class="modal confirm-modal">
+      <div class="modal confirm-modal" data-modal="open-date" role="dialog" aria-modal="true" aria-label="Open specific date" tabindex="-1">
         <h3 class="confirm-title">Open Specific Date</h3>
         <p class="confirm-text">Enter a date as `YYYY-MM-DD`.</p>
         <input
@@ -2794,7 +2900,7 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-if="shortcutsModalVisible" class="modal-overlay" @click.self="closeShortcutsModal">
-      <div class="modal shortcuts-modal">
+      <div class="modal shortcuts-modal" data-modal="shortcuts" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" tabindex="-1">
         <h3 class="confirm-title">Keyboard Shortcuts</h3>
         <input
           v-model="shortcutsFilterQuery"
@@ -2821,7 +2927,14 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-if="wikilinkRewritePrompt" class="modal-overlay" @click.self="resolveWikilinkRewritePrompt(false)">
-      <div class="modal confirm-modal">
+      <div
+        class="modal confirm-modal"
+        data-modal="wikilink-rewrite"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Update wikilinks"
+        tabindex="-1"
+      >
         <h3 class="confirm-title">Update wikilinks?</h3>
         <p class="confirm-text">The file was renamed. Do you want to rewrite matching wikilinks across the workspace?</p>
         <p class="confirm-path"><strong>From:</strong> {{ toRelativePath(wikilinkRewritePrompt.fromPath) }}</p>
