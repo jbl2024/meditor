@@ -41,6 +41,7 @@ import {
   writeTextFile
 } from './lib/api'
 import { parseSearchSnippet } from './lib/searchSnippets'
+import { shouldBlockGlobalShortcutsFromTarget } from './lib/shortcutTargets'
 import { parseWikilinkTarget, type WikilinkAnchor } from './lib/wikilinks'
 import { useEditorState } from './composables/useEditorState'
 import { useFilesystemState } from './composables/useFilesystemState'
@@ -1965,15 +1966,6 @@ function onOpenDateInputKeydown(event: KeyboardEvent) {
   }
 }
 
-function isEditableEventTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false
-  if (target.closest('[data-search-input="true"]')) return false
-  const tag = target.tagName.toLowerCase()
-  if (tag === 'input' || tag === 'textarea' || tag === 'select') return true
-  if (target.closest('.editor-shell')) return false
-  return target.isContentEditable || Boolean(target.closest('[contenteditable="true"]'))
-}
-
 function activeModalSelector(): string | null {
   if (wikilinkRewritePrompt.value) return '[data-modal="wikilink-rewrite"]'
   if (shortcutsModalVisible.value) return '[data-modal="shortcuts"]'
@@ -2165,7 +2157,7 @@ function onWindowKeydown(event: KeyboardEvent) {
     return
   }
 
-  if (isEditableEventTarget(event.target)) return
+  if (shouldBlockGlobalShortcutsFromTarget(event.target)) return
 
   const isMod = event.metaKey || event.ctrlKey
   if (!isMod) return
