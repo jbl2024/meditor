@@ -1976,6 +1976,17 @@ function activeModalSelector(): string | null {
   return null
 }
 
+function hasBlockingModalOpen(): boolean {
+  return Boolean(
+    quickOpenVisible.value ||
+    newFileModalVisible.value ||
+    newFolderModalVisible.value ||
+    openDateModalVisible.value ||
+    shortcutsModalVisible.value ||
+    wikilinkRewritePrompt.value
+  )
+}
+
 function restoreFocusAfterModalClose() {
   if (activeModalSelector()) return
   if (modalFocusReturnTarget && document.contains(modalFocusReturnTarget)) {
@@ -2156,6 +2167,8 @@ function onWindowKeydown(event: KeyboardEvent) {
     event.stopPropagation()
     return
   }
+
+  if (hasBlockingModalOpen()) return
 
   if (shouldBlockGlobalShortcutsFromTarget(event.target)) return
 
@@ -2848,7 +2861,17 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-if="quickOpenVisible" class="modal-overlay" @click.self="closeQuickOpen">
-      <div class="modal quick-open" data-modal="quick-open" role="dialog" aria-modal="true" aria-label="Quick open" tabindex="-1">
+      <div
+        class="modal quick-open"
+        data-modal="quick-open"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="quick-open-title"
+        aria-describedby="quick-open-description"
+        tabindex="-1"
+      >
+        <h3 id="quick-open-title" class="sr-only">Quick open</h3>
+        <p id="quick-open-description" class="sr-only">Type a file name, or start with greater-than for actions.</p>
         <input
           v-model="quickOpenQuery"
           data-quick-open-input="true"
@@ -2888,9 +2911,17 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-if="newFileModalVisible" class="modal-overlay" @click.self="closeNewFileModal">
-      <div class="modal confirm-modal" data-modal="new-file" role="dialog" aria-modal="true" aria-label="New note" tabindex="-1">
-        <h3 class="confirm-title">New Note</h3>
-        <p class="confirm-text">Enter a workspace-relative note path. `.md` is added automatically.</p>
+      <div
+        class="modal confirm-modal"
+        data-modal="new-file"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="new-file-title"
+        aria-describedby="new-file-description"
+        tabindex="-1"
+      >
+        <h3 id="new-file-title" class="confirm-title">New Note</h3>
+        <p id="new-file-description" class="confirm-text">Enter a workspace-relative note path. `.md` is added automatically.</p>
         <input
           v-model="newFilePathInput"
           data-new-file-input="true"
@@ -2907,9 +2938,17 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-if="newFolderModalVisible" class="modal-overlay" @click.self="closeNewFolderModal">
-      <div class="modal confirm-modal" data-modal="new-folder" role="dialog" aria-modal="true" aria-label="New folder" tabindex="-1">
-        <h3 class="confirm-title">New Folder</h3>
-        <p class="confirm-text">Enter a workspace-relative folder path.</p>
+      <div
+        class="modal confirm-modal"
+        data-modal="new-folder"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="new-folder-title"
+        aria-describedby="new-folder-description"
+        tabindex="-1"
+      >
+        <h3 id="new-folder-title" class="confirm-title">New Folder</h3>
+        <p id="new-folder-description" class="confirm-text">Enter a workspace-relative folder path.</p>
         <input
           v-model="newFolderPathInput"
           data-new-folder-input="true"
@@ -2926,9 +2965,17 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-if="openDateModalVisible" class="modal-overlay" @click.self="closeOpenDateModal">
-      <div class="modal confirm-modal" data-modal="open-date" role="dialog" aria-modal="true" aria-label="Open specific date" tabindex="-1">
-        <h3 class="confirm-title">Open Specific Date</h3>
-        <p class="confirm-text">Enter a date as `YYYY-MM-DD`.</p>
+      <div
+        class="modal confirm-modal"
+        data-modal="open-date"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="open-date-title"
+        aria-describedby="open-date-description"
+        tabindex="-1"
+      >
+        <h3 id="open-date-title" class="confirm-title">Open Specific Date</h3>
+        <p id="open-date-description" class="confirm-text">Enter a date as `YYYY-MM-DD`.</p>
         <input
           v-model="openDateInput"
           data-open-date-input="true"
@@ -2945,8 +2992,17 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-if="shortcutsModalVisible" class="modal-overlay" @click.self="closeShortcutsModal">
-      <div class="modal shortcuts-modal" data-modal="shortcuts" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" tabindex="-1">
-        <h3 class="confirm-title">Keyboard Shortcuts</h3>
+      <div
+        class="modal shortcuts-modal"
+        data-modal="shortcuts"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="shortcuts-title"
+        aria-describedby="shortcuts-description"
+        tabindex="-1"
+      >
+        <h3 id="shortcuts-title" class="confirm-title">Keyboard Shortcuts</h3>
+        <p id="shortcuts-description" class="sr-only">Browse and filter keyboard shortcuts.</p>
         <input
           v-model="shortcutsFilterQuery"
           data-shortcuts-filter="true"
@@ -2977,11 +3033,12 @@ onBeforeUnmount(() => {
         data-modal="wikilink-rewrite"
         role="dialog"
         aria-modal="true"
-        aria-label="Update wikilinks"
+        aria-labelledby="wikilink-rewrite-title"
+        aria-describedby="wikilink-rewrite-description"
         tabindex="-1"
       >
-        <h3 class="confirm-title">Update wikilinks?</h3>
-        <p class="confirm-text">The file was renamed. Do you want to rewrite matching wikilinks across the workspace?</p>
+        <h3 id="wikilink-rewrite-title" class="confirm-title">Update wikilinks?</h3>
+        <p id="wikilink-rewrite-description" class="confirm-text">The file was renamed. Do you want to rewrite matching wikilinks across the workspace?</p>
         <p class="confirm-path"><strong>From:</strong> {{ toRelativePath(wikilinkRewritePrompt.fromPath) }}</p>
         <p class="confirm-path"><strong>To:</strong> {{ toRelativePath(wikilinkRewritePrompt.toPath) }}</p>
         <div class="confirm-actions">
@@ -4011,6 +4068,18 @@ onBeforeUnmount(() => {
   color: #64748b;
   font-size: 12px;
   padding: 6px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 @media (max-width: 980px) {
