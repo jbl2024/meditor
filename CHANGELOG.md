@@ -18,6 +18,18 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.4.1] - 2026-02-26
+
+### Changed
+- test(shortcuts): add regression coverage for global shortcut target gating (c732565)
+
+### Fixed
+- fix(a11y): enforce modal focus isolation and block background shortcuts (d3e1b9e)
+- fix(shortcuts): allow global keybindings from search panel input (4435a68)
+- fix(search): keep quick-open file index consistent across create/delete/rename events (ba4e23d)
+- fix(ui): restore focus after modal close for keyboard flow continuity (3ce7a6f)
+- fix(ui): harden keyboard/modal flows and remove dead-end sidebar states (28c94df)
+
 ## [0.4.0] - 2026-02-25
 
 ### Added
