@@ -121,6 +121,7 @@ const blockMenuFloatingEl = ref<HTMLDivElement | null>(null)
 const blockMenuPos = ref({ x: 0, y: 0 })
 const DRAG_HANDLE_PLUGIN_KEY = 'meditor-drag-handle'
 const DRAG_HANDLE_DEBUG = false
+let lastAppliedDragHandleLock: boolean | null = null
 const dragHandleUiState = ref<DragHandleUiState>({
   menuOpen: false,
   gutterHover: false,
@@ -386,6 +387,8 @@ function closeWikilinkMenu() {
 }
 
 function closeBlockMenu(unlock = true) {
+  const wasOpen = blockMenuOpen.value || blockMenuIndex.value !== 0 || dragHandleUiState.value.menuOpen
+  if (!wasOpen) return
   blockMenuOpen.value = false
   blockMenuIndex.value = 0
   dragHandleUiState.value = { ...dragHandleUiState.value, menuOpen: false }
@@ -522,6 +525,8 @@ function debugDragHandle(event: string, detail?: unknown) {
 function syncDragHandleLockFromState(reason: string) {
   if (!editor) return
   const shouldLock = computeHandleLock(dragHandleUiState.value)
+  if (lastAppliedDragHandleLock === shouldLock) return
+  lastAppliedDragHandleLock = shouldLock
   editor.commands.setMeta('lockDragHandle', shouldLock)
   debugDragHandle(`sync-lock:${reason}`, shouldLock)
 }
@@ -645,6 +650,7 @@ const { ensureEditor, destroyEditor } = useTiptapInstance({
   getEditor: () => editor,
   setEditor: (instance) => {
     editor = instance
+    lastAppliedDragHandleLock = null
   },
   createOptions: (_holderEl, onEditorChange) => ({
     autofocus: false,
@@ -757,6 +763,7 @@ const { ensureEditor, destroyEditor } = useTiptapInstance({
     emitOutlineSoon()
   },
   beforeDestroy: () => {
+    lastAppliedDragHandleLock = null
     clearAutosaveTimer()
     clearOutlineTimer()
     closeSlashMenu()
@@ -1138,7 +1145,9 @@ function syncWikilinkUiFromPluginState() {
   }
 
   wikilinkOpen.value = true
-  closeBlockMenu()
+  if (blockMenuOpen.value || dragHandleUiState.value.menuOpen) {
+    closeBlockMenu()
+  }
   wikilinkIndex.value = state.selectedIndex
   wikilinkEditingRange.value = state.editingRange
   wikilinkResults.value = state.candidates.map((candidate) => ({
@@ -1148,8 +1157,11 @@ function syncWikilinkUiFromPluginState() {
     isCreate: Boolean(candidate.isCreate)
   }))
 
-  const pos = editor.state.selection.from
-  const rect = editor.view.coordsAtPos(pos)
+  const anchorPos = Math.max(
+    state.editingRange.from + 2,
+    Math.min(editor.state.selection.from, state.editingRange.to - 1)
+  )
+  const rect = editor.view.coordsAtPos(anchorPos)
   const holderRect = holder.value.getBoundingClientRect()
   wikilinkLeft.value = rect.left - holderRect.left + holder.value.scrollLeft
   wikilinkTop.value = rect.bottom - holderRect.top + holder.value.scrollTop + 8
