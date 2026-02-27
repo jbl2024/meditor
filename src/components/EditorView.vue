@@ -43,7 +43,7 @@ import { buildWikilinkCandidates } from '../lib/tiptap/wikilinkCandidates'
 import { enterWikilinkEditFromNode, parseWikilinkToken, type WikilinkEditingRange } from '../lib/tiptap/extensions/wikilinkCommands'
 import type { BlockMenuActionItem, BlockMenuTarget, TurnIntoType } from '../lib/tiptap/blockMenu/types'
 import { canCopyAnchor, canTurnInto, toBlockMenuTarget } from '../lib/tiptap/blockMenu/guards'
-import { deleteNode, duplicateNode, insertAbove, insertBelow, turnInto } from '../lib/tiptap/blockMenu/actions'
+import { canMoveDown, canMoveUp, deleteNode, duplicateNode, insertAbove, insertBelow, moveNodeDown, moveNodeUp, turnInto } from '../lib/tiptap/blockMenu/actions'
 import { computeHandleLock, resolveActiveTarget, type DragHandleUiState } from '../lib/tiptap/blockMenu/dragHandleState'
 
 const VIRTUAL_TITLE_BLOCK_ID = '__virtual_title__'
@@ -147,15 +147,15 @@ const TURN_INTO_TYPES: TurnIntoType[] = [
   'blockquote',
 ]
 const TURN_INTO_LABELS: Record<TurnIntoType, string> = {
-  paragraph: 'Turn into paragraph',
-  heading1: 'Turn into heading 1',
-  heading2: 'Turn into heading 2',
-  heading3: 'Turn into heading 3',
-  bulletList: 'Turn into bullet list',
-  orderedList: 'Turn into ordered list',
-  taskList: 'Turn into task list',
-  codeBlock: 'Turn into code block',
-  blockquote: 'Turn into quote',
+  paragraph: 'Paragraph',
+  heading1: 'Heading 1',
+  heading2: 'Heading 2',
+  heading3: 'Heading 3',
+  bulletList: 'Bullet list',
+  orderedList: 'Ordered list',
+  taskList: 'Task list',
+  codeBlock: 'Code block',
+  blockquote: 'Quote',
 }
 const currentPath = computed(() => props.path?.trim() || '')
 const visibleSlashCommands = computed(() => {
@@ -175,23 +175,31 @@ const WIKILINK_TARGETS_TTL_MS = 15_000
 const WIKILINK_HEADINGS_TTL_MS = 30_000
 const computedDragLock = computed(() => computeHandleLock(dragHandleUiState.value))
 const debugTargetPos = computed(() => String(dragHandleUiState.value.activeTarget?.pos ?? ''))
+const blockMenuActionTarget = computed(() => resolveActiveTarget(dragHandleUiState.value.activeTarget, lastStableBlockMenuTarget.value))
 const blockMenuActions = computed<BlockMenuActionItem[]>(() => {
-  const target = resolveActiveTarget(dragHandleUiState.value.activeTarget, lastStableBlockMenuTarget.value)
+  const target = blockMenuActionTarget.value
+  const canMoveUpValue = Boolean(editor && target && !target.isVirtualTitle && canMoveUp(editor, target))
+  const canMoveDownValue = Boolean(editor && target && !target.isVirtualTitle && canMoveDown(editor, target))
   const base: BlockMenuActionItem[] = [
     { id: 'insert_above', actionId: 'insert_above', label: 'Insert above', disabled: !target },
     { id: 'insert_below', actionId: 'insert_below', label: 'Insert below', disabled: !target },
-    ...TURN_INTO_TYPES.map((turnIntoType) => ({
-      id: `turn_into:${turnIntoType}`,
-      actionId: 'turn_into' as const,
-      turnIntoType,
-      label: TURN_INTO_LABELS[turnIntoType],
-      disabled: !canTurnInto(target, turnIntoType),
-    })),
+    { id: 'move_up', actionId: 'move_up', label: 'Move up', disabled: !canMoveUpValue },
+    { id: 'move_down', actionId: 'move_down', label: 'Move down', disabled: !canMoveDownValue },
     { id: 'duplicate', actionId: 'duplicate', label: 'Duplicate', disabled: !target },
     { id: 'copy_anchor', actionId: 'copy_anchor', label: 'Copy anchor', disabled: !canCopyAnchor(target) },
     { id: 'delete', actionId: 'delete', label: 'Delete', disabled: !target?.canDelete },
   ]
   return base
+})
+const blockMenuConvertActions = computed<BlockMenuActionItem[]>(() => {
+  const target = blockMenuActionTarget.value
+  return TURN_INTO_TYPES.map((turnIntoType) => ({
+    id: `turn_into:${turnIntoType}`,
+    actionId: 'turn_into' as const,
+    turnIntoType,
+    label: TURN_INTO_LABELS[turnIntoType],
+    disabled: !canTurnInto(target, turnIntoType),
+  }))
 })
 const { editorZoomStyle, initFromStorage: initEditorZoomFromStorage, zoomBy: zoomEditorBy, resetZoom: resetEditorZoom, getZoom } = useEditorZoom()
 const { mermaidReplaceDialog, resolveMermaidReplaceDialog, requestMermaidReplaceConfirm } = useMermaidReplaceDialog()
@@ -469,6 +477,8 @@ function onBlockMenuSelect(item: BlockMenuActionItem) {
   blockMenuTarget.value = target
   if (item.actionId === 'insert_above') insertAbove(editor, target)
   if (item.actionId === 'insert_below') insertBelow(editor, target)
+  if (item.actionId === 'move_up') moveNodeUp(editor, target)
+  if (item.actionId === 'move_down') moveNodeDown(editor, target)
   if (item.actionId === 'duplicate') duplicateNode(editor, target)
   if (item.actionId === 'delete') deleteNode(editor, target)
   if (item.actionId === 'copy_anchor' && canCopyAnchor(target)) copyAnchorTarget(target)
@@ -1631,12 +1641,13 @@ defineExpose({
           <Teleport to="body">
             <div :style="{ position: 'fixed', left: `${blockMenuPos.x}px`, top: `${blockMenuPos.y}px`, zIndex: 50 }">
               <EditorBlockMenu
-                :open="blockMenuOpen"
-                :index="blockMenuIndex"
-                :actions="blockMenuActions"
-                @menu-el="blockMenuFloatingEl = $event"
-                @update:index="blockMenuIndex = $event"
-                @select="onBlockMenuSelect($event)"
+              :open="blockMenuOpen"
+              :index="blockMenuIndex"
+              :actions="blockMenuActions"
+              :convert-actions="blockMenuConvertActions"
+              @menu-el="blockMenuFloatingEl = $event"
+              @update:index="blockMenuIndex = $event"
+              @select="onBlockMenuSelect($event)"
                 @close="closeBlockMenu()"
               />
             </div>

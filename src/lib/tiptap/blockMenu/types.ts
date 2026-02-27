@@ -1,4 +1,12 @@
-export type BlockMenuActionId = 'insert_above' | 'insert_below' | 'turn_into' | 'duplicate' | 'delete' | 'copy_anchor'
+export type BlockMenuActionId =
+  | 'insert_above'
+  | 'insert_below'
+  | 'move_up'
+  | 'move_down'
+  | 'turn_into'
+  | 'duplicate'
+  | 'delete'
+  | 'copy_anchor'
 
 export type TurnIntoType =
   | 'paragraph'

@@ -1,5 +1,5 @@
 import type { Editor } from '@tiptap/vue-3'
-import type { Node as ProseNode, Schema } from '@tiptap/pm/model'
+import { Fragment, type Node as ProseNode, type Schema } from '@tiptap/pm/model'
 import { TextSelection } from '@tiptap/pm/state'
 import type { BlockMenuTarget, TurnIntoType } from './types'
 
@@ -59,6 +59,42 @@ function focusNearPos(editor: Editor, pos: number) {
   editor.commands.focus(nextPos)
 }
 
+function topLevelEntryByPos(editor: Editor, pos: number): { index: number; pos: number; node: ProseNode } | null {
+  const { doc } = editor.state
+  let found: { index: number; pos: number; node: ProseNode } | null = null
+  doc.forEach((node, offset, index) => {
+    if (found) return
+    if (offset === pos) {
+      found = { index, pos: offset, node }
+    }
+  })
+  return found
+}
+
+function topLevelEntryByIndex(editor: Editor, index: number): { index: number; pos: number; node: ProseNode } | null {
+  const { doc } = editor.state
+  let found: { index: number; pos: number; node: ProseNode } | null = null
+  doc.forEach((node, offset, currentIndex) => {
+    if (found) return
+    if (currentIndex === index) {
+      found = { index: currentIndex, pos: offset, node }
+    }
+  })
+  return found
+}
+
+export function canMoveUp(editor: Editor, target: BlockMenuTarget): boolean {
+  const current = topLevelEntryByPos(editor, target.pos)
+  if (!current) return false
+  return current.index > 0
+}
+
+export function canMoveDown(editor: Editor, target: BlockMenuTarget): boolean {
+  const current = topLevelEntryByPos(editor, target.pos)
+  if (!current) return false
+  return current.index < editor.state.doc.childCount - 1
+}
+
 export function insertAbove(editor: Editor, target: BlockMenuTarget): boolean {
   const node = createParagraph(editor.state.schema)
   if (!node) return false
@@ -86,6 +122,36 @@ export function duplicateNode(editor: Editor, target: BlockMenuTarget): boolean 
   const tr = editor.state.tr.insert(insertPos, clone)
   editor.view.dispatch(tr)
   focusNearPos(editor, insertPos + 1)
+  return true
+}
+
+export function moveNodeUp(editor: Editor, target: BlockMenuTarget): boolean {
+  const current = topLevelEntryByPos(editor, target.pos)
+  if (!current || current.index === 0) return false
+  const previous = topLevelEntryByIndex(editor, current.index - 1)
+  if (!previous) return false
+
+  const from = previous.pos
+  const to = current.pos + current.node.nodeSize
+  const fragment = Fragment.fromArray([current.node, previous.node])
+  const tr = editor.state.tr.replaceWith(from, to, fragment)
+  editor.view.dispatch(tr)
+  focusNearPos(editor, from + 1)
+  return true
+}
+
+export function moveNodeDown(editor: Editor, target: BlockMenuTarget): boolean {
+  const current = topLevelEntryByPos(editor, target.pos)
+  if (!current || current.index >= editor.state.doc.childCount - 1) return false
+  const next = topLevelEntryByIndex(editor, current.index + 1)
+  if (!next) return false
+
+  const from = current.pos
+  const to = next.pos + next.node.nodeSize
+  const fragment = Fragment.fromArray([next.node, current.node])
+  const tr = editor.state.tr.replaceWith(from, to, fragment)
+  editor.view.dispatch(tr)
+  focusNearPos(editor, next.pos + 1)
   return true
 }
 
