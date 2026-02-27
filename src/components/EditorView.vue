@@ -1886,6 +1886,7 @@ defineExpose({
   align-items: center;
   gap: 0.35rem;
   padding: 0.12rem;
+  padding-right: 0.8rem;
   line-height: 1;
 }
 
