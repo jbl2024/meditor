@@ -1676,8 +1676,7 @@ defineExpose({
   min-width: 36px;
   z-index: 1;
   pointer-events: none;
-  border-right: 1px dashed rgb(148 163 184 / 0.5);
-  background: rgb(59 130 246 / 0.06);
+  background: transparent;
 }
 
 .editor-holder :deep(.ProseMirror > *),
