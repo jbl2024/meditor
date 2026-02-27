@@ -734,11 +734,13 @@ const { ensureEditor, destroyEditor } = useTiptapInstance({
     },
     onUpdate: () => {
       onEditorChange()
+      syncSlashMenuFromSelection({ preserveIndex: true })
       syncWikilinkUiFromPluginState()
     },
     onSelectionUpdate: () => {
       const path = currentPath.value
       if (path) captureCaret(path)
+      syncSlashMenuFromSelection({ preserveIndex: true })
       updateFormattingToolbar()
       syncWikilinkUiFromPluginState()
     },
@@ -940,6 +942,15 @@ function openSlashAtSelection(query = '', options?: { preserveIndex?: boolean })
   slashOpen.value = visibleSlashCommands.value.length > 0
   if (slashOpen.value && canPreserve) {
     slashIndex.value = Math.max(0, Math.min(slashIndex.value, visibleSlashCommands.value.length - 1))
+  }
+}
+
+function syncSlashMenuFromSelection(options?: { preserveIndex?: boolean }) {
+  const slash = readSlashContext()
+  if (slash) {
+    openSlashAtSelection(slash.query, { preserveIndex: options?.preserveIndex ?? true })
+  } else {
+    closeSlashMenu()
   }
 }
 
@@ -1265,12 +1276,7 @@ function onEditorKeydown(event: KeyboardEvent) {
 function onEditorKeyup() {
   const path = currentPath.value
   if (path) captureCaret(path)
-  const slash = readSlashContext()
-  if (slash) {
-    openSlashAtSelection(slash.query, { preserveIndex: true })
-  } else {
-    closeSlashMenu()
-  }
+  syncSlashMenuFromSelection({ preserveIndex: true })
   updateFormattingToolbar()
 }
 
