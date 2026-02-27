@@ -3,10 +3,9 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Editor, EditorContent, Extension } from '@tiptap/vue-3'
 import { NodeSelection, TextSelection } from '@tiptap/pm/state'
 import StarterKit from '@tiptap/starter-kit'
-import Link from '@tiptap/extension-link'
-import Underline from '@tiptap/extension-underline'
+import { DragHandle as DragHandleVue3 } from '@tiptap/extension-drag-handle-vue-3'
 import { Table, TableRow, TableHeader, TableCell } from '@tiptap/extension-table'
-import { ListKit, TaskItem } from '@tiptap/extension-list'
+import { ListKit } from '@tiptap/extension-list'
 import Placeholder from '@tiptap/extension-placeholder'
 import type { JSONContent } from '@tiptap/vue-3'
 import {
@@ -20,6 +19,7 @@ import { openExternalUrl } from '../lib/api'
 import EditorPropertiesPanel from './editor/EditorPropertiesPanel.vue'
 import EditorSlashMenu from './editor/EditorSlashMenu.vue'
 import EditorWikilinkMenu from './editor/EditorWikilinkMenu.vue'
+import EditorBlockMenu from './editor/EditorBlockMenu.vue'
 import EditorLargeDocOverlay from './editor/EditorLargeDocOverlay.vue'
 import EditorMermaidReplaceDialog from './editor/EditorMermaidReplaceDialog.vue'
 import { composeMarkdownDocument, serializeFrontmatter } from '../lib/frontmatter'
@@ -41,6 +41,10 @@ import { CodeBlockNode } from '../lib/tiptap/extensions/CodeBlockNode'
 import { WIKILINK_STATE_KEY, getWikilinkPluginState, type WikilinkCandidate } from '../lib/tiptap/plugins/wikilinkState'
 import { buildWikilinkCandidates } from '../lib/tiptap/wikilinkCandidates'
 import { enterWikilinkEditFromNode, parseWikilinkToken, type WikilinkEditingRange } from '../lib/tiptap/extensions/wikilinkCommands'
+import type { BlockMenuActionItem, BlockMenuTarget, TurnIntoType } from '../lib/tiptap/blockMenu/types'
+import { canCopyAnchor, canTurnInto, toBlockMenuTarget } from '../lib/tiptap/blockMenu/guards'
+import { deleteNode, duplicateNode, insertAbove, insertBelow, turnInto } from '../lib/tiptap/blockMenu/actions'
+import { computeHandleLock, resolveActiveTarget, type DragHandleUiState } from '../lib/tiptap/blockMenu/dragHandleState'
 
 const VIRTUAL_TITLE_BLOCK_ID = '__virtual_title__'
 
@@ -78,6 +82,7 @@ const emit = defineEmits<{
 }>()
 
 const holder = ref<HTMLDivElement | null>(null)
+const contentShell = ref<HTMLDivElement | null>(null)
 let editor: Editor | null = null
 let suppressOnChange = false
 
@@ -108,6 +113,50 @@ const wikilinkLeft = ref(0)
 const wikilinkTop = ref(0)
 const wikilinkResults = ref<Array<{ id: string; label: string; target: string; isCreate: boolean }>>([])
 const wikilinkEditingRange = ref<WikilinkEditingRange | null>(null)
+const blockMenuOpen = ref(false)
+const blockMenuIndex = ref(0)
+const blockMenuTarget = ref<BlockMenuTarget | null>(null)
+const lastStableBlockMenuTarget = ref<BlockMenuTarget | null>(null)
+const blockMenuFloatingEl = ref<HTMLDivElement | null>(null)
+const blockMenuPos = ref({ x: 0, y: 0 })
+const DRAG_HANDLE_PLUGIN_KEY = 'meditor-drag-handle'
+const DRAG_HANDLE_DEBUG = false
+const dragHandleUiState = ref<DragHandleUiState>({
+  menuOpen: false,
+  gutterHover: false,
+  controlsHover: false,
+  dragging: false,
+  activeTarget: null,
+})
+const gutterHitboxStyle = ref<Record<string, string>>({
+  position: 'absolute',
+  top: '0',
+  left: '0px',
+  bottom: '0',
+  width: '0px',
+})
+const TURN_INTO_TYPES: TurnIntoType[] = [
+  'paragraph',
+  'heading1',
+  'heading2',
+  'heading3',
+  'bulletList',
+  'orderedList',
+  'taskList',
+  'codeBlock',
+  'blockquote',
+]
+const TURN_INTO_LABELS: Record<TurnIntoType, string> = {
+  paragraph: 'Turn into paragraph',
+  heading1: 'Turn into heading 1',
+  heading2: 'Turn into heading 2',
+  heading3: 'Turn into heading 3',
+  bulletList: 'Turn into bullet list',
+  orderedList: 'Turn into ordered list',
+  taskList: 'Turn into task list',
+  codeBlock: 'Turn into code block',
+  blockquote: 'Turn into quote',
+}
 const currentPath = computed(() => props.path?.trim() || '')
 const visibleSlashCommands = computed(() => {
   const query = slashQuery.value.trim().toLowerCase()
@@ -124,7 +173,26 @@ const cachedHeadingsByTarget = ref<Record<string, string[]>>({})
 const cachedHeadingsAt = ref<Record<string, number>>({})
 const WIKILINK_TARGETS_TTL_MS = 15_000
 const WIKILINK_HEADINGS_TTL_MS = 30_000
-
+const computedDragLock = computed(() => computeHandleLock(dragHandleUiState.value))
+const debugTargetPos = computed(() => String(dragHandleUiState.value.activeTarget?.pos ?? ''))
+const blockMenuActions = computed<BlockMenuActionItem[]>(() => {
+  const target = resolveActiveTarget(dragHandleUiState.value.activeTarget, lastStableBlockMenuTarget.value)
+  const base: BlockMenuActionItem[] = [
+    { id: 'insert_above', actionId: 'insert_above', label: 'Insert above', disabled: !target },
+    { id: 'insert_below', actionId: 'insert_below', label: 'Insert below', disabled: !target },
+    ...TURN_INTO_TYPES.map((turnIntoType) => ({
+      id: `turn_into:${turnIntoType}`,
+      actionId: 'turn_into' as const,
+      turnIntoType,
+      label: TURN_INTO_LABELS[turnIntoType],
+      disabled: !canTurnInto(target, turnIntoType),
+    })),
+    { id: 'duplicate', actionId: 'duplicate', label: 'Duplicate', disabled: !target },
+    { id: 'copy_anchor', actionId: 'copy_anchor', label: 'Copy anchor', disabled: !canCopyAnchor(target) },
+    { id: 'delete', actionId: 'delete', label: 'Delete', disabled: !target?.canDelete },
+  ]
+  return base
+})
 const { editorZoomStyle, initFromStorage: initEditorZoomFromStorage, zoomBy: zoomEditorBy, resetZoom: resetEditorZoom, getZoom } = useEditorZoom()
 const { mermaidReplaceDialog, resolveMermaidReplaceDialog, requestMermaidReplaceConfirm } = useMermaidReplaceDialog()
 
@@ -309,6 +377,169 @@ function closeWikilinkMenu() {
   wikilinkEditingRange.value = null
 }
 
+function closeBlockMenu(unlock = true) {
+  blockMenuOpen.value = false
+  blockMenuIndex.value = 0
+  dragHandleUiState.value = { ...dragHandleUiState.value, menuOpen: false }
+  if (unlock) {
+    syncDragHandleLockFromState('close-menu')
+  }
+}
+
+function onBlockHandleNodeChange(payload: { pos: number; node: { type: { name: string }; attrs?: Record<string, unknown>; textContent?: string; nodeSize: number } | null }) {
+  if (!payload.node) return
+  const nodeAtPos = editor?.state.doc.nodeAt(payload.pos)
+  if (!nodeAtPos) return
+  const nextTarget = toBlockMenuTarget(nodeAtPos, payload.pos)
+  blockMenuTarget.value = nextTarget
+  lastStableBlockMenuTarget.value = nextTarget
+  dragHandleUiState.value = {
+    ...dragHandleUiState.value,
+    activeTarget: nextTarget,
+  }
+  debugDragHandle('target-change', nextTarget.pos)
+}
+
+function toggleBlockMenu(event: MouseEvent) {
+  const handleRoot = (event.currentTarget instanceof HTMLElement)
+    ? event.currentTarget.closest('.meditor-drag-handle')
+    : null
+  if (handleRoot?.getAttribute('data-dragging') === 'true') {
+    dragHandleUiState.value = { ...dragHandleUiState.value, dragging: true }
+    syncDragHandleLockFromState('drag-guard')
+    return
+  }
+  event.preventDefault()
+  event.stopPropagation()
+  if (!editor) return
+  const target = resolveActiveTarget(dragHandleUiState.value.activeTarget, lastStableBlockMenuTarget.value)
+  if (!target) return
+  blockMenuTarget.value = target
+
+  if (blockMenuOpen.value) {
+    closeBlockMenu()
+    return
+  }
+
+  if (event.currentTarget instanceof HTMLElement) {
+    const rect = event.currentTarget.getBoundingClientRect()
+    const estimatedWidth = 260
+    const estimatedHeight = 360
+    const maxX = Math.max(12, window.innerWidth - estimatedWidth - 12)
+    const maxY = Math.max(12, window.innerHeight - estimatedHeight - 12)
+    blockMenuPos.value = {
+      x: Math.max(12, Math.min(rect.right + 8, maxX)),
+      y: Math.max(12, Math.min(rect.top, maxY)),
+    }
+  }
+
+  closeSlashMenu()
+  closeWikilinkMenu()
+  blockMenuOpen.value = true
+  dragHandleUiState.value = { ...dragHandleUiState.value, menuOpen: true }
+  blockMenuIndex.value = 0
+  syncDragHandleLockFromState('open-menu')
+}
+
+function onBlockMenuPlus(event: MouseEvent) {
+  event.preventDefault()
+  event.stopPropagation()
+  if (!editor) return
+  const target = resolveActiveTarget(dragHandleUiState.value.activeTarget, lastStableBlockMenuTarget.value)
+  if (!target) return
+  blockMenuTarget.value = target
+  closeSlashMenu()
+  closeWikilinkMenu()
+  insertBelow(editor, target)
+  openSlashAtSelection('')
+}
+
+function copyAnchorTarget(target: BlockMenuTarget) {
+  if (!target.text.trim()) return
+  const text = `[[#${target.text.trim()}]]`
+  if (navigator.clipboard?.writeText) {
+    void navigator.clipboard.writeText(text)
+  }
+}
+
+function onBlockMenuSelect(item: BlockMenuActionItem) {
+  if (!editor || item.disabled) return
+  const target = resolveActiveTarget(dragHandleUiState.value.activeTarget, lastStableBlockMenuTarget.value)
+  if (!target) return
+  blockMenuTarget.value = target
+  if (item.actionId === 'insert_above') insertAbove(editor, target)
+  if (item.actionId === 'insert_below') insertBelow(editor, target)
+  if (item.actionId === 'duplicate') duplicateNode(editor, target)
+  if (item.actionId === 'delete') deleteNode(editor, target)
+  if (item.actionId === 'copy_anchor' && canCopyAnchor(target)) copyAnchorTarget(target)
+  if (item.actionId === 'turn_into' && item.turnIntoType) turnInto(editor, target, item.turnIntoType)
+  closeBlockMenu()
+}
+
+function onDocumentMouseDown(event: MouseEvent) {
+  if (!blockMenuOpen.value) return
+  const target = event.target
+  if (!(target instanceof Node)) return
+  if (blockMenuFloatingEl.value?.contains(target)) return
+  const handleRoot = target instanceof Element ? target.closest('.meditor-block-controls') : null
+  if (handleRoot) return
+  closeBlockMenu()
+}
+
+function updateGutterHitboxStyle() {
+  if (!holder.value || !contentShell.value) return
+  const holderRect = holder.value.getBoundingClientRect()
+  const shellRect = contentShell.value.getBoundingClientRect()
+  const shellStyle = window.getComputedStyle(contentShell.value)
+  const shellPaddingLeft = Number.parseFloat(shellStyle.paddingLeft || '0') || 0
+  const textStart = shellRect.left + shellPaddingLeft
+  const width = Math.max(48, textStart - holderRect.left + 8)
+  gutterHitboxStyle.value = {
+    position: 'absolute',
+    top: '0',
+    left: '0px',
+    bottom: '0',
+    width: `${width}px`,
+  }
+}
+
+function debugDragHandle(event: string, detail?: unknown) {
+  if (!DRAG_HANDLE_DEBUG) return
+  // eslint-disable-next-line no-console
+  console.info('[drag-handle]', event, detail ?? '', dragHandleUiState.value)
+}
+
+function syncDragHandleLockFromState(reason: string) {
+  if (!editor) return
+  const shouldLock = computeHandleLock(dragHandleUiState.value)
+  editor.commands.setMeta('lockDragHandle', shouldLock)
+  debugDragHandle(`sync-lock:${reason}`, shouldLock)
+}
+
+function onHandleControlsEnter() {
+  if (dragHandleUiState.value.controlsHover) return
+  dragHandleUiState.value = { ...dragHandleUiState.value, controlsHover: true }
+  syncDragHandleLockFromState('controls-enter')
+}
+
+function onHandleControlsLeave() {
+  if (!dragHandleUiState.value.controlsHover) return
+  dragHandleUiState.value = { ...dragHandleUiState.value, controlsHover: false }
+  syncDragHandleLockFromState('controls-leave')
+}
+
+function onHandleDragStart() {
+  if (dragHandleUiState.value.dragging) return
+  dragHandleUiState.value = { ...dragHandleUiState.value, dragging: true }
+  syncDragHandleLockFromState('drag-start')
+}
+
+function onHandleDragEnd() {
+  if (!dragHandleUiState.value.dragging) return
+  dragHandleUiState.value = { ...dragHandleUiState.value, dragging: false }
+  syncDragHandleLockFromState('drag-end')
+}
+
 function updateFormattingToolbar() {
   if (!editor || !holder.value) {
     formatToolbarOpen.value = false
@@ -395,6 +626,10 @@ const HeadingMeta = Extension.create({
   }
 })
 
+watch(editorZoomStyle, () => {
+  void nextTick().then(() => updateGutterHitboxStyle())
+}, { deep: true })
+
 const { ensureEditor, destroyEditor } = useTiptapInstance({
   holder,
   getEditor: () => editor,
@@ -406,17 +641,25 @@ const { ensureEditor, destroyEditor } = useTiptapInstance({
     extensions: [
       StarterKit.configure({
         blockquote: false,
-        codeBlock: false
+        codeBlock: false,
+        bulletList: false,
+        orderedList: false,
+        listItem: false,
+        listKeymap: false,
+        link: {
+          openOnClick: false
+        }
       }),
       HeadingMeta,
-      Link.configure({ openOnClick: false }),
-      Underline,
+      ListKit.configure({
+        taskItem: {
+          nested: true
+        }
+      }),
       Table.configure({ resizable: false }),
       TableRow,
       TableHeader,
       TableCell,
-      ListKit,
-      TaskItem.configure({ nested: true }),
       Placeholder.configure({ placeholder: 'Write here...' }),
       CalloutNode,
       MermaidNode.configure({ confirmReplace: requestMermaidReplaceConfirm }),
@@ -519,6 +762,10 @@ async function loadCurrentFile(path: string) {
   clearAutosaveTimer()
   closeSlashMenu()
   closeWikilinkMenu()
+  closeBlockMenu()
+  blockMenuTarget.value = null
+  lastStableBlockMenuTarget.value = null
+  dragHandleUiState.value = { ...dragHandleUiState.value, activeTarget: null }
   formatToolbarOpen.value = false
   isLoadingLargeDocument.value = false
   loadStageLabel.value = ''
@@ -568,6 +815,7 @@ async function loadCurrentFile(path: string) {
 
     emitOutlineSoon()
     syncWikilinkUiFromPluginState()
+    updateGutterHitboxStyle()
   } catch (error) {
     setSaveError(path, error instanceof Error ? error.message : 'Could not read file.')
   } finally {
@@ -668,6 +916,7 @@ async function saveCurrentFile(manual = true) {
 
 function openSlashAtSelection(query = '', options?: { preserveIndex?: boolean }) {
   if (!editor || !holder.value) return
+  closeBlockMenu()
   const pos = editor.state.selection.from
   const rect = editor.view.coordsAtPos(pos)
   const holderRect = holder.value.getBoundingClientRect()
@@ -868,6 +1117,7 @@ function syncWikilinkUiFromPluginState() {
   }
 
   wikilinkOpen.value = true
+  closeBlockMenu()
   wikilinkIndex.value = state.selectedIndex
   wikilinkEditingRange.value = state.editingRange
   wikilinkResults.value = state.candidates.map((candidate) => ({
@@ -977,19 +1227,6 @@ function onEditorKeydown(event: KeyboardEvent) {
     }
   }
 
-  if (
-    event.key === '/' &&
-    !event.metaKey &&
-    !event.ctrlKey &&
-    !event.altKey &&
-    currentTextSelectionContext()?.nodeType === 'paragraph'
-  ) {
-    event.preventDefault()
-    editor.chain().focus().insertContent('/').run()
-    openSlashAtSelection('')
-    return
-  }
-
   if ((event.key === ' ' || event.code === 'Space') && currentTextSelectionContext()?.nodeType === 'paragraph') {
     const marker = currentTextSelectionContext()?.text.trim() ?? ''
     const transform = applyMarkdownShortcut(marker)
@@ -1007,6 +1244,11 @@ function onEditorKeydown(event: KeyboardEvent) {
       event.preventDefault()
       insertBlockFromDescriptor('code', { code: '' })
     }
+  }
+
+  if (event.key === 'Escape' && blockMenuOpen.value) {
+    event.preventDefault()
+    closeBlockMenu()
   }
 }
 
@@ -1118,6 +1360,12 @@ onMounted(async () => {
   holder.value?.addEventListener('keyup', onEditorKeyup, true)
   holder.value?.addEventListener('contextmenu', onEditorContextMenu, true)
   holder.value?.addEventListener('paste', onEditorPaste, true)
+  holder.value?.addEventListener('scroll', updateGutterHitboxStyle, true)
+  window.addEventListener('resize', updateGutterHitboxStyle)
+  await nextTick()
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+  updateGutterHitboxStyle()
+  document.addEventListener('mousedown', onDocumentMouseDown, true)
 })
 
 onBeforeUnmount(async () => {
@@ -1130,6 +1378,9 @@ onBeforeUnmount(async () => {
   holder.value?.removeEventListener('keyup', onEditorKeyup, true)
   holder.value?.removeEventListener('contextmenu', onEditorContextMenu, true)
   holder.value?.removeEventListener('paste', onEditorPaste, true)
+  holder.value?.removeEventListener('scroll', updateGutterHitboxStyle, true)
+  window.removeEventListener('resize', updateGutterHitboxStyle)
+  document.removeEventListener('mousedown', onDocumentMouseDown, true)
   await destroyEditor()
 })
 
@@ -1283,14 +1534,64 @@ defineExpose({
         @raw-yaml-input="onRawYamlInput($event)"
       />
 
-      <div class="relative min-h-0 flex-1 overflow-hidden">
+      <div
+        class="relative min-h-0 flex-1 overflow-hidden"
+        :data-drag-lock="computedDragLock ? 'true' : 'false'"
+        :data-menu-open="dragHandleUiState.menuOpen ? 'true' : 'false'"
+        :data-gutter-hover="dragHandleUiState.gutterHover ? 'true' : 'false'"
+        :data-controls-hover="dragHandleUiState.controlsHover ? 'true' : 'false'"
+        :data-target-pos="debugTargetPos"
+      >
+        <div
+          v-if="DRAG_HANDLE_DEBUG"
+          class="pointer-events-none absolute right-2 top-2 z-50 rounded bg-slate-900/80 px-2 py-1 text-[11px] text-white"
+        >
+          lock={{ computedDragLock }} menu={{ dragHandleUiState.menuOpen }} gutter={{ dragHandleUiState.gutterHover }} controls={{ dragHandleUiState.controlsHover }} drag={{ dragHandleUiState.dragging }} target={{ debugTargetPos }}
+        </div>
+        <div
+          class="editor-gutter-hitbox"
+          :style="gutterHitboxStyle"
+        />
         <div
           ref="holder"
           class="editor-holder relative h-full min-h-0 overflow-y-auto px-8 py-6"
           :style="editorZoomStyle"
-          @click="closeSlashMenu(); closeWikilinkMenu()"
+          @click="closeSlashMenu(); closeWikilinkMenu(); closeBlockMenu()"
         >
-          <EditorContent v-if="editor" :editor="editor" />
+          <div ref="contentShell" class="editor-content-shell">
+            <EditorContent v-if="editor" :editor="editor" />
+          </div>
+          <DragHandleVue3
+            v-if="editor"
+            :editor="editor"
+            :plugin-key="DRAG_HANDLE_PLUGIN_KEY"
+            class="meditor-drag-handle"
+            :nested="true"
+            :on-node-change="onBlockHandleNodeChange"
+            :on-element-drag-start="onHandleDragStart"
+            :on-element-drag-end="onHandleDragEnd"
+          >
+            <div class="meditor-block-controls" @mouseenter="onHandleControlsEnter" @mouseleave="onHandleControlsLeave">
+              <button
+                type="button"
+                class="meditor-block-control-btn"
+                aria-label="Insert below"
+                @mousedown.stop
+                @click.stop.prevent="onBlockMenuPlus"
+              >
+                +
+              </button>
+              <button
+                type="button"
+                class="meditor-block-control-btn meditor-block-grip-btn"
+                aria-label="Open block menu"
+                @mousedown.stop
+                @click.stop.prevent="toggleBlockMenu"
+              >
+                ⋮⋮
+              </button>
+            </div>
+          </DragHandleVue3>
 
           <div
             v-if="formatToolbarOpen"
@@ -1325,6 +1626,20 @@ defineExpose({
             @update:index="onWikilinkMenuIndexUpdate($event)"
             @select="onWikilinkMenuSelect($event)"
           />
+
+          <Teleport to="body">
+            <div :style="{ position: 'fixed', left: `${blockMenuPos.x}px`, top: `${blockMenuPos.y}px`, zIndex: 50 }">
+              <EditorBlockMenu
+                :open="blockMenuOpen"
+                :index="blockMenuIndex"
+                :actions="blockMenuActions"
+                @menu-el="blockMenuFloatingEl = $event"
+                @update:index="blockMenuIndex = $event"
+                @select="onBlockMenuSelect($event)"
+                @close="closeBlockMenu()"
+              />
+            </div>
+          </Teleport>
         </div>
 
         <EditorLargeDocOverlay
@@ -1349,6 +1664,43 @@ defineExpose({
 <style scoped>
 .editor-holder {
   --meditor-link-color: #2563eb;
+}
+
+.editor-content-shell {
+  max-width: 880px;
+  margin: 0 auto;
+  padding-left: 2.5rem;
+}
+
+.editor-gutter-hitbox {
+  min-width: 36px;
+  z-index: 1;
+  pointer-events: none;
+  border-right: 1px dashed rgb(148 163 184 / 0.5);
+  background: rgb(59 130 246 / 0.06);
+}
+
+.editor-holder :deep(.ProseMirror > *),
+.editor-holder :deep(.ProseMirror li) {
+  position: relative;
+}
+
+.editor-holder :deep(.ProseMirror > *::after),
+.editor-holder :deep(.ProseMirror li::after) {
+  content: '';
+  position: absolute;
+  left: -5rem;
+  width: 5rem;
+  top: -0.25rem;
+  bottom: -0.25rem;
+  pointer-events: auto;
+}
+
+@media (max-width: 840px) {
+  .editor-content-shell {
+    max-width: 100%;
+    padding-left: 0.5rem;
+  }
 }
 
 .dark .editor-holder {
@@ -1494,6 +1846,49 @@ defineExpose({
   line-height: 1;
   padding: 0.28rem 0.45rem;
   cursor: pointer;
+}
+
+.editor-holder :deep(.meditor-drag-handle) {
+  z-index: 35;
+}
+
+.editor-holder :deep(.meditor-block-controls) {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.12rem;
+}
+
+.editor-holder :deep(.meditor-block-control-btn) {
+  width: 1.7rem;
+  height: 1.7rem;
+  border: 1px solid rgb(203 213 225);
+  border-radius: 0.4rem;
+  background: white;
+  color: rgb(71 85 105);
+  font-size: 0.95rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.editor-holder :deep(.meditor-block-control-btn:hover) {
+  background: rgb(241 245 249);
+}
+
+.editor-holder :deep(.meditor-block-grip-btn) {
+  letter-spacing: -0.1rem;
+}
+
+.dark .editor-holder :deep(.meditor-block-control-btn) {
+  border-color: rgb(71 85 105);
+  background: rgb(15 23 42);
+  color: rgb(203 213 225);
+}
+
+.dark .editor-holder :deep(.meditor-block-control-btn:hover) {
+  background: rgb(30 41 59);
 }
 
 .dark .editor-holder :deep(.ProseMirror th),
