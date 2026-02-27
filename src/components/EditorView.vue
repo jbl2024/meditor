@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Editor, EditorContent, Extension } from '@tiptap/vue-3'
-import { getMarkRange } from '@tiptap/core'
+import { NodeSelection, TextSelection } from '@tiptap/pm/state'
 import StarterKit from '@tiptap/starter-kit'
 import Link from '@tiptap/extension-link'
 import Underline from '@tiptap/extension-underline'
@@ -30,13 +30,17 @@ import { applyMarkdownShortcut, isEditorZoomModifier, isLikelyMarkdownPaste, isZ
 import { normalizeBlockId, normalizeHeadingAnchor, parseWikilinkTarget, slugifyHeading } from '../lib/wikilinks'
 import { toTiptapDoc } from '../lib/tiptap/editorBlocksToTiptapDoc'
 import { fromTiptapDoc } from '../lib/tiptap/tiptapDocToEditorBlocks'
+import { TIPTAP_NODE_TYPES } from '../lib/tiptap/types'
 import { useTiptapInstance } from '../composables/useTiptapInstance'
 import { CalloutNode } from '../lib/tiptap/extensions/CalloutNode'
 import { MermaidNode } from '../lib/tiptap/extensions/MermaidNode'
 import { QuoteNode } from '../lib/tiptap/extensions/QuoteNode'
-import { WikilinkMark } from '../lib/tiptap/extensions/WikilinkMark'
+import { WikilinkNode } from '../lib/tiptap/extensions/WikilinkNode'
 import { VirtualTitleGuard } from '../lib/tiptap/extensions/VirtualTitleGuard'
 import { CodeBlockNode } from '../lib/tiptap/extensions/CodeBlockNode'
+import { WIKILINK_STATE_KEY, getWikilinkPluginState, type WikilinkCandidate } from '../lib/tiptap/plugins/wikilinkState'
+import { buildWikilinkCandidates } from '../lib/tiptap/wikilinkCandidates'
+import { enterWikilinkEditFromNode, parseWikilinkToken, type WikilinkEditingRange } from '../lib/tiptap/extensions/wikilinkCommands'
 
 const VIRTUAL_TITLE_BLOCK_ID = '__virtual_title__'
 
@@ -102,10 +106,8 @@ const wikilinkOpen = ref(false)
 const wikilinkIndex = ref(0)
 const wikilinkLeft = ref(0)
 const wikilinkTop = ref(0)
-const wikilinkQuery = ref('')
-const wikilinkTargets = ref<string[]>([])
-const wikilinkHeadingResults = ref<Array<{ id: string; label: string; target: string; isCreate: boolean }>>([])
-const wikilinkRange = ref<{ from: number; to: number; alias: string | null } | null>(null)
+const wikilinkResults = ref<Array<{ id: string; label: string; target: string; isCreate: boolean }>>([])
+const wikilinkEditingRange = ref<WikilinkEditingRange | null>(null)
 const currentPath = computed(() => props.path?.trim() || '')
 const visibleSlashCommands = computed(() => {
   const query = slashQuery.value.trim().toLowerCase()
@@ -116,6 +118,12 @@ const visibleSlashCommands = computed(() => {
 const formatToolbarOpen = ref(false)
 const formatToolbarLeft = ref(0)
 const formatToolbarTop = ref(0)
+const cachedLinkTargets = ref<string[]>([])
+const cachedLinkTargetsAt = ref(0)
+const cachedHeadingsByTarget = ref<Record<string, string[]>>({})
+const cachedHeadingsAt = ref<Record<string, number>>({})
+const WIKILINK_TARGETS_TTL_MS = 15_000
+const WIKILINK_HEADINGS_TTL_MS = 30_000
 
 const { editorZoomStyle, initFromStorage: initEditorZoomFromStorage, zoomBy: zoomEditorBy, resetZoom: resetEditorZoom, getZoom } = useEditorZoom()
 const { mermaidReplaceDialog, resolveMermaidReplaceDialog, requestMermaidReplaceConfirm } = useMermaidReplaceDialog()
@@ -297,13 +305,16 @@ function closeSlashMenu() {
 function closeWikilinkMenu() {
   wikilinkOpen.value = false
   wikilinkIndex.value = 0
-  wikilinkQuery.value = ''
-  wikilinkRange.value = null
-  wikilinkHeadingResults.value = []
+  wikilinkResults.value = []
+  wikilinkEditingRange.value = null
 }
 
 function updateFormattingToolbar() {
   if (!editor || !holder.value) {
+    formatToolbarOpen.value = false
+    return
+  }
+  if (editor.state.selection instanceof NodeSelection) {
     formatToolbarOpen.value = false
     return
   }
@@ -319,6 +330,15 @@ function updateFormattingToolbar() {
   formatToolbarLeft.value = centerX - holderRect.left + holder.value.scrollLeft
   formatToolbarTop.value = Math.min(start.top, end.top) - holderRect.top + holder.value.scrollTop - 10
   formatToolbarOpen.value = true
+}
+
+function closestAnchorFromEventTarget(target: EventTarget | null): HTMLAnchorElement | null {
+  const element = target instanceof Element
+    ? target
+    : target instanceof Node
+      ? target.parentElement
+      : null
+  return element?.closest('a') as HTMLAnchorElement | null
 }
 
 const {
@@ -402,7 +422,12 @@ const { ensureEditor, destroyEditor } = useTiptapInstance({
       MermaidNode.configure({ confirmReplace: requestMermaidReplaceConfirm }),
       QuoteNode,
       CodeBlockNode,
-      WikilinkMark,
+      WikilinkNode.configure({
+        getCandidates: (query: string) => getWikilinkCandidates(query),
+        onNavigate: (target: string) => openLinkTargetWithAutosave(target),
+        onCreate: async (_target: string) => {},
+        resolve: (target: string) => resolveWikilinkTarget(target)
+      }),
       VirtualTitleGuard
     ],
     editorProps: {
@@ -410,12 +435,35 @@ const { ensureEditor, destroyEditor } = useTiptapInstance({
         class: 'ProseMirror meditor-prosemirror'
       },
       handleClick: (_view, _pos, event) => {
-        const target = event.target as HTMLElement | null
-        const anchor = target?.closest('a') as HTMLAnchorElement | null
+        const anchor = closestAnchorFromEventTarget(event.target)
         if (!anchor) return false
 
-        const wikilinkTarget = anchor.dataset.wikilinkTarget?.trim() ?? ''
+        const wikilinkTarget = (
+          anchor.getAttribute('data-target') ??
+          anchor.getAttribute('data-wikilink-target') ??
+          ''
+        ).trim()
         if (wikilinkTarget) {
+          if (event.metaKey || event.ctrlKey) {
+            event.preventDefault()
+            event.stopPropagation()
+            const view = _view
+            let pos = 0
+            try {
+              pos = view.posAtDOM(anchor, 0)
+            } catch {
+              pos = 0
+            }
+            const candidates = [pos, pos - 1, pos + 1]
+            for (const candidate of candidates) {
+              if (candidate < 0 || candidate > view.state.doc.content.size) continue
+              const range = enterWikilinkEditFromNode(editor!, candidate)
+              if (!range) continue
+              view.dispatch(view.state.tr.setMeta(WIKILINK_STATE_KEY, { type: 'startEditing', range }))
+              return true
+            }
+            return true
+          }
           event.preventDefault()
           event.stopPropagation()
           void openLinkTargetWithAutosave(wikilinkTarget)
@@ -433,12 +481,16 @@ const { ensureEditor, destroyEditor } = useTiptapInstance({
     },
     onUpdate: () => {
       onEditorChange()
+      syncWikilinkUiFromPluginState()
     },
     onSelectionUpdate: () => {
       const path = currentPath.value
       if (path) captureCaret(path)
       updateFormattingToolbar()
-      void syncWikilinkMenuFromSelection()
+      syncWikilinkUiFromPluginState()
+    },
+    onTransaction: () => {
+      syncWikilinkUiFromPluginState()
     }
   }),
   onEditorChange: () => {
@@ -473,6 +525,9 @@ async function loadCurrentFile(path: string) {
   loadProgressPercent.value = 0
   loadProgressIndeterminate.value = false
   loadDocumentStats.value = null
+  cachedLinkTargetsAt.value = 0
+  cachedHeadingsByTarget.value = {}
+  cachedHeadingsAt.value = {}
 
   try {
     const txt = await props.openFile(path)
@@ -512,6 +567,7 @@ async function loadCurrentFile(path: string) {
     }
 
     emitOutlineSoon()
+    syncWikilinkUiFromPluginState()
   } catch (error) {
     setSaveError(path, error instanceof Error ? error.message : 'Could not read file.')
   } finally {
@@ -610,16 +666,22 @@ async function saveCurrentFile(manual = true) {
   }
 }
 
-function openSlashAtSelection(query = '') {
+function openSlashAtSelection(query = '', options?: { preserveIndex?: boolean }) {
   if (!editor || !holder.value) return
   const pos = editor.state.selection.from
   const rect = editor.view.coordsAtPos(pos)
   const holderRect = holder.value.getBoundingClientRect()
   slashLeft.value = rect.left - holderRect.left + holder.value.scrollLeft
   slashTop.value = rect.bottom - holderRect.top + holder.value.scrollTop + 8
+  const previousQuery = slashQuery.value
+  const previousIndex = slashIndex.value
   slashQuery.value = query
-  slashIndex.value = 0
+  const canPreserve = Boolean(options?.preserveIndex) && previousQuery === query
+  slashIndex.value = canPreserve ? previousIndex : 0
   slashOpen.value = visibleSlashCommands.value.length > 0
+  if (slashOpen.value && canPreserve) {
+    slashIndex.value = Math.max(0, Math.min(slashIndex.value, visibleSlashCommands.value.length - 1))
+  }
 }
 
 function currentTextSelectionContext() {
@@ -709,189 +771,151 @@ function insertBlockFromDescriptor(type: string, data: Record<string, unknown>) 
   return true
 }
 
-function readWikilinkContext() {
-  const context = currentTextSelectionContext()
-  if (!context) return null
-  const before = context.text.slice(0, context.offset)
-  const start = before.lastIndexOf('[[')
-  if (start < 0) return null
-  const closeAfter = context.text.indexOf(']]', start + 2)
-  if (closeAfter >= 0 && context.offset >= closeAfter + 2) return null
-  const endOffset = closeAfter >= 0 ? closeAfter + 2 : context.offset
-  const raw = context.text.slice(start + 2, closeAfter >= 0 ? closeAfter : context.offset)
-  if (raw.includes('\n') || raw.includes('[')) return null
-  const from = context.from + start
-  const to = context.from + endOffset
-  const alias = (raw.split('|', 2)[1] ?? '').trim() || null
-  return { query: raw, from, to, alias }
-}
-
-const wikilinkResults = computed(() => {
-  if (wikilinkHeadingResults.value.length) return wikilinkHeadingResults.value
-  const query = wikilinkQuery.value.trim().toLowerCase()
-  const base = wikilinkTargets.value
-    .filter((path) => !query || path.toLowerCase().includes(query))
-    .slice(0, 12)
-    .map((path) => ({ id: `existing:${path}`, label: path, target: path, isCreate: false }))
-  const exact = base.some((item) => item.target.toLowerCase() === query)
-  if (query && !exact) {
-    base.unshift({ id: `create:${query}`, label: `Create "${wikilinkQuery.value.trim()}"`, target: wikilinkQuery.value.trim(), isCreate: true })
+async function loadWikilinkTargets() {
+  const now = Date.now()
+  if (cachedLinkTargets.value.length && now - cachedLinkTargetsAt.value < WIKILINK_TARGETS_TTL_MS) {
+    return cachedLinkTargets.value
   }
-  return base
-})
-
-async function refreshWikilinkTargets() {
   try {
-    wikilinkTargets.value = await props.loadLinkTargets()
+    const targets = await props.loadLinkTargets()
+    cachedLinkTargets.value = targets
+    cachedLinkTargetsAt.value = Date.now()
+    return targets
   } catch {
-    wikilinkTargets.value = []
+    cachedLinkTargets.value = []
+    cachedLinkTargetsAt.value = Date.now()
+    return []
   }
 }
 
-async function refreshWikilinkHeadingResults(rawQuery: string) {
-  const targetPart = rawQuery.split('|', 1)[0]?.trim() ?? ''
-  const hashIndex = targetPart.indexOf('#')
-  if (hashIndex < 0 && !targetPart.startsWith('#')) {
-    wikilinkHeadingResults.value = []
-    return
+async function loadWikilinkHeadings(target: string) {
+  const key = target.trim().toLowerCase()
+  const now = Date.now()
+  if (
+    key &&
+    cachedHeadingsByTarget.value[key] &&
+    now - (cachedHeadingsAt.value[key] ?? 0) < WIKILINK_HEADINGS_TTL_MS
+  ) {
+    return cachedHeadingsByTarget.value[key]
   }
-
-  let notePart = ''
-  let headingPart = ''
-  if (targetPart.startsWith('#')) {
-    headingPart = targetPart.slice(1).trim()
-  } else {
-    notePart = targetPart.slice(0, hashIndex).trim()
-    headingPart = targetPart.slice(hashIndex + 1).trim()
+  try {
+    const headings = await props.loadLinkHeadings(target)
+    if (key) {
+      cachedHeadingsByTarget.value = { ...cachedHeadingsByTarget.value, [key]: headings }
+      cachedHeadingsAt.value = { ...cachedHeadingsAt.value, [key]: Date.now() }
+    }
+    return headings
+  } catch {
+    return []
   }
-
-  const headings = notePart
-    ? await props.loadLinkHeadings(notePart)
-    : parseOutlineFromDoc().map((item) => item.text)
-
-  const query = headingPart.toLowerCase()
-  wikilinkHeadingResults.value = headings
-    .map((heading) => heading.trim())
-    .filter((heading) => heading && (!query || heading.toLowerCase().includes(query)))
-    .slice(0, 24)
-    .map((heading) => {
-      const target = notePart ? `${notePart}#${heading}` : `#${heading}`
-      return { id: `heading:${target}`, label: `#${heading}`, target, isCreate: false }
-    })
 }
 
-async function syncWikilinkMenuFromSelection() {
-  if (!editor || !holder.value) return
-  const context = readWikilinkContext()
-  if (!context) {
+async function resolveWikilinkTarget(target: string): Promise<boolean> {
+  const parsed = parseWikilinkTarget(target)
+  if (!parsed.notePath) return true
+  const targets = await loadWikilinkTargets()
+  const wanted = parsed.notePath.toLowerCase()
+  return targets.some((entry) => entry.toLowerCase() === wanted)
+}
+
+async function getWikilinkCandidates(query: string): Promise<WikilinkCandidate[]> {
+  return buildWikilinkCandidates({
+    query,
+    loadTargets: () => loadWikilinkTargets(),
+    loadHeadings: (target) => loadWikilinkHeadings(target),
+    currentHeadings: () => parseOutlineFromDoc().map((item) => item.text),
+    resolve: (target) => resolveWikilinkTarget(target)
+  })
+}
+
+function syncWikilinkUiFromPluginState() {
+  if (!editor || !holder.value) {
     closeWikilinkMenu()
     return
   }
 
-  if (!wikilinkTargets.value.length) {
-    await refreshWikilinkTargets()
+  const state = getWikilinkPluginState(editor.state)
+  if (state.mode === 'editing' && state.editingRange) {
+    const selection = editor.state.selection
+    const stillInside = selection.from > state.editingRange.from && selection.to < state.editingRange.to
+    if (!stillInside) {
+      const token = editor.state.doc.textBetween(state.editingRange.from, state.editingRange.to, '', '')
+      const parsed = parseWikilinkToken(token)
+      if (parsed) {
+        const nodeType = editor.state.schema.nodes[TIPTAP_NODE_TYPES.wikilink]
+        if (nodeType) {
+          const node = nodeType.create({
+            target: parsed.target,
+            label: parsed.label,
+            exists: true
+          })
+          const exitOnLeft = selection.from <= state.editingRange.from
+          const tr = editor.state.tr.replaceWith(state.editingRange.from, state.editingRange.to, node)
+          const pos = exitOnLeft ? state.editingRange.from : state.editingRange.from + node.nodeSize
+          tr.setSelection(TextSelection.create(tr.doc, Math.max(1, Math.min(pos, tr.doc.content.size))))
+          editor.view.dispatch(tr)
+        }
+      }
+      editor.view.dispatch(editor.state.tr.setMeta(WIKILINK_STATE_KEY, { type: 'setIdle' }))
+      closeWikilinkMenu()
+      return
+    }
   }
 
-  wikilinkRange.value = { from: context.from, to: context.to, alias: context.alias }
-  wikilinkQuery.value = context.query
-  await refreshWikilinkHeadingResults(context.query)
+  if (!state.open || state.mode !== 'editing' || !state.editingRange) {
+    closeWikilinkMenu()
+    return
+  }
 
-  const rect = editor.view.coordsAtPos(editor.state.selection.from)
+  wikilinkOpen.value = true
+  wikilinkIndex.value = state.selectedIndex
+  wikilinkEditingRange.value = state.editingRange
+  wikilinkResults.value = state.candidates.map((candidate) => ({
+    id: `${candidate.isCreate ? 'create' : 'existing'}:${candidate.target}`,
+    label: candidate.label ?? candidate.target,
+    target: candidate.target,
+    isCreate: Boolean(candidate.isCreate)
+  }))
+
+  const pos = editor.state.selection.from
+  const rect = editor.view.coordsAtPos(pos)
   const holderRect = holder.value.getBoundingClientRect()
   wikilinkLeft.value = rect.left - holderRect.left + holder.value.scrollLeft
   wikilinkTop.value = rect.bottom - holderRect.top + holder.value.scrollTop + 8
-  wikilinkOpen.value = true
-}
-
-function applyWikilinkSelection(target: string, snapshotRange?: { from: number; to: number; alias: string | null } | null) {
-  const range = snapshotRange ?? wikilinkRange.value
-  if (!editor || !range) {
-    closeWikilinkMenu()
-    return
-  }
-
-  const parsed = parseWikilinkTarget(target)
-  const defaultLabel = parsed.anchor?.heading && !parsed.notePath ? parsed.anchor.heading : target
-  const alias = range.alias
-  const label = alias || defaultLabel
-
-  const markType = editor.state.schema.marks.wikilink
-  if (!markType) return
-
-  const tr = editor.state.tr
-  tr.insertText(label, range.from, range.to)
-  tr.addMark(range.from, range.from + label.length, markType.create({ target }))
-  editor.view.dispatch(tr)
-  editor.commands.setTextSelection(range.from + label.length)
-
-  const path = currentPath.value
-  if (path) {
-    setDirty(path, true)
-    setSaveError(path, '')
-    scheduleAutosave()
-  }
-
-  closeWikilinkMenu()
-}
-
-function applyWikilinkDraftSelection(target: string, snapshotRange?: { from: number; to: number; alias: string | null } | null) {
-  const range = snapshotRange ?? wikilinkRange.value
-  if (!editor || !range) {
-    closeWikilinkMenu()
-    return
-  }
-  const token = `[[${target}|`
-  editor.chain().focus().insertContentAt({ from: range.from, to: range.to }, token).run()
-  closeWikilinkMenu()
 }
 
 function onWikilinkMenuSelect(target: string) {
-  const range = wikilinkRange.value ? { ...wikilinkRange.value } : null
-  applyWikilinkSelection(target, range)
+  applyWikilinkCandidateToken(target, 'after')
 }
 
-function getActiveWikilinkAtCursor() {
-  if (!editor) return null
-  const markType = editor.state.schema.marks.wikilink
-  if (!markType) return null
-  const { from, empty } = editor.state.selection
-  if (!empty) return null
-
-  const primary = getMarkRange(editor.state.doc.resolve(from), markType)
-  const fallback = from > 1 ? getMarkRange(editor.state.doc.resolve(from - 1), markType) : null
-  const range = primary ?? fallback
-  if (!range) return null
-
-  const label = editor.state.doc.textBetween(range.from, range.to, '')
-  let target = ''
-  editor.state.doc.nodesBetween(range.from, range.to, (node) => {
-    if (!node.isText || !Array.isArray(node.marks)) return
-    const match = node.marks.find((mark) => mark.type === markType)
-    if (!match) return
-    target = String(match.attrs.target ?? '').trim()
-  })
-  if (!target) return null
-
-  return { from: range.from, to: range.to, target, label }
+function applyWikilinkCandidateToken(target: string, placement: 'after' | 'inside') {
+  if (!editor || !wikilinkEditingRange.value) return
+  const trimmedTarget = target.trim()
+  if (!trimmedTarget) return
+  const range = wikilinkEditingRange.value
+  const token = `[[${trimmedTarget}]]`
+  const tr = editor.state.tr.insertText(token, range.from, range.to)
+  const nextPos = placement === 'inside'
+    ? range.from + token.length - 2
+    : range.from + token.length
+  tr.setSelection(TextSelection.create(tr.doc, Math.min(nextPos, tr.doc.content.size)))
+  editor.view.dispatch(tr)
+  if (placement === 'inside') {
+    editor.view.dispatch(editor.state.tr.setMeta(WIKILINK_STATE_KEY, {
+      type: 'startEditing',
+      range: { from: range.from, to: range.from + token.length }
+    }))
+  } else {
+    editor.view.dispatch(editor.state.tr.setMeta(WIKILINK_STATE_KEY, { type: 'setIdle' }))
+  }
+  syncWikilinkUiFromPluginState()
 }
 
-function expandActiveWikilinkForEditing(): boolean {
-  if (!editor) return false
-  const active = getActiveWikilinkAtCursor()
-  if (!active) return false
-
-  const parsed = parseWikilinkTarget(active.target)
-  const defaultLabel = parsed.anchor?.heading && !parsed.notePath ? parsed.anchor.heading : active.target
-  const token = active.label && active.label !== defaultLabel
-    ? `[[${active.target}|${active.label}]]`
-    : `[[${active.target}]]`
-
-  editor.chain().focus().insertContentAt({ from: active.from, to: active.to }, token).run()
-  const aliasSeparator = token.indexOf('|')
-  const caretOffset = aliasSeparator >= 0 ? aliasSeparator + 1 : token.length - 2
-  editor.commands.setTextSelection(active.from + caretOffset)
-  void syncWikilinkMenuFromSelection()
-  return true
+function onWikilinkMenuIndexUpdate(index: number) {
+  wikilinkIndex.value = index
+  if (!editor) return
+  const tr = editor.state.tr.setMeta(WIKILINK_STATE_KEY, { type: 'setSelectedIndex', index })
+  editor.view.dispatch(tr)
 }
 
 async function openLinkTargetWithAutosave(target: string) {
@@ -925,41 +949,6 @@ function onEditorKeydown(event: KeyboardEvent) {
     }
   }
 
-  if (wikilinkOpen.value) {
-    if (event.key === 'ArrowDown') {
-      event.preventDefault()
-      if (wikilinkResults.value.length) wikilinkIndex.value = (wikilinkIndex.value + 1) % wikilinkResults.value.length
-      return
-    }
-    if (event.key === 'ArrowUp') {
-      event.preventDefault()
-      if (wikilinkResults.value.length) wikilinkIndex.value = (wikilinkIndex.value - 1 + wikilinkResults.value.length) % wikilinkResults.value.length
-      return
-    }
-    if (event.key === 'Enter' || event.key === 'Tab') {
-      const selected = wikilinkResults.value[wikilinkIndex.value]
-      if (!selected) return
-      event.preventDefault()
-      const range = wikilinkRange.value ? { ...wikilinkRange.value } : null
-      if (event.key === 'Tab') {
-        applyWikilinkDraftSelection(selected.target, range)
-      } else {
-        applyWikilinkSelection(selected.target, range)
-      }
-      return
-    }
-    if (event.key === 'Escape') {
-      event.preventDefault()
-      closeWikilinkMenu()
-      return
-    }
-  }
-
-  if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight') && expandActiveWikilinkForEditing()) {
-    event.preventDefault()
-    return
-  }
-
   if (slashOpen.value) {
     if (event.key === 'ArrowDown') {
       event.preventDefault()
@@ -988,15 +977,16 @@ function onEditorKeydown(event: KeyboardEvent) {
     }
   }
 
-  if (event.key === '/' && currentTextSelectionContext()?.nodeType === 'paragraph') {
-    window.setTimeout(() => {
-      const slash = readSlashContext()
-      if (!slash) {
-        closeSlashMenu()
-        return
-      }
-      openSlashAtSelection(slash.query)
-    }, 0)
+  if (
+    event.key === '/' &&
+    !event.metaKey &&
+    !event.ctrlKey &&
+    !event.altKey &&
+    currentTextSelectionContext()?.nodeType === 'paragraph'
+  ) {
+    event.preventDefault()
+    editor.chain().focus().insertContent('/').run()
+    openSlashAtSelection('')
     return
   }
 
@@ -1025,12 +1015,11 @@ function onEditorKeyup() {
   if (path) captureCaret(path)
   const slash = readSlashContext()
   if (slash) {
-    openSlashAtSelection(slash.query)
+    openSlashAtSelection(slash.query, { preserveIndex: true })
   } else {
     closeSlashMenu()
   }
   updateFormattingToolbar()
-  void syncWikilinkMenuFromSelection()
 }
 
 function isMarkActive(name: 'bold' | 'italic' | 'strike' | 'underline' | 'code' | 'link') {
@@ -1333,7 +1322,7 @@ defineExpose({
             :top="wikilinkTop"
             :results="wikilinkResults"
             @menu-el="() => {}"
-            @update:index="wikilinkIndex = $event"
+            @update:index="onWikilinkMenuIndexUpdate($event)"
             @select="onWikilinkMenuSelect($event)"
           />
         </div>
@@ -1366,9 +1355,14 @@ defineExpose({
   --meditor-link-color: #60a5fa;
 }
 
-.editor-holder :deep(a.md-wikilink) {
+.editor-holder :deep(a.wikilink) {
   color: var(--meditor-link-color);
   text-decoration: underline;
+}
+
+.editor-holder :deep(a.wikilink.is-missing) {
+  color: rgb(220 38 38);
+  text-decoration-style: dashed;
 }
 
 .editor-holder :deep(.ProseMirror) {

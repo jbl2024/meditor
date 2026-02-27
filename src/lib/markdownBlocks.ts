@@ -123,7 +123,7 @@ function parseInlineSegment(value: string): string {
 }
 
 function inlineMarkdownToHtml(value: string): string {
-  const tokenRe = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]|\[([^\]]+)\]\(([^)\s]+)\)/g
+  const tokenRe = /\[\[([^\|\]\n]+)(?:\|([^\|\]\n]*))?\]\]|\[([^\]]+)\]\(([^)\s]+)\)/g
   let html = ''
   let lastIndex = 0
   let match: RegExpExecArray | null

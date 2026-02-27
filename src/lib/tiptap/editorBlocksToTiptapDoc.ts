@@ -1,6 +1,7 @@
 import type { JSONContent } from '@tiptap/vue-3'
 import type { EditorBlock } from '../markdownBlocks'
 import { normalizeCalloutKind } from '../callouts'
+import { parseWikilinkTarget } from '../wikilinks'
 import { TIPTAP_NODE_TYPES } from './types'
 
 type TiptapNode = JSONContent
@@ -22,13 +23,8 @@ function marksForElement(element: HTMLElement): Array<{ type: string; attrs?: Re
   if (tag === 'u') out.push({ type: 'underline' })
   if (tag === 'code') out.push({ type: 'code' })
   if (tag === 'a') {
-    const target = element.getAttribute('data-wikilink-target')?.trim() ?? ''
-    if (target) {
-      out.push({ type: TIPTAP_NODE_TYPES.wikilink, attrs: { target } })
-    } else {
-      const href = element.getAttribute('href')?.trim() ?? ''
-      if (href) out.push({ type: 'link', attrs: { href } })
-    }
+    const href = element.getAttribute('href')?.trim() ?? ''
+    if (href) out.push({ type: 'link', attrs: { href } })
   }
   return out
 }
@@ -44,6 +40,27 @@ function parseInlineNode(node: Node, inheritedMarks: Array<{ type: string; attrs
   const element = node as HTMLElement
   const tag = element.tagName.toLowerCase()
   if (tag === 'br') return [{ type: 'hardBreak' }]
+  if (tag === 'a') {
+    const target = (
+      element.getAttribute('data-target') ??
+      element.getAttribute('data-wikilink-target') ??
+      ''
+    ).trim()
+
+    if (target) {
+      const text = (element.textContent ?? '').trim()
+      const parsed = parseWikilinkTarget(target)
+      const defaultLabel = parsed.anchor?.heading && !parsed.notePath ? parsed.anchor.heading : target
+      return [{
+        type: TIPTAP_NODE_TYPES.wikilink,
+        attrs: {
+          target,
+          label: text && text !== defaultLabel ? text : null,
+          exists: true
+        }
+      }]
+    }
+  }
 
   const marks = [...inheritedMarks, ...marksForElement(element)]
   const out: TiptapNode[] = []

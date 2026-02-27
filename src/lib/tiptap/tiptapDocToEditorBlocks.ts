@@ -51,6 +51,13 @@ function serializeTextWithMarks(node: JSONContent): string {
 
 function inlineHtmlFromNode(node: JSONContent | null | undefined): string {
   if (!node) return ''
+  if (node.type === TIPTAP_NODE_TYPES.wikilink) {
+    const target = String(node.attrs?.target ?? '').trim()
+    if (!target) return ''
+    const label = String(node.attrs?.label ?? '').trim() || target
+    const href = `wikilink:${encodeURIComponent(target)}`
+    return `<a href="${escapeHtml(href)}" data-wikilink-target="${escapeHtml(target)}">${escapeHtml(label)}</a>`
+  }
   if (node.type === 'text') return serializeTextWithMarks(node)
   if (node.type === 'hardBreak') return '<br>'
   if (!Array.isArray(node.content)) return ''
