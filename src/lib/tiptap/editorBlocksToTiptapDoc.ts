@@ -1,0 +1,235 @@
+import type { JSONContent } from '@tiptap/vue-3'
+import type { EditorBlock } from '../markdownBlocks'
+import { normalizeCalloutKind } from '../callouts'
+import { TIPTAP_NODE_TYPES } from './types'
+
+type TiptapNode = JSONContent
+
+function plainTextFromHtml(value: unknown): string {
+  const html = String(value ?? '')
+  if (!html.trim()) return ''
+  const div = document.createElement('div')
+  div.innerHTML = html
+  return (div.textContent ?? '').replace(/\u00a0/g, ' ').replace(/\u200b/g, '').trim()
+}
+
+function marksForElement(element: HTMLElement): Array<{ type: string; attrs?: Record<string, unknown> }> {
+  const out: Array<{ type: string; attrs?: Record<string, unknown> }> = []
+  const tag = element.tagName.toLowerCase()
+  if (tag === 'strong' || tag === 'b') out.push({ type: 'bold' })
+  if (tag === 'em' || tag === 'i') out.push({ type: 'italic' })
+  if (tag === 's' || tag === 'strike') out.push({ type: 'strike' })
+  if (tag === 'u') out.push({ type: 'underline' })
+  if (tag === 'code') out.push({ type: 'code' })
+  if (tag === 'a') {
+    const target = element.getAttribute('data-wikilink-target')?.trim() ?? ''
+    if (target) {
+      out.push({ type: TIPTAP_NODE_TYPES.wikilink, attrs: { target } })
+    } else {
+      const href = element.getAttribute('href')?.trim() ?? ''
+      if (href) out.push({ type: 'link', attrs: { href } })
+    }
+  }
+  return out
+}
+
+function parseInlineNode(node: Node, inheritedMarks: Array<{ type: string; attrs?: Record<string, unknown> }>): TiptapNode[] {
+  if (node.nodeType === Node.TEXT_NODE) {
+    const text = node.textContent ?? ''
+    if (!text) return []
+    return [{ type: 'text', text, ...(inheritedMarks.length ? { marks: inheritedMarks } : {}) }]
+  }
+  if (node.nodeType !== Node.ELEMENT_NODE) return []
+
+  const element = node as HTMLElement
+  const tag = element.tagName.toLowerCase()
+  if (tag === 'br') return [{ type: 'hardBreak' }]
+
+  const marks = [...inheritedMarks, ...marksForElement(element)]
+  const out: TiptapNode[] = []
+  Array.from(element.childNodes).forEach((child) => {
+    out.push(...parseInlineNode(child, marks))
+  })
+  return out
+}
+
+function inlineNodesFromHtml(value: unknown): TiptapNode[] {
+  const html = String(value ?? '')
+  if (!html.trim()) return []
+  const root = document.createElement('div')
+  root.innerHTML = html
+  const out: TiptapNode[] = []
+  Array.from(root.childNodes).forEach((node) => {
+    out.push(...parseInlineNode(node, []))
+  })
+  return out
+}
+
+function listItemNode(content: string, checked?: boolean, task = false, nested?: TiptapNode): TiptapNode {
+  const paragraph: TiptapNode = {
+    type: 'paragraph',
+    content: content ? [{ type: 'text', text: content }] : []
+  }
+  const attrs = typeof checked === 'boolean' ? { checked } : undefined
+  const nodeType = task ? 'taskItem' : 'listItem'
+  const contentNodes: TiptapNode[] = [paragraph]
+  if (nested) contentNodes.push(nested)
+  return {
+    type: nodeType,
+    ...(attrs ? { attrs } : {}),
+    content: contentNodes
+  }
+}
+
+function richItemToNode(entry: unknown, style: 'ordered' | 'unordered' | 'checklist'): TiptapNode | null {
+  if (!entry || typeof entry !== 'object') return null
+  const item = entry as Record<string, unknown>
+  const text = plainTextFromHtml(item.content)
+  const checkedRaw = (item.meta as { checked?: boolean } | undefined)?.checked
+
+  let nested: TiptapNode | undefined
+  if (Array.isArray(item.items) && item.items.length > 0) {
+    const nestedItems = item.items
+      .map((child) => richItemToNode(child, style))
+      .filter((child): child is TiptapNode => Boolean(child))
+    if (nestedItems.length > 0) {
+      nested = style === 'ordered'
+        ? { type: 'orderedList', content: nestedItems }
+        : style === 'checklist'
+          ? { type: 'taskList', content: nestedItems }
+          : { type: 'bulletList', content: nestedItems }
+    }
+  }
+
+  return listItemNode(text, style === 'checklist' ? Boolean(checkedRaw) : undefined, style === 'checklist', nested)
+}
+
+function blockToNode(block: EditorBlock): TiptapNode | null {
+  const data = block.data ?? {}
+
+  switch (block.type) {
+    case 'paragraph': {
+      return { type: 'paragraph', content: inlineNodesFromHtml(data.text) }
+    }
+
+    case 'header':
+    case 'heading': {
+      const level = Math.max(1, Math.min(6, Number(data.level ?? 2)))
+      return {
+        type: 'heading',
+        attrs: {
+          level,
+          isVirtualTitle: block.id === '__virtual_title__'
+        },
+        content: inlineNodesFromHtml(data.text)
+      }
+    }
+
+    case 'list': {
+      const style = data.style === 'ordered' ? 'ordered' : data.style === 'checklist' ? 'checklist' : 'unordered'
+      const rawItems = Array.isArray(data.items) ? data.items : []
+      const content = rawItems
+        .map((item) => richItemToNode(item, style))
+        .filter((item): item is TiptapNode => Boolean(item))
+
+      if (!content.length) {
+        content.push(listItemNode('', style === 'checklist' ? false : undefined, style === 'checklist'))
+      }
+
+      if (style === 'ordered') {
+        return { type: 'orderedList', content }
+      }
+      if (style === 'checklist') {
+        return { type: 'taskList', content }
+      }
+      return { type: 'bulletList', content }
+    }
+
+    case 'quote': {
+      return {
+        type: TIPTAP_NODE_TYPES.quote,
+        attrs: {
+          text: String(data.text ?? '')
+        }
+      }
+    }
+
+    case 'callout': {
+      return {
+        type: TIPTAP_NODE_TYPES.callout,
+        attrs: {
+          kind: normalizeCalloutKind(String(data.kind ?? 'NOTE')),
+          message: String(data.message ?? '')
+        }
+      }
+    }
+
+    case 'mermaid': {
+      return {
+        type: TIPTAP_NODE_TYPES.mermaid,
+        attrs: {
+          code: String(data.code ?? '')
+        }
+      }
+    }
+
+    case 'code': {
+      return {
+        type: 'codeBlock',
+        attrs: {
+          language: String(data.language ?? '').trim() || null
+        },
+        content: String(data.code ?? '') ? [{ type: 'text', text: String(data.code ?? '') }] : []
+      }
+    }
+
+    case 'table': {
+      const rows = Array.isArray(data.content) ? data.content : []
+      const rowNodes: TiptapNode[] = rows.map((row, rowIndex) => {
+        const cells = Array.isArray(row) ? row : []
+        const cellType = rowIndex === 0 ? 'tableHeader' : 'tableCell'
+        return {
+          type: 'tableRow',
+          content: cells.map((cell) => ({
+            type: cellType,
+            content: [{ type: 'paragraph', content: inlineNodesFromHtml(String(cell ?? '')) }]
+          }))
+        }
+      })
+      return {
+        type: 'table',
+        content: rowNodes
+      }
+    }
+
+    case 'delimiter':
+      return { type: 'horizontalRule' }
+
+    case 'raw':
+      return {
+        type: 'codeBlock',
+        attrs: { language: 'markdown' },
+        content: String(data.markdown ?? '') ? [{ type: 'text', text: String(data.markdown ?? '') }] : []
+      }
+
+    default: {
+      const fallback = JSON.stringify(data ?? {}, null, 2)
+      return {
+        type: 'codeBlock',
+        attrs: { language: 'json' },
+        content: fallback ? [{ type: 'text', text: fallback }] : []
+      }
+    }
+  }
+}
+
+export function toTiptapDoc(blocks: EditorBlock[]): JSONContent {
+  const content = blocks
+    .map((block) => blockToNode(block))
+    .filter((node): node is JSONContent => Boolean(node))
+
+  return {
+    type: 'doc',
+    content
+  }
+}

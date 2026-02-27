@@ -33,7 +33,7 @@ const emit = defineEmits<{
       class="block w-full rounded px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
       :class="idx === props.index ? 'bg-slate-100 dark:bg-slate-800' : ''"
       @mousedown.prevent="emit('update:index', idx)"
-      @click.prevent="emit('select', command)"
+      @click.stop.prevent="emit('select', command)"
     >
       {{ command.label }}
     </button>

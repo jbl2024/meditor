@@ -51,7 +51,7 @@ onUpdated(syncRootEl)
       "
       :title="item.label"
       @mousedown.prevent="emit('update:index', idx)"
-      @click.prevent="emit('select', item.target)"
+      @click.stop.prevent="emit('select', item.target)"
     >
       <span class="block min-w-0 truncate">{{ item.label }}</span>
     </button>
