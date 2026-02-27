@@ -1565,6 +1565,7 @@ defineExpose({
             v-if="editor"
             :editor="editor"
             :plugin-key="DRAG_HANDLE_PLUGIN_KEY"
+            :compute-position-config="{ placement: 'left' }"
             class="meditor-drag-handle"
             :nested="true"
             :on-node-change="onBlockHandleNodeChange"
@@ -1856,6 +1857,7 @@ defineExpose({
   align-items: center;
   gap: 0.35rem;
   padding: 0.12rem;
+  line-height: 1;
 }
 
 .editor-holder :deep(.meditor-block-control-btn) {
