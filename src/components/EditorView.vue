@@ -748,7 +748,6 @@ const { ensureEditor, destroyEditor } = useTiptapInstance({
       }
     },
     onUpdate: () => {
-      onEditorChange()
       syncSlashMenuFromSelection({ preserveIndex: true })
       syncWikilinkUiFromPluginState()
     },
@@ -759,7 +758,10 @@ const { ensureEditor, destroyEditor } = useTiptapInstance({
       updateFormattingToolbar()
       syncWikilinkUiFromPluginState()
     },
-    onTransaction: () => {
+    onTransaction: ({ transaction }) => {
+      if (transaction.docChanged) {
+        onEditorChange()
+      }
       syncWikilinkUiFromPluginState()
     }
   }),
