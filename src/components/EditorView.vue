@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { Editor, EditorContent } from '@tiptap/vue-3'
 import { DragHandle as DragHandleVue3 } from '@tiptap/extension-drag-handle-vue-3'
+import type { Middleware, MiddlewareState } from '@floating-ui/dom'
 import {
   sanitizeExternalHref,
   type EditorBlock
@@ -119,6 +120,7 @@ const TABLE_EDGE_STICKY_MS = 280
 const TABLE_MARKDOWN_MODE = true
 const DRAG_HANDLE_PLUGIN_KEY = 'meditor-drag-handle'
 const DRAG_HANDLE_DEBUG = false
+const DRAG_HANDLE_CONTENT_EDGE_GAP_PX = 2
 const dragHandleUiState = ref<DragHandleUiState>({
   menuOpen: false,
   gutterHover: false,
@@ -229,6 +231,32 @@ const blockHandleControls = useEditorBlockHandleControls({
     }
     : undefined
 })
+
+const dragHandleLockXMiddleware: Middleware = {
+  name: 'meditorLockXToContent',
+  fn(state: MiddlewareState) {
+    const shellEl = contentShell.value
+    if (!shellEl) return {}
+    const shellRect = shellEl.getBoundingClientRect()
+    const shellStyle = window.getComputedStyle(shellEl)
+    const shellPaddingLeft = Number.parseFloat(shellStyle.paddingLeft || '0') || 0
+    const floatingEl = state.elements.floating
+    const offsetParent = floatingEl instanceof HTMLElement && floatingEl.offsetParent instanceof HTMLElement
+      ? floatingEl.offsetParent
+      : null
+    const offsetParentLeft = offsetParent?.getBoundingClientRect().left ?? 0
+    const referenceLeft = state.rects.reference.x
+    // Keep X fixed by remapping the reference column to the text-content edge.
+    const targetReferenceLeft =
+      shellRect.left + shellPaddingLeft - offsetParentLeft - DRAG_HANDLE_CONTENT_EDGE_GAP_PX
+    const nextX = state.x + (targetReferenceLeft - referenceLeft)
+    return { x: nextX }
+  }
+}
+const dragHandleComputePositionConfig = {
+  placement: 'left-start' as const,
+  middleware: [dragHandleLockXMiddleware]
+}
 const closeBlockMenu = blockHandleControls.closeBlockMenu
 const onBlockHandleNodeChange = blockHandleControls.onBlockHandleNodeChange
 const toggleBlockMenu = blockHandleControls.toggleBlockMenu
@@ -905,7 +933,7 @@ defineExpose({
             :key="`drag-handle:${currentPath || 'none'}`"
             :editor="renderedEditor"
             :plugin-key="DRAG_HANDLE_PLUGIN_KEY"
-            :compute-position-config="{ placement: 'left-start' }"
+            :compute-position-config="dragHandleComputePositionConfig"
             class="meditor-drag-handle"
             :nested="true"
             :on-node-change="onBlockHandleNodeChange"
