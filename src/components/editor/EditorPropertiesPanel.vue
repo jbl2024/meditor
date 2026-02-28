@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ChevronRightIcon } from '@heroicons/vue/24/outline'
 import { CircleStackIcon } from '@heroicons/vue/24/solid'
 import type { FrontmatterField } from '../../lib/frontmatter'
 import type { PropertyType } from '../../lib/propertyTypes'
@@ -53,16 +54,19 @@ function checkboxValue(event: Event): boolean {
 
 <template>
   <section
-    class="properties-panel mx-6 mb-2 mt-3 rounded-lg px-4"
-    :class="props.expanded ? 'py-3' : 'py-2'"
+    class="properties-panel mx-6 mb-2 mt-3 rounded-lg px-4 py-2.5"
   >
-    <div class="flex items-center justify-between gap-3" :class="props.expanded ? 'mb-2' : 'mb-0'">
+    <div class="flex min-h-6 items-center justify-between gap-3">
       <button
         type="button"
         class="inline-flex items-center gap-2 text-sm font-semibold text-[#2d313a] dark:text-slate-100"
         @click="emit('toggle-visibility')"
       >
-        <span aria-hidden="true">{{ props.expanded ? '▾' : '▸' }}</span>
+        <ChevronRightIcon
+          class="h-4 w-4 shrink-0 transition-transform duration-150"
+          :class="props.expanded ? 'rotate-90' : 'rotate-0'"
+          aria-hidden="true"
+        />
         <span>Properties</span>
         <CircleStackIcon
           v-if="props.hasProperties"
@@ -91,7 +95,7 @@ function checkboxValue(event: Event): boolean {
       </div>
     </div>
 
-    <div v-if="props.expanded && props.mode === 'structured'" class="space-y-2">
+    <div v-if="props.expanded && props.mode === 'structured'" class="mt-2 space-y-2">
       <div
         v-for="(field, index) in props.structuredPropertyFields"
         :key="index"
@@ -164,7 +168,7 @@ function checkboxValue(event: Event): boolean {
       </div>
     </div>
 
-    <div v-else-if="props.expanded">
+    <div v-else-if="props.expanded" class="mt-2">
       <textarea
         class="font-mono min-h-28 w-full rounded border border-[#e5e7eb] bg-white p-2 text-xs text-[#2d313a] dark:border-slate-700 dark:bg-[#21252b] dark:text-[#abb2bf]"
         :value="props.activeRawYaml"
