@@ -95,93 +95,97 @@ function checkboxValue(event: Event): boolean {
       </div>
     </div>
 
-    <div v-if="props.expanded && props.mode === 'structured'" class="mt-2 space-y-2">
-      <div
-        v-for="(field, index) in props.structuredPropertyFields"
-        :key="index"
-        class="property-row grid grid-cols-[1fr_auto_2fr_auto] items-center gap-2"
-      >
-        <input
-          :value="field.key"
-          class="rounded border border-[#e5e7eb] bg-white px-2 py-1 text-xs text-[#2d313a] dark:border-[#3e4451] dark:bg-[#2c313a] dark:text-[#abb2bf]"
-          placeholder="key"
-          @input="emit('property-key-input', { index, value: inputValue($event) })"
-        />
-        <select
-          :value="props.effectiveTypeForField(field)"
-          class="rounded border border-[#e5e7eb] bg-white px-2 py-1 text-xs text-[#737a87] dark:border-[#3e4451] dark:bg-[#2c313a] dark:text-[#abb2bf]"
-          :disabled="props.isPropertyTypeLocked(field.key)"
-          @change="emit('property-type-change', { index, value: selectValue($event) })"
-        >
-          <option value="text">Text</option>
-          <option value="list">List</option>
-          <option value="number">Number</option>
-          <option value="checkbox">Checkbox</option>
-          <option value="date">Date</option>
-          <option value="tags">Tags</option>
-        </select>
-        <div class="min-w-0">
-          <input
-            v-if="props.effectiveTypeForField(field) === 'text' || props.effectiveTypeForField(field) === 'date'"
-            :value="String(field.value ?? '')"
-            class="w-full rounded border border-[#e5e7eb] bg-white px-2 py-1 text-xs text-[#2d313a] dark:border-[#3e4451] dark:bg-[#2c313a] dark:text-[#abb2bf]"
-            :placeholder="props.effectiveTypeForField(field) === 'date' ? 'YYYY-MM-DD' : 'value'"
-            @input="emit('property-value-input', { index, value: inputValue($event) })"
-          />
-          <input
-            v-else-if="props.effectiveTypeForField(field) === 'number'"
-            :value="String(field.value ?? 0)"
-            class="w-full rounded border border-[#e5e7eb] bg-white px-2 py-1 text-xs text-[#2d313a] dark:border-[#3e4451] dark:bg-[#2c313a] dark:text-[#abb2bf]"
-            type="number"
-            @input="emit('property-value-input', { index, value: inputValue($event) })"
-          />
-          <PropertyTokenInput
-            v-else-if="props.effectiveTypeForField(field) === 'list' || props.effectiveTypeForField(field) === 'tags'"
-            :model-value="Array.isArray(field.value) ? field.value : []"
-            :placeholder="props.effectiveTypeForField(field) === 'tags' ? 'add tag' : 'add value'"
-            @update:modelValue="emit('property-tokens-change', { index, tokens: $event })"
-          />
-          <label v-else class="inline-flex items-center gap-2 text-xs text-[#737a87] dark:text-slate-200">
+    <Transition name="properties-content">
+      <div v-if="props.expanded" class="mt-2 properties-content-wrap">
+        <div v-if="props.mode === 'structured'" class="space-y-2">
+          <div
+            v-for="(field, index) in props.structuredPropertyFields"
+            :key="index"
+            class="property-row grid grid-cols-[1fr_auto_2fr_auto] items-center gap-2"
+          >
             <input
-              type="checkbox"
-              :checked="Boolean(field.value)"
-              @change="emit('property-checkbox-input', { index, checked: checkboxValue($event) })"
+              :value="field.key"
+              class="rounded border border-[#e5e7eb] bg-white px-2 py-1 text-xs text-[#2d313a] dark:border-[#3e4451] dark:bg-[#2c313a] dark:text-[#abb2bf]"
+              placeholder="key"
+              @input="emit('property-key-input', { index, value: inputValue($event) })"
             />
-            true / false
-          </label>
+            <select
+              :value="props.effectiveTypeForField(field)"
+              class="rounded border border-[#e5e7eb] bg-white px-2 py-1 text-xs text-[#737a87] dark:border-[#3e4451] dark:bg-[#2c313a] dark:text-[#abb2bf]"
+              :disabled="props.isPropertyTypeLocked(field.key)"
+              @change="emit('property-type-change', { index, value: selectValue($event) })"
+            >
+              <option value="text">Text</option>
+              <option value="list">List</option>
+              <option value="number">Number</option>
+              <option value="checkbox">Checkbox</option>
+              <option value="date">Date</option>
+              <option value="tags">Tags</option>
+            </select>
+            <div class="min-w-0">
+              <input
+                v-if="props.effectiveTypeForField(field) === 'text' || props.effectiveTypeForField(field) === 'date'"
+                :value="String(field.value ?? '')"
+                class="w-full rounded border border-[#e5e7eb] bg-white px-2 py-1 text-xs text-[#2d313a] dark:border-[#3e4451] dark:bg-[#2c313a] dark:text-[#abb2bf]"
+                :placeholder="props.effectiveTypeForField(field) === 'date' ? 'YYYY-MM-DD' : 'value'"
+                @input="emit('property-value-input', { index, value: inputValue($event) })"
+              />
+              <input
+                v-else-if="props.effectiveTypeForField(field) === 'number'"
+                :value="String(field.value ?? 0)"
+                class="w-full rounded border border-[#e5e7eb] bg-white px-2 py-1 text-xs text-[#2d313a] dark:border-[#3e4451] dark:bg-[#2c313a] dark:text-[#abb2bf]"
+                type="number"
+                @input="emit('property-value-input', { index, value: inputValue($event) })"
+              />
+              <PropertyTokenInput
+                v-else-if="props.effectiveTypeForField(field) === 'list' || props.effectiveTypeForField(field) === 'tags'"
+                :model-value="Array.isArray(field.value) ? field.value : []"
+                :placeholder="props.effectiveTypeForField(field) === 'tags' ? 'add tag' : 'add value'"
+                @update:modelValue="emit('property-tokens-change', { index, tokens: $event })"
+              />
+              <label v-else class="inline-flex items-center gap-2 text-xs text-[#737a87] dark:text-slate-200">
+                <input
+                  type="checkbox"
+                  :checked="Boolean(field.value)"
+                  @change="emit('property-checkbox-input', { index, checked: checkboxValue($event) })"
+                />
+                true / false
+              </label>
+            </div>
+            <button
+              type="button"
+              class="rounded border border-[#e5e7eb] bg-white px-2 py-1 text-xs text-[#737a87] hover:bg-[#eff1f5] hover:text-[#2d313a] dark:border-slate-700 dark:bg-[#2c313a] dark:text-slate-300 dark:hover:bg-[#343b47] dark:hover:text-[#d7dce5]"
+              @click="emit('remove-property', index)"
+            >
+              Remove
+            </button>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <PropertyAddDropdown
+              :options="props.corePropertyOptions"
+              :existing-keys="props.structuredPropertyKeys"
+              @select="emit('add-property', $event)"
+            />
+          </div>
         </div>
-        <button
-          type="button"
-          class="rounded border border-[#e5e7eb] bg-white px-2 py-1 text-xs text-[#737a87] hover:bg-[#eff1f5] hover:text-[#2d313a] dark:border-slate-700 dark:bg-[#2c313a] dark:text-slate-300 dark:hover:bg-[#343b47] dark:hover:text-[#d7dce5]"
-          @click="emit('remove-property', index)"
-        >
-          Remove
-        </button>
-      </div>
 
-      <div class="flex items-center gap-2">
-        <PropertyAddDropdown
-          :options="props.corePropertyOptions"
-          :existing-keys="props.structuredPropertyKeys"
-          @select="emit('add-property', $event)"
-        />
-      </div>
-    </div>
+        <div v-else>
+          <textarea
+            class="font-mono min-h-28 w-full rounded border border-[#e5e7eb] bg-white p-2 text-xs text-[#2d313a] dark:border-slate-700 dark:bg-[#21252b] dark:text-[#abb2bf]"
+            :value="props.activeRawYaml"
+            placeholder="title: My note"
+            @input="emit('raw-yaml-input', inputValue($event))"
+          ></textarea>
+        </div>
 
-    <div v-else-if="props.expanded" class="mt-2">
-      <textarea
-        class="font-mono min-h-28 w-full rounded border border-[#e5e7eb] bg-white p-2 text-xs text-[#2d313a] dark:border-slate-700 dark:bg-[#21252b] dark:text-[#abb2bf]"
-        :value="props.activeRawYaml"
-        placeholder="title: My note"
-        @input="emit('raw-yaml-input', inputValue($event))"
-      ></textarea>
-    </div>
-
-    <div v-if="props.expanded && props.activeParseErrors.length" class="mt-2 text-xs text-red-600 dark:text-red-400">
-      <div v-for="(error, index) in props.activeParseErrors" :key="`${error.line}-${index}`">
-        Line {{ error.line }}: {{ error.message }}
+        <div v-if="props.activeParseErrors.length" class="mt-2 text-xs text-red-600 dark:text-red-400">
+          <div v-for="(error, index) in props.activeParseErrors" :key="`${error.line}-${index}`">
+            Line {{ error.line }}: {{ error.message }}
+          </div>
+        </div>
       </div>
-    </div>
+    </Transition>
   </section>
 </template>
 
@@ -202,5 +206,35 @@ function checkboxValue(event: Event): boolean {
 .property-row :is(input, select, textarea):focus-visible {
   outline: 2px solid rgb(94 106 210 / 0.3);
   outline-offset: 1px;
+}
+
+.properties-content-wrap {
+  overflow: hidden;
+}
+
+.properties-content-enter-active,
+.properties-content-leave-active {
+  transition: opacity 180ms ease, transform 180ms ease, max-height 220ms ease;
+}
+
+.properties-content-enter-from,
+.properties-content-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+  max-height: 0;
+}
+
+.properties-content-enter-to,
+.properties-content-leave-from {
+  opacity: 1;
+  transform: translateY(0);
+  max-height: 820px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .properties-content-enter-active,
+  .properties-content-leave-active {
+    transition: none;
+  }
 }
 </style>
