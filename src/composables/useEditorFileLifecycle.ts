@@ -237,12 +237,6 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
    */
   async function loadCurrentFile(path: string, loadOptions?: { forceReload?: boolean; requestId?: number }) {
     if (!path) return
-    // eslint-disable-next-line no-console
-    console.info('[tab-caret-debug] lifecycle:load-start', {
-      path,
-      forceReload: Boolean(loadOptions?.forceReload),
-      requestId: loadOptions?.requestId
-    })
     await documentPort.ensurePropertySchemaLoaded()
     if (typeof loadOptions?.requestId === 'number' && !requestPort.isCurrentRequest(loadOptions.requestId)) return
 
@@ -250,12 +244,6 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
     const editor = sessionPort.getEditor()
     if (!editor) return
     const shouldReloadContent = !session.isLoaded || Boolean(loadOptions?.forceReload)
-    // eslint-disable-next-line no-console
-    console.info('[tab-caret-debug] lifecycle:load-session', {
-      path,
-      shouldReloadContent,
-      sessionLoaded: session.isLoaded
-    })
 
     if (shouldReloadContent) {
       sessionPort.setSaveError(path, '')
@@ -280,14 +268,6 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
         const isLargeDocument = txt.length >= uiPort.largeDocThreshold
         const heavyComplexityScore = heavyRenderComplexityScore(body)
         const shouldShowOverlayEarly = isLargeDocument || heavyComplexityScore >= heavyRenderComplexityThreshold
-        // eslint-disable-next-line no-console
-        console.info('[tab-caret-debug] lifecycle:complexity', {
-          path,
-          txtLength: txt.length,
-          isLargeDocument,
-          heavyComplexityScore,
-          shouldShowOverlayEarly
-        })
 
         if (shouldShowOverlayEarly) {
           largeDocOverlayShownAt = Date.now()
@@ -298,11 +278,6 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
         const parsed = markdownToEditorData(body)
         const normalized = documentPort.withVirtualTitle(parsed.blocks as EditorBlock[], documentPort.noteTitleFromPath(path)).blocks
         const shouldWaitForHeavyRender = isHeavyRenderMarkdown(body) && typeof options.waitForHeavyRenderIdle === 'function'
-        // eslint-disable-next-line no-console
-        console.info('[tab-caret-debug] lifecycle:heavy-render-wait', {
-          path,
-          shouldWaitForHeavyRender
-        })
 
         if (uiPort.ui.isLoadingLargeDocument.value) {
           uiPort.ui.loadStageLabel.value = 'Rendering blocks in editor...'
@@ -366,20 +341,13 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
       // Invariant: mounted tab switches should keep in-memory selection untouched.
       // Only reload/reopen flows restore persisted caret snapshots.
       if (shouldReloadContent) {
-        const restored = sessionPort.restoreCaret(path)
-        // eslint-disable-next-line no-console
-        console.info('[tab-caret-debug] lifecycle:restore-caret', { path, restored, shouldReloadContent })
+        sessionPort.restoreCaret(path)
       }
 
       uiPort.emitOutlineSoon(path)
       uiPort.syncWikilinkUiFromPluginState()
       uiPort.updateGutterHitboxStyle()
     } catch (error) {
-      // eslint-disable-next-line no-console
-      console.info('[tab-caret-debug] lifecycle:load-error', {
-        path,
-        error: error instanceof Error ? error.message : String(error)
-      })
       sessionPort.setSaveError(path, error instanceof Error ? error.message : 'Could not read file.')
     } finally {
       if (typeof loadOptions?.requestId === 'number' && !requestPort.isCurrentRequest(loadOptions.requestId)) return
@@ -397,12 +365,6 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
         uiPort.ui.loadProgressIndeterminate.value = false
         uiPort.ui.loadDocumentStats.value = null
       }
-      // eslint-disable-next-line no-console
-      console.info('[tab-caret-debug] lifecycle:load-finally', {
-        path,
-        shouldReloadContent,
-        overlayVisible: uiPort.ui.isLoadingLargeDocument.value
-      })
     }
   }
 

@@ -219,12 +219,6 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
         const allowCapture = activePath
           ? (options.shouldCaptureCaret ? options.shouldCaptureCaret(activePath) : true)
           : false
-        // eslint-disable-next-line no-console
-        console.info('[tab-caret-debug] tiptap:selection-update', {
-          path,
-          activePath,
-          allowCapture
-        })
         if (activePath && allowCapture) options.captureCaret(activePath)
         options.syncSlashMenuFromSelection({ preserveIndex: true })
         options.updateFormattingToolbar()

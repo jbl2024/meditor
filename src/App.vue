@@ -922,20 +922,7 @@ async function goForwardInHistory() {
 }
 
 async function onExplorerOpen(path: string) {
-  // eslint-disable-next-line no-console
-  console.info('[tab-caret-debug] app:on-explorer-open:start', {
-    targetPath: path,
-    currentPath: workspace.activeTabPath.value,
-    activeElementTag: document.activeElement?.tagName,
-    activeElementClass: (document.activeElement as HTMLElement | null)?.className ?? ''
-  })
   const opened = await openTabWithAutosave(path)
-  // eslint-disable-next-line no-console
-  console.info('[tab-caret-debug] app:on-explorer-open:after-switch', {
-    opened,
-    activePath: workspace.activeTabPath.value,
-    refocusSuppressed: true
-  })
   if (!opened) return
 }
 
@@ -1258,45 +1245,18 @@ async function onSearchResultOpen(hit: SearchHit) {
 }
 
 async function onTabClick(path: string) {
-  // eslint-disable-next-line no-console
-  console.info('[tab-caret-debug] app:on-tab-click:start', {
-    targetPath: path,
-    currentPath: workspace.activeTabPath.value,
-    activeElementTag: document.activeElement?.tagName,
-    activeElementClass: (document.activeElement as HTMLElement | null)?.className ?? ''
-  })
   const opened = await setActiveTabWithAutosave(path)
-  // eslint-disable-next-line no-console
-  console.info('[tab-caret-debug] app:on-tab-click:after-switch', {
-    opened,
-    activePath: workspace.activeTabPath.value,
-    refocusSuppressed: true
-  })
   if (!opened) return
 }
 
 async function openNextTabWithAutosave() {
-  // eslint-disable-next-line no-console
-  console.info('[tab-caret-debug] app:open-next-tab:start', {
-    currentPath: workspace.activeTabPath.value,
-    activeElementTag: document.activeElement?.tagName,
-    activeElementClass: (document.activeElement as HTMLElement | null)?.className ?? ''
-  })
   const tabs = workspace.openTabs.value
   if (!tabs.length) return
   const currentIndex = workspace.activeTabIndex.value
   const nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % tabs.length
   const nextPath = tabs[nextIndex]?.path
   if (!nextPath) return
-  // eslint-disable-next-line no-console
-  console.info('[tab-caret-debug] app:open-next-tab:target', { nextPath, nextIndex })
   const opened = await setActiveTabWithAutosave(nextPath)
-  // eslint-disable-next-line no-console
-  console.info('[tab-caret-debug] app:open-next-tab:after-switch', {
-    opened,
-    activePath: workspace.activeTabPath.value,
-    refocusSuppressed: true
-  })
   if (!opened) return
 }
 

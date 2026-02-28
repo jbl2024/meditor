@@ -44,36 +44,17 @@ export function useEditorCaretOutline(options: UseEditorCaretOutlineOptions) {
     if (!session) return
     const snapshot = toPersistedTextSelection(editor.state.selection as never)
     session.caret = { kind: 'pm-selection', from: snapshot.from, to: snapshot.to }
-    // eslint-disable-next-line no-console
-    console.info('[tab-caret-debug] caret-outline:capture', {
-      path,
-      from: snapshot.from,
-      to: snapshot.to
-    })
   }
 
   function restoreCaret(path: string) {
     const editor = options.getEditor()
     if (!editor || !path) return false
     const snapshot = options.getSession(path)?.caret
-    if (!snapshot) {
-      // eslint-disable-next-line no-console
-      console.info('[tab-caret-debug] caret-outline:restore-skip', { path, reason: 'no-snapshot' })
-      return false
-    }
+    if (!snapshot) return false
     const max = Math.max(1, editor.state.doc.content.size)
     const from = Math.max(1, Math.min(snapshot.from, max))
     const to = Math.max(1, Math.min(snapshot.to, max))
     editor.commands.setTextSelection({ from, to })
-    // eslint-disable-next-line no-console
-    console.info('[tab-caret-debug] caret-outline:restore', {
-      path,
-      savedFrom: snapshot.from,
-      savedTo: snapshot.to,
-      appliedFrom: from,
-      appliedTo: to,
-      max
-    })
     return true
   }
 

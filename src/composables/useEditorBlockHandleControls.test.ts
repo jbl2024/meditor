@@ -1,5 +1,5 @@
 import { computed, ref } from 'vue'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { BlockMenuTarget } from '../lib/tiptap/blockMenu/types'
 import type { DragHandleUiState } from '../lib/tiptap/blockMenu/dragHandleState'
 import { useBlockMenuControls } from './useBlockMenuControls'
@@ -18,6 +18,10 @@ function createTarget(): BlockMenuTarget {
 }
 
 describe('useEditorBlockHandleControls', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   function createHarness() {
     const dragHandleUiState = ref<DragHandleUiState>({
       menuOpen: false,
@@ -110,5 +114,29 @@ describe('useEditorBlockHandleControls', () => {
 
     controls.syncDragHandleLockFromState('a')
     controls.syncDragHandleLockFromState('b')
+  })
+
+  it('keeps target briefly on null node change before clearing', () => {
+    vi.useFakeTimers()
+    const { controls, dragHandleUiState } = createHarness()
+
+    controls.onBlockHandleNodeChange({ pos: 1, node: null })
+    expect(dragHandleUiState.value.activeTarget).not.toBeNull()
+
+    vi.advanceTimersByTime(130)
+    expect(dragHandleUiState.value.activeTarget).toBeNull()
+  })
+
+  it('does not clear target while controls are hovered', () => {
+    vi.useFakeTimers()
+    const { controls, dragHandleUiState } = createHarness()
+
+    controls.onHandleControlsEnter()
+    controls.onBlockHandleNodeChange({ pos: 1, node: null })
+    vi.advanceTimersByTime(130)
+
+    expect(dragHandleUiState.value.activeTarget).not.toBeNull()
+    expect(dragHandleUiState.value.controlsHover).toBe(true)
+    expect(dragHandleUiState.value.gutterHover).toBe(true)
   })
 })

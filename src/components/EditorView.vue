@@ -466,12 +466,6 @@ function setActiveSession(path: string) {
   sessionStore.setActivePath(MAIN_PANE_ID, path)
   const session = getSession(path)
   editor = session?.editor ?? null
-  // eslint-disable-next-line no-console
-  console.info('[tab-caret-debug] editor-view:set-active-session', {
-    path,
-    hasSession: Boolean(session),
-    hasEditor: Boolean(editor)
-  })
   blockHandleControls.resetLockState()
 }
 
@@ -510,13 +504,6 @@ const tiptapSetup = useEditorTiptapSetup({
     const active = typeof document !== 'undefined' ? document.activeElement : null
     if (!active || !holder.value.contains(active)) return false
     const hasRecentUserInteraction = Date.now() - lastEditorInteractionAt.value <= USER_INTERACTION_CAPTURE_WINDOW_MS
-    // eslint-disable-next-line no-console
-    console.info('[tab-caret-debug] editor-view:should-capture-caret', {
-      path,
-      hasRecentUserInteraction,
-      suppressOnChange,
-      activeElementTag: active instanceof HTMLElement ? active.tagName : null
-    })
     return hasRecentUserInteraction
   },
   updateFormattingToolbar,
@@ -618,12 +605,6 @@ const fileLifecycle = useEditorFileLifecycle({
 })
 
 async function loadCurrentFile(path: string, options?: { forceReload?: boolean; requestId?: number }) {
-  // eslint-disable-next-line no-console
-  console.info('[tab-caret-debug] editor-view:load-current-file', {
-    path,
-    forceReload: Boolean(options?.forceReload),
-    requestId: options?.requestId
-  })
   await fileLifecycle.loadCurrentFile(path, options)
 }
 
@@ -789,11 +770,6 @@ useEditorPathWatchers({
 })
 
 function focusEditor() {
-  // eslint-disable-next-line no-console
-  console.info('[tab-caret-debug] editor-view:focus-editor', {
-    path: currentPath.value,
-    activeElementTag: typeof document !== 'undefined' ? document.activeElement?.tagName : null
-  })
   editor?.commands.focus()
 }
 
@@ -926,6 +902,7 @@ defineExpose({
           <!-- Invariant: interactive overlays/drag-handle stay bound to active editor only. -->
           <DragHandleVue3
             v-if="renderedEditor"
+            :key="`drag-handle:${currentPath || 'none'}`"
             :editor="renderedEditor"
             :plugin-key="DRAG_HANDLE_PLUGIN_KEY"
             :compute-position-config="{ placement: 'left-start' }"
