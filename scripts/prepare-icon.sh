@@ -14,7 +14,7 @@ CANVAS_SIZE=1024
 SQUIRCLE_SIZE=832           
 MARGIN=$(( (CANVAS_SIZE - SQUIRCLE_SIZE) / 2 )) # 96
 RADIUS=$(( SQUIRCLE_SIZE * 225 / 1000 ))        # Arrondi Apple
-INNER=540                   # Taille du logo central
+INNER=700                   # Taille du logo central
 
 # 1. Export du SVG propre
 inkscape "$SVG" \
