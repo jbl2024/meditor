@@ -33,6 +33,7 @@
 - `useEditorWikilinkOverlayState` should be initialized before binding tiptap callbacks that invoke it.
 - Editor content rendering is multi-instance and path-scoped; only active path is visible/interactable.
 - Loading overlays for complex docs should remain visible until `waitForHeavyRenderIdle` settles after `setContent`.
+- Overlay trigger is not size-only: heavy markdown complexity and runtime pending render signals can escalate loading UI for below-threshold files.
 
 ## Anti-patterns
 - Duplicated behavior in both `EditorView` and composables.

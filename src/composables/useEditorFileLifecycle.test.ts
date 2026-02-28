@@ -4,6 +4,7 @@ import type { EditorBlock } from '../lib/markdownBlocks'
 import type { DocumentSession } from './useDocumentEditorSessions'
 import {
   type EditorFileLifecycleDocumentPort,
+  type HasPendingHeavyRender,
   useEditorFileLifecycle,
   type EditorFileLifecycleIoPort,
   type EditorFileLifecycleRequestPort,
@@ -53,9 +54,12 @@ type UseEditorFileLifecycleOverrides = {
   ioPort?: Partial<EditorFileLifecycleIoPort>
   requestPort?: Partial<EditorFileLifecycleRequestPort>
   waitForHeavyRenderIdle?: WaitForHeavyRenderIdle
+  hasPendingHeavyRender?: HasPendingHeavyRender
   minLargeDocOverlayVisibleMs?: number
   heavyRenderIdleTimeoutMs?: number
   heavyRenderIdleSettleMs?: number
+  heavyOverlayDelayMs?: number
+  heavyRenderComplexityThreshold?: number
 }
 
 function createOptions(overrides: UseEditorFileLifecycleOverrides = {}) {
@@ -157,9 +161,12 @@ function createOptions(overrides: UseEditorFileLifecycleOverrides = {}) {
       ioPort: { ...ioPort, ...(overrides.ioPort ?? {}) },
       requestPort: { ...requestPort, ...(overrides.requestPort ?? {}) },
       waitForHeavyRenderIdle: overrides.waitForHeavyRenderIdle,
+      hasPendingHeavyRender: overrides.hasPendingHeavyRender,
       minLargeDocOverlayVisibleMs: overrides.minLargeDocOverlayVisibleMs,
       heavyRenderIdleTimeoutMs: overrides.heavyRenderIdleTimeoutMs,
-      heavyRenderIdleSettleMs: overrides.heavyRenderIdleSettleMs
+      heavyRenderIdleSettleMs: overrides.heavyRenderIdleSettleMs,
+      heavyOverlayDelayMs: overrides.heavyOverlayDelayMs,
+      heavyRenderComplexityThreshold: overrides.heavyRenderComplexityThreshold
     },
     sessions,
     currentPath
@@ -342,6 +349,78 @@ describe('useEditorFileLifecycle', () => {
 
     await lifecycle.loadCurrentFile('a.md', { requestId: 1 })
     expect(waitForHeavyRenderIdle).not.toHaveBeenCalled()
+  })
+
+  it('shows overlay for below-threshold docs when heavy complexity score is high', async () => {
+    vi.useFakeTimers()
+    const waitDeferred = deferred<boolean>()
+    const waitForHeavyRenderIdle = vi.fn(() => waitDeferred.promise)
+    const hasPendingHeavyRender = vi.fn(() => false)
+    const mermaidHeavyDoc = [
+      '# Title',
+      '```mermaid',
+      'flowchart TD',
+      'A --> B',
+      '```',
+      '```mermaid',
+      'flowchart TD',
+      'C --> D',
+      '```'
+    ].join('\n')
+    const { options } = createOptions({
+      ioPort: { openFile: vi.fn(async () => mermaidHeavyDoc) } as Partial<EditorFileLifecycleIoPort>,
+      uiPort: { largeDocThreshold: 200_000 } as Partial<EditorFileLifecycleUiPort>,
+      waitForHeavyRenderIdle,
+      hasPendingHeavyRender,
+      minLargeDocOverlayVisibleMs: 0
+    })
+    const lifecycle = useEditorFileLifecycle(options)
+
+    const loadPromise = lifecycle.loadCurrentFile('a.md', { requestId: 1 })
+    await vi.advanceTimersByTimeAsync(120)
+    expect(options.uiPort.ui.isLoadingLargeDocument.value).toBe(true)
+    expect(waitForHeavyRenderIdle).toHaveBeenCalledTimes(1)
+    waitDeferred.resolve(true)
+    await vi.runAllTimersAsync()
+    await loadPromise
+    vi.useRealTimers()
+  })
+
+  it('escalates to overlay after delay when runtime heavy render remains pending', async () => {
+    vi.useFakeTimers()
+    const waitDeferred = deferred<boolean>()
+    const waitForHeavyRenderIdle = vi.fn(() => waitDeferred.promise)
+    const hasPendingHeavyRender = vi.fn(() => true)
+    const oneMermaidDoc = [
+      '# Title',
+      '```mermaid',
+      'flowchart TD',
+      'A --> B',
+      '```'
+    ].join('\n')
+    const { options } = createOptions({
+      ioPort: { openFile: vi.fn(async () => oneMermaidDoc) } as Partial<EditorFileLifecycleIoPort>,
+      uiPort: { largeDocThreshold: 200_000 } as Partial<EditorFileLifecycleUiPort>,
+      waitForHeavyRenderIdle,
+      hasPendingHeavyRender,
+      heavyRenderComplexityThreshold: 99,
+      heavyOverlayDelayMs: 100,
+      minLargeDocOverlayVisibleMs: 0
+    })
+    const lifecycle = useEditorFileLifecycle(options)
+
+    const loadPromise = lifecycle.loadCurrentFile('a.md', { requestId: 1 })
+    await vi.advanceTimersByTimeAsync(80)
+    expect(options.uiPort.ui.isLoadingLargeDocument.value).toBe(false)
+    await vi.advanceTimersByTimeAsync(40)
+    expect(options.uiPort.ui.isLoadingLargeDocument.value).toBe(true)
+    expect(options.uiPort.ui.loadStageLabel.value).toBe('Finalizing rich blocks...')
+
+    waitDeferred.resolve(true)
+    await vi.runAllTimersAsync()
+    await loadPromise
+    expect(options.uiPort.ui.isLoadingLargeDocument.value).toBe(false)
+    vi.useRealTimers()
   })
 
   it('keeps mounted-tab switch lightweight when session is already loaded', async () => {

@@ -71,6 +71,7 @@ describe('editor architecture ownership guardrails', () => {
     expect(fileLifecycleSource).toContain('ioPort')
     expect(fileLifecycleSource).toContain('requestPort')
     expect(fileLifecycleSource).toContain('waitForHeavyRenderIdle')
+    expect(fileLifecycleSource).toContain('hasPendingHeavyRender')
     expect(fileLifecycleSource).not.toContain('skipActivate')
   })
 

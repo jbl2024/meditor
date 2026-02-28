@@ -13,10 +13,12 @@ import type { DocumentSession } from './useDocumentEditorSessions'
  * - Resolves `false` when the wait times out; callers should continue deterministic load completion.
  */
 export type WaitForHeavyRenderIdle = (options?: { timeoutMs?: number; settleMs?: number }) => Promise<boolean>
+export type HasPendingHeavyRender = () => boolean
 
 // Regex-driven heavy render detection:
 // - Mermaid example detected: "```mermaid\nflowchart TD\nA-->B\n```"
 const MERMAID_FENCE_RE = /```[ \t]*mermaid\b/i
+const MERMAID_FENCE_GLOBAL_RE = /```[ \t]*mermaid\b/gi
 const MARKDOWN_TABLE_SEPARATOR_RE = /^\s*\|?(?:\s*:?-{3,}:?\s*\|){1,}\s*$/gm
 const MARKDOWN_TABLE_ROW_RE = /^\s*\|.+\|\s*$/gm
 
@@ -26,6 +28,18 @@ function isHeavyRenderMarkdown(source: string): boolean {
   if (separatorCount === 0) return false
   const rowCount = source.match(MARKDOWN_TABLE_ROW_RE)?.length ?? 0
   return rowCount >= 6
+}
+
+/**
+ * Computes a coarse complexity score to trigger loading UI for render-heavy docs
+ * even when byte length is below the large-document threshold.
+ */
+function heavyRenderComplexityScore(source: string): number {
+  const mermaidCount = source.match(MERMAID_FENCE_GLOBAL_RE)?.length ?? 0
+  const separatorCount = source.match(MARKDOWN_TABLE_SEPARATOR_RE)?.length ?? 0
+  const rowCount = source.match(MARKDOWN_TABLE_ROW_RE)?.length ?? 0
+  const tableLoadScore = separatorCount > 0 ? Math.ceil(rowCount / 8) : 0
+  return (mermaidCount * 3) + tableLoadScore
 }
 
 /**
@@ -131,6 +145,10 @@ export type UseEditorFileLifecycleOptions = {
    */
   waitForHeavyRenderIdle?: WaitForHeavyRenderIdle
   /**
+   * Optional hook that reports whether heavy async rendering is currently in-flight.
+   */
+  hasPendingHeavyRender?: HasPendingHeavyRender
+  /**
    * Minimum overlay visibility once large-document loading is shown.
    *
    * Why/invariant:
@@ -146,6 +164,14 @@ export type UseEditorFileLifecycleOptions = {
    * Settle window for optional heavy-render idle wait.
    */
   heavyRenderIdleSettleMs?: number
+  /**
+   * Delay before escalating to full loading overlay when runtime heavy rendering remains pending.
+   */
+  heavyOverlayDelayMs?: number
+  /**
+   * Minimum heavy-render complexity score that triggers loading overlay regardless of file size.
+   */
+  heavyRenderComplexityThreshold?: number
 }
 
 /**
@@ -173,6 +199,8 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
   const minLargeDocOverlayVisibleMs = options.minLargeDocOverlayVisibleMs ?? 220
   const heavyRenderIdleTimeoutMs = options.heavyRenderIdleTimeoutMs ?? 1_200
   const heavyRenderIdleSettleMs = options.heavyRenderIdleSettleMs ?? 48
+  const heavyOverlayDelayMs = options.heavyOverlayDelayMs ?? 160
+  const heavyRenderComplexityThreshold = options.heavyRenderComplexityThreshold ?? 4
 
   async function flushUiFrame() {
     await nextTick()
@@ -185,6 +213,16 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
       const raf = window.requestAnimationFrame ?? ((callback: FrameRequestCallback) => window.setTimeout(() => callback(performance.now()), 16))
       raf(() => resolve())
     })
+  }
+
+  function showLoadingOverlay(body: string, stageLabel: string, progressPercent: number, indeterminate = false) {
+    if (!uiPort.ui.isLoadingLargeDocument.value) {
+      uiPort.ui.isLoadingLargeDocument.value = true
+      uiPort.ui.loadDocumentStats.value = { chars: body.length, lines: documentPort.countLines(body) }
+    }
+    uiPort.ui.loadStageLabel.value = stageLabel
+    uiPort.ui.loadProgressPercent.value = progressPercent
+    uiPort.ui.loadProgressIndeterminate.value = indeterminate
   }
 
   /**
@@ -228,22 +266,20 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
         documentPort.parseAndStoreFrontmatter(path, txt)
         const body = documentPort.frontmatterByPath.value[path]?.body ?? txt
         const isLargeDocument = txt.length >= uiPort.largeDocThreshold
+        const heavyComplexityScore = heavyRenderComplexityScore(body)
+        const shouldShowOverlayEarly = isLargeDocument || heavyComplexityScore >= heavyRenderComplexityThreshold
 
-        if (isLargeDocument) {
-          uiPort.ui.isLoadingLargeDocument.value = true
+        if (shouldShowOverlayEarly) {
           largeDocOverlayShownAt = Date.now()
-          uiPort.ui.loadDocumentStats.value = { chars: body.length, lines: documentPort.countLines(body) }
-          uiPort.ui.loadStageLabel.value = 'Parsing markdown blocks...'
-          uiPort.ui.loadProgressPercent.value = 35
-          uiPort.ui.loadProgressIndeterminate.value = false
+          showLoadingOverlay(body, 'Parsing markdown blocks...', 35, false)
           await flushUiFrame()
         }
 
         const parsed = markdownToEditorData(body)
         const normalized = documentPort.withVirtualTitle(parsed.blocks as EditorBlock[], documentPort.noteTitleFromPath(path)).blocks
-        const shouldWaitForHeavyRender = isLargeDocument && isHeavyRenderMarkdown(body) && typeof options.waitForHeavyRenderIdle === 'function'
+        const shouldWaitForHeavyRender = isHeavyRenderMarkdown(body) && typeof options.waitForHeavyRenderIdle === 'function'
 
-        if (isLargeDocument) {
+        if (uiPort.ui.isLoadingLargeDocument.value) {
           uiPort.ui.loadStageLabel.value = 'Rendering blocks in editor...'
           uiPort.ui.loadProgressPercent.value = 70
           await flushUiFrame()
@@ -253,19 +289,40 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
         session.editor.commands.setContent(toTiptapDoc(normalized), { emitUpdate: false })
         sessionPort.setSuppressOnChange(false)
 
+        if (
+          shouldWaitForHeavyRender &&
+          !uiPort.ui.isLoadingLargeDocument.value &&
+          typeof options.hasPendingHeavyRender === 'function' &&
+          options.hasPendingHeavyRender()
+        ) {
+          // Why/invariant: below-threshold docs can still trigger expensive async node renders.
+          // Delay escalation prevents unnecessary blocking for near-instant renders.
+          await new Promise<void>((resolve) => window.setTimeout(resolve, heavyOverlayDelayMs))
+          if (typeof loadOptions?.requestId === 'number' && !requestPort.isCurrentRequest(loadOptions.requestId)) return
+          if (options.hasPendingHeavyRender()) {
+            largeDocOverlayShownAt = Date.now()
+            showLoadingOverlay(body, 'Finalizing rich blocks...', 90, true)
+            await flushUiFrame()
+          }
+        }
+
         if (shouldWaitForHeavyRender) {
           // Why/invariant: Mermaid/table node views may resolve asynchronously after setContent.
           // Waiting for heavy render idle avoids first-load reveal flicker on complex documents.
-          uiPort.ui.loadStageLabel.value = 'Finalizing rich blocks...'
-          uiPort.ui.loadProgressPercent.value = 90
-          uiPort.ui.loadProgressIndeterminate.value = true
+          if (uiPort.ui.isLoadingLargeDocument.value) {
+            uiPort.ui.loadStageLabel.value = 'Finalizing rich blocks...'
+            uiPort.ui.loadProgressPercent.value = 90
+            uiPort.ui.loadProgressIndeterminate.value = true
+          }
           await options.waitForHeavyRenderIdle?.({
             timeoutMs: heavyRenderIdleTimeoutMs,
             settleMs: heavyRenderIdleSettleMs
           })
           if (typeof loadOptions?.requestId === 'number' && !requestPort.isCurrentRequest(loadOptions.requestId)) return
           await flushPaintBarrier()
-          uiPort.ui.loadProgressIndeterminate.value = false
+          if (uiPort.ui.isLoadingLargeDocument.value) {
+            uiPort.ui.loadProgressIndeterminate.value = false
+          }
         }
 
         session.loadedText = txt
