@@ -37,6 +37,7 @@ function iconForNode(node: TreeNode) {
 
 <template>
   <div
+    :data-explorer-path="node.path"
     class="group relative flex items-center gap-1.5 rounded-md px-2 py-1 text-[13px] leading-[1.35] transition-colors"
     :class="[
       selected ? 'bg-[#e6eaf5] text-[#1f2937] dark:bg-[#2d3440] dark:text-[#d7dce5]' : 'text-[#4b5563] dark:text-[#abb2bf]',

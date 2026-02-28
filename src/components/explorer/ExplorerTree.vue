@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import ExplorerContextMenu, { type MenuAction } from './ExplorerContextMenu.vue'
 import ExplorerItem from './ExplorerItem.vue'
 import {
@@ -43,6 +43,10 @@ const emit = defineEmits<{
 }>()
 
 type VisibleRow = { kind: 'node'; path: string; depth: number }
+type RevealPathOptions = {
+  focusTree?: boolean
+  behavior?: ScrollBehavior
+}
 
 const treeRoot = computed(() => props.folderPath)
 const childrenByDir = ref<Record<string, TreeNode[]>>({})
@@ -110,6 +114,13 @@ function emitError(message: string) {
 
 function normalizePath(path: string): string {
   return path.replace(/\\/g, '/')
+}
+
+function escapeSelectorValue(value: string): string {
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
+    return CSS.escape(value)
+  }
+  return value.replace(/["\\]/g, '\\$&')
 }
 
 function getParentPath(path: string): string {
@@ -919,6 +930,17 @@ async function revealPath(path: string) {
   focusedPath.value = path
 }
 
+async function revealPathInView(path: string, options: RevealPathOptions = {}) {
+  await revealPath(path)
+  await nextTick()
+  const selector = `[data-explorer-path="${escapeSelectorValue(path)}"]`
+  const row = treeRef.value?.querySelector<HTMLElement>(selector)
+  row?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: options.behavior ?? 'auto' })
+  if (options.focusTree) {
+    focusTree()
+  }
+}
+
 let unlistenWorkspaceFsChanged: (() => void) | null = null
 
 function closeConflictPrompt() {
@@ -977,10 +999,14 @@ watch(
   () => props.activePath,
   async (next) => {
     if (!next || !props.folderPath) return
-    await revealPath(next)
+    await revealPathInView(next)
   },
   { immediate: true }
 )
+
+defineExpose({
+  revealPathInView
+})
 
 onMounted(() => {
   window.addEventListener('click', closeContextMenu)

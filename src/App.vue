@@ -66,6 +66,10 @@ type EditorViewExposed = {
   getZoom: () => number
 }
 
+type ExplorerTreeExposed = {
+  revealPathInView: (path: string, options?: { focusTree?: boolean; behavior?: ScrollBehavior }) => Promise<void>
+}
+
 type SaveFileOptions = {
   explicit: boolean
 }
@@ -113,6 +117,7 @@ const rightPaneWidth = ref(300)
 const allWorkspaceFiles = ref<string[]>([])
 const loadingAllFiles = ref(false)
 const editorRef = ref<EditorViewExposed | null>(null)
+const explorerRef = ref<ExplorerTreeExposed | null>(null)
 const tabScrollRef = ref<HTMLElement | null>(null)
 const overflowMenuRef = ref<HTMLElement | null>(null)
 const backHistoryMenuRef = ref<HTMLElement | null>(null)
@@ -1397,6 +1402,17 @@ async function openTodayNote() {
   return await openDailyNote(formatIsoDate(new Date()))
 }
 
+async function showExplorerForActiveFile(options: { focusTree?: boolean } = {}) {
+  workspace.setSidebarMode('explorer')
+  await nextTick()
+  const activePath = workspace.activeTabPath.value
+  if (!activePath) return
+  await explorerRef.value?.revealPathInView(activePath, {
+    focusTree: options.focusTree ?? false,
+    behavior: 'auto'
+  })
+}
+
 async function openYesterdayNote() {
   const value = new Date()
   value.setDate(value.getDate() - 1)
@@ -2239,7 +2255,7 @@ function onWindowKeydown(event: KeyboardEvent) {
 
   if (key === 'e') {
     event.preventDefault()
-    workspace.setSidebarMode('explorer')
+    void showExplorerForActiveFile({ focusTree: true })
     return
   }
 
@@ -2464,6 +2480,7 @@ onBeforeUnmount(() => {
           <div v-if="workspace.sidebarMode.value === 'explorer'" class="panel-fill">
             <ExplorerTree
               v-if="filesystem.hasWorkspace.value"
+              ref="explorerRef"
               :folder-path="filesystem.workingFolderPath.value"
               :active-path="activeFilePath"
               @open="onExplorerOpen"
