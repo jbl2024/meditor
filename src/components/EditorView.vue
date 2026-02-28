@@ -1803,7 +1803,7 @@ defineExpose({
 
 .editor-holder :deep(.ProseMirror ul[data-type="taskList"] li) {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.45rem;
 }
 
