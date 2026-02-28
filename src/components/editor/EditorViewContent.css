@@ -3,9 +3,10 @@
 }
 
 .editor-content-shell {
-  max-width: 880px;
+  max-width: 800px;
   margin: 0 auto;
-  padding-left: 2.5rem;
+  padding-left: 3.5rem;
+  padding-right: 2rem;
 }
 
 .editor-gutter-hitbox {
@@ -34,7 +35,8 @@
 @media (max-width: 840px) {
   .editor-content-shell {
     max-width: 100%;
-    padding-left: 0.5rem;
+    padding-left: 1rem;
+    padding-right: 1rem;
   }
 }
 
@@ -117,8 +119,13 @@
 
 .editor-holder .ProseMirror ul,
 .editor-holder .ProseMirror ol {
-  margin: 0.45rem 0 0.45rem 1.35rem;
+  margin: 0.32rem 0 0.45rem 1.35rem;
   padding: 0;
+}
+
+.editor-holder .ProseMirror p + ul,
+.editor-holder .ProseMirror p + ol {
+  margin-top: 0.18rem;
 }
 
 .editor-holder .ProseMirror ul {
@@ -131,10 +138,32 @@
 
 .editor-holder .ProseMirror ul ul {
   list-style: circle;
+  margin-top: 0.24rem;
+  margin-bottom: 0.24rem;
+}
+
+.editor-holder .ProseMirror ul ul ul {
+  list-style: square;
 }
 
 .editor-holder .ProseMirror ol ol {
   list-style: lower-alpha;
+  margin-top: 0.24rem;
+  margin-bottom: 0.24rem;
+}
+
+.editor-holder .ProseMirror ol ol ol {
+  list-style: lower-roman;
+}
+
+.editor-holder .ProseMirror ul ul > li::marker,
+.editor-holder .ProseMirror ol ol > li::marker {
+  color: rgb(100 116 139);
+}
+
+.editor-holder .ProseMirror ul ul ul > li::marker,
+.editor-holder .ProseMirror ol ol ol > li::marker {
+  color: rgb(148 163 184);
 }
 
 .editor-holder .ProseMirror li {
