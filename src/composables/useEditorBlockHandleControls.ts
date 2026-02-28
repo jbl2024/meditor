@@ -52,19 +52,6 @@ export function useEditorBlockHandleControls(options: UseEditorBlockHandleContro
     options.debug?.(event, detail)
   }
 
-  function logGutter(event: string, detail?: unknown) {
-    const state = options.dragHandleUiState.value
-    // eslint-disable-next-line no-console
-    console.info('[gutter-debug]', event, detail ?? '', {
-      lock: computeHandleLock(state),
-      menuOpen: state.menuOpen,
-      controlsHover: state.controlsHover,
-      gutterHover: state.gutterHover,
-      dragging: state.dragging,
-      activeTargetPos: state.activeTarget?.pos ?? null
-    })
-  }
-
   function clearTargetClearTimer() {
     if (!targetClearTimer) return
     clearTimeout(targetClearTimer)
@@ -85,7 +72,6 @@ export function useEditorBlockHandleControls(options: UseEditorBlockHandleContro
       gutterHover: false,
     }
     syncDragHandleLockFromState(reason)
-    logGutter(reason)
   }
 
   /**
@@ -97,7 +83,6 @@ export function useEditorBlockHandleControls(options: UseEditorBlockHandleContro
     lastAppliedDragHandleLock = shouldLock
     options.setDragHandleLockMeta(shouldLock)
     debug(`sync-lock:${reason}`, shouldLock)
-    logGutter('lock-change', { reason, shouldLock })
   }
 
   /**
@@ -112,7 +97,6 @@ export function useEditorBlockHandleControls(options: UseEditorBlockHandleContro
     if (unlock) {
       syncDragHandleLockFromState('close-menu')
     }
-    logGutter('menu-close', { unlock })
   }
 
   /**
@@ -122,27 +106,21 @@ export function useEditorBlockHandleControls(options: UseEditorBlockHandleContro
     if (!payload.node) {
       clearTargetClearTimer()
       if (shouldKeepTargetDuringTransition()) {
-        logGutter('target-clear-skipped', { reason: 'transient-interaction' })
         return
       }
       targetClearTimer = setTimeout(() => {
         targetClearTimer = null
         if (shouldKeepTargetDuringTransition()) {
-          logGutter('target-clear-skipped', { reason: 'delayed-interaction' })
           return
         }
         clearActiveTargetNow('target-cleared')
       }, targetClearDelayMs)
-      logGutter('target-clear-scheduled', { delayMs: targetClearDelayMs })
       return
     }
     clearTargetClearTimer()
     const editor = options.getEditor()
     const nodeAtPos = editor?.state.doc.nodeAt(payload.pos)
-    if (!nodeAtPos) {
-      logGutter('target-missing-node', { pos: payload.pos })
-      return
-    }
+    if (!nodeAtPos) return
     const nextTarget = toBlockMenuTarget(nodeAtPos, payload.pos)
     options.blockMenuTarget.value = nextTarget
     options.lastStableBlockMenuTarget.value = nextTarget
@@ -151,7 +129,6 @@ export function useEditorBlockHandleControls(options: UseEditorBlockHandleContro
       activeTarget: nextTarget,
     }
     debug('target-change', nextTarget.pos)
-    logGutter('target-change', { pos: nextTarget.pos, nodeType: nextTarget.nodeType })
   }
 
   function toggleBlockMenu(event: MouseEvent) {
@@ -161,16 +138,12 @@ export function useEditorBlockHandleControls(options: UseEditorBlockHandleContro
     if (handleRoot?.getAttribute('data-dragging') === 'true') {
       options.dragHandleUiState.value = { ...options.dragHandleUiState.value, dragging: true }
       syncDragHandleLockFromState('drag-guard')
-      logGutter('menu-toggle-blocked', { reason: 'dragging' })
       return
     }
     event.preventDefault()
     event.stopPropagation()
     const target = options.blockMenuActionTarget.value
-    if (!target) {
-      logGutter('menu-toggle-blocked', { reason: 'no-target' })
-      return
-    }
+    if (!target) return
     options.blockMenuTarget.value = target
 
     if (options.blockMenuOpen.value) {
@@ -196,7 +169,6 @@ export function useEditorBlockHandleControls(options: UseEditorBlockHandleContro
     options.dragHandleUiState.value = { ...options.dragHandleUiState.value, menuOpen: true }
     options.blockMenuIndex.value = 0
     syncDragHandleLockFromState('open-menu')
-    logGutter('menu-open')
   }
 
   function onBlockMenuPlus(event: MouseEvent) {
@@ -243,7 +215,6 @@ export function useEditorBlockHandleControls(options: UseEditorBlockHandleContro
       gutterHover: true
     }
     syncDragHandleLockFromState('controls-enter')
-    logGutter('controls-enter')
   }
 
   function onHandleControlsLeave() {
@@ -254,21 +225,18 @@ export function useEditorBlockHandleControls(options: UseEditorBlockHandleContro
       gutterHover: false
     }
     syncDragHandleLockFromState('controls-leave')
-    logGutter('controls-leave')
   }
 
   function onHandleDragStart() {
     if (options.dragHandleUiState.value.dragging) return
     options.dragHandleUiState.value = { ...options.dragHandleUiState.value, dragging: true }
     syncDragHandleLockFromState('drag-start')
-    logGutter('drag-start')
   }
 
   function onHandleDragEnd() {
     if (!options.dragHandleUiState.value.dragging) return
     options.dragHandleUiState.value = { ...options.dragHandleUiState.value, dragging: false }
     syncDragHandleLockFromState('drag-end')
-    logGutter('drag-end')
   }
 
   function resetLockState() {
