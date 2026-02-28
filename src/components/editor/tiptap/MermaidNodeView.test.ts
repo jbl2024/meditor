@@ -116,6 +116,47 @@ describe('MermaidNodeView', () => {
     harness.app.unmount()
   })
 
+  it('inserts indentation when pressing Tab in raw editor', async () => {
+    const harness = mountHarness({ initialCode: 'flowchart TD\nA --> B' })
+    await flush()
+
+    const preview = harness.root.querySelector('.meditor-mermaid-preview') as HTMLDivElement
+    preview.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+    await flush()
+
+    const textarea = harness.root.querySelector('.meditor-mermaid-code') as HTMLTextAreaElement
+    textarea.setSelectionRange(0, 0)
+    textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }))
+    await flush()
+
+    expect(harness.code.value.startsWith('  flowchart TD')).toBe(true)
+
+    harness.app.unmount()
+  })
+
+  it('indents and unindents selected lines with Tab and Shift+Tab', async () => {
+    const harness = mountHarness({ initialCode: 'A --> B\nB --> C' })
+    await flush()
+
+    const preview = harness.root.querySelector('.meditor-mermaid-preview') as HTMLDivElement
+    preview.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+    await flush()
+
+    const textarea = harness.root.querySelector('.meditor-mermaid-code') as HTMLTextAreaElement
+    textarea.setSelectionRange(0, textarea.value.length)
+    textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }))
+    await flush()
+    expect(harness.code.value).toBe('  A --> B\n  B --> C')
+
+    const updated = harness.root.querySelector('.meditor-mermaid-code') as HTMLTextAreaElement
+    updated.setSelectionRange(0, updated.value.length)
+    updated.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }))
+    await flush()
+    expect(harness.code.value).toBe('A --> B\nB --> C')
+
+    harness.app.unmount()
+  })
+
   it('applies selected template from filterable dropdown', async () => {
     const harness = mountHarness()
     await flush()

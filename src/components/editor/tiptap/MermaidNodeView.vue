@@ -27,6 +27,7 @@ const activeTemplateIndex = ref(0)
 const showCodeEditor = ref(false)
 const currentTemplateId = computed(() => resolveMermaidTemplateId(code.value))
 const templateItems = computed(() => toMermaidTemplateItems(MERMAID_TEMPLATES))
+const INDENT = '  '
 let renderRequestId = 0
 let renderCount = 0
 
@@ -143,9 +144,80 @@ function onEditorToggle(event?: MouseEvent) {
 }
 
 function onEditorKeydown(event: KeyboardEvent) {
+  if (event.key === 'Tab') {
+    event.preventDefault()
+    const textarea = event.target as HTMLTextAreaElement | null
+    if (!textarea) return
+    applyTabIndentation(textarea, event.shiftKey)
+    return
+  }
+
   if (event.key !== 'Escape') return
   event.preventDefault()
   showCodeEditor.value = false
+}
+
+function applyTabIndentation(textarea: HTMLTextAreaElement, unindent: boolean) {
+  const source = textarea.value
+  const start = textarea.selectionStart ?? 0
+  const end = textarea.selectionEnd ?? start
+
+  if (!unindent) {
+    if (start === end) {
+      const next = `${source.slice(0, start)}${INDENT}${source.slice(end)}`
+      props.updateAttributes({ code: next })
+      void nextTick().then(() => {
+        textareaEl.value?.setSelectionRange(start + INDENT.length, start + INDENT.length)
+      })
+      return
+    }
+
+    const lineStart = source.lastIndexOf('\n', Math.max(0, start - 1)) + 1
+    const selectedBlock = source.slice(lineStart, end)
+    const lines = selectedBlock.split('\n')
+    const indented = lines.map((line) => `${INDENT}${line}`).join('\n')
+    const next = `${source.slice(0, lineStart)}${indented}${source.slice(end)}`
+    const addedChars = INDENT.length * lines.length
+    props.updateAttributes({ code: next })
+    void nextTick().then(() => {
+      textareaEl.value?.setSelectionRange(start + INDENT.length, end + addedChars)
+    })
+    return
+  }
+
+  const lineStart = source.lastIndexOf('\n', Math.max(0, start - 1)) + 1
+  const selectedBlock = source.slice(lineStart, end)
+  const lines = selectedBlock.split('\n')
+
+  let removedTotal = 0
+  let removedFirstLine = 0
+  const updatedLines = lines.map((line, index) => {
+    if (line.startsWith(INDENT)) {
+      removedTotal += INDENT.length
+      if (index === 0) removedFirstLine = INDENT.length
+      return line.slice(INDENT.length)
+    }
+    if (line.startsWith('\t')) {
+      removedTotal += 1
+      if (index === 0) removedFirstLine = 1
+      return line.slice(1)
+    }
+    if (line.startsWith(' ')) {
+      removedTotal += 1
+      if (index === 0) removedFirstLine = 1
+      return line.slice(1)
+    }
+    return line
+  })
+
+  if (removedTotal === 0) return
+  const next = `${source.slice(0, lineStart)}${updatedLines.join('\n')}${source.slice(end)}`
+  const nextStart = Math.max(lineStart, start - removedFirstLine)
+  const nextEnd = Math.max(nextStart, end - removedTotal)
+  props.updateAttributes({ code: next })
+  void nextTick().then(() => {
+    textareaEl.value?.setSelectionRange(nextStart, nextEnd)
+  })
 }
 </script>
 
@@ -234,6 +306,10 @@ function onEditorKeydown(event: KeyboardEvent) {
   align-items: center;
   display: flex;
   gap: 8px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+  visibility: hidden;
 }
 
 .meditor-mermaid-template-select {
@@ -291,5 +367,20 @@ function onEditorKeydown(event: KeyboardEvent) {
   margin-bottom: 10px;
   min-height: 120px;
   width: 100%;
+}
+
+.meditor-mermaid:hover .meditor-mermaid-actions,
+.meditor-mermaid:focus-within .meditor-mermaid-actions {
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
+}
+
+@media (hover: none) {
+  .meditor-mermaid .meditor-mermaid-actions {
+    opacity: 1;
+    pointer-events: auto;
+    visibility: visible;
+  }
 }
 </style>
