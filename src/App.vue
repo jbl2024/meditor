@@ -3060,8 +3060,8 @@ onBeforeUnmount(() => {
 }
 
 .ide-root.dark {
-  background: #020617;
-  color: #e2e8f0;
+  background: #282c34;
+  color: #abb2bf;
 }
 
 .topbar {
@@ -3074,8 +3074,8 @@ onBeforeUnmount(() => {
 }
 
 .ide-root.dark .topbar {
-  border-bottom-color: #1e293b;
-  background: #0f172a;
+  border-bottom-color: #3e4451;
+  background: #21252b;
 }
 
 .tabs-row {
@@ -3107,8 +3107,8 @@ onBeforeUnmount(() => {
 }
 
 .ide-root.dark .tab-item {
-  border-right-color: #1e293b;
-  color: #94a3b8;
+  border-right-color: #3e4451;
+  color: #5c6370;
 }
 
 .tab-item.active {
@@ -3118,9 +3118,13 @@ onBeforeUnmount(() => {
 }
 
 .ide-root.dark .tab-item.active {
-  border-bottom-color: #e2e8f0;
+  border-bottom-color: #abb2bf;
   background: transparent;
-  color: #e2e8f0;
+  color: #abb2bf;
+}
+
+.ide-root.dark .tab-item:not(.active):hover {
+  color: #abb2bf;
 }
 
 .tab-item:not(.active):hover {
@@ -3272,40 +3276,40 @@ onBeforeUnmount(() => {
 }
 
 .ide-root.dark .toolbar-icon-btn {
-  color: #94a3b8;
+  color: #5c6370;
 }
 
 .ide-root.dark .toolbar-icon-btn:hover {
-  background: #1e293b;
-  color: #cbd5e1;
+  background: #2c313a;
+  color: #abb2bf;
 }
 
 .ide-root.dark .toolbar-icon-btn.active {
-  border-color: #334155;
-  background: #020617;
-  color: #e2e8f0;
+  border-color: #3e4451;
+  background: #282c34;
+  color: #abb2bf;
 }
 
 .ide-root.dark .nav-actions {
-  border-right-color: #1e293b;
+  border-right-color: #3e4451;
 }
 
 .ide-root.dark .history-menu {
-  border-color: #334155;
-  background: #0b1220;
-  box-shadow: 0 12px 28px rgba(2, 6, 23, 0.5);
+  border-color: #3e4451;
+  background: #21252b;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.3);
 }
 
 .ide-root.dark .history-menu-item {
-  color: #cbd5e1;
+  color: #abb2bf;
 }
 
 .ide-root.dark .history-menu-item:hover {
-  background: #1e293b;
+  background: #2c313a;
 }
 
 .ide-root.dark .history-menu-empty {
-  color: #94a3b8;
+  color: #5c6370;
 }
 
 .overflow-wrap {
@@ -3329,9 +3333,9 @@ onBeforeUnmount(() => {
 }
 
 .ide-root.dark .overflow-menu {
-  border-color: #334155;
-  background: #0b1220;
-  box-shadow: 0 12px 28px rgba(2, 6, 23, 0.5);
+  border-color: #3e4451;
+  background: #21252b;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.3);
 }
 
 .overflow-item {
@@ -3364,11 +3368,11 @@ onBeforeUnmount(() => {
 }
 
 .ide-root.dark .overflow-item {
-  color: #cbd5e1;
+  color: #abb2bf;
 }
 
 .ide-root.dark .overflow-item:hover {
-  background: #1e293b;
+  background: #2c313a;
 }
 
 .ide-root.dark .overflow-item:disabled {
@@ -3376,8 +3380,8 @@ onBeforeUnmount(() => {
 }
 
 .ide-root.dark .overflow-item.active {
-  background: #334155;
-  color: #f8fafc;
+  background: #3e4451;
+  color: #e5e7eb;
 }
 
 .overflow-item-icon {
@@ -3407,7 +3411,7 @@ onBeforeUnmount(() => {
 }
 
 .ide-root.dark .overflow-zoom-state {
-  color: #94a3b8;
+  color: #5c6370;
 }
 
 .overflow-divider {
@@ -3417,7 +3421,7 @@ onBeforeUnmount(() => {
 }
 
 .ide-root.dark .overflow-divider {
-  background: #334155;
+  background: #3e4451;
 }
 
 .overflow-label {
@@ -3429,7 +3433,7 @@ onBeforeUnmount(() => {
 }
 
 .ide-root.dark .overflow-label {
-  color: #94a3b8;
+  color: #5c6370;
 }
 
 .body-row {
@@ -3470,8 +3474,8 @@ onBeforeUnmount(() => {
 }
 
 .ide-root.dark .activity-bar {
-  border-right-color: #1e293b;
-  background: #0f172a;
+  border-right-color: #3e4451;
+  background: #21252b;
 }
 
 .activity-btn {
@@ -3505,18 +3509,18 @@ onBeforeUnmount(() => {
 }
 
 .ide-root.dark .activity-btn {
-  color: #94a3b8;
+  color: #5c6370;
 }
 
 .ide-root.dark .activity-btn.active {
-  color: #e2e8f0;
-  border-color: #334155;
-  background: #020617;
+  color: #abb2bf;
+  border-color: #3e4451;
+  background: #282c34;
 }
 
 .ide-root.dark .activity-btn:hover {
-  background: #1e293b;
-  color: #cbd5e1;
+  background: #2c313a;
+  color: #abb2bf;
 }
 
 .left-sidebar,
@@ -3542,8 +3546,8 @@ onBeforeUnmount(() => {
 
 .ide-root.dark .left-sidebar,
 .ide-root.dark .right-pane {
-  background: #0b1220;
-  border-color: #1e293b;
+  background: #21252b;
+  border-color: #3e4451;
 }
 
 .panel-header {
@@ -3556,7 +3560,7 @@ onBeforeUnmount(() => {
 }
 
 .ide-root.dark .panel-header {
-  border-bottom-color: #1e293b;
+  border-bottom-color: #3e4451;
 }
 
 .panel-title {
@@ -3601,11 +3605,11 @@ onBeforeUnmount(() => {
 }
 
 .ide-root.dark .inline-link-btn {
-  color: #60a5fa;
+  color: #61afef;
 }
 
 .ide-root.dark .inline-link-btn:hover {
-  color: #93c5fd;
+  color: #7ec5ff;
 }
 
 .search-panel {
@@ -3631,9 +3635,9 @@ onBeforeUnmount(() => {
 }
 
 .ide-root.dark .tool-input {
-  border-color: #334155;
-  background: #020617;
-  color: #e2e8f0;
+  border-color: #3e4451;
+  background: #282c34;
+  color: #abb2bf;
 }
 
 .results-list {
@@ -3664,9 +3668,9 @@ onBeforeUnmount(() => {
 }
 
 .ide-root.dark .result-item {
-  border-color: #1e293b;
-  background: #020617;
-  color: #cbd5e1;
+  border-color: #3e4451;
+  background: #21252b;
+  color: #abb2bf;
 }
 
 .result-snippet :deep(strong) {
@@ -3703,7 +3707,7 @@ onBeforeUnmount(() => {
 }
 
 .ide-root.dark .splitter::before {
-  background: #64748b;
+  background: #5c6370;
 }
 
 .center-area {
@@ -3714,7 +3718,7 @@ onBeforeUnmount(() => {
 }
 
 .ide-root.dark .center-area {
-  background: #020617;
+  background: #282c34;
 }
 
 .pane-section {
@@ -3723,7 +3727,7 @@ onBeforeUnmount(() => {
 }
 
 .ide-root.dark .pane-section {
-  border-bottom-color: #1e293b;
+  border-bottom-color: #3e4451;
 }
 
 .pane-section h3 {
@@ -3769,7 +3773,7 @@ onBeforeUnmount(() => {
 }
 
 .ide-root.dark .meta-row span:last-child {
-  color: #cbd5e1;
+  color: #abb2bf;
 }
 
 .status-bar {
@@ -3787,9 +3791,9 @@ onBeforeUnmount(() => {
 }
 
 .ide-root.dark .status-bar {
-  border-top-color: #1e293b;
-  background: #0f172a;
-  color: #94a3b8;
+  border-top-color: #3e4451;
+  background: #21252b;
+  color: #5c6370;
 }
 
 .status-item {
@@ -3810,7 +3814,7 @@ onBeforeUnmount(() => {
 }
 
 .ide-root.dark .status-item + .status-item {
-  border-left-color: #1e293b;
+  border-left-color: #3e4451;
 }
 
 .toast {
@@ -3846,21 +3850,21 @@ onBeforeUnmount(() => {
 }
 
 .ide-root.dark .toast-error {
-  border-color: #be123c;
-  background: #3b0a1a;
-  color: #fecdd3;
+  border-color: #e06c75;
+  background: #3b1e22;
+  color: #e06c75;
 }
 
 .ide-root.dark .toast-success {
-  border-color: #166534;
-  background: #0b2a16;
-  color: #bbf7d0;
+  border-color: #98c379;
+  background: #1e3a22;
+  color: #98c379;
 }
 
 .ide-root.dark .toast-info {
-  border-color: #1d4ed8;
-  background: #0f1f45;
-  color: #bfdbfe;
+  border-color: #61afef;
+  background: #1e2a3a;
+  color: #61afef;
 }
 
 .toast-close {
@@ -3897,8 +3901,8 @@ onBeforeUnmount(() => {
 }
 
 .ide-root.dark .modal {
-  border-color: #334155;
-  background: #020617;
+  border-color: #3e4451;
+  background: #282c34;
 }
 
 .shortcuts-modal {
@@ -3930,7 +3934,7 @@ onBeforeUnmount(() => {
 }
 
 .ide-root.dark .shortcuts-section {
-  border-color: #334155;
+  border-color: #3e4451;
 }
 
 .shortcuts-title {
@@ -3942,7 +3946,7 @@ onBeforeUnmount(() => {
 }
 
 .ide-root.dark .shortcuts-title {
-  color: #94a3b8;
+  color: #5c6370;
 }
 
 .shortcuts-grid {
@@ -3964,9 +3968,13 @@ onBeforeUnmount(() => {
 }
 
 .ide-root.dark .shortcut-keys {
-  color: #e2e8f0;
-  background: #0f172a;
-  border-color: #334155;
+  color: #abb2bf;
+  background: #21252b;
+  border-color: #3e4451;
+}
+
+.ide-root.dark .shortcut-action {
+  color: #abb2bf;
 }
 
 .shortcut-action {
@@ -4002,14 +4010,14 @@ onBeforeUnmount(() => {
 }
 
 .ide-root.dark .modal-item {
-  border-color: #1e293b;
-  background: #0b1220;
-  color: #cbd5e1;
+  border-color: #3e4451;
+  background: #21252b;
+  color: #abb2bf;
 }
 
 .ide-root.dark .modal-item.active {
-  border-color: #475569;
-  background: #1e293b;
+  border-color: #61afef;
+  background: #2c313a;
 }
 
 .confirm-modal {
@@ -4024,7 +4032,19 @@ onBeforeUnmount(() => {
 }
 
 .ide-root.dark .confirm-title {
-  color: #f8fafc;
+  color: #e5e7eb;
+}
+
+.ide-root.dark .confirm-text {
+  color: #5c6370;
+}
+
+.ide-root.dark .modal-input-error {
+  color: #e06c75;
+}
+
+.ide-root.dark .confirm-path {
+  color: #abb2bf;
 }
 
 .confirm-text {
