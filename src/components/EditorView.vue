@@ -939,8 +939,19 @@ function openSlashAtSelection(query = '', options?: { preserveIndex?: boolean })
   const pos = editor.state.selection.from
   const rect = editor.view.coordsAtPos(pos)
   const holderRect = holder.value.getBoundingClientRect()
-  slashLeft.value = rect.left - holderRect.left + holder.value.scrollLeft
-  slashTop.value = rect.bottom - holderRect.top + holder.value.scrollTop + 8
+  let left = rect.left - holderRect.left + holder.value.scrollLeft
+  let top = rect.bottom - holderRect.top + holder.value.scrollTop + 8
+
+  const estimatedWidth = 240
+  const estimatedHeight = 360
+  const maxX = Math.max(12, window.innerWidth - estimatedWidth - 12)
+  const maxY = Math.max(12, window.innerHeight - estimatedHeight - 12)
+
+  left = Math.max(12, Math.min(left, maxX))
+  top = Math.max(12, Math.min(top, maxY))
+
+  slashLeft.value = left
+  slashTop.value = top
   const previousQuery = slashQuery.value
   const previousIndex = slashIndex.value
   slashQuery.value = query
@@ -1163,8 +1174,19 @@ function syncWikilinkUiFromPluginState() {
   )
   const rect = editor.view.coordsAtPos(anchorPos)
   const holderRect = holder.value.getBoundingClientRect()
-  wikilinkLeft.value = rect.left - holderRect.left + holder.value.scrollLeft
-  wikilinkTop.value = rect.bottom - holderRect.top + holder.value.scrollTop + 8
+  let left = rect.left - holderRect.left + holder.value.scrollLeft
+  let top = rect.bottom - holderRect.top + holder.value.scrollTop + 8
+
+  const estimatedWidth = 320
+  const estimatedHeight = 280
+  const maxX = Math.max(12, window.innerWidth - estimatedWidth - 12)
+  const maxY = Math.max(12, window.innerHeight - estimatedHeight - 12)
+
+  left = Math.max(12, Math.min(left, maxX))
+  top = Math.max(12, Math.min(top, maxY))
+
+  wikilinkLeft.value = left
+  wikilinkTop.value = top
 }
 
 function onWikilinkMenuSelect(target: string) {
@@ -1235,18 +1257,21 @@ function onEditorKeydown(event: KeyboardEvent) {
   if (slashOpen.value) {
     if (event.key === 'ArrowDown') {
       event.preventDefault()
+      event.stopPropagation()
       if (!visibleSlashCommands.value.length) return
       slashIndex.value = (slashIndex.value + 1) % visibleSlashCommands.value.length
       return
     }
     if (event.key === 'ArrowUp') {
       event.preventDefault()
+      event.stopPropagation()
       if (!visibleSlashCommands.value.length) return
       slashIndex.value = (slashIndex.value - 1 + visibleSlashCommands.value.length) % visibleSlashCommands.value.length
       return
     }
     if (event.key === 'Enter') {
       event.preventDefault()
+      event.stopPropagation()
       const command = visibleSlashCommands.value[slashIndex.value]
       if (!command) return
       closeSlashMenu()
@@ -1255,6 +1280,7 @@ function onEditorKeydown(event: KeyboardEvent) {
     }
     if (event.key === 'Escape') {
       event.preventDefault()
+      event.stopPropagation()
       closeSlashMenu()
       return
     }
