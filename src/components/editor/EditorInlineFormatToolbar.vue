@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { CodeBracketIcon, LinkIcon } from '@heroicons/vue/24/outline'
 import { nextTick, ref, watch } from 'vue'
 import type { InlineFormatMark, InlineFormatMarkOrLink } from '../../composables/useInlineFormatToolbar'
 
@@ -113,23 +114,27 @@ function onLinkInputKeydown(event: KeyboardEvent) {
     </button>
     <button
       type="button"
-      class="px-2 py-1 text-xs font-mono"
+      class="px-2 py-1 text-xs"
       data-action="code"
+      aria-label="Code"
+      title="Code"
       :class="activeMarks.code ? 'bg-slate-200 dark:bg-slate-700' : ''"
       @mousedown.prevent
       @click="emit('toggle-mark', 'code')"
     >
-      { }
+      <CodeBracketIcon class="h-4 w-4" />
     </button>
     <button
       type="button"
       class="px-2 py-1 text-xs"
       data-action="link"
+      aria-label="Link"
+      title="Link"
       :class="activeMarks.link ? 'bg-slate-200 dark:bg-slate-700' : ''"
       @mousedown.prevent
       @click="emit('open-link')"
     >
-      Link
+      <LinkIcon class="h-4 w-4" />
     </button>
 
     <div
