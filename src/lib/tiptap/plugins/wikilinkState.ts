@@ -255,7 +255,9 @@ function applySelectedCandidateToken(
   const target = String(selected?.target ?? state.query).trim()
   if (!target) return true
 
-  const token = `[[${target}]]`
+  const currentToken = view.state.doc.textBetween(range.from, range.to, '', '')
+  const alias = extractAliasFromDraftToken(currentToken)
+  const token = alias ? `[[${target}|${alias}]]` : `[[${target}]]`
   const tr = view.state.tr.insertText(token, range.from, range.to)
   const nextPos = placement === 'inside'
     ? range.from + token.length - 2
@@ -272,6 +274,20 @@ function applySelectedCandidateToken(
   }
 
   return true
+}
+
+function extractAliasFromDraftToken(token: string): string | null {
+  if (!token.startsWith('[[')) return null
+  const closeIndex = token.indexOf(']]', 2)
+  const inner = (closeIndex >= 0 ? token.slice(2, closeIndex) : token.slice(2)).trim()
+  if (!inner || inner.includes('[') || inner.includes(']')) return null
+
+  const pipeIndex = inner.indexOf('|')
+  if (pipeIndex < 0) return null
+  if (inner.indexOf('|', pipeIndex + 1) >= 0) return null
+
+  const alias = inner.slice(pipeIndex + 1).trim()
+  return alias || null
 }
 
 export function createWikilinkStatePlugin(editor: Editor, options: WikilinkStateOptions) {

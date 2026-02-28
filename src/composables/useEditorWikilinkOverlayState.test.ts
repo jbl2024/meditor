@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { TextSelection } from '@tiptap/pm/state'
 import { useEditorWikilinkOverlayState } from './useEditorWikilinkOverlayState'
 
 const getWikilinkPluginStateMock = vi.fn()
@@ -120,5 +121,40 @@ describe('useEditorWikilinkOverlayState', () => {
 
     expect(wikilink.wikilinkOpen.value).toBe(false)
     expect(wikilink.wikilinkResults.value).toEqual([])
+  })
+
+  it('preserves alias when selecting a candidate and annotates create label', () => {
+    const selectionSpy = vi.spyOn(TextSelection, 'create').mockReturnValue({} as any)
+    const { editor, tr } = createEditor()
+    ;(editor.state.doc.textBetween as any).mockReturnValue('[[Another.md|alias]]')
+    getWikilinkPluginStateMock.mockReturnValue({
+      open: true,
+      mode: 'editing',
+      editingRange: { from: 20, to: 40 },
+      selectedIndex: 0,
+      candidates: [{ target: 'Another.md', label: 'Create "Another.md"', isCreate: true }]
+    })
+
+    const wikilink = useEditorWikilinkOverlayState({
+      getEditor: () => editor as any,
+      holder: ref(document.createElement('div')),
+      blockMenuOpen: ref(false),
+      isDragMenuOpen: () => false,
+      closeBlockMenu: () => {}
+    })
+
+    wikilink.syncWikilinkUiFromPluginState()
+    expect(wikilink.wikilinkResults.value).toEqual([
+      {
+        id: 'create:Another.md',
+        label: 'Create "Another.md" as "alias"',
+        target: 'Another.md',
+        isCreate: true
+      }
+    ])
+
+    wikilink.onWikilinkMenuSelect('Another.md')
+    expect((tr.insertText as any).mock.calls.at(-1)).toEqual(['[[Another.md|alias]]', 20, 40])
+    selectionSpy.mockRestore()
   })
 })

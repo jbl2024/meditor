@@ -110,9 +110,13 @@ export function useEditorWikilinkOverlayState(options: UseEditorWikilinkOverlayS
     }
     wikilinkIndex.value = state.selectedIndex
     wikilinkEditingRange.value = state.editingRange
+    const currentToken = editor.state.doc.textBetween(state.editingRange.from, state.editingRange.to, '', '')
+    const currentAlias = extractAliasFromDraftToken(currentToken)
     wikilinkResults.value = state.candidates.map((candidate) => ({
       id: `${candidate.isCreate ? 'create' : 'existing'}:${candidate.target}`,
-      label: candidate.label ?? candidate.target,
+      label: candidate.isCreate && currentAlias
+        ? `Create "${candidate.target}" as "${currentAlias}"`
+        : (candidate.label ?? candidate.target),
       target: candidate.target,
       isCreate: Boolean(candidate.isCreate)
     }))
@@ -146,7 +150,9 @@ export function useEditorWikilinkOverlayState(options: UseEditorWikilinkOverlayS
     const trimmedTarget = target.trim()
     if (!trimmedTarget) return
     const range = wikilinkEditingRange.value
-    const token = `[[${trimmedTarget}]]`
+    const currentToken = editor.state.doc.textBetween(range.from, range.to, '', '')
+    const alias = extractAliasFromDraftToken(currentToken)
+    const token = alias ? `[[${trimmedTarget}|${alias}]]` : `[[${trimmedTarget}]]`
     const tr = editor.state.tr.insertText(token, range.from, range.to)
     const nextPos = placement === 'inside'
       ? range.from + token.length - 2
@@ -195,4 +201,18 @@ export function useEditorWikilinkOverlayState(options: UseEditorWikilinkOverlayS
     onWikilinkMenuSelect,
     onWikilinkMenuIndexUpdate
   }
+}
+
+function extractAliasFromDraftToken(token: string): string | null {
+  if (!token.startsWith('[[')) return null
+  const closeIndex = token.indexOf(']]', 2)
+  const inner = (closeIndex >= 0 ? token.slice(2, closeIndex) : token.slice(2)).trim()
+  if (!inner || inner.includes('[') || inner.includes(']')) return null
+
+  const pipeIndex = inner.indexOf('|')
+  if (pipeIndex < 0) return null
+  if (inner.indexOf('|', pipeIndex + 1) >= 0) return null
+
+  const alias = inner.slice(pipeIndex + 1).trim()
+  return alias || null
 }
