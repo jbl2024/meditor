@@ -144,6 +144,14 @@ const tableAddRightVisible = ref(false)
 const tableToolbarTriggerVisible = ref(false)
 const tableToolbarHovering = ref(false)
 const tableToolbarActions = ref<TableToolbarAction[]>([])
+let tableEdgeTopSeenAt = 0
+let tableEdgeBottomSeenAt = 0
+let tableEdgeLeftSeenAt = 0
+let tableEdgeRightSeenAt = 0
+let tableHoverHideTimer: ReturnType<typeof setTimeout> | null = null
+const TABLE_EDGE_SHOW_THRESHOLD = 20
+const TABLE_EDGE_STICKY_THRESHOLD = 44
+const TABLE_EDGE_STICKY_MS = 280
 const TABLE_MARKDOWN_MODE = true
 const DRAG_HANDLE_PLUGIN_KEY = 'meditor-drag-handle'
 const DRAG_HANDLE_DEBUG = false
@@ -701,6 +709,10 @@ function hideTableToolbar() {
 }
 
 function hideTableToolbarAnchor() {
+  if (tableHoverHideTimer) {
+    clearTimeout(tableHoverHideTimer)
+    tableHoverHideTimer = null
+  }
   hideTableToolbar()
   tableToolbarHovering.value = false
   tableToolbarTriggerVisible.value = false
@@ -708,6 +720,10 @@ function hideTableToolbarAnchor() {
   tableAddBottomVisible.value = false
   tableAddLeftVisible.value = false
   tableAddRightVisible.value = false
+  tableEdgeTopSeenAt = 0
+  tableEdgeBottomSeenAt = 0
+  tableEdgeLeftSeenAt = 0
+  tableEdgeRightSeenAt = 0
   tableToolbarActions.value = []
 }
 
@@ -816,12 +832,20 @@ function updateTableToolbar() {
 }
 
 function onEditorMouseMove(event: MouseEvent) {
+  if (tableHoverHideTimer) {
+    clearTimeout(tableHoverHideTimer)
+    tableHoverHideTimer = null
+  }
   if (!editor?.isActive('table')) {
     tableToolbarHovering.value = false
     tableAddTopVisible.value = false
     tableAddBottomVisible.value = false
     tableAddLeftVisible.value = false
     tableAddRightVisible.value = false
+    tableEdgeTopSeenAt = 0
+    tableEdgeBottomSeenAt = 0
+    tableEdgeLeftSeenAt = 0
+    tableEdgeRightSeenAt = 0
     return
   }
   const target = event.target
@@ -831,30 +855,50 @@ function onEditorMouseMove(event: MouseEvent) {
   const rect = tableEl.getBoundingClientRect()
   const x = event.clientX
   const y = event.clientY
-  const edgeThreshold = 24
+  const now = performance.now()
+  const topThreshold = tableAddTopVisible.value ? TABLE_EDGE_STICKY_THRESHOLD : TABLE_EDGE_SHOW_THRESHOLD
+  const bottomThreshold = tableAddBottomVisible.value ? TABLE_EDGE_STICKY_THRESHOLD : TABLE_EDGE_SHOW_THRESHOLD
+  const leftThreshold = tableAddLeftVisible.value ? TABLE_EDGE_STICKY_THRESHOLD : TABLE_EDGE_SHOW_THRESHOLD
+  const rightThreshold = tableAddRightVisible.value ? TABLE_EDGE_STICKY_THRESHOLD : TABLE_EDGE_SHOW_THRESHOLD
   const inVerticalBand = y >= rect.top - 24 && y <= rect.bottom + 24
   const inHorizontalBand = x >= rect.left - 24 && x <= rect.right + 24
-  const nearLeft = Math.abs(x - rect.left) <= edgeThreshold && inVerticalBand
-  const nearRight = Math.abs(x - rect.right) <= edgeThreshold && inVerticalBand
-  const nearTop = Math.abs(y - rect.top) <= edgeThreshold && inHorizontalBand
-  const nearBottom = Math.abs(y - rect.bottom) <= edgeThreshold && inHorizontalBand
+  const nearLeft = Math.abs(x - rect.left) <= leftThreshold && inVerticalBand
+  const nearRight = Math.abs(x - rect.right) <= rightThreshold && inVerticalBand
+  const nearTop = Math.abs(y - rect.top) <= topThreshold && inHorizontalBand
+  const nearBottom = Math.abs(y - rect.bottom) <= bottomThreshold && inHorizontalBand
+  if (nearTop) tableEdgeTopSeenAt = now
+  if (nearBottom) tableEdgeBottomSeenAt = now
+  if (nearLeft) tableEdgeLeftSeenAt = now
+  if (nearRight) tableEdgeRightSeenAt = now
+  const stickyTop = now - tableEdgeTopSeenAt <= TABLE_EDGE_STICKY_MS
+  const stickyBottom = now - tableEdgeBottomSeenAt <= TABLE_EDGE_STICKY_MS
+  const stickyLeft = now - tableEdgeLeftSeenAt <= TABLE_EDGE_STICKY_MS
+  const stickyRight = now - tableEdgeRightSeenAt <= TABLE_EDGE_STICKY_MS
   const inToolbar = Boolean(tableToolbarFloatingEl.value?.contains(target))
   const inControls = Boolean(target.closest('.meditor-table-control'))
   const inTable = Boolean(target.closest('.ProseMirror table'))
-  tableAddTopVisible.value = nearTop || inControls || tableToolbarOpen.value
-  tableAddBottomVisible.value = nearBottom || inControls || tableToolbarOpen.value
-  tableAddLeftVisible.value = nearLeft || inControls || tableToolbarOpen.value
-  tableAddRightVisible.value = nearRight || inControls || tableToolbarOpen.value
+  tableAddTopVisible.value = nearTop || stickyTop || inControls || tableToolbarOpen.value
+  tableAddBottomVisible.value = nearBottom || stickyBottom || inControls || tableToolbarOpen.value
+  tableAddLeftVisible.value = nearLeft || stickyLeft || inControls || tableToolbarOpen.value
+  tableAddRightVisible.value = nearRight || stickyRight || inControls || tableToolbarOpen.value
   tableToolbarHovering.value = inTable || inToolbar || inControls || tableToolbarOpen.value
 }
 
 function onEditorMouseLeave() {
   if (tableToolbarOpen.value) return
-  tableToolbarHovering.value = false
-  tableAddTopVisible.value = false
-  tableAddBottomVisible.value = false
-  tableAddLeftVisible.value = false
-  tableAddRightVisible.value = false
+  if (tableHoverHideTimer) clearTimeout(tableHoverHideTimer)
+  tableHoverHideTimer = setTimeout(() => {
+    tableToolbarHovering.value = false
+    tableAddTopVisible.value = false
+    tableAddBottomVisible.value = false
+    tableAddLeftVisible.value = false
+    tableAddRightVisible.value = false
+    tableEdgeTopSeenAt = 0
+    tableEdgeBottomSeenAt = 0
+    tableEdgeLeftSeenAt = 0
+    tableEdgeRightSeenAt = 0
+    tableHoverHideTimer = null
+  }, 120)
 }
 
 function closestAnchorFromEventTarget(target: EventTarget | null): HTMLAnchorElement | null {
@@ -1755,6 +1799,10 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(async () => {
+  if (tableHoverHideTimer) {
+    clearTimeout(tableHoverHideTimer)
+    tableHoverHideTimer = null
+  }
   if (mermaidReplaceDialog.value.resolve) {
     mermaidReplaceDialog.value.resolve(false)
   }
@@ -1960,7 +2008,7 @@ defineExpose({
             :key="`editor-drag:${currentPath}`"
             :editor="renderedEditor"
             :plugin-key="DRAG_HANDLE_PLUGIN_KEY"
-            :compute-position-config="{ placement: 'left' }"
+            :compute-position-config="{ placement: 'left-start' }"
             class="meditor-drag-handle"
             :nested="true"
             :on-node-change="onBlockHandleNodeChange"
@@ -2023,7 +2071,7 @@ defineExpose({
             v-if="tableToolbarTriggerVisible"
             class="meditor-table-edge meditor-table-edge-top absolute z-30 meditor-table-control"
             :class="{ 'is-visible': tableAddTopVisible }"
-            :style="{ left: `${tableBoxLeft}px`, top: `${tableBoxTop - 24}px`, width: `${tableBoxWidth}px` }"
+            :style="{ left: `${tableBoxLeft}px`, top: `${tableBoxTop - 20}px`, width: `${tableBoxWidth}px` }"
           >
             <button
               type="button"
@@ -2040,7 +2088,7 @@ defineExpose({
             v-if="tableToolbarTriggerVisible"
             class="meditor-table-edge meditor-table-edge-bottom absolute z-30 meditor-table-control"
             :class="{ 'is-visible': tableAddBottomVisible }"
-            :style="{ left: `${tableBoxLeft}px`, top: `${tableBoxTop + tableBoxHeight + 4}px`, width: `${tableBoxWidth}px` }"
+            :style="{ left: `${tableBoxLeft}px`, top: `${tableBoxTop + tableBoxHeight}px`, width: `${tableBoxWidth}px` }"
           >
             <button
               type="button"
@@ -2057,7 +2105,7 @@ defineExpose({
             v-if="tableToolbarTriggerVisible"
             class="meditor-table-edge meditor-table-edge-left absolute z-30 meditor-table-control"
             :class="{ 'is-visible': tableAddLeftVisible }"
-            :style="{ left: `${tableBoxLeft - 24}px`, top: `${tableBoxTop}px`, height: `${tableBoxHeight}px` }"
+            :style="{ left: `${tableBoxLeft - 20}px`, top: `${tableBoxTop}px`, height: `${tableBoxHeight}px` }"
           >
             <button
               type="button"
@@ -2074,7 +2122,7 @@ defineExpose({
             v-if="tableToolbarTriggerVisible"
             class="meditor-table-edge meditor-table-edge-right absolute z-30 meditor-table-control"
             :class="{ 'is-visible': tableAddRightVisible }"
-            :style="{ left: `${tableBoxLeft + tableBoxWidth + 4}px`, top: `${tableBoxTop}px`, height: `${tableBoxHeight}px` }"
+            :style="{ left: `${tableBoxLeft + tableBoxWidth}px`, top: `${tableBoxTop}px`, height: `${tableBoxHeight}px` }"
           >
             <button
               type="button"
