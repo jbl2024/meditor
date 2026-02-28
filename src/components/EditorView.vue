@@ -19,10 +19,8 @@ import {
 import { EDITOR_SLASH_COMMANDS } from '../lib/editorSlashCommands'
 import { openExternalUrl } from '../lib/api'
 import EditorPropertiesPanel from './editor/EditorPropertiesPanel.vue'
-import EditorSlashMenu from './editor/EditorSlashMenu.vue'
-import EditorWikilinkMenu from './editor/EditorWikilinkMenu.vue'
-import EditorBlockMenu from './editor/EditorBlockMenu.vue'
-import EditorTableToolbar from './editor/EditorTableToolbar.vue'
+import EditorFloatingOverlays from './editor/EditorFloatingOverlays.vue'
+import EditorTableEdgeControls from './editor/EditorTableEdgeControls.vue'
 import EditorInlineFormatToolbar from './editor/EditorInlineFormatToolbar.vue'
 import EditorLargeDocOverlay from './editor/EditorLargeDocOverlay.vue'
 import EditorMermaidReplaceDialog from './editor/EditorMermaidReplaceDialog.vue'
@@ -31,13 +29,15 @@ import { useFrontmatterProperties } from '../composables/useFrontmatterPropertie
 import { useEditorZoom } from '../composables/useEditorZoom'
 import { useMermaidReplaceDialog } from '../composables/useMermaidReplaceDialog'
 import { useInlineFormatToolbar } from '../composables/useInlineFormatToolbar'
-import { applyMarkdownShortcut, isEditorZoomModifier, isLikelyMarkdownPaste, isZoomInShortcut, isZoomOutShortcut, isZoomResetShortcut } from '../lib/editorInteractions'
+import { useEditorInputHandlers } from '../composables/useEditorInputHandlers'
 import { normalizeBlockId, normalizeHeadingAnchor, parseWikilinkTarget, slugifyHeading } from '../lib/wikilinks'
 import { toTiptapDoc } from '../lib/tiptap/editorBlocksToTiptapDoc'
 import { fromTiptapDoc } from '../lib/tiptap/tiptapDocToEditorBlocks'
 import { TIPTAP_NODE_TYPES } from '../lib/tiptap/types'
 import { toPersistedTextSelection } from '../lib/tiptap/selectionSnapshot'
 import { useDocumentEditorSessions, type PaneId } from '../composables/useDocumentEditorSessions'
+import { useEditorNavigation, type EditorHeadingNode } from '../composables/useEditorNavigation'
+import { useSlashMenu } from '../composables/useSlashMenu'
 import { CalloutNode } from '../lib/tiptap/extensions/CalloutNode'
 import { MermaidNode } from '../lib/tiptap/extensions/MermaidNode'
 import { QuoteNode } from '../lib/tiptap/extensions/QuoteNode'
@@ -61,7 +61,7 @@ import { applyTableAction } from '../lib/tiptap/tableCommands'
 
 const VIRTUAL_TITLE_BLOCK_ID = '__virtual_title__'
 
-type HeadingNode = { level: 1 | 2 | 3; text: string }
+type HeadingNode = EditorHeadingNode
 type CorePropertyOption = { key: string; label?: string; description?: string }
 const CORE_PROPERTY_OPTIONS: CorePropertyOption[] = [
   { key: 'tags', label: 'tags', description: 'Tag list' },
@@ -107,13 +107,6 @@ const loadProgressPercent = ref(0)
 const loadProgressIndeterminate = ref(false)
 const loadDocumentStats = ref<{ chars: number; lines: number } | null>(null)
 const LARGE_DOC_THRESHOLD = 50_000
-
-const slashOpen = ref(false)
-const slashIndex = ref(0)
-const slashLeft = ref(0)
-const slashTop = ref(0)
-const slashQuery = ref('')
-const slashActivatedByUser = ref(false)
 
 const wikilinkOpen = ref(false)
 const wikilinkIndex = ref(0)
@@ -199,11 +192,23 @@ const currentPath = computed(() => props.path?.trim() || '')
 const sessionStore = useDocumentEditorSessions({
   createEditor: (path) => createSessionEditor(path)
 })
-const visibleSlashCommands = computed(() => {
-  const query = slashQuery.value.trim().toLowerCase()
-  if (!query) return SLASH_COMMANDS
-  return SLASH_COMMANDS.filter((command) => command.label.toLowerCase().includes(query) || command.id.toLowerCase().includes(query))
+const slashCommandSource = computed(() => SLASH_COMMANDS)
+const slashMenu = useSlashMenu({
+  getEditor: () => editor,
+  commands: slashCommandSource,
+  closeCompetingMenus: () => closeBlockMenu()
 })
+const slashOpen = slashMenu.slashOpen
+const slashIndex = slashMenu.slashIndex
+const slashLeft = slashMenu.slashLeft
+const slashTop = slashMenu.slashTop
+const visibleSlashCommands = slashMenu.visibleSlashCommands
+const closeSlashMenu = slashMenu.closeSlashMenu
+const markSlashActivatedByUser = slashMenu.markSlashActivatedByUser
+const currentTextSelectionContext = slashMenu.currentTextSelectionContext
+const readSlashContext = slashMenu.readSlashContext
+const openSlashAtSelection = slashMenu.openSlashAtSelection
+const syncSlashMenuFromSelection = slashMenu.syncSlashMenuFromSelection
 
 const inlineFormatToolbar = useInlineFormatToolbar({
   holder,
@@ -249,6 +254,13 @@ const blockMenuConvertActions = computed<BlockMenuActionItem[]>(() => {
 })
 const { editorZoomStyle, initFromStorage: initEditorZoomFromStorage, zoomBy: zoomEditorBy, resetZoom: resetEditorZoom, getZoom } = useEditorZoom()
 const { mermaidReplaceDialog, resolveMermaidReplaceDialog, requestMermaidReplaceConfirm } = useMermaidReplaceDialog()
+const navigation = useEditorNavigation({
+  getEditor: () => editor,
+  emitOutline: (headings) => emit('outline', headings),
+  normalizeHeadingAnchor,
+  slugifyHeading,
+  normalizeBlockId
+})
 
 function getSession(path: string) {
   return sessionStore.getSession(path)
@@ -408,21 +420,6 @@ function restoreCaret(path: string) {
   return true
 }
 
-function parseOutlineFromDoc(): HeadingNode[] {
-  if (!editor) return []
-  const headings: HeadingNode[] = []
-  editor.state.doc.descendants((node) => {
-    if (node.type.name !== 'heading') return
-    if (node.attrs.isVirtualTitle) return
-    const levelRaw = Number(node.attrs.level ?? 2)
-    const level = (levelRaw >= 1 && levelRaw <= 3 ? levelRaw : 3) as 1 | 2 | 3
-    const text = node.textContent.trim()
-    if (!text) return
-    headings.push({ level, text })
-  })
-  return headings
-}
-
 function clearOutlineTimer(path: string) {
   const session = getSession(path)
   if (!session || !session.outlineTimer) return
@@ -436,18 +433,8 @@ function emitOutlineSoon(path: string) {
   clearOutlineTimer(path)
   session.outlineTimer = setTimeout(() => {
     if (currentPath.value !== path) return
-    emit('outline', parseOutlineFromDoc())
+    emit('outline', navigation.parseOutlineFromDoc())
   }, 120)
-}
-
-function closeSlashMenu() {
-  slashOpen.value = false
-  slashIndex.value = 0
-  slashQuery.value = ''
-}
-
-function markSlashActivatedByUser() {
-  slashActivatedByUser.value = true
 }
 
 function closeWikilinkMenu() {
@@ -1117,7 +1104,7 @@ function createSessionEditor(path: string): Editor {
 }
 
 function resetTransientUiState() {
-  slashActivatedByUser.value = false
+  slashMenu.slashActivatedByUser.value = false
   closeSlashMenu()
   closeWikilinkMenu()
   closeBlockMenu()
@@ -1284,71 +1271,6 @@ async function saveCurrentFile(manual = true) {
   }
 }
 
-function openSlashAtSelection(query = '', options?: { preserveIndex?: boolean }) {
-  if (!editor || !holder.value) return
-  closeBlockMenu()
-  const pos = editor.state.selection.from
-  const rect = editor.view.coordsAtPos(pos)
-  let left = rect.left
-  let top = rect.bottom + 8
-
-  const estimatedWidth = 240
-  const estimatedHeight = 360
-  const maxX = Math.max(12, window.innerWidth - estimatedWidth - 12)
-  const maxY = Math.max(12, window.innerHeight - estimatedHeight - 12)
-
-  left = Math.max(12, Math.min(left, maxX))
-  top = Math.max(12, Math.min(top, maxY))
-
-  slashLeft.value = left
-  slashTop.value = top
-  const previousQuery = slashQuery.value
-  const previousIndex = slashIndex.value
-  slashQuery.value = query
-  const canPreserve = Boolean(options?.preserveIndex) && previousQuery === query
-  slashIndex.value = canPreserve ? previousIndex : 0
-  slashOpen.value = visibleSlashCommands.value.length > 0
-  if (slashOpen.value && canPreserve) {
-    slashIndex.value = Math.max(0, Math.min(slashIndex.value, visibleSlashCommands.value.length - 1))
-  }
-}
-
-function syncSlashMenuFromSelection(options?: { preserveIndex?: boolean }) {
-  const slash = readSlashContext()
-  if (slash && slashActivatedByUser.value) {
-    openSlashAtSelection(slash.query, { preserveIndex: options?.preserveIndex ?? true })
-  } else {
-    closeSlashMenu()
-  }
-}
-
-function currentTextSelectionContext() {
-  if (!editor) return null
-  const { selection } = editor.state
-  if (!selection.empty) return null
-  const { $from } = selection
-  const parent = $from.parent
-  if (!parent.isTextblock) return null
-  const text = parent.textContent
-  const from = $from.start()
-  const to = $from.end()
-  const offset = $from.parentOffset
-  return { from, to, text, offset, nodeType: parent.type.name }
-}
-
-function readSlashContext() {
-  const context = currentTextSelectionContext()
-  if (!context || context.nodeType !== 'paragraph') return null
-  const before = context.text.slice(0, context.offset)
-  const match = before.match(/^\/([a-zA-Z0-9_-]*)$/)
-  if (!match) return null
-  return {
-    query: match[1] ?? '',
-    from: context.from,
-    to: context.to
-  }
-}
-
 function insertBlockFromDescriptor(type: string, data: Record<string, unknown>) {
   if (!editor) return false
   const context = currentTextSelectionContext()
@@ -1461,7 +1383,7 @@ async function getWikilinkCandidates(query: string): Promise<WikilinkCandidate[]
     query,
     loadTargets: () => loadWikilinkTargets(),
     loadHeadings: (target) => loadWikilinkHeadings(target),
-    currentHeadings: () => parseOutlineFromDoc().map((item) => item.text),
+    currentHeadings: () => navigation.parseOutlineFromDoc().map((item) => item.text),
     resolve: (target) => resolveWikilinkTarget(target)
   })
 }
@@ -1583,129 +1505,34 @@ async function openLinkTargetWithAutosave(target: string) {
   await props.openLinkTarget(target)
 }
 
-function onEditorKeydown(event: KeyboardEvent) {
-  if (!editor) return
-
-  if (isEditorZoomModifier(event)) {
-    if (isZoomInShortcut(event)) {
-      event.preventDefault()
-      zoomEditorBy(0.1)
-      return
-    }
-    if (isZoomOutShortcut(event)) {
-      event.preventDefault()
-      zoomEditorBy(-0.1)
-      return
-    }
-    if (isZoomResetShortcut(event)) {
-      event.preventDefault()
-      resetEditorZoom()
-      return
-    }
+const inputHandlers = useEditorInputHandlers({
+  getEditor: () => editor,
+  currentPath,
+  captureCaret,
+  currentTextSelectionContext,
+  visibleSlashCommands,
+  slashOpen,
+  slashIndex,
+  closeSlashMenu,
+  insertBlockFromDescriptor,
+  blockMenuOpen,
+  closeBlockMenu: () => closeBlockMenu(),
+  tableToolbarOpen,
+  hideTableToolbar,
+  updateFormattingToolbar,
+  updateTableToolbar,
+  syncSlashMenuFromSelection,
+  zoomEditorBy,
+  resetEditorZoom,
+  inlineFormatToolbar: {
+    linkPopoverOpen: inlineFormatToolbar.linkPopoverOpen,
+    cancelLink: inlineFormatToolbar.cancelLink
   }
-
-  if (slashOpen.value) {
-    if (event.key === 'ArrowDown') {
-      event.preventDefault()
-      event.stopPropagation()
-      if (!visibleSlashCommands.value.length) return
-      slashIndex.value = (slashIndex.value + 1) % visibleSlashCommands.value.length
-      return
-    }
-    if (event.key === 'ArrowUp') {
-      event.preventDefault()
-      event.stopPropagation()
-      if (!visibleSlashCommands.value.length) return
-      slashIndex.value = (slashIndex.value - 1 + visibleSlashCommands.value.length) % visibleSlashCommands.value.length
-      return
-    }
-    if (event.key === 'Enter') {
-      event.preventDefault()
-      event.stopPropagation()
-      const command = visibleSlashCommands.value[slashIndex.value]
-      if (!command) return
-      closeSlashMenu()
-      insertBlockFromDescriptor(command.type, command.data)
-      return
-    }
-    if (event.key === 'Escape') {
-      event.preventDefault()
-      event.stopPropagation()
-      closeSlashMenu()
-      return
-    }
-  }
-
-  if ((event.key === ' ' || event.code === 'Space') && currentTextSelectionContext()?.nodeType === 'paragraph') {
-    const marker = currentTextSelectionContext()?.text.trim() ?? ''
-    const transform = applyMarkdownShortcut(marker)
-    if (transform) {
-      event.preventDefault()
-      closeSlashMenu()
-      insertBlockFromDescriptor(transform.type, transform.data)
-      return
-    }
-  }
-
-  if (event.key === 'Enter' && currentTextSelectionContext()?.nodeType === 'paragraph') {
-    const marker = currentTextSelectionContext()?.text.trim() ?? ''
-    if (marker === '```') {
-      event.preventDefault()
-      insertBlockFromDescriptor('code', { code: '' })
-    }
-  }
-
-  if (event.key === 'Escape' && blockMenuOpen.value) {
-    event.preventDefault()
-    closeBlockMenu()
-    return
-  }
-
-  if (event.key === 'Escape' && inlineFormatToolbar.linkPopoverOpen.value) {
-    event.preventDefault()
-    inlineFormatToolbar.cancelLink()
-    return
-  }
-
-  if (event.key === 'Escape' && tableToolbarOpen.value) {
-    event.preventDefault()
-    hideTableToolbar()
-  }
-}
-
-function onEditorKeyup() {
-  const path = currentPath.value
-  if (path) captureCaret(path)
-  syncSlashMenuFromSelection({ preserveIndex: true })
-  updateFormattingToolbar()
-  updateTableToolbar()
-}
-
-function onEditorContextMenu(event: MouseEvent) {
-  const target = event.target as HTMLElement | null
-  const heading = target?.closest('h1') as HTMLElement | null
-  if (!heading) return
-  if (heading.closest('[data-virtual-title="true"]') || heading.parentElement?.getAttribute('data-virtual-title') === 'true') {
-    event.preventDefault()
-    event.stopPropagation()
-  }
-}
-
-function onEditorPaste(event: ClipboardEvent) {
-  if (!editor) return
-  const plain = event.clipboardData?.getData('text/plain') ?? ''
-  const html = event.clipboardData?.getData('text/html') ?? ''
-  if (!isLikelyMarkdownPaste(plain, html)) return
-  const parsed = markdownToEditorData(plain)
-  if (!parsed.blocks.length) return
-
-  event.preventDefault()
-  event.stopPropagation()
-
-  const json = toTiptapDoc(parsed.blocks as EditorBlock[])
-  const content = Array.isArray(json.content) ? json.content : []
-  editor.chain().focus().insertContent(content).run()
-}
+})
+const onEditorKeydown = inputHandlers.onEditorKeydown
+const onEditorKeyup = inputHandlers.onEditorKeyup
+const onEditorContextMenu = inputHandlers.onEditorContextMenu
+const onEditorPaste = inputHandlers.onEditorPaste
 
 watch(
   () => props.path,
@@ -1803,75 +1630,6 @@ onBeforeUnmount(async () => {
   editor = null
 })
 
-async function revealOutlineHeading(index: number) {
-  if (!editor) return
-  let visibleIndex = 0
-  let targetPos = -1
-  editor.state.doc.descendants((node, pos) => {
-    if (node.type.name !== 'heading') return
-    if (node.attrs.isVirtualTitle) return
-    if (visibleIndex === index) {
-      targetPos = pos + 1
-      return false
-    }
-    visibleIndex += 1
-  })
-  if (targetPos <= 0) return
-  editor.chain().focus().setTextSelection(targetPos).scrollIntoView().run()
-}
-
-async function revealSnippet(snippet: string) {
-  if (!editor || !snippet) return
-  const normalizedSnippet = snippet.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase()
-  if (!normalizedSnippet) return
-
-  let targetPos = -1
-  editor.state.doc.descendants((node, pos) => {
-    if (!node.isText) return
-    const value = (node.text ?? '').replace(/\s+/g, ' ').toLowerCase()
-    const idx = value.indexOf(normalizedSnippet)
-    if (idx >= 0) {
-      targetPos = pos + idx
-      return false
-    }
-  })
-
-  if (targetPos <= 0) return
-  editor.chain().focus().setTextSelection(targetPos + 1).scrollIntoView().run()
-}
-
-async function revealAnchor(anchor: { heading?: string; blockId?: string }): Promise<boolean> {
-  if (!editor || (!anchor.heading && !anchor.blockId)) return false
-
-  let targetPos = -1
-  if (anchor.heading) {
-    const wanted = normalizeHeadingAnchor(anchor.heading)
-    editor.state.doc.descendants((node, pos) => {
-      if (node.type.name !== 'heading' || node.attrs.isVirtualTitle) return
-      const text = node.textContent.trim()
-      if (!text) return
-      if (normalizeHeadingAnchor(text) === wanted || slugifyHeading(text) === slugifyHeading(anchor.heading ?? '')) {
-        targetPos = pos + 1
-        return false
-      }
-    })
-  } else if (anchor.blockId) {
-    const wanted = normalizeBlockId(anchor.blockId)
-    const matcher = new RegExp(`(^|\\s)\\^${wanted.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}(\\s|$)`, 'i')
-    editor.state.doc.descendants((node, pos) => {
-      if (!node.isText) return
-      if (matcher.test(node.text ?? '')) {
-        targetPos = pos + 1
-        return false
-      }
-    })
-  }
-
-  if (targetPos <= 0) return false
-  editor.chain().focus().setTextSelection(targetPos).scrollIntoView().run()
-  return true
-}
-
 function focusEditor() {
   editor?.commands.focus()
 }
@@ -1907,9 +1665,9 @@ defineExpose({
   },
   focusEditor,
   focusFirstContentBlock,
-  revealSnippet,
-  revealOutlineHeading,
-  revealAnchor,
+  revealSnippet: navigation.revealSnippet,
+  revealOutlineHeading: navigation.revealOutlineHeading,
+  revealAnchor: navigation.revealAnchor,
   zoomIn: () => {
     return zoomEditorBy(0.1)
   },
@@ -2046,143 +1804,60 @@ defineExpose({
             @update:linkValue="(value) => { inlineFormatToolbar.linkValue.value = value }"
           />
 
-          <div
-            v-if="tableToolbarTriggerVisible"
-            class="meditor-table-trigger absolute z-30 meditor-table-control"
-            :class="{ 'is-visible': true }"
-            :style="{ left: `${tableMenuBtnLeft}px`, top: `${tableMenuBtnTop}px` }"
-          >
-            <button
-              type="button"
-              class="meditor-table-trigger-btn"
-              aria-label="Open table actions"
-              @mousedown.prevent
-              @click.stop="toggleTableToolbar"
-            >
-              ⋮
-            </button>
-          </div>
+          <EditorTableEdgeControls
+            :trigger-visible="tableToolbarTriggerVisible"
+            :trigger-left="tableMenuBtnLeft"
+            :trigger-top="tableMenuBtnTop"
+            :add-top-visible="tableAddTopVisible"
+            :add-bottom-visible="tableAddBottomVisible"
+            :add-left-visible="tableAddLeftVisible"
+            :add-right-visible="tableAddRightVisible"
+            :table-box-left="tableBoxLeft"
+            :table-box-top="tableBoxTop"
+            :table-box-width="tableBoxWidth"
+            :table-box-height="tableBoxHeight"
+            @toggle="toggleTableToolbar"
+            @add-row-before="addRowBeforeFromTrigger"
+            @add-row-after="addRowAfterFromTrigger"
+            @add-column-before="addColumnBeforeFromTrigger"
+            @add-column-after="addColumnAfterFromTrigger"
+          />
 
-          <div
-            v-if="tableToolbarTriggerVisible"
-            class="meditor-table-edge meditor-table-edge-top absolute z-30 meditor-table-control"
-            :class="{ 'is-visible': tableAddTopVisible }"
-            :style="{ left: `${tableBoxLeft}px`, top: `${tableBoxTop - 20}px`, width: `${tableBoxWidth}px` }"
-          >
-            <button
-              type="button"
-              class="meditor-table-trigger-btn meditor-table-plus-btn"
-              aria-label="Add row above"
-              @mousedown.prevent
-              @click.stop="addRowBeforeFromTrigger"
-            >
-              +
-            </button>
-          </div>
-
-          <div
-            v-if="tableToolbarTriggerVisible"
-            class="meditor-table-edge meditor-table-edge-bottom absolute z-30 meditor-table-control"
-            :class="{ 'is-visible': tableAddBottomVisible }"
-            :style="{ left: `${tableBoxLeft}px`, top: `${tableBoxTop + tableBoxHeight}px`, width: `${tableBoxWidth}px` }"
-          >
-            <button
-              type="button"
-              class="meditor-table-trigger-btn meditor-table-plus-btn"
-              aria-label="Add row below"
-              @mousedown.prevent
-              @click.stop="addRowAfterFromTrigger"
-            >
-              +
-            </button>
-          </div>
-
-          <div
-            v-if="tableToolbarTriggerVisible"
-            class="meditor-table-edge meditor-table-edge-left absolute z-30 meditor-table-control"
-            :class="{ 'is-visible': tableAddLeftVisible }"
-            :style="{ left: `${tableBoxLeft - 20}px`, top: `${tableBoxTop}px`, height: `${tableBoxHeight}px` }"
-          >
-            <button
-              type="button"
-              class="meditor-table-trigger-btn meditor-table-plus-btn"
-              aria-label="Add column left"
-              @mousedown.prevent
-              @click.stop="addColumnBeforeFromTrigger"
-            >
-              +
-            </button>
-          </div>
-
-          <div
-            v-if="tableToolbarTriggerVisible"
-            class="meditor-table-edge meditor-table-edge-right absolute z-30 meditor-table-control"
-            :class="{ 'is-visible': tableAddRightVisible }"
-            :style="{ left: `${tableBoxLeft + tableBoxWidth}px`, top: `${tableBoxTop}px`, height: `${tableBoxHeight}px` }"
-          >
-            <button
-              type="button"
-              class="meditor-table-trigger-btn meditor-table-plus-btn"
-              aria-label="Add column right"
-              @mousedown.prevent
-              @click.stop="addColumnAfterFromTrigger"
-            >
-              +
-            </button>
-          </div>
-
-          <Teleport to="body">
-            <div :style="{ position: 'fixed', left: `${slashLeft}px`, top: `${slashTop}px`, zIndex: 50 }">
-              <EditorSlashMenu
-                :open="slashOpen"
-                :index="slashIndex"
-                :left="0"
-                :top="0"
-                :commands="visibleSlashCommands"
-                @update:index="slashIndex = $event"
-                @select="closeSlashMenu(); insertBlockFromDescriptor($event.type, $event.data)"
-              />
-            </div>
-
-            <div :style="{ position: 'fixed', left: `${wikilinkLeft}px`, top: `${wikilinkTop}px`, zIndex: 50 }">
-              <EditorWikilinkMenu
-                :open="wikilinkOpen"
-                :index="wikilinkIndex"
-                :left="0"
-                :top="0"
-                :results="wikilinkResults"
-                @menu-el="() => {}"
-                @update:index="onWikilinkMenuIndexUpdate($event)"
-                @select="onWikilinkMenuSelect($event)"
-              />
-            </div>
-
-            <div :style="{ position: 'fixed', left: `${blockMenuPos.x}px`, top: `${blockMenuPos.y}px`, zIndex: 50 }">
-              <EditorBlockMenu
-              :open="blockMenuOpen"
-              :index="blockMenuIndex"
-              :actions="blockMenuActions"
-              :convert-actions="blockMenuConvertActions"
-              @menu-el="blockMenuFloatingEl = $event"
-              @update:index="blockMenuIndex = $event"
-              @select="onBlockMenuSelect($event)"
-                @close="closeBlockMenu()"
-              />
-            </div>
-
-            <div :style="{ position: 'fixed', left: `${tableToolbarViewportLeft}px`, top: `${tableToolbarViewportTop}px`, zIndex: 52 }">
-              <EditorTableToolbar
-                :open="tableToolbarOpen"
-                :actions="tableToolbarActions"
-                :markdown-mode="TABLE_MARKDOWN_MODE"
-                :max-height-px="tableToolbarViewportMaxHeight"
-                @menu-el="tableToolbarFloatingEl = $event"
-                @select="onTableToolbarSelect($event)"
-                @close="hideTableToolbar()"
-              />
-            </div>
-
-          </Teleport>
+          <EditorFloatingOverlays
+            :slash-open="slashOpen"
+            :slash-index="slashIndex"
+            :slash-left="slashLeft"
+            :slash-top="slashTop"
+            :slash-commands="visibleSlashCommands"
+            :wikilink-open="wikilinkOpen"
+            :wikilink-index="wikilinkIndex"
+            :wikilink-left="wikilinkLeft"
+            :wikilink-top="wikilinkTop"
+            :wikilink-results="wikilinkResults"
+            :block-menu-open="blockMenuOpen"
+            :block-menu-index="blockMenuIndex"
+            :block-menu-x="blockMenuPos.x"
+            :block-menu-y="blockMenuPos.y"
+            :block-menu-actions="blockMenuActions"
+            :block-menu-convert-actions="blockMenuConvertActions"
+            :table-toolbar-open="tableToolbarOpen"
+            :table-toolbar-viewport-left="tableToolbarViewportLeft"
+            :table-toolbar-viewport-top="tableToolbarViewportTop"
+            :table-toolbar-actions="tableToolbarActions"
+            :table-markdown-mode="TABLE_MARKDOWN_MODE"
+            :table-toolbar-viewport-max-height="tableToolbarViewportMaxHeight"
+            @slash:update-index="slashIndex = $event"
+            @slash:select="closeSlashMenu(); insertBlockFromDescriptor($event.type, $event.data)"
+            @wikilink:update-index="onWikilinkMenuIndexUpdate($event)"
+            @wikilink:select="onWikilinkMenuSelect($event)"
+            @block:menu-el="blockMenuFloatingEl = $event"
+            @block:update-index="blockMenuIndex = $event"
+            @block:select="onBlockMenuSelect($event)"
+            @block:close="closeBlockMenu()"
+            @table:menu-el="tableToolbarFloatingEl = $event"
+            @table:select="onTableToolbarSelect($event)"
+            @table:close="hideTableToolbar()"
+          />
         </div>
 
         <EditorLargeDocOverlay
