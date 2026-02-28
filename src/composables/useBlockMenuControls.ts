@@ -15,6 +15,9 @@ import type { Editor } from '@tiptap/vue-3'
  * - Resolve active target from transient and stable values.
  * - Build enabled/disabled action rows for move/duplicate/delete/copy.
  * - Build "turn into" action rows from allowed block types.
+ *
+ * Boundary:
+ * - This composable only derives menu state; command execution remains in the caller.
  */
 export function useBlockMenuControls(options: {
   getEditor: () => Editor | null

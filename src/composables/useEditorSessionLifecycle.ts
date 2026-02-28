@@ -20,6 +20,13 @@ export type SessionStatus = {
   saveError: string
 }
 
+/**
+ * Dependencies used to coordinate status emits and autosave scheduling.
+ *
+ * Parameter semantics:
+ * - `saveCurrentFile(false)` is invoked for autosave.
+ * - `isEditingVirtualTitle()` controls autosave deferral windows.
+ */
 export type UseEditorSessionLifecycleOptions = {
   emitStatus: (payload: { path: string; dirty: boolean; saving: boolean; saveError: string }) => void
   saveCurrentFile: (manual?: boolean) => Promise<void>
@@ -30,7 +37,11 @@ export type UseEditorSessionLifecycleOptions = {
 }
 
 /**
- * Creates lifecycle helpers shared by editor session orchestrators.
+ * Creates request-token/status/autosave lifecycle helpers.
+ *
+ * Side effects:
+ * - Emits status snapshots when `patchStatus` is called.
+ * - Schedules timer-driven autosave callbacks.
  */
 export function useEditorSessionLifecycle(options: UseEditorSessionLifecycleOptions) {
   const requestToken = ref(0)

@@ -11,8 +11,6 @@ import { ListKit } from '@tiptap/extension-list'
 import Placeholder from '@tiptap/extension-placeholder'
 import type { JSONContent } from '@tiptap/vue-3'
 import {
-  editorDataToMarkdown,
-  markdownToEditorData,
   sanitizeExternalHref,
   type EditorBlock
 } from '../lib/markdownBlocks'
@@ -26,7 +24,6 @@ import EditorTableEdgeControls from './editor/EditorTableEdgeControls.vue'
 import EditorInlineFormatToolbar from './editor/EditorInlineFormatToolbar.vue'
 import EditorLargeDocOverlay from './editor/EditorLargeDocOverlay.vue'
 import EditorMermaidReplaceDialog from './editor/EditorMermaidReplaceDialog.vue'
-import { composeMarkdownDocument, serializeFrontmatter } from '../lib/frontmatter'
 import { useFrontmatterProperties } from '../composables/useFrontmatterProperties'
 import { useEditorZoom } from '../composables/useEditorZoom'
 import { useMermaidReplaceDialog } from '../composables/useMermaidReplaceDialog'
@@ -35,6 +32,8 @@ import { useEditorInputHandlers } from '../composables/useEditorInputHandlers'
 import { useEditorSessionLifecycle } from '../composables/useEditorSessionLifecycle'
 import { useBlockMenuControls } from '../composables/useBlockMenuControls'
 import { useTableToolbarControls } from '../composables/useTableToolbarControls'
+import { useEditorFileLifecycle } from '../composables/useEditorFileLifecycle'
+import { useEditorTableGeometry } from '../composables/useEditorTableGeometry'
 import { normalizeBlockId, normalizeHeadingAnchor, parseWikilinkTarget, slugifyHeading } from '../lib/wikilinks'
 import { toTiptapDoc } from '../lib/tiptap/editorBlocksToTiptapDoc'
 import { fromTiptapDoc } from '../lib/tiptap/tiptapDocToEditorBlocks'
@@ -252,8 +251,25 @@ const navigation = useEditorNavigation({
 const lifecycle = useEditorSessionLifecycle({
   emitStatus: (payload) => emit('status', payload),
   saveCurrentFile: (manual) => saveCurrentFile(manual),
-  isEditingVirtualTitle: () => false,
+  isEditingVirtualTitle: () => isEditingVirtualTitle(),
   autosaveIdleMs: 1800
+})
+
+const tableGeometry = useEditorTableGeometry({
+  holder,
+  state: {
+    tableMenuBtnLeft,
+    tableMenuBtnTop,
+    tableBoxLeft,
+    tableBoxTop,
+    tableBoxWidth,
+    tableBoxHeight,
+    tableToolbarLeft,
+    tableToolbarTop,
+    tableToolbarViewportLeft,
+    tableToolbarViewportTop,
+    tableToolbarViewportMaxHeight
+  }
 })
 
 function getSession(path: string) {
@@ -294,11 +310,6 @@ function countLines(input: string): number {
   return input.replace(/\r\n?/g, '\n').split('\n').length
 }
 
-async function flushUiFrame() {
-  await nextTick()
-  await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()))
-}
-
 function scheduleAutosave(path: string) {
   if (!getSession(path)) return
   lifecycle.scheduleAutosave()
@@ -310,6 +321,18 @@ function noteTitleFromPath(path: string): string {
   const name = parts[parts.length - 1] || normalized
   const stem = name.replace(/\.(md|markdown)$/i, '').trim()
   return stem || 'Untitled'
+}
+
+function isEditingVirtualTitle(): boolean {
+  if (!editor) return false
+  const { $from } = editor.state.selection
+  for (let depth = $from.depth; depth >= 0; depth -= 1) {
+    const node = $from.node(depth)
+    if (node.type.name === 'heading' && Boolean(node.attrs?.isVirtualTitle)) {
+      return true
+    }
+  }
+  return false
 }
 
 function extractPlainText(value: unknown): string {
@@ -682,58 +705,6 @@ function activeTableCellElement(): HTMLElement | null {
   return baseEl?.closest('td,th') as HTMLElement | null
 }
 
-function updateTableToolbarPosition(cellEl: HTMLElement, tableEl: HTMLElement) {
-  if (!holder.value) return
-  const holderRect = holder.value.getBoundingClientRect()
-  const cellRect = cellEl.getBoundingClientRect()
-  const tableRect = tableEl.getBoundingClientRect()
-  const holderScrollLeft = holder.value.scrollLeft
-  const holderScrollTop = holder.value.scrollTop
-  const cellTop = cellRect.top - holderRect.top + holderScrollTop
-  const cellRight = cellRect.right - holderRect.left + holderScrollLeft
-  const tableTop = tableRect.top - holderRect.top + holderScrollTop
-  const tableLeft = tableRect.left - holderRect.left + holderScrollLeft
-  const tableWidth = tableRect.width
-  const tableHeight = tableRect.height
-
-  tableMenuBtnLeft.value = Math.max(6, cellRight - 28)
-  tableMenuBtnTop.value = Math.max(6, cellTop + 6)
-  tableBoxLeft.value = Math.max(6, tableLeft)
-  tableBoxTop.value = Math.max(6, tableTop)
-  tableBoxWidth.value = Math.max(0, tableWidth)
-  tableBoxHeight.value = Math.max(0, tableHeight)
-
-  tableToolbarLeft.value = tableMenuBtnLeft.value + 24
-  tableToolbarTop.value = Math.max(6, tableMenuBtnTop.value - 4)
-
-  const menuWidth = 320
-  const viewportPadding = 8
-  const minMenuHeight = 160
-  const preferredMenuHeight = Math.max(220, Math.floor(window.innerHeight * 0.72))
-  const rawViewportLeft = holderRect.left + tableToolbarLeft.value
-  const rawViewportTop = holderRect.top + tableToolbarTop.value
-  const availableBelow = Math.max(0, Math.floor(window.innerHeight - rawViewportTop - viewportPadding))
-  const availableAbove = Math.max(0, Math.floor(rawViewportTop - viewportPadding))
-
-  let clampedTop = rawViewportTop
-  let maxHeight = Math.max(minMenuHeight, Math.min(preferredMenuHeight, availableBelow))
-  if (availableBelow < 220 && availableAbove > availableBelow) {
-    maxHeight = Math.max(minMenuHeight, Math.min(preferredMenuHeight, availableAbove))
-    clampedTop = rawViewportTop - maxHeight
-  }
-
-  clampedTop = Math.max(viewportPadding, clampedTop)
-  const overflowBottom = clampedTop + maxHeight - (window.innerHeight - viewportPadding)
-  if (overflowBottom > 0) {
-    clampedTop = Math.max(viewportPadding, clampedTop - overflowBottom)
-  }
-
-  const clampedLeft = Math.max(viewportPadding, Math.min(rawViewportLeft, window.innerWidth - menuWidth - viewportPadding))
-  tableToolbarViewportLeft.value = clampedLeft
-  tableToolbarViewportTop.value = clampedTop
-  tableToolbarViewportMaxHeight.value = maxHeight
-}
-
 function readTableCommandCapabilities(currentEditor: Editor): TableCommandCapabilities {
   const canRun = (command: (chain: ReturnType<ReturnType<Editor['can']>['chain']>) => ReturnType<ReturnType<Editor['can']>['chain']>) =>
     command(currentEditor.can().chain().focus()).run()
@@ -769,7 +740,7 @@ function updateTableToolbar() {
     return
   }
   tableToolbarTriggerVisible.value = true
-  updateTableToolbarPosition(cellEl, tableEl)
+  tableGeometry.updateTableToolbarPosition(cellEl, tableEl)
 }
 
 function onEditorMouseMove(event: MouseEvent) {
@@ -1070,151 +1041,65 @@ function setActiveSession(path: string) {
   lastAppliedDragHandleLock = null
 }
 
+const fileLifecycle = useEditorFileLifecycle({
+  currentPath,
+  holder,
+  getEditor: () => editor,
+  getSession,
+  ensureSession,
+  ensurePropertySchemaLoaded,
+  openFile: props.openFile,
+  saveFile: props.saveFile,
+  renameFileFromTitle: props.renameFileFromTitle,
+  parseAndStoreFrontmatter,
+  frontmatterByPath,
+  propertyEditorMode,
+  rawYamlByPath,
+  serializableFrontmatterFields,
+  moveFrontmatterPathState,
+  renameSessionPath: (from, to) => {
+    sessionStore.renamePath(from, to)
+  },
+  moveLifecyclePathState: (from, to) => lifecycle.movePathState(from, to),
+  emitPathRenamed: (payload) => emit('path-renamed', payload),
+  clearAutosaveTimer,
+  clearOutlineTimer,
+  emitOutlineSoon,
+  resetTransientUiState,
+  countLines,
+  noteTitleFromPath,
+  readVirtualTitle,
+  blockTextCandidate,
+  withVirtualTitle,
+  stripVirtualTitle,
+  serializeCurrentDocBlocks,
+  renderBlocks,
+  restoreCaret,
+  setSuppressOnChange: (value) => {
+    suppressOnChange = value
+  },
+  setDirty,
+  setSaving,
+  setSaveError,
+  updateGutterHitboxStyle,
+  syncWikilinkUiFromPluginState,
+  isCurrentRequest: (requestId) => lifecycle.isCurrentRequest(requestId),
+  largeDocThreshold: LARGE_DOC_THRESHOLD,
+  ui: {
+    isLoadingLargeDocument,
+    loadStageLabel,
+    loadProgressPercent,
+    loadProgressIndeterminate,
+    loadDocumentStats
+  }
+})
+
 async function loadCurrentFile(path: string, options?: { forceReload?: boolean; requestId?: number; skipActivate?: boolean }) {
-  if (!path) return
-  await ensurePropertySchemaLoaded()
-  if (typeof options?.requestId === 'number' && !lifecycle.isCurrentRequest(options.requestId)) return
-  const session = ensureSession(path)
-  if (!options?.skipActivate) {
-    setActiveSession(path)
-  }
-  if (typeof options?.requestId === 'number' && !lifecycle.isCurrentRequest(options.requestId)) return
-  if (!editor) return
-
-  setSaveError(path, '')
-  clearAutosaveTimer()
-  clearOutlineTimer(path)
-  resetTransientUiState()
-  isLoadingLargeDocument.value = false
-  loadStageLabel.value = ''
-  loadProgressPercent.value = 0
-  loadProgressIndeterminate.value = false
-  loadDocumentStats.value = null
-
-  try {
-    if (!session.isLoaded || options?.forceReload) {
-      const txt = await props.openFile(path)
-      if (typeof options?.requestId === 'number' && !lifecycle.isCurrentRequest(options.requestId)) return
-      parseAndStoreFrontmatter(path, txt)
-      const body = frontmatterByPath.value[path]?.body ?? txt
-      const isLargeDocument = txt.length >= LARGE_DOC_THRESHOLD
-      if (isLargeDocument) {
-        isLoadingLargeDocument.value = true
-        loadDocumentStats.value = { chars: body.length, lines: countLines(body) }
-        loadStageLabel.value = 'Parsing markdown blocks...'
-        loadProgressPercent.value = 35
-        loadProgressIndeterminate.value = false
-        await flushUiFrame()
-      }
-      const parsed = markdownToEditorData(body)
-      const normalized = withVirtualTitle(parsed.blocks as EditorBlock[], noteTitleFromPath(path)).blocks
-
-      suppressOnChange = true
-      if (isLargeDocument) {
-        loadStageLabel.value = 'Rendering blocks in editor...'
-        loadProgressPercent.value = 70
-        await flushUiFrame()
-      }
-      session.editor.commands.setContent(toTiptapDoc(normalized), { emitUpdate: false })
-      suppressOnChange = false
-
-      session.loadedText = txt
-      session.isLoaded = true
-      setDirty(path, false)
-    }
-
-    await nextTick()
-    if (typeof options?.requestId === 'number' && !lifecycle.isCurrentRequest(options.requestId)) return
-    if (currentPath.value !== path) return
-    const remembered = session.scrollTop
-    if (holder.value && typeof remembered === 'number') {
-      holder.value.scrollTop = remembered
-    }
-    if (!restoreCaret(path)) {
-      editor.commands.focus('end')
-    }
-
-    emitOutlineSoon(path)
-    syncWikilinkUiFromPluginState()
-    updateGutterHitboxStyle()
-  } catch (error) {
-    setSaveError(path, error instanceof Error ? error.message : 'Could not read file.')
-  } finally {
-    if (typeof options?.requestId === 'number' && !lifecycle.isCurrentRequest(options.requestId)) return
-    isLoadingLargeDocument.value = false
-    loadStageLabel.value = ''
-    loadProgressPercent.value = 0
-    loadProgressIndeterminate.value = false
-    loadDocumentStats.value = null
-  }
+  await fileLifecycle.loadCurrentFile(path, options)
 }
 
 async function saveCurrentFile(manual = true) {
-  const initialPath = currentPath.value
-  const initialSession = getSession(initialPath)
-  if (!initialPath || !editor || !initialSession || initialSession.saving) return
-
-  let savePath = initialPath
-  setSaving(savePath, true)
-  if (manual) setSaveError(savePath, '')
-
-  try {
-    const rawBlocks = serializeCurrentDocBlocks()
-    const requestedTitle = readVirtualTitle(rawBlocks) || blockTextCandidate(rawBlocks[0]) || noteTitleFromPath(initialPath)
-    const lastLoaded = initialSession.loadedText
-
-    const latestOnDisk = await props.openFile(initialPath)
-    if (latestOnDisk !== lastLoaded) {
-      throw new Error('File changed on disk. Reload before saving to avoid overwrite.')
-    }
-
-    const renameResult = await props.renameFileFromTitle(initialPath, requestedTitle)
-    savePath = renameResult.path
-    const normalized = withVirtualTitle(rawBlocks, renameResult.title)
-    const markdownBlocks = stripVirtualTitle(normalized.blocks)
-    const bodyMarkdown = editorDataToMarkdown({ blocks: markdownBlocks })
-    const frontmatterState = frontmatterByPath.value[savePath] ?? frontmatterByPath.value[initialPath]
-    const frontmatterYaml = propertyEditorMode.value === 'raw'
-      ? (rawYamlByPath.value[savePath] ?? rawYamlByPath.value[initialPath] ?? '')
-      : serializeFrontmatter(serializableFrontmatterFields(frontmatterState?.fields ?? []))
-    const markdown = composeMarkdownDocument(bodyMarkdown, frontmatterYaml)
-
-    if (!manual && savePath === initialPath && markdown === lastLoaded) {
-      setDirty(savePath, false)
-      return
-    }
-
-    if (savePath !== initialPath) {
-      sessionStore.renamePath(initialPath, savePath)
-      lifecycle.movePathState(initialPath, savePath)
-      moveFrontmatterPathState(initialPath, savePath)
-      emit('path-renamed', { from: initialPath, to: savePath, manual })
-    }
-
-    if (normalized.changed) {
-      await renderBlocks(normalized.blocks)
-    }
-
-    const result = await props.saveFile(savePath, markdown, { explicit: manual })
-    if (!result.persisted) {
-      setDirty(savePath, true)
-      return
-    }
-
-    const savedSession = getSession(savePath)
-    if (savedSession) {
-      savedSession.loadedText = markdown
-      savedSession.isLoaded = true
-    }
-
-    parseAndStoreFrontmatter(savePath, markdown)
-    setDirty(savePath, false)
-  } catch (error) {
-    setSaveError(savePath, error instanceof Error ? error.message : 'Could not save file.')
-  } finally {
-    setSaving(savePath, false)
-    emitOutlineSoon(savePath)
-  }
+  await fileLifecycle.saveCurrentFile(manual)
 }
 
 function insertBlockFromDescriptor(type: string, data: Record<string, unknown>) {

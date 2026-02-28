@@ -61,6 +61,9 @@ export type UseEditorInputHandlersOptions = {
 
 /**
  * Creates DOM event handlers bound to editor/menu runtime dependencies.
+ *
+ * Failure behavior:
+ * - Handlers no-op when editor/runtime dependencies are unavailable.
  */
 export function useEditorInputHandlers(options: UseEditorInputHandlersOptions) {
   function onEditorKeydown(event: KeyboardEvent) {

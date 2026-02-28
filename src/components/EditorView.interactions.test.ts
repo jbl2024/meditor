@@ -58,4 +58,5 @@ describe('EditorView interactions contract', () => {
     app.unmount()
     document.body.innerHTML = ''
   })
+
 })

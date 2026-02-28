@@ -10,6 +10,10 @@ import { ref } from 'vue'
  * - Expose reactive trigger/edge visibility flags.
  * - Apply edge show and sticky thresholds based on pointer distance.
  * - Reset state when pointer leaves table region.
+ *
+ * Invariant:
+ * - `hideAll()` clears both visibility flags and sticky timestamps so stale proximity state
+ *   does not leak into the next table hover.
  */
 export type TableEdgeDistance = {
   top: number
@@ -18,6 +22,9 @@ export type TableEdgeDistance = {
   right: number
 }
 
+/**
+ * Creates table edge visibility controls driven by pointer-to-edge distances.
+ */
 export function useTableToolbarControls(options?: {
   showThreshold?: number
   stickyThreshold?: number

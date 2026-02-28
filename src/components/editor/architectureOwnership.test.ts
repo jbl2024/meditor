@@ -16,6 +16,8 @@ describe('editor architecture ownership guardrails', () => {
   it('avoids no-op overlay forwarding and mega overlay component', () => {
     expect(editorViewSource).not.toContain('EditorFloatingOverlays')
     expect(editorViewSource).not.toContain('@menu-el="() => {}"')
+    expect(editorViewSource).not.toContain('useEditorTiptapSetup')
+    expect(editorViewSource).not.toContain('useWikilinkMenu')
   })
 
   it('kept composables avoid computed side-effect pattern', () => {
