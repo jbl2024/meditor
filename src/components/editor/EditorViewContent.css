@@ -15,13 +15,13 @@
   background: transparent;
 }
 
-.editor-holder :deep(.ProseMirror > *),
-.editor-holder :deep(.ProseMirror li) {
+.editor-holder .ProseMirror > *,
+.editor-holder .ProseMirror li {
   position: relative;
 }
 
-.editor-holder :deep(.ProseMirror > *::after),
-.editor-holder :deep(.ProseMirror li::after) {
+.editor-holder .ProseMirror > *::after,
+.editor-holder .ProseMirror li::after {
   content: '';
   position: absolute;
   left: -5rem;
@@ -42,104 +42,104 @@
   --meditor-link-color: #60a5fa;
 }
 
-.editor-holder :deep(a.wikilink) {
+.editor-holder a.wikilink {
   color: var(--meditor-link-color);
   text-decoration: underline;
 }
 
-.editor-holder :deep(a.wikilink.is-missing) {
+.editor-holder a.wikilink.is-missing {
   color: rgb(220 38 38);
   text-decoration-style: dashed;
 }
 
-.editor-holder :deep(.ProseMirror) {
+.editor-holder .ProseMirror {
   min-height: 100%;
   outline: none;
 }
 
-.editor-holder :deep(.ProseMirror p) {
+.editor-holder .ProseMirror p {
   margin: 0.35rem 0;
 }
 
-.editor-holder :deep(.ProseMirror h1) {
+.editor-holder .ProseMirror h1 {
   font-size: calc(2rem * var(--editor-zoom, 1));
   margin: 0.6rem 0;
 }
 
-.editor-holder :deep(.ProseMirror h2) {
+.editor-holder .ProseMirror h2 {
   font-size: calc(1.6rem * var(--editor-zoom, 1));
   margin: 0.55rem 0;
 }
 
-.editor-holder :deep(.ProseMirror h3) {
+.editor-holder .ProseMirror h3 {
   font-size: calc(1.35rem * var(--editor-zoom, 1));
   margin: 0.5rem 0;
 }
 
-.editor-holder :deep(.ProseMirror ul),
-.editor-holder :deep(.ProseMirror ol) {
+.editor-holder .ProseMirror ul,
+.editor-holder .ProseMirror ol {
   margin: 0.45rem 0 0.45rem 1.35rem;
   padding: 0;
 }
 
-.editor-holder :deep(.ProseMirror ul) {
+.editor-holder .ProseMirror ul {
   list-style: disc;
 }
 
-.editor-holder :deep(.ProseMirror ol) {
+.editor-holder .ProseMirror ol {
   list-style: decimal;
 }
 
-.editor-holder :deep(.ProseMirror ul ul) {
+.editor-holder .ProseMirror ul ul {
   list-style: circle;
 }
 
-.editor-holder :deep(.ProseMirror ol ol) {
+.editor-holder .ProseMirror ol ol {
   list-style: lower-alpha;
 }
 
-.editor-holder :deep(.ProseMirror li) {
+.editor-holder .ProseMirror li {
   margin: 0.2rem 0;
 }
 
-.editor-holder :deep(.ProseMirror ul[data-type="taskList"]) {
+.editor-holder .ProseMirror ul[data-type="taskList"] {
   list-style: none;
   margin-left: 0.25rem;
 }
 
-.editor-holder :deep(.ProseMirror ul[data-type="taskList"] li) {
+.editor-holder .ProseMirror ul[data-type="taskList"] li {
   display: flex;
   align-items: flex-start;
   gap: 0.45rem;
 }
 
-.editor-holder :deep(.ProseMirror ul[data-type="taskList"] li > label) {
+.editor-holder .ProseMirror ul[data-type="taskList"] li > label {
   margin-top: 0;
   display: inline-flex;
   align-items: center;
   padding-top: 0.15rem;
 }
 
-.editor-holder :deep(.ProseMirror ul[data-type="taskList"] li > label input[type="checkbox"]) {
+.editor-holder .ProseMirror ul[data-type="taskList"] li > label input[type="checkbox"] {
   width: 1.1rem;
   height: 1.1rem;
   accent-color: rgb(37 99 235);
   cursor: pointer;
 }
 
-.dark .editor-holder :deep(.ProseMirror ul[data-type="taskList"] li > label input[type="checkbox"]) {
+.dark .editor-holder .ProseMirror ul[data-type="taskList"] li > label input[type="checkbox"] {
   color-scheme: dark;
   background-color: rgb(30 41 59);
   border-color: rgb(100 116 139);
 }
 
-.editor-holder :deep(.ProseMirror ul[data-type="taskList"] li > div > p) {
+.editor-holder .ProseMirror ul[data-type="taskList"] li > div > p {
   margin: 0;
   min-height: 1.2em;
   outline: 1px solid transparent;
 }
 
-.editor-holder :deep(.ProseMirror table) {
+.editor-holder .ProseMirror table {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
@@ -153,8 +153,8 @@
   table-layout: fixed;
 }
 
-.editor-holder :deep(.ProseMirror th),
-.editor-holder :deep(.ProseMirror td) {
+.editor-holder .ProseMirror th,
+.editor-holder .ProseMirror td {
   border-right: 1px solid rgb(226 232 240);
   border-bottom: 1px solid rgb(226 232 240);
   padding: 0.5rem 0.62rem;
@@ -164,32 +164,32 @@
   transition: background-color 120ms ease;
 }
 
-.editor-holder :deep(.ProseMirror tr:last-child > th),
-.editor-holder :deep(.ProseMirror tr:last-child > td) {
+.editor-holder .ProseMirror tr:last-child > th,
+.editor-holder .ProseMirror tr:last-child > td {
   border-bottom: none;
 }
 
-.editor-holder :deep(.ProseMirror tr > th:last-child),
-.editor-holder :deep(.ProseMirror tr > td:last-child) {
+.editor-holder .ProseMirror tr > th:last-child,
+.editor-holder .ProseMirror tr > td:last-child {
   border-right: none;
 }
 
-.editor-holder :deep(.ProseMirror tbody tr:hover td) {
+.editor-holder .ProseMirror tbody tr:hover td {
   background: rgb(248 250 252);
 }
 
-.editor-holder :deep(.ProseMirror th) {
+.editor-holder .ProseMirror th {
   font-weight: 640;
   background: rgb(248 250 252);
   color: rgb(30 41 59);
 }
 
-.editor-holder :deep(.ProseMirror td.selectedCell),
-.editor-holder :deep(.ProseMirror th.selectedCell) {
+.editor-holder .ProseMirror td.selectedCell,
+.editor-holder .ProseMirror th.selectedCell {
   background: rgb(219 234 254);
 }
 
-.editor-holder :deep(.ProseMirror .column-resize-handle) {
+.editor-holder .ProseMirror .column-resize-handle {
   position: absolute;
   right: -2px;
   top: 0;
@@ -199,35 +199,35 @@
   pointer-events: none;
 }
 
-.editor-holder :deep(.ProseMirror.resize-cursor) {
+.editor-holder .ProseMirror.resize-cursor {
   cursor: col-resize;
 }
 
-.editor-holder :deep(.ProseMirror pre) {
+.editor-holder .ProseMirror pre {
   border: 1px solid rgb(226 232 240);
   border-radius: 0.6rem;
   padding: 0.8rem;
   overflow: auto;
 }
 
-.editor-holder :deep(.meditor-code-node) {
+.editor-holder .meditor-code-node {
   margin: 0.5rem 0;
 }
 
-.editor-holder :deep(.meditor-code-node-actions) {
+.editor-holder .meditor-code-node-actions {
   display: flex;
   gap: 0.36rem;
   justify-content: flex-end;
   margin-bottom: 0.35rem;
 }
 
-.editor-holder :deep(.meditor-code-node pre.meditor-code-wrap-enabled) {
+.editor-holder .meditor-code-node pre.meditor-code-wrap-enabled {
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-.editor-holder :deep(.meditor-code-copy-btn),
-.editor-holder :deep(.meditor-code-wrap-btn) {
+.editor-holder .meditor-code-copy-btn,
+.editor-holder .meditor-code-wrap-btn {
   border: 1px solid rgb(203 213 225);
   border-radius: 0.4rem;
   background: white;
@@ -238,11 +238,11 @@
   cursor: pointer;
 }
 
-.editor-holder :deep(.meditor-drag-handle) {
+.editor-holder .meditor-drag-handle {
   z-index: 35;
 }
 
-.editor-holder :deep(.meditor-block-controls) {
+.editor-holder .meditor-block-controls {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
@@ -251,7 +251,7 @@
   line-height: 1;
 }
 
-.editor-holder :deep(.meditor-block-control-btn) {
+.editor-holder .meditor-block-control-btn {
   width: 1.7rem;
   height: 1.7rem;
   border: 1px solid rgb(203 213 225);
@@ -265,11 +265,11 @@
   justify-content: center;
 }
 
-.editor-holder :deep(.meditor-block-control-btn:hover) {
+.editor-holder .meditor-block-control-btn:hover {
   background: rgb(241 245 249);
 }
 
-.editor-holder :deep(.meditor-block-grip-btn) {
+.editor-holder .meditor-block-grip-btn {
   letter-spacing: -0.1rem;
 }
 
@@ -363,13 +363,13 @@
   background: rgb(248 250 252);
 }
 
-.dark .editor-holder :deep(.meditor-block-control-btn) {
+.dark .editor-holder .meditor-block-control-btn {
   border-color: rgb(71 85 105);
   background: rgb(15 23 42);
   color: rgb(203 213 225);
 }
 
-.dark .editor-holder :deep(.meditor-block-control-btn:hover) {
+.dark .editor-holder .meditor-block-control-btn:hover {
   background: rgb(30 41 59);
 }
 
@@ -396,30 +396,30 @@
   outline: 2px solid rgb(147 197 253 / 0.65);
 }
 
-.dark .editor-holder :deep(.ProseMirror th),
-.dark .editor-holder :deep(.ProseMirror td) {
+.dark .editor-holder .ProseMirror th,
+.dark .editor-holder .ProseMirror td {
   border-color: rgb(51 65 85);
 }
 
-.dark .editor-holder :deep(.ProseMirror table) {
+.dark .editor-holder .ProseMirror table {
   border-color: rgb(71 85 105);
   background: rgb(15 23 42);
 }
 
-.dark .editor-holder :deep(.ProseMirror th) {
+.dark .editor-holder .ProseMirror th {
   background: rgb(30 41 59 / 0.85);
   color: rgb(226 232 240);
 }
 
-.dark .editor-holder :deep(.ProseMirror tbody tr:hover td) {
+.dark .editor-holder .ProseMirror tbody tr:hover td {
   background: rgb(30 41 59 / 0.45);
 }
 
-.dark .editor-holder :deep(.ProseMirror td.selectedCell),
-.dark .editor-holder :deep(.ProseMirror th.selectedCell) {
+.dark .editor-holder .ProseMirror td.selectedCell,
+.dark .editor-holder .ProseMirror th.selectedCell {
   background: rgb(30 64 175 / 0.45);
 }
 
-.dark .editor-holder :deep(.ProseMirror .column-resize-handle) {
+.dark .editor-holder .ProseMirror .column-resize-handle {
   background: rgb(96 165 250 / 0.65);
 }
