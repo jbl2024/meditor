@@ -45,6 +45,7 @@ type WikilinkStateAction =
   | { type: 'setNodeSelected'; pos: number; target: string; label: string | null; exists: boolean }
   | { type: 'startEditing'; range: WikilinkEditingRange }
   | { type: 'updateEditing'; range: WikilinkEditingRange; query: string; inLabel: boolean; pipeSeen: boolean }
+  | { type: 'setEditingOpen'; open: boolean }
   | { type: 'setCandidates'; requestId: number; candidates: WikilinkCandidate[] }
   | { type: 'setSelectedIndex'; index: number }
 
@@ -205,6 +206,13 @@ function reduceState(previous: WikilinkPluginState, action: WikilinkStateAction)
         open: true
       }
 
+    case 'setEditingOpen':
+      if (previous.mode !== 'editing') return previous
+      return {
+        ...previous,
+        open: action.open
+      }
+
     case 'setCandidates': {
       if (action.requestId !== previous.requestId) return previous
       const nextIndex = action.candidates.length
@@ -316,7 +324,7 @@ export function createWikilinkStatePlugin(editor: Editor, options: WikilinkState
             query: editing.query,
             inLabel: editing.inLabel,
             pipeSeen: editing.pipeSeen,
-            open: true
+            open: next.open
           }
         }
 
@@ -424,7 +432,7 @@ export function createWikilinkStatePlugin(editor: Editor, options: WikilinkState
 
           if (event.key === 'Escape') {
             event.preventDefault()
-            dispatchAction(view, { type: 'setIdle' })
+            dispatchAction(view, { type: 'setEditingOpen', open: false })
             return true
           }
 
@@ -434,11 +442,13 @@ export function createWikilinkStatePlugin(editor: Editor, options: WikilinkState
           }
 
           if (event.key === 'Tab') {
+            if (!state.open) return false
             event.preventDefault()
             return applySelectedCandidateToken(view, state, 'inside')
           }
 
           if (event.key === 'Enter') {
+            if (!state.open) return false
             event.preventDefault()
             return applySelectedCandidateToken(view, state, 'after')
           }
@@ -508,7 +518,7 @@ export function createWikilinkStatePlugin(editor: Editor, options: WikilinkState
       return {
         update(nextView) {
           const state = getWikilinkPluginState(nextView.state)
-          if (state.mode !== 'editing') {
+          if (state.mode !== 'editing' || !state.open) {
             clearTimer()
             lastQuery = ''
             lastRequestId = 0

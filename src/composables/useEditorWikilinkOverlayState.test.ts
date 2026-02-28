@@ -157,4 +157,32 @@ describe('useEditorWikilinkOverlayState', () => {
     expect((tr.insertText as any).mock.calls.at(-1)).toEqual(['[[Another.md|alias]]', 20, 40])
     selectionSpy.mockRestore()
   })
+
+  it('commits wikilink node when leaving editing range even if dropdown is closed', () => {
+    const selectionSpy = vi.spyOn(TextSelection, 'create').mockReturnValue({} as any)
+    const { editor, tr, dispatch } = createEditor()
+    ;(editor.state.selection as any) = { from: 45, to: 45 }
+    parseWikilinkTokenMock.mockReturnValue({ target: 'GLPI.md', label: null })
+    getWikilinkPluginStateMock.mockReturnValue({
+      open: false,
+      mode: 'editing',
+      editingRange: { from: 20, to: 40 },
+      selectedIndex: 0,
+      candidates: []
+    })
+
+    const wikilink = useEditorWikilinkOverlayState({
+      getEditor: () => editor as any,
+      holder: ref(document.createElement('div')),
+      blockMenuOpen: ref(false),
+      isDragMenuOpen: () => false,
+      closeBlockMenu: () => {}
+    })
+
+    wikilink.syncWikilinkUiFromPluginState()
+
+    expect((tr.replaceWith as any).mock.calls.length).toBeGreaterThan(0)
+    expect(dispatch).toHaveBeenCalled()
+    selectionSpy.mockRestore()
+  })
 })
