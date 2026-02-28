@@ -295,11 +295,24 @@ defineExpose({
 <style scoped>
 .ui-filterable-dropdown {
   position: relative;
+  --ui-dropdown-bg: #ffffff;
+  --ui-dropdown-border: #d1d5db;
+  --ui-dropdown-text: #0f172a;
+  --ui-dropdown-muted: #6b7280;
+  --ui-dropdown-hover: rgba(37, 99, 235, 0.08);
+}
+
+:global(.dark) .ui-filterable-dropdown {
+  --ui-dropdown-bg: rgb(15 23 42);
+  --ui-dropdown-border: rgb(71 85 105);
+  --ui-dropdown-text: rgb(226 232 240);
+  --ui-dropdown-muted: rgb(148 163 184);
+  --ui-dropdown-hover: rgba(59, 130, 246, 0.22);
 }
 
 .ui-filterable-dropdown-menu {
-  background: var(--color-bg, #fff);
-  border: 1px solid var(--color-border, #d1d5db);
+  background: var(--ui-dropdown-bg);
+  border: 1px solid var(--ui-dropdown-border);
   border-radius: 10px;
   box-shadow: 0 14px 32px rgba(15, 23, 42, 0.2);
   display: flex;
@@ -308,16 +321,16 @@ defineExpose({
 }
 
 .ui-filterable-dropdown-filter {
-  border-bottom: 1px solid var(--color-border, #d1d5db);
+  border-bottom: 1px solid var(--ui-dropdown-border);
   padding: 8px;
 }
 
 .ui-filterable-dropdown-filter-input {
   width: 100%;
-  background: var(--color-bg, #fff);
-  border: 1px solid var(--color-border, #d1d5db);
+  background: var(--ui-dropdown-bg);
+  border: 1px solid var(--ui-dropdown-border);
   border-radius: 8px;
-  color: var(--color-text, #0f172a);
+  color: var(--ui-dropdown-text);
   font-size: 12px;
   line-height: 1.2;
   padding: 7px 10px;
@@ -336,7 +349,7 @@ defineExpose({
 .ui-filterable-dropdown-option {
   background: transparent;
   border: none;
-  color: var(--color-text, #0f172a);
+  color: var(--ui-dropdown-text);
   cursor: pointer;
   display: block;
   font-size: 12px;
@@ -349,17 +362,17 @@ defineExpose({
 
 .ui-filterable-dropdown-option:hover,
 .ui-filterable-dropdown-option[data-active='true'] {
-  background: rgba(37, 99, 235, 0.08);
+  background: var(--ui-dropdown-hover);
 }
 
 .ui-filterable-dropdown-empty {
-  color: var(--color-text-muted, #6b7280);
+  color: var(--ui-dropdown-muted);
   font-size: 12px;
   padding: 10px 12px;
 }
 
 .ui-filterable-dropdown-footer {
-  border-top: 1px solid var(--color-border, #d1d5db);
+  border-top: 1px solid var(--ui-dropdown-border);
   padding: 8px;
 }
 </style>

@@ -165,6 +165,38 @@ function onMessageInput(event: Event) {
   z-index: 40;
 }
 
+.dark .meditor-callout-kind-select :deep(.ui-filterable-dropdown-menu) {
+  background: rgb(15 23 42);
+  border-color: rgb(71 85 105);
+}
+
+.dark .meditor-callout-kind-select :deep(.ui-filterable-dropdown-filter) {
+  border-bottom-color: rgb(71 85 105);
+}
+
+.dark .meditor-callout-kind-select :deep(.ui-filterable-dropdown-filter-input) {
+  background: rgb(15 23 42);
+  border-color: rgb(71 85 105);
+  color: rgb(226 232 240);
+}
+
+.dark .meditor-callout-kind-select :deep(.ui-filterable-dropdown-filter-input::placeholder) {
+  color: rgb(148 163 184);
+}
+
+.dark .meditor-callout-kind-select :deep(.ui-filterable-dropdown-option) {
+  color: rgb(226 232 240);
+}
+
+.dark .meditor-callout-kind-select :deep(.ui-filterable-dropdown-option:hover),
+.dark .meditor-callout-kind-select :deep(.ui-filterable-dropdown-option[data-active='true']) {
+  background: rgb(30 41 59);
+}
+
+.dark .meditor-callout-kind-select :deep(.ui-filterable-dropdown-empty) {
+  color: rgb(148 163 184);
+}
+
 .meditor-callout-kind-active {
   font-weight: 600;
 }

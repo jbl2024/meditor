@@ -2334,6 +2334,12 @@ defineExpose({
   cursor: pointer;
 }
 
+.dark .editor-holder :deep(.ProseMirror ul[data-type="taskList"] li > label input[type="checkbox"]) {
+  color-scheme: dark;
+  background-color: rgb(30 41 59);
+  border-color: rgb(100 116 139);
+}
+
 .editor-holder :deep(.ProseMirror ul[data-type="taskList"] li > div > p) {
   margin: 0;
   min-height: 1.2em;
