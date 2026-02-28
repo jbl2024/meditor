@@ -17,27 +17,35 @@ function createHandlers(overrides: Partial<Parameters<typeof useEditorInputHandl
   } as unknown as Editor
 
   const options: Parameters<typeof useEditorInputHandlers>[0] = {
-    getEditor: () => editor,
-    currentPath: ref('a.md'),
-    captureCaret: vi.fn(),
-    currentTextSelectionContext: () => ({ text: '/quote', nodeType: 'paragraph' }),
-    visibleSlashCommands: ref([{ id: 'quote', label: 'Quote', type: 'quote', data: {} }]),
-    slashOpen: ref(true),
-    slashIndex: ref(0),
-    closeSlashMenu: vi.fn(),
-    insertBlockFromDescriptor: vi.fn(() => true),
-    blockMenuOpen: ref(false),
-    closeBlockMenu: vi.fn(),
-    tableToolbarOpen: ref(false),
-    hideTableToolbar: vi.fn(),
-    updateFormattingToolbar: vi.fn(),
-    updateTableToolbar: vi.fn(),
-    syncSlashMenuFromSelection: vi.fn(),
-    zoomEditorBy: vi.fn(() => 1),
-    resetEditorZoom: vi.fn(() => 1),
-    inlineFormatToolbar: {
-      linkPopoverOpen: ref(false),
-      cancelLink: vi.fn()
+    editingPort: {
+      getEditor: () => editor,
+      currentPath: ref('a.md'),
+      captureCaret: vi.fn(),
+      currentTextSelectionContext: () => ({ text: '/quote', nodeType: 'paragraph' }),
+      insertBlockFromDescriptor: vi.fn(() => true)
+    },
+    menusPort: {
+      visibleSlashCommands: ref([{ id: 'quote', label: 'Quote', type: 'quote', data: {} }]),
+      slashOpen: ref(true),
+      slashIndex: ref(0),
+      closeSlashMenu: vi.fn(),
+      blockMenuOpen: ref(false),
+      closeBlockMenu: vi.fn(),
+      tableToolbarOpen: ref(false),
+      hideTableToolbar: vi.fn(),
+      inlineFormatToolbar: {
+        linkPopoverOpen: ref(false),
+        cancelLink: vi.fn()
+      }
+    },
+    uiPort: {
+      updateFormattingToolbar: vi.fn(),
+      updateTableToolbar: vi.fn(),
+      syncSlashMenuFromSelection: vi.fn()
+    },
+    zoomPort: {
+      zoomEditorBy: vi.fn(() => 1),
+      resetEditorZoom: vi.fn(() => 1)
     },
     ...overrides
   }
@@ -50,23 +58,42 @@ describe('useEditorInputHandlers', () => {
     const { handlers, options } = createHandlers()
     const event = new KeyboardEvent('keydown', { key: 'Enter' })
     handlers.onEditorKeydown(event)
-    expect(options.closeSlashMenu).toHaveBeenCalledTimes(1)
-    expect(options.insertBlockFromDescriptor).toHaveBeenCalledWith('quote', {})
+    expect(options.menusPort.closeSlashMenu).toHaveBeenCalledTimes(1)
+    expect(options.editingPort.insertBlockFromDescriptor).toHaveBeenCalledWith('quote', {})
   })
 
   it('routes keyup refresh hooks', () => {
     const { handlers, options } = createHandlers()
     handlers.onEditorKeyup()
-    expect(options.captureCaret).toHaveBeenCalledWith('a.md')
-    expect(options.syncSlashMenuFromSelection).toHaveBeenCalledWith({ preserveIndex: true })
-    expect(options.updateFormattingToolbar).toHaveBeenCalledTimes(1)
-    expect(options.updateTableToolbar).toHaveBeenCalledTimes(1)
+    expect(options.editingPort.captureCaret).toHaveBeenCalledWith('a.md')
+    expect(options.uiPort.syncSlashMenuFromSelection).toHaveBeenCalledWith({ preserveIndex: true })
+    expect(options.uiPort.updateFormattingToolbar).toHaveBeenCalledTimes(1)
+    expect(options.uiPort.updateTableToolbar).toHaveBeenCalledTimes(1)
   })
 
   it('converts markdown paste to editor json content', () => {
     const { handlers, insertContent } = createHandlers({
-      slashOpen: ref(false),
-      currentTextSelectionContext: () => null
+      menusPort: {
+        visibleSlashCommands: ref([{ id: 'quote', label: 'Quote', type: 'quote', data: {} }]),
+        slashOpen: ref(false),
+        slashIndex: ref(0),
+        closeSlashMenu: vi.fn(),
+        blockMenuOpen: ref(false),
+        closeBlockMenu: vi.fn(),
+        tableToolbarOpen: ref(false),
+        hideTableToolbar: vi.fn(),
+        inlineFormatToolbar: {
+          linkPopoverOpen: ref(false),
+          cancelLink: vi.fn()
+        }
+      },
+      editingPort: {
+        getEditor: () => ({ chain: () => ({ focus: () => ({ insertContent: (...args: unknown[]) => { insertContent(...args); return { run: () => true } } }) }) } as unknown as Editor),
+        currentPath: ref('a.md'),
+        captureCaret: vi.fn(),
+        currentTextSelectionContext: () => null,
+        insertBlockFromDescriptor: vi.fn(() => true)
+      }
     })
 
     const clipboardData = {

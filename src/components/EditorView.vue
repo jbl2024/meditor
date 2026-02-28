@@ -19,7 +19,9 @@ import {
 import { EDITOR_SLASH_COMMANDS } from '../lib/editorSlashCommands'
 import { openExternalUrl } from '../lib/api'
 import EditorPropertiesPanel from './editor/EditorPropertiesPanel.vue'
-import EditorFloatingOverlays from './editor/EditorFloatingOverlays.vue'
+import EditorSlashOverlay from './editor/EditorSlashOverlay.vue'
+import EditorWikilinkOverlay from './editor/EditorWikilinkOverlay.vue'
+import EditorContextOverlays from './editor/EditorContextOverlays.vue'
 import EditorTableEdgeControls from './editor/EditorTableEdgeControls.vue'
 import EditorInlineFormatToolbar from './editor/EditorInlineFormatToolbar.vue'
 import EditorLargeDocOverlay from './editor/EditorLargeDocOverlay.vue'
@@ -30,6 +32,9 @@ import { useEditorZoom } from '../composables/useEditorZoom'
 import { useMermaidReplaceDialog } from '../composables/useMermaidReplaceDialog'
 import { useInlineFormatToolbar } from '../composables/useInlineFormatToolbar'
 import { useEditorInputHandlers } from '../composables/useEditorInputHandlers'
+import { useEditorSessionLifecycle } from '../composables/useEditorSessionLifecycle'
+import { useBlockMenuControls } from '../composables/useBlockMenuControls'
+import { useTableToolbarControls } from '../composables/useTableToolbarControls'
 import { normalizeBlockId, normalizeHeadingAnchor, parseWikilinkTarget, slugifyHeading } from '../lib/wikilinks'
 import { toTiptapDoc } from '../lib/tiptap/editorBlocksToTiptapDoc'
 import { fromTiptapDoc } from '../lib/tiptap/tiptapDocToEditorBlocks'
@@ -48,9 +53,9 @@ import { WIKILINK_STATE_KEY, getWikilinkPluginState, type WikilinkCandidate } fr
 import { buildWikilinkCandidates } from '../lib/tiptap/wikilinkCandidates'
 import { enterWikilinkEditFromNode, parseWikilinkToken, type WikilinkEditingRange } from '../lib/tiptap/extensions/wikilinkCommands'
 import type { BlockMenuActionItem, BlockMenuTarget, TurnIntoType } from '../lib/tiptap/blockMenu/types'
-import { canCopyAnchor, canTurnInto, toBlockMenuTarget } from '../lib/tiptap/blockMenu/guards'
-import { canMoveDown, canMoveUp, deleteNode, duplicateNode, insertAbove, insertBelow, moveNodeDown, moveNodeUp, turnInto } from '../lib/tiptap/blockMenu/actions'
-import { computeHandleLock, resolveActiveTarget, type DragHandleUiState } from '../lib/tiptap/blockMenu/dragHandleState'
+import { canCopyAnchor, toBlockMenuTarget } from '../lib/tiptap/blockMenu/guards'
+import { deleteNode, duplicateNode, insertAbove, insertBelow, moveNodeDown, moveNodeUp, turnInto } from '../lib/tiptap/blockMenu/actions'
+import { computeHandleLock, type DragHandleUiState } from '../lib/tiptap/blockMenu/dragHandleState'
 import {
   buildTableToolbarActions,
   type TableActionId,
@@ -99,7 +104,6 @@ const holder = ref<HTMLDivElement | null>(null)
 const contentShell = ref<HTMLDivElement | null>(null)
 let editor: Editor | null = null
 let suppressOnChange = false
-let pathLoadToken = 0
 const MAIN_PANE_ID: PaneId = 'main'
 const isLoadingLargeDocument = ref(false)
 const loadStageLabel = ref('')
@@ -114,9 +118,6 @@ const wikilinkLeft = ref(0)
 const wikilinkTop = ref(0)
 const wikilinkResults = ref<Array<{ id: string; label: string; target: string; isCreate: boolean }>>([])
 const wikilinkEditingRange = ref<WikilinkEditingRange | null>(null)
-const blockMenuOpen = ref(false)
-const blockMenuIndex = ref(0)
-const blockMenuTarget = ref<BlockMenuTarget | null>(null)
 const lastStableBlockMenuTarget = ref<BlockMenuTarget | null>(null)
 const blockMenuFloatingEl = ref<HTMLDivElement | null>(null)
 const blockMenuPos = ref({ x: 0, y: 0 })
@@ -133,17 +134,8 @@ const tableBoxLeft = ref(0)
 const tableBoxTop = ref(0)
 const tableBoxWidth = ref(0)
 const tableBoxHeight = ref(0)
-const tableAddTopVisible = ref(false)
-const tableAddBottomVisible = ref(false)
-const tableAddLeftVisible = ref(false)
-const tableAddRightVisible = ref(false)
-const tableToolbarTriggerVisible = ref(false)
 const tableToolbarHovering = ref(false)
 const tableToolbarActions = ref<TableToolbarAction[]>([])
-let tableEdgeTopSeenAt = 0
-let tableEdgeBottomSeenAt = 0
-let tableEdgeLeftSeenAt = 0
-let tableEdgeRightSeenAt = 0
 let tableHoverHideTimer: ReturnType<typeof setTimeout> | null = null
 const TABLE_EDGE_SHOW_THRESHOLD = 20
 const TABLE_EDGE_STICKY_THRESHOLD = 44
@@ -225,33 +217,29 @@ const computedDragLock = computed(() => computeHandleLock(dragHandleUiState.valu
 const debugTargetPos = computed(() => String(dragHandleUiState.value.activeTarget?.pos ?? ''))
 // Keep template binding reactive when active session editor changes.
 const renderedEditor = computed(() => sessionStore.getActiveSession(MAIN_PANE_ID)?.editor ?? null)
-const blockMenuActionTarget = computed(() => resolveActiveTarget(dragHandleUiState.value.activeTarget, lastStableBlockMenuTarget.value))
-const blockMenuActions = computed<BlockMenuActionItem[]>(() => {
-  const currentEditor = renderedEditor.value
-  const target = blockMenuActionTarget.value
-  const canMoveUpValue = Boolean(currentEditor && target && !target.isVirtualTitle && canMoveUp(currentEditor, target))
-  const canMoveDownValue = Boolean(currentEditor && target && !target.isVirtualTitle && canMoveDown(currentEditor, target))
-  const base: BlockMenuActionItem[] = [
-    { id: 'insert_above', actionId: 'insert_above', label: 'Insert above', disabled: !target },
-    { id: 'insert_below', actionId: 'insert_below', label: 'Insert below', disabled: !target },
-    { id: 'move_up', actionId: 'move_up', label: 'Move up', disabled: !canMoveUpValue },
-    { id: 'move_down', actionId: 'move_down', label: 'Move down', disabled: !canMoveDownValue },
-    { id: 'duplicate', actionId: 'duplicate', label: 'Duplicate', disabled: !target },
-    { id: 'copy_anchor', actionId: 'copy_anchor', label: 'Copy anchor', disabled: !canCopyAnchor(target) },
-    { id: 'delete', actionId: 'delete', label: 'Delete', disabled: !target?.canDelete },
-  ]
-  return base
+const blockMenuControls = useBlockMenuControls({
+  getEditor: () => renderedEditor.value,
+  turnIntoTypes: TURN_INTO_TYPES,
+  turnIntoLabels: TURN_INTO_LABELS,
+  activeTarget: computed(() => dragHandleUiState.value.activeTarget),
+  stableTarget: lastStableBlockMenuTarget
 })
-const blockMenuConvertActions = computed<BlockMenuActionItem[]>(() => {
-  const target = blockMenuActionTarget.value
-  return TURN_INTO_TYPES.map((turnIntoType) => ({
-    id: `turn_into:${turnIntoType}`,
-    actionId: 'turn_into' as const,
-    turnIntoType,
-    label: TURN_INTO_LABELS[turnIntoType],
-    disabled: !canTurnInto(target, turnIntoType),
-  }))
+const blockMenuOpen = blockMenuControls.blockMenuOpen
+const blockMenuIndex = blockMenuControls.blockMenuIndex
+const blockMenuTarget = blockMenuControls.blockMenuTarget
+const blockMenuActionTarget = blockMenuControls.actionTarget
+const blockMenuActions = blockMenuControls.actions
+const blockMenuConvertActions = blockMenuControls.convertActions
+const tableControls = useTableToolbarControls({
+  showThreshold: TABLE_EDGE_SHOW_THRESHOLD,
+  stickyThreshold: TABLE_EDGE_STICKY_THRESHOLD,
+  stickyMs: TABLE_EDGE_STICKY_MS
 })
+const tableToolbarTriggerVisible = tableControls.tableToolbarTriggerVisible
+const tableAddTopVisible = tableControls.tableAddTopVisible
+const tableAddBottomVisible = tableControls.tableAddBottomVisible
+const tableAddLeftVisible = tableControls.tableAddLeftVisible
+const tableAddRightVisible = tableControls.tableAddRightVisible
 const { editorZoomStyle, initFromStorage: initEditorZoomFromStorage, zoomBy: zoomEditorBy, resetZoom: resetEditorZoom, getZoom } = useEditorZoom()
 const { mermaidReplaceDialog, resolveMermaidReplaceDialog, requestMermaidReplaceConfirm } = useMermaidReplaceDialog()
 const navigation = useEditorNavigation({
@@ -260,6 +248,12 @@ const navigation = useEditorNavigation({
   normalizeHeadingAnchor,
   slugifyHeading,
   normalizeBlockId
+})
+const lifecycle = useEditorSessionLifecycle({
+  emitStatus: (payload) => emit('status', payload),
+  saveCurrentFile: (manual) => saveCurrentFile(manual),
+  isEditingVirtualTitle: () => false,
+  autosaveIdleMs: 1800
 })
 
 function getSession(path: string) {
@@ -270,43 +264,29 @@ function ensureSession(path: string) {
   return sessionStore.ensureSession(path)
 }
 
-function emitStatus(path: string) {
-  const session = getSession(path)
-  if (!session) return
-  emit('status', {
-    path,
-    dirty: session.dirty,
-    saving: session.saving,
-    saveError: session.saveError
-  })
-}
-
 function setDirty(path: string, dirty: boolean) {
   const session = getSession(path)
   if (!session) return
   session.dirty = dirty
-  emitStatus(path)
+  lifecycle.patchStatus(path, { dirty })
 }
 
 function setSaving(path: string, saving: boolean) {
   const session = getSession(path)
   if (!session) return
   session.saving = saving
-  emitStatus(path)
+  lifecycle.patchStatus(path, { saving })
 }
 
 function setSaveError(path: string, message: string) {
   const session = getSession(path)
   if (!session) return
   session.saveError = message
-  emitStatus(path)
+  lifecycle.patchStatus(path, { saveError: message })
 }
 
-function clearAutosaveTimer(path: string) {
-  const session = getSession(path)
-  if (!session || !session.autosaveTimer) return
-  clearTimeout(session.autosaveTimer)
-  session.autosaveTimer = null
+function clearAutosaveTimer() {
+  lifecycle.clearAutosaveTimer()
 }
 
 function countLines(input: string): number {
@@ -320,12 +300,8 @@ async function flushUiFrame() {
 }
 
 function scheduleAutosave(path: string) {
-  const session = getSession(path)
-  if (!session) return
-  clearAutosaveTimer(path)
-  session.autosaveTimer = setTimeout(() => {
-    void saveCurrentFile(false)
-  }, 1800)
+  if (!getSession(path)) return
+  lifecycle.scheduleAutosave()
 }
 
 function noteTitleFromPath(path: string): string {
@@ -481,7 +457,7 @@ function toggleBlockMenu(event: MouseEvent) {
   event.preventDefault()
   event.stopPropagation()
   if (!editor) return
-  const target = resolveActiveTarget(dragHandleUiState.value.activeTarget, lastStableBlockMenuTarget.value)
+  const target = blockMenuActionTarget.value
   if (!target) return
   blockMenuTarget.value = target
 
@@ -514,7 +490,7 @@ function onBlockMenuPlus(event: MouseEvent) {
   event.preventDefault()
   event.stopPropagation()
   if (!editor) return
-  const target = resolveActiveTarget(dragHandleUiState.value.activeTarget, lastStableBlockMenuTarget.value)
+  const target = blockMenuActionTarget.value
   if (!target) return
   blockMenuTarget.value = target
   closeSlashMenu()
@@ -533,7 +509,7 @@ function copyAnchorTarget(target: BlockMenuTarget) {
 
 function onBlockMenuSelect(item: BlockMenuActionItem) {
   if (!editor || item.disabled) return
-  const target = resolveActiveTarget(dragHandleUiState.value.activeTarget, lastStableBlockMenuTarget.value)
+  const target = blockMenuActionTarget.value
   if (!target) return
   blockMenuTarget.value = target
   if (item.actionId === 'insert_above') insertAbove(editor, target)
@@ -688,15 +664,7 @@ function hideTableToolbarAnchor() {
   }
   hideTableToolbar()
   tableToolbarHovering.value = false
-  tableToolbarTriggerVisible.value = false
-  tableAddTopVisible.value = false
-  tableAddBottomVisible.value = false
-  tableAddLeftVisible.value = false
-  tableAddRightVisible.value = false
-  tableEdgeTopSeenAt = 0
-  tableEdgeBottomSeenAt = 0
-  tableEdgeLeftSeenAt = 0
-  tableEdgeRightSeenAt = 0
+  tableControls.hideAll()
   tableToolbarActions.value = []
 }
 
@@ -811,14 +779,7 @@ function onEditorMouseMove(event: MouseEvent) {
   }
   if (!editor?.isActive('table')) {
     tableToolbarHovering.value = false
-    tableAddTopVisible.value = false
-    tableAddBottomVisible.value = false
-    tableAddLeftVisible.value = false
-    tableAddRightVisible.value = false
-    tableEdgeTopSeenAt = 0
-    tableEdgeBottomSeenAt = 0
-    tableEdgeLeftSeenAt = 0
-    tableEdgeRightSeenAt = 0
+    tableControls.hideAll()
     return
   }
   const target = event.target
@@ -828,32 +789,23 @@ function onEditorMouseMove(event: MouseEvent) {
   const rect = tableEl.getBoundingClientRect()
   const x = event.clientX
   const y = event.clientY
-  const now = performance.now()
-  const topThreshold = tableAddTopVisible.value ? TABLE_EDGE_STICKY_THRESHOLD : TABLE_EDGE_SHOW_THRESHOLD
-  const bottomThreshold = tableAddBottomVisible.value ? TABLE_EDGE_STICKY_THRESHOLD : TABLE_EDGE_SHOW_THRESHOLD
-  const leftThreshold = tableAddLeftVisible.value ? TABLE_EDGE_STICKY_THRESHOLD : TABLE_EDGE_SHOW_THRESHOLD
-  const rightThreshold = tableAddRightVisible.value ? TABLE_EDGE_STICKY_THRESHOLD : TABLE_EDGE_SHOW_THRESHOLD
   const inVerticalBand = y >= rect.top - 24 && y <= rect.bottom + 24
   const inHorizontalBand = x >= rect.left - 24 && x <= rect.right + 24
-  const nearLeft = Math.abs(x - rect.left) <= leftThreshold && inVerticalBand
-  const nearRight = Math.abs(x - rect.right) <= rightThreshold && inVerticalBand
-  const nearTop = Math.abs(y - rect.top) <= topThreshold && inHorizontalBand
-  const nearBottom = Math.abs(y - rect.bottom) <= bottomThreshold && inHorizontalBand
-  if (nearTop) tableEdgeTopSeenAt = now
-  if (nearBottom) tableEdgeBottomSeenAt = now
-  if (nearLeft) tableEdgeLeftSeenAt = now
-  if (nearRight) tableEdgeRightSeenAt = now
-  const stickyTop = now - tableEdgeTopSeenAt <= TABLE_EDGE_STICKY_MS
-  const stickyBottom = now - tableEdgeBottomSeenAt <= TABLE_EDGE_STICKY_MS
-  const stickyLeft = now - tableEdgeLeftSeenAt <= TABLE_EDGE_STICKY_MS
-  const stickyRight = now - tableEdgeRightSeenAt <= TABLE_EDGE_STICKY_MS
+  tableControls.updateFromDistances({
+    left: inVerticalBand ? Math.abs(x - rect.left) : Number.POSITIVE_INFINITY,
+    right: inVerticalBand ? Math.abs(x - rect.right) : Number.POSITIVE_INFINITY,
+    top: inHorizontalBand ? Math.abs(y - rect.top) : Number.POSITIVE_INFINITY,
+    bottom: inHorizontalBand ? Math.abs(y - rect.bottom) : Number.POSITIVE_INFINITY
+  })
   const inToolbar = Boolean(tableToolbarFloatingEl.value?.contains(target))
   const inControls = Boolean(target.closest('.meditor-table-control'))
   const inTable = Boolean(target.closest('.ProseMirror table'))
-  tableAddTopVisible.value = nearTop || stickyTop || inControls || tableToolbarOpen.value
-  tableAddBottomVisible.value = nearBottom || stickyBottom || inControls || tableToolbarOpen.value
-  tableAddLeftVisible.value = nearLeft || stickyLeft || inControls || tableToolbarOpen.value
-  tableAddRightVisible.value = nearRight || stickyRight || inControls || tableToolbarOpen.value
+  if (inControls || tableToolbarOpen.value) {
+    tableAddTopVisible.value = true
+    tableAddBottomVisible.value = true
+    tableAddLeftVisible.value = true
+    tableAddRightVisible.value = true
+  }
   tableToolbarHovering.value = inTable || inToolbar || inControls || tableToolbarOpen.value
 }
 
@@ -862,14 +814,7 @@ function onEditorMouseLeave() {
   if (tableHoverHideTimer) clearTimeout(tableHoverHideTimer)
   tableHoverHideTimer = setTimeout(() => {
     tableToolbarHovering.value = false
-    tableAddTopVisible.value = false
-    tableAddBottomVisible.value = false
-    tableAddLeftVisible.value = false
-    tableAddRightVisible.value = false
-    tableEdgeTopSeenAt = 0
-    tableEdgeBottomSeenAt = 0
-    tableEdgeLeftSeenAt = 0
-    tableEdgeRightSeenAt = 0
+    tableControls.hideAll()
     tableHoverHideTimer = null
   }, 120)
 }
@@ -1128,16 +1073,16 @@ function setActiveSession(path: string) {
 async function loadCurrentFile(path: string, options?: { forceReload?: boolean; requestId?: number; skipActivate?: boolean }) {
   if (!path) return
   await ensurePropertySchemaLoaded()
-  if (typeof options?.requestId === 'number' && options.requestId !== pathLoadToken) return
+  if (typeof options?.requestId === 'number' && !lifecycle.isCurrentRequest(options.requestId)) return
   const session = ensureSession(path)
   if (!options?.skipActivate) {
     setActiveSession(path)
   }
-  if (typeof options?.requestId === 'number' && options.requestId !== pathLoadToken) return
+  if (typeof options?.requestId === 'number' && !lifecycle.isCurrentRequest(options.requestId)) return
   if (!editor) return
 
   setSaveError(path, '')
-  clearAutosaveTimer(path)
+  clearAutosaveTimer()
   clearOutlineTimer(path)
   resetTransientUiState()
   isLoadingLargeDocument.value = false
@@ -1149,7 +1094,7 @@ async function loadCurrentFile(path: string, options?: { forceReload?: boolean; 
   try {
     if (!session.isLoaded || options?.forceReload) {
       const txt = await props.openFile(path)
-      if (typeof options?.requestId === 'number' && options.requestId !== pathLoadToken) return
+      if (typeof options?.requestId === 'number' && !lifecycle.isCurrentRequest(options.requestId)) return
       parseAndStoreFrontmatter(path, txt)
       const body = frontmatterByPath.value[path]?.body ?? txt
       const isLargeDocument = txt.length >= LARGE_DOC_THRESHOLD
@@ -1179,7 +1124,7 @@ async function loadCurrentFile(path: string, options?: { forceReload?: boolean; 
     }
 
     await nextTick()
-    if (typeof options?.requestId === 'number' && options.requestId !== pathLoadToken) return
+    if (typeof options?.requestId === 'number' && !lifecycle.isCurrentRequest(options.requestId)) return
     if (currentPath.value !== path) return
     const remembered = session.scrollTop
     if (holder.value && typeof remembered === 'number') {
@@ -1195,7 +1140,7 @@ async function loadCurrentFile(path: string, options?: { forceReload?: boolean; 
   } catch (error) {
     setSaveError(path, error instanceof Error ? error.message : 'Could not read file.')
   } finally {
-    if (typeof options?.requestId === 'number' && options.requestId !== pathLoadToken) return
+    if (typeof options?.requestId === 'number' && !lifecycle.isCurrentRequest(options.requestId)) return
     isLoadingLargeDocument.value = false
     loadStageLabel.value = ''
     loadProgressPercent.value = 0
@@ -1241,6 +1186,7 @@ async function saveCurrentFile(manual = true) {
 
     if (savePath !== initialPath) {
       sessionStore.renamePath(initialPath, savePath)
+      lifecycle.movePathState(initialPath, savePath)
       moveFrontmatterPathState(initialPath, savePath)
       emit('path-renamed', { from: initialPath, to: savePath, manual })
     }
@@ -1498,7 +1444,7 @@ async function openLinkTargetWithAutosave(target: string) {
   const path = currentPath.value
   const session = path ? getSession(path) : null
   if (path && session?.dirty) {
-    clearAutosaveTimer(path)
+    clearAutosaveTimer()
     await saveCurrentFile(false)
     if (getSession(path)?.dirty) return
   }
@@ -1506,27 +1452,35 @@ async function openLinkTargetWithAutosave(target: string) {
 }
 
 const inputHandlers = useEditorInputHandlers({
-  getEditor: () => editor,
-  currentPath,
-  captureCaret,
-  currentTextSelectionContext,
-  visibleSlashCommands,
-  slashOpen,
-  slashIndex,
-  closeSlashMenu,
-  insertBlockFromDescriptor,
-  blockMenuOpen,
-  closeBlockMenu: () => closeBlockMenu(),
-  tableToolbarOpen,
-  hideTableToolbar,
-  updateFormattingToolbar,
-  updateTableToolbar,
-  syncSlashMenuFromSelection,
-  zoomEditorBy,
-  resetEditorZoom,
-  inlineFormatToolbar: {
-    linkPopoverOpen: inlineFormatToolbar.linkPopoverOpen,
-    cancelLink: inlineFormatToolbar.cancelLink
+  editingPort: {
+    getEditor: () => editor,
+    currentPath,
+    captureCaret,
+    currentTextSelectionContext,
+    insertBlockFromDescriptor
+  },
+  menusPort: {
+    visibleSlashCommands,
+    slashOpen,
+    slashIndex,
+    closeSlashMenu,
+    blockMenuOpen,
+    closeBlockMenu: () => closeBlockMenu(),
+    tableToolbarOpen,
+    hideTableToolbar,
+    inlineFormatToolbar: {
+      linkPopoverOpen: inlineFormatToolbar.linkPopoverOpen,
+      cancelLink: inlineFormatToolbar.cancelLink
+    }
+  },
+  uiPort: {
+    updateFormattingToolbar,
+    updateTableToolbar,
+    syncSlashMenuFromSelection
+  },
+  zoomPort: {
+    zoomEditorBy,
+    resetEditorZoom
   }
 })
 const onEditorKeydown = inputHandlers.onEditorKeydown
@@ -1545,7 +1499,7 @@ watch(
 
     const nextPath = next?.trim()
     if (!nextPath) {
-      pathLoadToken += 1
+      lifecycle.nextRequestId()
       const activePath = sessionStore.getActivePath(MAIN_PANE_ID)
       if (activePath) {
         captureCaret(activePath)
@@ -1566,7 +1520,7 @@ watch(
       return
     }
 
-    const requestId = ++pathLoadToken
+    const requestId = lifecycle.nextRequestId()
     ensureSession(nextPath)
     setActiveSession(nextPath)
     await nextTick()
@@ -1593,7 +1547,7 @@ onMounted(async () => {
   initEditorZoomFromStorage()
 
   if (currentPath.value) {
-    const requestId = ++pathLoadToken
+    const requestId = lifecycle.nextRequestId()
     ensureSession(currentPath.value)
     setActiveSession(currentPath.value)
     await loadCurrentFile(currentPath.value, { requestId, skipActivate: true })
@@ -1658,7 +1612,7 @@ defineExpose({
   },
   reloadCurrent: async () => {
     if (!currentPath.value) return
-    const requestId = ++pathLoadToken
+    const requestId = lifecycle.nextRequestId()
     ensureSession(currentPath.value)
     setActiveSession(currentPath.value)
     await loadCurrentFile(currentPath.value, { forceReload: true, requestId, skipActivate: true })
@@ -1823,17 +1777,27 @@ defineExpose({
             @add-column-after="addColumnAfterFromTrigger"
           />
 
-          <EditorFloatingOverlays
-            :slash-open="slashOpen"
-            :slash-index="slashIndex"
-            :slash-left="slashLeft"
-            :slash-top="slashTop"
-            :slash-commands="visibleSlashCommands"
-            :wikilink-open="wikilinkOpen"
-            :wikilink-index="wikilinkIndex"
-            :wikilink-left="wikilinkLeft"
-            :wikilink-top="wikilinkTop"
-            :wikilink-results="wikilinkResults"
+          <EditorSlashOverlay
+            :open="slashOpen"
+            :index="slashIndex"
+            :left="slashLeft"
+            :top="slashTop"
+            :commands="visibleSlashCommands"
+            @update:index="slashIndex = $event"
+            @select="closeSlashMenu(); insertBlockFromDescriptor($event.type, $event.data)"
+          />
+
+          <EditorWikilinkOverlay
+            :open="wikilinkOpen"
+            :index="wikilinkIndex"
+            :left="wikilinkLeft"
+            :top="wikilinkTop"
+            :results="wikilinkResults"
+            @update:index="onWikilinkMenuIndexUpdate($event)"
+            @select="onWikilinkMenuSelect($event)"
+          />
+
+          <EditorContextOverlays
             :block-menu-open="blockMenuOpen"
             :block-menu-index="blockMenuIndex"
             :block-menu-x="blockMenuPos.x"
@@ -1846,10 +1810,6 @@ defineExpose({
             :table-toolbar-actions="tableToolbarActions"
             :table-markdown-mode="TABLE_MARKDOWN_MODE"
             :table-toolbar-viewport-max-height="tableToolbarViewportMaxHeight"
-            @slash:update-index="slashIndex = $event"
-            @slash:select="closeSlashMenu(); insertBlockFromDescriptor($event.type, $event.data)"
-            @wikilink:update-index="onWikilinkMenuIndexUpdate($event)"
-            @wikilink:select="onWikilinkMenuSelect($event)"
             @block:menu-el="blockMenuFloatingEl = $event"
             @block:update-index="blockMenuIndex = $event"
             @block:select="onBlockMenuSelect($event)"

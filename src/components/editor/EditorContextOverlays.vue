@@ -1,23 +1,10 @@
 <script setup lang="ts">
 import type { BlockMenuActionItem } from '../../lib/tiptap/blockMenu/types'
 import type { TableActionId, TableToolbarAction } from '../../lib/tiptap/tableToolbarActions'
-import type { SlashCommand } from '../../lib/editorSlashCommands'
-import EditorSlashMenu from './EditorSlashMenu.vue'
-import EditorWikilinkMenu from './EditorWikilinkMenu.vue'
 import EditorBlockMenu from './EditorBlockMenu.vue'
 import EditorTableToolbar from './EditorTableToolbar.vue'
 
 defineProps<{
-  slashOpen: boolean
-  slashIndex: number
-  slashLeft: number
-  slashTop: number
-  slashCommands: SlashCommand[]
-  wikilinkOpen: boolean
-  wikilinkIndex: number
-  wikilinkLeft: number
-  wikilinkTop: number
-  wikilinkResults: Array<{ id: string; label: string; target: string; isCreate: boolean }>
   blockMenuOpen: boolean
   blockMenuIndex: number
   blockMenuX: number
@@ -33,10 +20,6 @@ defineProps<{
 }>()
 
 const emit = defineEmits<{
-  'slash:updateIndex': [value: number]
-  'slash:select': [command: SlashCommand]
-  'wikilink:updateIndex': [value: number]
-  'wikilink:select': [target: string]
   'block:updateIndex': [value: number]
   'block:select': [item: BlockMenuActionItem]
   'block:close': []
@@ -49,31 +32,6 @@ const emit = defineEmits<{
 
 <template>
   <Teleport to="body">
-    <div :style="{ position: 'fixed', left: `${slashLeft}px`, top: `${slashTop}px`, zIndex: 50 }">
-      <EditorSlashMenu
-        :open="slashOpen"
-        :index="slashIndex"
-        :left="0"
-        :top="0"
-        :commands="slashCommands"
-        @update:index="emit('slash:updateIndex', $event)"
-        @select="emit('slash:select', $event)"
-      />
-    </div>
-
-    <div :style="{ position: 'fixed', left: `${wikilinkLeft}px`, top: `${wikilinkTop}px`, zIndex: 50 }">
-      <EditorWikilinkMenu
-        :open="wikilinkOpen"
-        :index="wikilinkIndex"
-        :left="0"
-        :top="0"
-        :results="wikilinkResults"
-        @menu-el="() => {}"
-        @update:index="emit('wikilink:updateIndex', $event)"
-        @select="emit('wikilink:select', $event)"
-      />
-    </div>
-
     <div :style="{ position: 'fixed', left: `${blockMenuX}px`, top: `${blockMenuY}px`, zIndex: 50 }">
       <EditorBlockMenu
         :open="blockMenuOpen"

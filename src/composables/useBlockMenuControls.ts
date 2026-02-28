@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue'
+import { computed, ref, type Ref } from 'vue'
 import type { BlockMenuActionItem, BlockMenuTarget, TurnIntoType } from '../lib/tiptap/blockMenu/types'
 import { canCopyAnchor, canTurnInto } from '../lib/tiptap/blockMenu/guards'
 import { canMoveDown, canMoveUp } from '../lib/tiptap/blockMenu/actions'
@@ -20,13 +20,14 @@ export function useBlockMenuControls(options: {
   getEditor: () => Editor | null
   turnIntoTypes: TurnIntoType[]
   turnIntoLabels: Record<TurnIntoType, string>
+  activeTarget: Ref<BlockMenuTarget | null>
+  stableTarget: Ref<BlockMenuTarget | null>
 }) {
   const blockMenuOpen = ref(false)
   const blockMenuIndex = ref(0)
   const blockMenuTarget = ref<BlockMenuTarget | null>(null)
-  const lastStableTarget = ref<BlockMenuTarget | null>(null)
 
-  const actionTarget = computed(() => resolveActiveTarget(blockMenuTarget.value, lastStableTarget.value))
+  const actionTarget = computed(() => resolveActiveTarget(options.activeTarget.value, options.stableTarget.value))
 
   const actions = computed<BlockMenuActionItem[]>(() => {
     const editor = options.getEditor()
@@ -60,7 +61,6 @@ export function useBlockMenuControls(options: {
     blockMenuOpen,
     blockMenuIndex,
     blockMenuTarget,
-    lastStableTarget,
     actionTarget,
     actions,
     convertActions

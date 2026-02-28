@@ -27,27 +27,35 @@ import { toTiptapDoc } from '../lib/tiptap/editorBlocksToTiptapDoc'
  * - Does not own menu state; host passes callbacks and refs.
  */
 export type UseEditorInputHandlersOptions = {
-  getEditor: () => Editor | null
-  currentPath: Ref<string>
-  captureCaret: (path: string) => void
-  currentTextSelectionContext: () => { text: string; nodeType: string } | null
-  visibleSlashCommands: Ref<SlashCommand[]>
-  slashOpen: Ref<boolean>
-  slashIndex: Ref<number>
-  closeSlashMenu: () => void
-  insertBlockFromDescriptor: (type: string, data: Record<string, unknown>) => boolean
-  blockMenuOpen: Ref<boolean>
-  closeBlockMenu: () => void
-  tableToolbarOpen: Ref<boolean>
-  hideTableToolbar: () => void
-  updateFormattingToolbar: () => void
-  updateTableToolbar: () => void
-  syncSlashMenuFromSelection: (options?: { preserveIndex?: boolean }) => void
-  zoomEditorBy: (delta: number) => number
-  resetEditorZoom: () => number
-  inlineFormatToolbar: {
-    linkPopoverOpen: Ref<boolean>
-    cancelLink: () => void
+  editingPort: {
+    getEditor: () => Editor | null
+    currentPath: Ref<string>
+    captureCaret: (path: string) => void
+    currentTextSelectionContext: () => { text: string; nodeType: string } | null
+    insertBlockFromDescriptor: (type: string, data: Record<string, unknown>) => boolean
+  }
+  menusPort: {
+    visibleSlashCommands: Ref<SlashCommand[]>
+    slashOpen: Ref<boolean>
+    slashIndex: Ref<number>
+    closeSlashMenu: () => void
+    blockMenuOpen: Ref<boolean>
+    closeBlockMenu: () => void
+    tableToolbarOpen: Ref<boolean>
+    hideTableToolbar: () => void
+    inlineFormatToolbar: {
+      linkPopoverOpen: Ref<boolean>
+      cancelLink: () => void
+    }
+  }
+  uiPort: {
+    updateFormattingToolbar: () => void
+    updateTableToolbar: () => void
+    syncSlashMenuFromSelection: (options?: { preserveIndex?: boolean }) => void
+  }
+  zoomPort: {
+    zoomEditorBy: (delta: number) => number
+    resetEditorZoom: () => number
   }
 }
 
@@ -56,66 +64,66 @@ export type UseEditorInputHandlersOptions = {
  */
 export function useEditorInputHandlers(options: UseEditorInputHandlersOptions) {
   function onEditorKeydown(event: KeyboardEvent) {
-    if (!options.getEditor()) return
+    if (!options.editingPort.getEditor()) return
 
     if (isEditorZoomModifier(event)) {
       if (isZoomInShortcut(event)) {
         event.preventDefault()
-        options.zoomEditorBy(0.1)
+        options.zoomPort.zoomEditorBy(0.1)
         return
       }
       if (isZoomOutShortcut(event)) {
         event.preventDefault()
-        options.zoomEditorBy(-0.1)
+        options.zoomPort.zoomEditorBy(-0.1)
         return
       }
       if (isZoomResetShortcut(event)) {
         event.preventDefault()
-        options.resetEditorZoom()
+        options.zoomPort.resetEditorZoom()
         return
       }
     }
 
-    if (options.slashOpen.value) {
+    if (options.menusPort.slashOpen.value) {
       if (event.key === 'ArrowDown') {
         event.preventDefault()
         event.stopPropagation()
-        if (!options.visibleSlashCommands.value.length) return
-        options.slashIndex.value = (options.slashIndex.value + 1) % options.visibleSlashCommands.value.length
+        if (!options.menusPort.visibleSlashCommands.value.length) return
+        options.menusPort.slashIndex.value = (options.menusPort.slashIndex.value + 1) % options.menusPort.visibleSlashCommands.value.length
         return
       }
       if (event.key === 'ArrowUp') {
         event.preventDefault()
         event.stopPropagation()
-        if (!options.visibleSlashCommands.value.length) return
-        options.slashIndex.value = (options.slashIndex.value - 1 + options.visibleSlashCommands.value.length) % options.visibleSlashCommands.value.length
+        if (!options.menusPort.visibleSlashCommands.value.length) return
+        options.menusPort.slashIndex.value = (options.menusPort.slashIndex.value - 1 + options.menusPort.visibleSlashCommands.value.length) % options.menusPort.visibleSlashCommands.value.length
         return
       }
       if (event.key === 'Enter') {
         event.preventDefault()
         event.stopPropagation()
-        const command = options.visibleSlashCommands.value[options.slashIndex.value]
+        const command = options.menusPort.visibleSlashCommands.value[options.menusPort.slashIndex.value]
         if (!command) return
-        options.closeSlashMenu()
-        options.insertBlockFromDescriptor(command.type, command.data)
+        options.menusPort.closeSlashMenu()
+        options.editingPort.insertBlockFromDescriptor(command.type, command.data)
         return
       }
       if (event.key === 'Escape') {
         event.preventDefault()
         event.stopPropagation()
-        options.closeSlashMenu()
+        options.menusPort.closeSlashMenu()
         return
       }
     }
 
-    const context = options.currentTextSelectionContext()
+    const context = options.editingPort.currentTextSelectionContext()
     if ((event.key === ' ' || event.code === 'Space') && context?.nodeType === 'paragraph') {
       const marker = context.text.trim()
       const transform = applyMarkdownShortcut(marker)
       if (transform) {
         event.preventDefault()
-        options.closeSlashMenu()
-        options.insertBlockFromDescriptor(transform.type, transform.data)
+        options.menusPort.closeSlashMenu()
+        options.editingPort.insertBlockFromDescriptor(transform.type, transform.data)
         return
       }
     }
@@ -124,34 +132,34 @@ export function useEditorInputHandlers(options: UseEditorInputHandlersOptions) {
       const marker = context.text.trim()
       if (marker === '```') {
         event.preventDefault()
-        options.insertBlockFromDescriptor('code', { code: '' })
+        options.editingPort.insertBlockFromDescriptor('code', { code: '' })
       }
     }
 
-    if (event.key === 'Escape' && options.blockMenuOpen.value) {
+    if (event.key === 'Escape' && options.menusPort.blockMenuOpen.value) {
       event.preventDefault()
-      options.closeBlockMenu()
+      options.menusPort.closeBlockMenu()
       return
     }
 
-    if (event.key === 'Escape' && options.inlineFormatToolbar.linkPopoverOpen.value) {
+    if (event.key === 'Escape' && options.menusPort.inlineFormatToolbar.linkPopoverOpen.value) {
       event.preventDefault()
-      options.inlineFormatToolbar.cancelLink()
+      options.menusPort.inlineFormatToolbar.cancelLink()
       return
     }
 
-    if (event.key === 'Escape' && options.tableToolbarOpen.value) {
+    if (event.key === 'Escape' && options.menusPort.tableToolbarOpen.value) {
       event.preventDefault()
-      options.hideTableToolbar()
+      options.menusPort.hideTableToolbar()
     }
   }
 
   function onEditorKeyup() {
-    const path = options.currentPath.value
-    if (path) options.captureCaret(path)
-    options.syncSlashMenuFromSelection({ preserveIndex: true })
-    options.updateFormattingToolbar()
-    options.updateTableToolbar()
+    const path = options.editingPort.currentPath.value
+    if (path) options.editingPort.captureCaret(path)
+    options.uiPort.syncSlashMenuFromSelection({ preserveIndex: true })
+    options.uiPort.updateFormattingToolbar()
+    options.uiPort.updateTableToolbar()
   }
 
   function onEditorContextMenu(event: MouseEvent) {
@@ -165,7 +173,7 @@ export function useEditorInputHandlers(options: UseEditorInputHandlersOptions) {
   }
 
   function onEditorPaste(event: ClipboardEvent) {
-    const editor = options.getEditor()
+    const editor = options.editingPort.getEditor()
     if (!editor) return
 
     const plain = event.clipboardData?.getData('text/plain') ?? ''
