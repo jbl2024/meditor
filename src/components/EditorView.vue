@@ -32,6 +32,7 @@ import { normalizeBlockId, normalizeHeadingAnchor, parseWikilinkTarget, slugifyH
 import { toTiptapDoc } from '../lib/tiptap/editorBlocksToTiptapDoc'
 import { fromTiptapDoc } from '../lib/tiptap/tiptapDocToEditorBlocks'
 import { TIPTAP_NODE_TYPES } from '../lib/tiptap/types'
+import { toPersistedTextSelection } from '../lib/tiptap/selectionSnapshot'
 import { useDocumentEditorSessions, type PaneId } from '../composables/useDocumentEditorSessions'
 import { CalloutNode } from '../lib/tiptap/extensions/CalloutNode'
 import { MermaidNode } from '../lib/tiptap/extensions/MermaidNode'
@@ -350,8 +351,8 @@ function captureCaret(path: string) {
   if (!editor || !path) return
   const session = getSession(path)
   if (!session) return
-  const { from, to } = editor.state.selection
-  session.caret = { kind: 'pm-selection', from, to }
+  const snapshot = toPersistedTextSelection(editor.state.selection)
+  session.caret = { kind: 'pm-selection', from: snapshot.from, to: snapshot.to }
 }
 
 function restoreCaret(path: string) {
