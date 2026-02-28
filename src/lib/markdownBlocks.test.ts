@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { editorDataToMarkdown, inlineTextToHtml, markdownToEditorData, sanitizeExternalHref } from './markdownBlocks'
+import {
+  clipboardHtmlToMarkdown,
+  editorDataToMarkdown,
+  inlineTextToHtml,
+  markdownToEditorData,
+  sanitizeExternalHref
+} from './markdownBlocks'
 
 describe('sanitizeExternalHref', () => {
   it('allows http/https/mailto', () => {
@@ -15,6 +21,46 @@ describe('sanitizeExternalHref', () => {
     expect(sanitizeExternalHref('file:///etc/passwd')).toBeNull()
     expect(sanitizeExternalHref('/relative/path')).toBeNull()
     expect(sanitizeExternalHref('')).toBeNull()
+  })
+})
+
+describe('clipboardHtmlToMarkdown', () => {
+  it('converts core html blocks to markdown', () => {
+    const html = `
+      <h2>Title</h2>
+      <p>Hello <strong>world</strong></p>
+      <ul><li>First</li><li>Second</li></ul>
+      <blockquote><p>Quoted line</p></blockquote>
+      <table>
+        <tr><th>Col</th><th>Val</th></tr>
+        <tr><td>A</td><td>B</td></tr>
+      </table>
+    `
+
+    const markdown = clipboardHtmlToMarkdown(html)
+    expect(markdown).toContain('## Title')
+    expect(markdown).toContain('Hello **world**')
+    expect(markdown).toContain('- First')
+    expect(markdown).toContain('> Quoted line')
+    expect(markdown).toContain('| Col | Val |')
+    expect(markdown).toContain('| --- | --- |')
+  })
+
+  it('keeps unsafe href schemes inert through markdown parsing', () => {
+    const html = '<p><a href="javascript:alert(1)">bad</a></p>'
+    const markdown = clipboardHtmlToMarkdown(html)
+    expect(markdown).toContain('[bad](javascript:alert(1))')
+
+    const parsed = markdownToEditorData(markdown)
+    expect(parsed.blocks).toHaveLength(1)
+    expect(String(parsed.blocks[0].data.text)).not.toContain('<a ')
+    expect(String(parsed.blocks[0].data.text)).toContain('[bad](javascript:alert(1))')
+  })
+
+  it('round-trips wikilink-style anchors from html', () => {
+    const html = '<p><a href="wikilink:notes%2Falpha.md" data-wikilink-target="notes/alpha.md">Alpha</a></p>'
+    const markdown = clipboardHtmlToMarkdown(html)
+    expect(markdown).toContain('[[notes/alpha.md|Alpha]]')
   })
 })
 

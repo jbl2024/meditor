@@ -108,4 +108,71 @@ describe('useEditorInputHandlers', () => {
     handlers.onEditorPaste(event)
     expect(insertContent).toHaveBeenCalledTimes(1)
   })
+
+  it('converts structured html paste to editor json content', () => {
+    const { handlers, insertContent } = createHandlers({
+      menusPort: {
+        visibleSlashCommands: ref([{ id: 'quote', label: 'Quote', type: 'quote', data: {} }]),
+        slashOpen: ref(false),
+        slashIndex: ref(0),
+        closeSlashMenu: vi.fn(),
+        blockMenuOpen: ref(false),
+        closeBlockMenu: vi.fn(),
+        tableToolbarOpen: ref(false),
+        hideTableToolbar: vi.fn(),
+        inlineFormatToolbar: {
+          linkPopoverOpen: ref(false),
+          cancelLink: vi.fn()
+        }
+      }
+    })
+
+    const event = {
+      clipboardData: {
+        getData: (kind: string) => (kind === 'text/html' ? '<h2>Title</h2><ul><li>First</li></ul>' : '')
+      },
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn()
+    } as unknown as ClipboardEvent
+
+    handlers.onEditorPaste(event)
+    expect(insertContent).toHaveBeenCalledTimes(1)
+    expect(event.preventDefault).toHaveBeenCalledTimes(1)
+  })
+
+  it('falls back to native paste when html and plain are low-confidence', () => {
+    const { handlers, insertContent } = createHandlers({
+      menusPort: {
+        visibleSlashCommands: ref([{ id: 'quote', label: 'Quote', type: 'quote', data: {} }]),
+        slashOpen: ref(false),
+        slashIndex: ref(0),
+        closeSlashMenu: vi.fn(),
+        blockMenuOpen: ref(false),
+        closeBlockMenu: vi.fn(),
+        tableToolbarOpen: ref(false),
+        hideTableToolbar: vi.fn(),
+        inlineFormatToolbar: {
+          linkPopoverOpen: ref(false),
+          cancelLink: vi.fn()
+        }
+      }
+    })
+
+    const event = {
+      clipboardData: {
+        getData: (kind: string) => {
+          if (kind === 'text/plain') return 'just text'
+          if (kind === 'text/html') return '<div><strong>Hello</strong></div>'
+          return ''
+        }
+      },
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn()
+    } as unknown as ClipboardEvent
+
+    handlers.onEditorPaste(event)
+    expect(insertContent).not.toHaveBeenCalled()
+    expect(event.preventDefault).not.toHaveBeenCalled()
+    expect(event.stopPropagation).not.toHaveBeenCalled()
+  })
 })

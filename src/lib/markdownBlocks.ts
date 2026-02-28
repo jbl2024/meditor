@@ -267,6 +267,226 @@ function inlineHtmlToMarkdown(value: unknown): string {
   return Array.from(container.childNodes).map(elementToMarkdown).join('')
 }
 
+function inlineNodesToMarkdown(nodes: Node[]): string {
+  return nodes.map(elementToMarkdown).join('')
+}
+
+function markdownLinesWithPrefix(value: string, prefix: string): string {
+  return value
+    .split('\n')
+    .map((line) => (line ? `${prefix}${line}` : prefix.trimEnd()))
+    .join('\n')
+}
+
+function hasDirectBlockChildren(element: HTMLElement): boolean {
+  return Array.from(element.children).some((child) => {
+    const tag = child.tagName.toLowerCase()
+    return /^(h[1-6]|p|div|blockquote|pre|ul|ol|table)$/.test(tag)
+  })
+}
+
+function detectCodeLanguage(element: HTMLElement): string {
+  const ownClass = element.className ?? ''
+  const nestedCode = element.querySelector('code')
+  const nestedClass = nestedCode?.className ?? ''
+  const match = `${ownClass} ${nestedClass}`.match(/(?:lang|language)-([A-Za-z0-9_-]+)/i)
+  return (match?.[1] ?? '').trim()
+}
+
+function markdownFromCodeBlock(element: HTMLElement): string {
+  const codeElement = element.tagName.toLowerCase() === 'code' ? element : element.querySelector('code')
+  const language = detectCodeLanguage(element)
+  const raw = (codeElement?.textContent ?? element.textContent ?? '').replace(/\r\n?/g, '\n')
+  const code = raw.replace(/\n+$/g, '')
+  return `\`\`\`${language}\n${code}\n\`\`\``
+}
+
+function markdownFromTable(table: HTMLTableElement): string {
+  const trElements = Array.from(table.querySelectorAll('tr'))
+  if (!trElements.length) return ''
+
+  const rows = trElements
+    .map((row) => {
+      const cells = Array.from(row.children).filter((cell) => {
+        const tag = cell.tagName.toLowerCase()
+        return tag === 'th' || tag === 'td'
+      })
+      return cells.map((cell) => normalizeMultiline(inlineNodesToMarkdown(Array.from(cell.childNodes))))
+    })
+    .filter((cells) => cells.length > 0)
+
+  if (!rows.length) return ''
+
+  const columnCount = Math.max(2, ...rows.map((row) => row.length))
+  const padded = rows.map((row) => Array.from({ length: columnCount }, (_, index) => row[index] ?? ''))
+  const escapeCell = (value: string) => value.replace(/\|/g, '\\|').replace(/\n/g, '<br>')
+  const lineForRow = (row: string[]) => `| ${row.map((cell) => escapeCell(cell)).join(' | ')} |`
+
+  const header = padded[0]
+  const separator = `| ${Array.from({ length: columnCount }, () => '---').join(' | ')} |`
+  const body = padded.slice(1).map(lineForRow)
+  return [lineForRow(header), separator, ...body].join('\n')
+}
+
+function markdownFromList(list: HTMLElement, depth = 0): string[] {
+  const ordered = list.tagName.toLowerCase() === 'ol'
+  const items = Array.from(list.children).filter((child) => child.tagName.toLowerCase() === 'li') as HTMLLIElement[]
+  const lines: string[] = []
+
+  items.forEach((item, index) => {
+    const nestedLists = Array.from(item.children).filter((child) => {
+      const tag = child.tagName.toLowerCase()
+      return tag === 'ul' || tag === 'ol'
+    })
+    const inlineNodes = Array.from(item.childNodes).filter((node) => {
+      if (node.nodeType !== Node.ELEMENT_NODE) return true
+      const tag = (node as HTMLElement).tagName.toLowerCase()
+      return tag !== 'ul' && tag !== 'ol'
+    })
+
+    const checkbox = inlineNodes.find(
+      (node) =>
+        node.nodeType === Node.ELEMENT_NODE &&
+        (node as HTMLElement).tagName.toLowerCase() === 'input' &&
+        ((node as HTMLInputElement).type ?? '').toLowerCase() === 'checkbox'
+    ) as HTMLInputElement | undefined
+    const contentNodes = checkbox ? inlineNodes.filter((node) => node !== checkbox) : inlineNodes
+    const content = normalizeMultiline(inlineNodesToMarkdown(contentNodes)).trim()
+    const marker = checkbox
+      ? `- [${checkbox.checked ? 'x' : ' '}] `
+      : ordered
+        ? `${index + 1}. `
+        : '- '
+    lines.push(`${'  '.repeat(depth)}${marker}${content}`)
+
+    nestedLists.forEach((nested) => {
+      lines.push(...markdownFromList(nested as HTMLElement, depth + 1))
+    })
+  })
+
+  return lines
+}
+
+function markdownFromStandaloneListItem(item: HTMLLIElement, depth = 0): string {
+  const nestedLists = Array.from(item.children).filter((child) => {
+    const tag = child.tagName.toLowerCase()
+    return tag === 'ul' || tag === 'ol'
+  })
+  const inlineNodes = Array.from(item.childNodes).filter((node) => {
+    if (node.nodeType !== Node.ELEMENT_NODE) return true
+    const tag = (node as HTMLElement).tagName.toLowerCase()
+    return tag !== 'ul' && tag !== 'ol'
+  })
+  const checkbox = inlineNodes.find(
+    (node) =>
+      node.nodeType === Node.ELEMENT_NODE &&
+      (node as HTMLElement).tagName.toLowerCase() === 'input' &&
+      ((node as HTMLInputElement).type ?? '').toLowerCase() === 'checkbox'
+  ) as HTMLInputElement | undefined
+  const contentNodes = checkbox ? inlineNodes.filter((node) => node !== checkbox) : inlineNodes
+  const content = normalizeMultiline(inlineNodesToMarkdown(contentNodes)).trim()
+  const marker = checkbox ? `- [${checkbox.checked ? 'x' : ' '}] ` : '- '
+  const lines = [`${'  '.repeat(depth)}${marker}${content}`]
+  nestedLists.forEach((nested) => {
+    lines.push(...markdownFromList(nested as HTMLElement, depth + 1))
+  })
+  return lines.join('\n')
+}
+
+function nodesToClipboardMarkdownBlocks(nodes: Node[]): string[] {
+  const blocks: string[] = []
+
+  const pushIfNotEmpty = (value: string) => {
+    const normalized = normalizeMultiline(value)
+    if (normalized) blocks.push(normalized)
+  }
+
+  nodes.forEach((node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = normalizeMultiline(node.textContent ?? '')
+      if (text) blocks.push(text)
+      return
+    }
+
+    if (node.nodeType !== Node.ELEMENT_NODE) return
+
+    const element = node as HTMLElement
+    const tag = element.tagName.toLowerCase()
+    if (tag === 'script' || tag === 'style') return
+
+    if (/^h[1-6]$/.test(tag)) {
+      const level = Number(tag.slice(1))
+      const text = normalizeMultiline(inlineNodesToMarkdown(Array.from(element.childNodes)))
+      if (text) blocks.push(`${'#'.repeat(level)} ${text}`)
+      return
+    }
+
+    if (tag === 'pre') {
+      pushIfNotEmpty(markdownFromCodeBlock(element))
+      return
+    }
+
+    if (tag === 'code') {
+      pushIfNotEmpty(markdownFromCodeBlock(element))
+      return
+    }
+
+    if (tag === 'ul' || tag === 'ol') {
+      const lines = markdownFromList(element)
+      if (lines.length) blocks.push(lines.join('\n'))
+      return
+    }
+
+    if (tag === 'li') {
+      const line = markdownFromStandaloneListItem(element as HTMLLIElement)
+      if (line) blocks.push(line)
+      return
+    }
+
+    if (tag === 'blockquote') {
+      const innerBlocks = nodesToClipboardMarkdownBlocks(Array.from(element.childNodes))
+      const nestedContent = normalizeMultiline(innerBlocks.join('\n\n'))
+      if (nestedContent) blocks.push(markdownLinesWithPrefix(nestedContent, '> '))
+      return
+    }
+
+    if (tag === 'table') {
+      pushIfNotEmpty(markdownFromTable(element as HTMLTableElement))
+      return
+    }
+
+    if (tag === 'br') {
+      return
+    }
+
+    if (tag === 'p') {
+      pushIfNotEmpty(inlineNodesToMarkdown(Array.from(element.childNodes)))
+      return
+    }
+
+    if (tag === 'div' && hasDirectBlockChildren(element)) {
+      const nested = nodesToClipboardMarkdownBlocks(Array.from(element.childNodes))
+      nested.forEach((value) => blocks.push(value))
+      return
+    }
+
+    pushIfNotEmpty(inlineNodesToMarkdown(Array.from(element.childNodes)))
+  })
+
+  return blocks
+}
+
+export function clipboardHtmlToMarkdown(html: string): string {
+  const raw = String(html ?? '')
+  if (!raw.trim()) return ''
+
+  const container = document.createElement('div')
+  container.innerHTML = raw
+  const blocks = nodesToClipboardMarkdownBlocks(Array.from(container.childNodes))
+  if (!blocks.length) return ''
+  return `${normalizeMultiline(blocks.join('\n\n'))}\n`
+}
+
 function normalizeLine(line: string): string {
   return line.replace(/[ \t]+$/g, '')
 }

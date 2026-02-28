@@ -4,7 +4,7 @@ import type { SlashCommand } from '../lib/editorSlashCommands'
 import {
   applyMarkdownShortcut,
   isEditorZoomModifier,
-  isLikelyMarkdownPaste,
+  selectSmartPasteMarkdown,
   isZoomInShortcut,
   isZoomOutShortcut,
   isZoomResetShortcut
@@ -181,8 +181,9 @@ export function useEditorInputHandlers(options: UseEditorInputHandlersOptions) {
 
     const plain = event.clipboardData?.getData('text/plain') ?? ''
     const html = event.clipboardData?.getData('text/html') ?? ''
-    if (!isLikelyMarkdownPaste(plain, html)) return
-    const parsed = markdownToEditorData(plain)
+    const selected = selectSmartPasteMarkdown(plain, html)
+    if (!selected) return
+    const parsed = markdownToEditorData(selected.markdown)
     if (!parsed.blocks.length) return
 
     event.preventDefault()

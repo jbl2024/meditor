@@ -3,6 +3,7 @@ import {
   applyMarkdownShortcut,
   isEditorZoomModifier,
   isLikelyMarkdownPaste,
+  selectSmartPasteMarkdown,
   isZoomInShortcut,
   isZoomOutShortcut,
   isZoomResetShortcut,
@@ -46,5 +47,26 @@ describe('markdown paste detection', () => {
   it('rejects plain non-markdown text', () => {
     expect(looksLikeMarkdown('just text')).toBe(false)
     expect(isLikelyMarkdownPaste('just text', '')).toBe(false)
+  })
+
+  it('prefers structured html conversion when available', () => {
+    const selected = selectSmartPasteMarkdown('', '<h2>Title</h2><ul><li>Alpha</li></ul>')
+    expect(selected).toEqual({
+      markdown: '## Title\n\n- Alpha\n',
+      source: 'html'
+    })
+  })
+
+  it('falls back to plain markdown when html confidence is low', () => {
+    const selected = selectSmartPasteMarkdown('# Hello', '<div><strong>Hello</strong></div>')
+    expect(selected).toEqual({
+      markdown: '# Hello',
+      source: 'plain'
+    })
+  })
+
+  it('returns null when neither html nor plain has markdown signals', () => {
+    const selected = selectSmartPasteMarkdown('just text', '<div><strong>Hello</strong></div>')
+    expect(selected).toBeNull()
   })
 })

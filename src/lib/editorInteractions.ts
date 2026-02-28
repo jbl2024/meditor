@@ -1,6 +1,7 @@
 /**
  * Shared editor interaction helpers used by keyboard/paste handlers.
  */
+import { clipboardHtmlToMarkdown } from './markdownBlocks'
 
 type ListStyle = 'unordered' | 'ordered' | 'checklist'
 
@@ -93,4 +94,29 @@ export function isLikelyMarkdownPaste(plain: string, html: string): boolean {
   if (!looksLikeMarkdown(plain)) return false
   if (!html) return true
   return true
+}
+
+type SmartPasteSource = 'html' | 'plain'
+
+export function selectSmartPasteMarkdown(
+  plain: string,
+  html: string
+): { markdown: string; source: SmartPasteSource } | null {
+  const htmlMarkdown = clipboardHtmlToMarkdown(html)
+  if (htmlMarkdown) {
+    const normalized = htmlMarkdown.trim()
+    const hasBlockSignals =
+      /(^#{1,6}\s)|(^\s*[-*+]\s)|(^\s*\d+\.\s)|(^>\s)|(^```)|(^\|.*\|)/m.test(normalized) ||
+      normalized.includes('\n')
+    if (hasBlockSignals) {
+      return { markdown: htmlMarkdown, source: 'html' }
+    }
+  }
+
+  const plainText = String(plain ?? '')
+  if (plainText.trim() && looksLikeMarkdown(plainText)) {
+    return { markdown: plainText, source: 'plain' }
+  }
+
+  return null
 }
