@@ -104,6 +104,14 @@ export type UseEditorFileLifecycleOptions = {
   uiPort: EditorFileLifecycleUiPort
   ioPort: EditorFileLifecycleIoPort
   requestPort: EditorFileLifecycleRequestPort
+  /**
+   * Minimum overlay visibility once large-document loading is shown.
+   *
+   * Why/invariant:
+   * - Fast machines can complete parse/render inside one frame; enforcing a short
+   *   minimum prevents imperceptible flash and keeps loading feedback discoverable.
+   */
+  minLargeDocOverlayVisibleMs?: number
 }
 
 /**
@@ -128,6 +136,8 @@ export type UseEditorFileLifecycleOptions = {
  */
 export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
   const { sessionPort, documentPort, uiPort, ioPort, requestPort } = options
+  const minLargeDocOverlayVisibleMs = options.minLargeDocOverlayVisibleMs ?? 220
+  const DEBUG_LARGE_DOC_LOADING = true
 
   async function flushUiFrame() {
     await nextTick()
@@ -146,6 +156,10 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
    */
   async function loadCurrentFile(path: string, loadOptions?: { forceReload?: boolean; requestId?: number }) {
     if (!path) return
+    if (DEBUG_LARGE_DOC_LOADING) {
+      // eslint-disable-next-line no-console
+      console.info('[large-doc-overlay] load:start', { path, requestId: loadOptions?.requestId, forceReload: Boolean(loadOptions?.forceReload) })
+    }
     await documentPort.ensurePropertySchemaLoaded()
     if (typeof loadOptions?.requestId === 'number' && !requestPort.isCurrentRequest(loadOptions.requestId)) return
 
@@ -163,21 +177,40 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
     uiPort.ui.loadProgressIndeterminate.value = false
     uiPort.ui.loadDocumentStats.value = null
 
+    let largeDocOverlayShownAt = 0
     try {
       if (!session.isLoaded || loadOptions?.forceReload) {
         const txt = await ioPort.openFile(path)
+        if (DEBUG_LARGE_DOC_LOADING) {
+          // eslint-disable-next-line no-console
+          console.info('[large-doc-overlay] openFile:done', { path, length: txt.length, threshold: uiPort.largeDocThreshold })
+        }
         if (typeof loadOptions?.requestId === 'number' && !requestPort.isCurrentRequest(loadOptions.requestId)) return
 
         documentPort.parseAndStoreFrontmatter(path, txt)
         const body = documentPort.frontmatterByPath.value[path]?.body ?? txt
         const isLargeDocument = txt.length >= uiPort.largeDocThreshold
+        if (DEBUG_LARGE_DOC_LOADING) {
+          // eslint-disable-next-line no-console
+          console.info('[large-doc-overlay] classify', { path, isLargeDocument, bodyLength: body.length })
+        }
 
         if (isLargeDocument) {
           uiPort.ui.isLoadingLargeDocument.value = true
+          largeDocOverlayShownAt = Date.now()
           uiPort.ui.loadDocumentStats.value = { chars: body.length, lines: documentPort.countLines(body) }
           uiPort.ui.loadStageLabel.value = 'Parsing markdown blocks...'
           uiPort.ui.loadProgressPercent.value = 35
           uiPort.ui.loadProgressIndeterminate.value = false
+          if (DEBUG_LARGE_DOC_LOADING) {
+            // eslint-disable-next-line no-console
+            console.info('[large-doc-overlay] show', {
+              path,
+              shownAt: largeDocOverlayShownAt,
+              stage: uiPort.ui.loadStageLabel.value,
+              stats: uiPort.ui.loadDocumentStats.value
+            })
+          }
           await flushUiFrame()
         }
 
@@ -187,6 +220,14 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
         if (isLargeDocument) {
           uiPort.ui.loadStageLabel.value = 'Rendering blocks in editor...'
           uiPort.ui.loadProgressPercent.value = 70
+          if (DEBUG_LARGE_DOC_LOADING) {
+            // eslint-disable-next-line no-console
+            console.info('[large-doc-overlay] stage:update', {
+              path,
+              stage: uiPort.ui.loadStageLabel.value,
+              progress: uiPort.ui.loadProgressPercent.value
+            })
+          }
           await flushUiFrame()
         }
 
@@ -217,11 +258,26 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
       sessionPort.setSaveError(path, error instanceof Error ? error.message : 'Could not read file.')
     } finally {
       if (typeof loadOptions?.requestId === 'number' && !requestPort.isCurrentRequest(loadOptions.requestId)) return
+      if (largeDocOverlayShownAt > 0) {
+        const elapsed = Date.now() - largeDocOverlayShownAt
+        const remaining = minLargeDocOverlayVisibleMs - elapsed
+        if (DEBUG_LARGE_DOC_LOADING) {
+          // eslint-disable-next-line no-console
+          console.info('[large-doc-overlay] hide:pre-delay', { path, elapsed, minLargeDocOverlayVisibleMs, remaining })
+        }
+        if (remaining > 0) {
+          await new Promise<void>((resolve) => window.setTimeout(resolve, remaining))
+        }
+      }
       uiPort.ui.isLoadingLargeDocument.value = false
       uiPort.ui.loadStageLabel.value = ''
       uiPort.ui.loadProgressPercent.value = 0
       uiPort.ui.loadProgressIndeterminate.value = false
       uiPort.ui.loadDocumentStats.value = null
+      if (DEBUG_LARGE_DOC_LOADING) {
+        // eslint-disable-next-line no-console
+        console.info('[large-doc-overlay] hide:done', { path })
+      }
     }
   }
 

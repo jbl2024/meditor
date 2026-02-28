@@ -210,4 +210,50 @@ describe('useEditorFileLifecycle', () => {
     expect(options.sessionPort.setSaveError).toHaveBeenCalledWith('a.md', 'File changed on disk. Reload before saving to avoid overwrite.')
     expect(options.sessionPort.setSaving).toHaveBeenCalledWith('a.md', false)
   })
+
+  it('keeps large-doc overlay visible for minimum duration to avoid imperceptible flash', async () => {
+    vi.useFakeTimers()
+    const largeDoc = 'x'.repeat(60_000)
+    const { options } = createOptions({
+      ioPort: { openFile: vi.fn(async () => largeDoc) } as Partial<EditorFileLifecycleIoPort>,
+      uiPort: { largeDocThreshold: 50_000 } as Partial<EditorFileLifecycleUiPort>
+    })
+
+    const lifecycle = useEditorFileLifecycle({
+      ...options,
+      minLargeDocOverlayVisibleMs: 1_000
+    })
+    const loadPromise = lifecycle.loadCurrentFile('a.md', { requestId: 1 })
+
+    await vi.advanceTimersByTimeAsync(20)
+    expect(options.uiPort.ui.isLoadingLargeDocument.value).toBe(true)
+
+    await vi.advanceTimersByTimeAsync(400)
+    expect(options.uiPort.ui.isLoadingLargeDocument.value).toBe(true)
+
+    await vi.advanceTimersByTimeAsync(700)
+    await loadPromise
+    expect(options.uiPort.ui.isLoadingLargeDocument.value).toBe(false)
+    vi.useRealTimers()
+  })
+
+  it('shows large-doc overlay when file length crosses configured threshold', async () => {
+    vi.useFakeTimers()
+    const mediumDoc = 'x'.repeat(42_428)
+    const { options } = createOptions({
+      ioPort: { openFile: vi.fn(async () => mediumDoc) } as Partial<EditorFileLifecycleIoPort>,
+      uiPort: { largeDocThreshold: 40_000 } as Partial<EditorFileLifecycleUiPort>
+    })
+
+    const lifecycle = useEditorFileLifecycle(options)
+    const loadPromise = lifecycle.loadCurrentFile('a.md', { requestId: 1 })
+    await vi.advanceTimersByTimeAsync(20)
+
+    expect(options.uiPort.ui.isLoadingLargeDocument.value).toBe(true)
+    expect(options.uiPort.ui.loadStageLabel.value.length).toBeGreaterThan(0)
+
+    await vi.runAllTimersAsync()
+    await loadPromise
+    vi.useRealTimers()
+  })
 })

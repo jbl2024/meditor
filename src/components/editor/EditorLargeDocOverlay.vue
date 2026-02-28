@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { watch } from 'vue'
+
 const props = defineProps<{
   visible: boolean
   stageLabel: string
@@ -6,6 +8,21 @@ const props = defineProps<{
   progressIndeterminate: boolean
   stats: { chars: number; lines: number } | null
 }>()
+
+watch(
+  () => [props.visible, props.stageLabel, props.progressPercent, props.progressIndeterminate, props.stats] as const,
+  ([visible, stageLabel, progressPercent, progressIndeterminate, stats]) => {
+    // eslint-disable-next-line no-console
+    console.info('[large-doc-overlay] component', {
+      visible,
+      stageLabel,
+      progressPercent,
+      progressIndeterminate,
+      stats
+    })
+  },
+  { immediate: true, deep: true }
+)
 </script>
 
 <template>

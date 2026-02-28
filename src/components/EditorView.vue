@@ -93,7 +93,8 @@ const loadStageLabel = ref('')
 const loadProgressPercent = ref(0)
 const loadProgressIndeterminate = ref(false)
 const loadDocumentStats = ref<{ chars: number; lines: number } | null>(null)
-const LARGE_DOC_THRESHOLD = 50_000
+const LARGE_DOC_THRESHOLD = 40_000
+
 
 const lastStableBlockMenuTarget = ref<BlockMenuTarget | null>(null)
 const blockMenuFloatingEl = ref<HTMLDivElement | null>(null)
@@ -146,6 +147,14 @@ const TURN_INTO_LABELS: Record<TurnIntoType, string> = {
   blockquote: 'Quote',
 }
 const currentPath = computed(() => props.path?.trim() || '')
+watch(
+  () => [currentPath.value, isLoadingLargeDocument.value, loadStageLabel.value, loadProgressPercent.value] as const,
+  ([path, loading, stage, progress]) => {
+    // eslint-disable-next-line no-console
+    console.info('[large-doc-overlay] editor-view', { path, loading, stage, progress })
+  },
+  { immediate: true }
+)
 const sessionStore = useDocumentEditorSessions({
   createEditor: (path) => createSessionEditor(path)
 })
