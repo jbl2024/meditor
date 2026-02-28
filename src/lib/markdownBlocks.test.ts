@@ -72,6 +72,28 @@ describe('markdownToEditorData tables', () => {
     const output = editorDataToMarkdown(parsed)
     expect(output).toContain('| **Deployment** | Single binary |')
   })
+
+  it('pads sparse rows to stable column count when serializing tables', () => {
+    const output = editorDataToMarkdown({
+      blocks: [
+        {
+          type: 'table',
+          data: {
+            withHeadings: true,
+            content: [
+              ['A', 'B', 'C'],
+              ['1', '2'],
+              ['x']
+            ]
+          }
+        }
+      ]
+    })
+
+    expect(output).toContain('| A | B | C |')
+    expect(output).toContain('| 1 | 2 |  |')
+    expect(output).toContain('| x |  |  |')
+  })
 })
 
 describe('nested lists', () => {

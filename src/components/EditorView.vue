@@ -21,6 +21,7 @@ import EditorPropertiesPanel from './editor/EditorPropertiesPanel.vue'
 import EditorSlashMenu from './editor/EditorSlashMenu.vue'
 import EditorWikilinkMenu from './editor/EditorWikilinkMenu.vue'
 import EditorBlockMenu from './editor/EditorBlockMenu.vue'
+import EditorTableToolbar from './editor/EditorTableToolbar.vue'
 import EditorLargeDocOverlay from './editor/EditorLargeDocOverlay.vue'
 import EditorMermaidReplaceDialog from './editor/EditorMermaidReplaceDialog.vue'
 import { composeMarkdownDocument, serializeFrontmatter } from '../lib/frontmatter'
@@ -47,6 +48,13 @@ import type { BlockMenuActionItem, BlockMenuTarget, TurnIntoType } from '../lib/
 import { canCopyAnchor, canTurnInto, toBlockMenuTarget } from '../lib/tiptap/blockMenu/guards'
 import { canMoveDown, canMoveUp, deleteNode, duplicateNode, insertAbove, insertBelow, moveNodeDown, moveNodeUp, turnInto } from '../lib/tiptap/blockMenu/actions'
 import { computeHandleLock, resolveActiveTarget, type DragHandleUiState } from '../lib/tiptap/blockMenu/dragHandleState'
+import {
+  buildTableToolbarActions,
+  type TableActionId,
+  type TableCommandCapabilities,
+  type TableToolbarAction
+} from '../lib/tiptap/tableToolbarActions'
+import { applyTableAction } from '../lib/tiptap/tableCommands'
 
 const VIRTUAL_TITLE_BLOCK_ID = '__virtual_title__'
 
@@ -116,6 +124,27 @@ const blockMenuTarget = ref<BlockMenuTarget | null>(null)
 const lastStableBlockMenuTarget = ref<BlockMenuTarget | null>(null)
 const blockMenuFloatingEl = ref<HTMLDivElement | null>(null)
 const blockMenuPos = ref({ x: 0, y: 0 })
+const tableToolbarFloatingEl = ref<HTMLDivElement | null>(null)
+const tableToolbarOpen = ref(false)
+const tableToolbarLeft = ref(0) // menu anchor, holder-relative
+const tableToolbarTop = ref(0) // menu anchor, holder-relative
+const tableToolbarViewportLeft = ref(0)
+const tableToolbarViewportTop = ref(0)
+const tableToolbarViewportMaxHeight = ref(420)
+const tableMenuBtnLeft = ref(0)
+const tableMenuBtnTop = ref(0)
+const tableBoxLeft = ref(0)
+const tableBoxTop = ref(0)
+const tableBoxWidth = ref(0)
+const tableBoxHeight = ref(0)
+const tableAddTopVisible = ref(false)
+const tableAddBottomVisible = ref(false)
+const tableAddLeftVisible = ref(false)
+const tableAddRightVisible = ref(false)
+const tableToolbarTriggerVisible = ref(false)
+const tableToolbarHovering = ref(false)
+const tableToolbarActions = ref<TableToolbarAction[]>([])
+const TABLE_MARKDOWN_MODE = true
 const DRAG_HANDLE_PLUGIN_KEY = 'meditor-drag-handle'
 const DRAG_HANDLE_DEBUG = false
 let lastAppliedDragHandleLock: boolean | null = null
@@ -518,14 +547,69 @@ function onBlockMenuSelect(item: BlockMenuActionItem) {
   closeBlockMenu()
 }
 
+function onTableToolbarSelect(actionId: TableActionId) {
+  if (!editor) return
+  applyTableAction(editor, actionId)
+  updateTableToolbar()
+}
+
+function toggleTableToolbar(event: MouseEvent) {
+  event.preventDefault()
+  event.stopPropagation()
+  if (!tableToolbarTriggerVisible.value) return
+  const opening = !tableToolbarOpen.value
+  if (opening) updateTableToolbar()
+  tableToolbarOpen.value = opening
+}
+
+function addRowAfterFromTrigger(event: MouseEvent) {
+  event.preventDefault()
+  event.stopPropagation()
+  if (!editor || !tableToolbarTriggerVisible.value) return
+  editor.chain().focus().addRowAfter().run()
+  updateTableToolbar()
+}
+
+function addRowBeforeFromTrigger(event: MouseEvent) {
+  event.preventDefault()
+  event.stopPropagation()
+  if (!editor || !tableToolbarTriggerVisible.value) return
+  editor.chain().focus().addRowBefore().run()
+  updateTableToolbar()
+}
+
+function addColumnBeforeFromTrigger(event: MouseEvent) {
+  event.preventDefault()
+  event.stopPropagation()
+  if (!editor || !tableToolbarTriggerVisible.value) return
+  editor.chain().focus().addColumnBefore().run()
+  updateTableToolbar()
+}
+
+function addColumnAfterFromTrigger(event: MouseEvent) {
+  event.preventDefault()
+  event.stopPropagation()
+  if (!editor || !tableToolbarTriggerVisible.value) return
+  editor.chain().focus().addColumnAfter().run()
+  updateTableToolbar()
+}
+
 function onDocumentMouseDown(event: MouseEvent) {
-  if (!blockMenuOpen.value) return
   const target = event.target
   if (!(target instanceof Node)) return
-  if (blockMenuFloatingEl.value?.contains(target)) return
   const handleRoot = target instanceof Element ? target.closest('.meditor-block-controls') : null
-  if (handleRoot) return
-  closeBlockMenu()
+
+  if (blockMenuOpen.value) {
+    if (blockMenuFloatingEl.value?.contains(target)) return
+    if (handleRoot) return
+    closeBlockMenu()
+  }
+
+  if (tableToolbarOpen.value) {
+    if (tableToolbarFloatingEl.value?.contains(target)) return
+    if (target instanceof Element && target.closest('.meditor-table-control')) return
+    hideTableToolbar()
+  }
 }
 
 function updateGutterHitboxStyle() {
@@ -543,6 +627,11 @@ function updateGutterHitboxStyle() {
     bottom: '0',
     width: `${width}px`,
   }
+}
+
+function onHolderScroll() {
+  updateGutterHitboxStyle()
+  updateTableToolbar()
 }
 
 function debugDragHandle(event: string, detail?: unknown) {
@@ -605,6 +694,167 @@ function updateFormattingToolbar() {
   formatToolbarLeft.value = centerX - holderRect.left + holder.value.scrollLeft
   formatToolbarTop.value = Math.min(start.top, end.top) - holderRect.top + holder.value.scrollTop - 10
   formatToolbarOpen.value = true
+}
+
+function hideTableToolbar() {
+  tableToolbarOpen.value = false
+}
+
+function hideTableToolbarAnchor() {
+  hideTableToolbar()
+  tableToolbarHovering.value = false
+  tableToolbarTriggerVisible.value = false
+  tableAddTopVisible.value = false
+  tableAddBottomVisible.value = false
+  tableAddLeftVisible.value = false
+  tableAddRightVisible.value = false
+  tableToolbarActions.value = []
+}
+
+function activeTableElement(): HTMLElement | null {
+  if (!editor) return null
+  const domAt = editor.view.domAtPos(editor.state.selection.$from.pos)
+  const baseEl = domAt.node instanceof Element ? domAt.node : domAt.node.parentElement
+  return baseEl?.closest('table') as HTMLElement | null
+}
+
+function activeTableCellElement(): HTMLElement | null {
+  if (!editor) return null
+  const domAt = editor.view.domAtPos(editor.state.selection.$from.pos)
+  const baseEl = domAt.node instanceof Element ? domAt.node : domAt.node.parentElement
+  return baseEl?.closest('td,th') as HTMLElement | null
+}
+
+function updateTableToolbarPosition(cellEl: HTMLElement, tableEl: HTMLElement) {
+  if (!holder.value) return
+  const holderRect = holder.value.getBoundingClientRect()
+  const cellRect = cellEl.getBoundingClientRect()
+  const tableRect = tableEl.getBoundingClientRect()
+  const holderScrollLeft = holder.value.scrollLeft
+  const holderScrollTop = holder.value.scrollTop
+  const cellTop = cellRect.top - holderRect.top + holderScrollTop
+  const cellRight = cellRect.right - holderRect.left + holderScrollLeft
+  const tableTop = tableRect.top - holderRect.top + holderScrollTop
+  const tableLeft = tableRect.left - holderRect.left + holderScrollLeft
+  const tableWidth = tableRect.width
+  const tableHeight = tableRect.height
+
+  tableMenuBtnLeft.value = Math.max(6, cellRight - 28)
+  tableMenuBtnTop.value = Math.max(6, cellTop + 6)
+  tableBoxLeft.value = Math.max(6, tableLeft)
+  tableBoxTop.value = Math.max(6, tableTop)
+  tableBoxWidth.value = Math.max(0, tableWidth)
+  tableBoxHeight.value = Math.max(0, tableHeight)
+
+  tableToolbarLeft.value = tableMenuBtnLeft.value + 24
+  tableToolbarTop.value = Math.max(6, tableMenuBtnTop.value - 4)
+
+  const menuWidth = 320
+  const viewportPadding = 8
+  const minMenuHeight = 160
+  const preferredMenuHeight = Math.max(220, Math.floor(window.innerHeight * 0.72))
+  const rawViewportLeft = holderRect.left + tableToolbarLeft.value
+  const rawViewportTop = holderRect.top + tableToolbarTop.value
+  const availableBelow = Math.max(0, Math.floor(window.innerHeight - rawViewportTop - viewportPadding))
+  const availableAbove = Math.max(0, Math.floor(rawViewportTop - viewportPadding))
+
+  let clampedTop = rawViewportTop
+  let maxHeight = Math.max(minMenuHeight, Math.min(preferredMenuHeight, availableBelow))
+  if (availableBelow < 220 && availableAbove > availableBelow) {
+    maxHeight = Math.max(minMenuHeight, Math.min(preferredMenuHeight, availableAbove))
+    clampedTop = rawViewportTop - maxHeight
+  }
+
+  clampedTop = Math.max(viewportPadding, clampedTop)
+  const overflowBottom = clampedTop + maxHeight - (window.innerHeight - viewportPadding)
+  if (overflowBottom > 0) {
+    clampedTop = Math.max(viewportPadding, clampedTop - overflowBottom)
+  }
+
+  const clampedLeft = Math.max(viewportPadding, Math.min(rawViewportLeft, window.innerWidth - menuWidth - viewportPadding))
+  tableToolbarViewportLeft.value = clampedLeft
+  tableToolbarViewportTop.value = clampedTop
+  tableToolbarViewportMaxHeight.value = maxHeight
+}
+
+function readTableCommandCapabilities(currentEditor: Editor): TableCommandCapabilities {
+  const canRun = (command: (chain: ReturnType<ReturnType<Editor['can']>['chain']>) => ReturnType<ReturnType<Editor['can']>['chain']>) =>
+    command(currentEditor.can().chain().focus()).run()
+  return {
+    addRowBefore: canRun((chain) => chain.addRowBefore()),
+    addRowAfter: canRun((chain) => chain.addRowAfter()),
+    deleteRow: canRun((chain) => chain.deleteRow()),
+    addColumnBefore: canRun((chain) => chain.addColumnBefore()),
+    addColumnAfter: canRun((chain) => chain.addColumnAfter()),
+    deleteColumn: canRun((chain) => chain.deleteColumn()),
+    toggleHeaderRow: canRun((chain) => chain.toggleHeaderRow()),
+    toggleHeaderColumn: canRun((chain) => chain.toggleHeaderColumn()),
+    toggleHeaderCell: canRun((chain) => chain.toggleHeaderCell()),
+    deleteTable: canRun((chain) => chain.deleteTable())
+  }
+}
+
+function updateTableToolbar() {
+  if (!editor || !holder.value) {
+    hideTableToolbarAnchor()
+    return
+  }
+  if (!editor.isActive('table')) {
+    hideTableToolbarAnchor()
+    return
+  }
+
+  tableToolbarActions.value = buildTableToolbarActions(readTableCommandCapabilities(editor))
+  const tableEl = activeTableElement()
+  const cellEl = activeTableCellElement()
+  if (!tableEl || !cellEl) {
+    hideTableToolbarAnchor()
+    return
+  }
+  tableToolbarTriggerVisible.value = true
+  updateTableToolbarPosition(cellEl, tableEl)
+}
+
+function onEditorMouseMove(event: MouseEvent) {
+  if (!editor?.isActive('table')) {
+    tableToolbarHovering.value = false
+    tableAddTopVisible.value = false
+    tableAddBottomVisible.value = false
+    tableAddLeftVisible.value = false
+    tableAddRightVisible.value = false
+    return
+  }
+  const target = event.target
+  if (!(target instanceof Element)) return
+  const tableEl = activeTableElement()
+  if (!tableEl) return
+  const rect = tableEl.getBoundingClientRect()
+  const x = event.clientX
+  const y = event.clientY
+  const edgeThreshold = 24
+  const inVerticalBand = y >= rect.top - 24 && y <= rect.bottom + 24
+  const inHorizontalBand = x >= rect.left - 24 && x <= rect.right + 24
+  const nearLeft = Math.abs(x - rect.left) <= edgeThreshold && inVerticalBand
+  const nearRight = Math.abs(x - rect.right) <= edgeThreshold && inVerticalBand
+  const nearTop = Math.abs(y - rect.top) <= edgeThreshold && inHorizontalBand
+  const nearBottom = Math.abs(y - rect.bottom) <= edgeThreshold && inHorizontalBand
+  const inToolbar = Boolean(tableToolbarFloatingEl.value?.contains(target))
+  const inControls = Boolean(target.closest('.meditor-table-control'))
+  const inTable = Boolean(target.closest('.ProseMirror table'))
+  tableAddTopVisible.value = nearTop || inControls || tableToolbarOpen.value
+  tableAddBottomVisible.value = nearBottom || inControls || tableToolbarOpen.value
+  tableAddLeftVisible.value = nearLeft || inControls || tableToolbarOpen.value
+  tableAddRightVisible.value = nearRight || inControls || tableToolbarOpen.value
+  tableToolbarHovering.value = inTable || inToolbar || inControls || tableToolbarOpen.value
+}
+
+function onEditorMouseLeave() {
+  if (tableToolbarOpen.value) return
+  tableToolbarHovering.value = false
+  tableAddTopVisible.value = false
+  tableAddBottomVisible.value = false
+  tableAddLeftVisible.value = false
+  tableAddRightVisible.value = false
 }
 
 function closestAnchorFromEventTarget(target: EventTarget | null): HTMLAnchorElement | null {
@@ -703,7 +953,7 @@ function createEditorOptions(path: string) {
           nested: true
         }
       }),
-      Table.configure({ resizable: false }),
+      Table.configure({ resizable: true }),
       TableRow,
       TableHeader,
       TableCell,
@@ -778,6 +1028,7 @@ function createEditorOptions(path: string) {
     onUpdate: () => {
       if (currentPath.value !== path) return
       syncSlashMenuFromSelection({ preserveIndex: true })
+      updateTableToolbar()
       syncWikilinkUiFromPluginState()
     },
     onSelectionUpdate: () => {
@@ -786,6 +1037,7 @@ function createEditorOptions(path: string) {
       if (activePath) captureCaret(activePath)
       syncSlashMenuFromSelection({ preserveIndex: true })
       updateFormattingToolbar()
+      updateTableToolbar()
       syncWikilinkUiFromPluginState()
     },
     onTransaction: (payload: { transaction: Transaction }) => {
@@ -794,6 +1046,7 @@ function createEditorOptions(path: string) {
         onEditorDocChanged(path)
       }
       if (currentPath.value !== path) return
+      updateTableToolbar()
       syncWikilinkUiFromPluginState()
     }
   }
@@ -816,6 +1069,7 @@ function resetTransientUiState() {
   lastStableBlockMenuTarget.value = null
   dragHandleUiState.value = { ...dragHandleUiState.value, activeTarget: null }
   formatToolbarOpen.value = false
+  hideTableToolbarAnchor()
   cachedLinkTargetsAt.value = 0
   cachedHeadingsByTarget.value = {}
   cachedHeadingsAt.value = {}
@@ -1348,6 +1602,12 @@ function onEditorKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape' && blockMenuOpen.value) {
     event.preventDefault()
     closeBlockMenu()
+    return
+  }
+
+  if (event.key === 'Escape' && tableToolbarOpen.value) {
+    event.preventDefault()
+    hideTableToolbar()
   }
 }
 
@@ -1356,6 +1616,7 @@ function onEditorKeyup() {
   if (path) captureCaret(path)
   syncSlashMenuFromSelection({ preserveIndex: true })
   updateFormattingToolbar()
+  updateTableToolbar()
 }
 
 function isMarkActive(name: 'bold' | 'italic' | 'strike' | 'underline' | 'code' | 'link') {
@@ -1443,6 +1704,7 @@ watch(
       closeSlashMenu()
       closeWikilinkMenu()
       closeBlockMenu()
+      hideTableToolbarAnchor()
       emit('outline', [])
       return
     }
@@ -1484,7 +1746,7 @@ onMounted(async () => {
   holder.value?.addEventListener('keyup', onEditorKeyup, true)
   holder.value?.addEventListener('contextmenu', onEditorContextMenu, true)
   holder.value?.addEventListener('paste', onEditorPaste, true)
-  holder.value?.addEventListener('scroll', updateGutterHitboxStyle, true)
+  holder.value?.addEventListener('scroll', onHolderScroll, true)
   window.addEventListener('resize', updateGutterHitboxStyle)
   await nextTick()
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
@@ -1500,7 +1762,7 @@ onBeforeUnmount(async () => {
   holder.value?.removeEventListener('keyup', onEditorKeyup, true)
   holder.value?.removeEventListener('contextmenu', onEditorContextMenu, true)
   holder.value?.removeEventListener('paste', onEditorPaste, true)
-  holder.value?.removeEventListener('scroll', updateGutterHitboxStyle, true)
+  holder.value?.removeEventListener('scroll', onHolderScroll, true)
   window.removeEventListener('resize', updateGutterHitboxStyle)
   document.removeEventListener('mousedown', onDocumentMouseDown, true)
   sessionStore.closeAll()
@@ -1682,6 +1944,8 @@ defineExpose({
           ref="holder"
           class="editor-holder relative h-full min-h-0 overflow-y-auto px-8 py-6"
           :style="editorZoomStyle"
+          @mousemove="onEditorMouseMove"
+          @mouseleave="onEditorMouseLeave"
           @click="closeSlashMenu(); closeWikilinkMenu(); closeBlockMenu()"
         >
           <div ref="contentShell" class="editor-content-shell">
@@ -1738,6 +2002,91 @@ defineExpose({
             <button type="button" class="px-2 py-1 text-xs" :class="isMarkActive('link') ? 'bg-slate-200 dark:bg-slate-700' : ''" @mousedown.prevent @click="toggleLink">Link</button>
           </div>
 
+          <div
+            v-if="tableToolbarTriggerVisible"
+            class="meditor-table-trigger absolute z-30 meditor-table-control"
+            :class="{ 'is-visible': true }"
+            :style="{ left: `${tableMenuBtnLeft}px`, top: `${tableMenuBtnTop}px` }"
+          >
+            <button
+              type="button"
+              class="meditor-table-trigger-btn"
+              aria-label="Open table actions"
+              @mousedown.prevent
+              @click.stop="toggleTableToolbar"
+            >
+              ⋮
+            </button>
+          </div>
+
+          <div
+            v-if="tableToolbarTriggerVisible"
+            class="meditor-table-edge meditor-table-edge-top absolute z-30 meditor-table-control"
+            :class="{ 'is-visible': tableAddTopVisible }"
+            :style="{ left: `${tableBoxLeft}px`, top: `${tableBoxTop - 24}px`, width: `${tableBoxWidth}px` }"
+          >
+            <button
+              type="button"
+              class="meditor-table-trigger-btn meditor-table-plus-btn"
+              aria-label="Add row above"
+              @mousedown.prevent
+              @click.stop="addRowBeforeFromTrigger"
+            >
+              +
+            </button>
+          </div>
+
+          <div
+            v-if="tableToolbarTriggerVisible"
+            class="meditor-table-edge meditor-table-edge-bottom absolute z-30 meditor-table-control"
+            :class="{ 'is-visible': tableAddBottomVisible }"
+            :style="{ left: `${tableBoxLeft}px`, top: `${tableBoxTop + tableBoxHeight + 4}px`, width: `${tableBoxWidth}px` }"
+          >
+            <button
+              type="button"
+              class="meditor-table-trigger-btn meditor-table-plus-btn"
+              aria-label="Add row below"
+              @mousedown.prevent
+              @click.stop="addRowAfterFromTrigger"
+            >
+              +
+            </button>
+          </div>
+
+          <div
+            v-if="tableToolbarTriggerVisible"
+            class="meditor-table-edge meditor-table-edge-left absolute z-30 meditor-table-control"
+            :class="{ 'is-visible': tableAddLeftVisible }"
+            :style="{ left: `${tableBoxLeft - 24}px`, top: `${tableBoxTop}px`, height: `${tableBoxHeight}px` }"
+          >
+            <button
+              type="button"
+              class="meditor-table-trigger-btn meditor-table-plus-btn"
+              aria-label="Add column left"
+              @mousedown.prevent
+              @click.stop="addColumnBeforeFromTrigger"
+            >
+              +
+            </button>
+          </div>
+
+          <div
+            v-if="tableToolbarTriggerVisible"
+            class="meditor-table-edge meditor-table-edge-right absolute z-30 meditor-table-control"
+            :class="{ 'is-visible': tableAddRightVisible }"
+            :style="{ left: `${tableBoxLeft + tableBoxWidth + 4}px`, top: `${tableBoxTop}px`, height: `${tableBoxHeight}px` }"
+          >
+            <button
+              type="button"
+              class="meditor-table-trigger-btn meditor-table-plus-btn"
+              aria-label="Add column right"
+              @mousedown.prevent
+              @click.stop="addColumnAfterFromTrigger"
+            >
+              +
+            </button>
+          </div>
+
           <Teleport to="body">
             <div :style="{ position: 'fixed', left: `${slashLeft}px`, top: `${slashTop}px`, zIndex: 50 }">
               <EditorSlashMenu
@@ -1776,6 +2125,19 @@ defineExpose({
                 @close="closeBlockMenu()"
               />
             </div>
+
+            <div :style="{ position: 'fixed', left: `${tableToolbarViewportLeft}px`, top: `${tableToolbarViewportTop}px`, zIndex: 52 }">
+              <EditorTableToolbar
+                :open="tableToolbarOpen"
+                :actions="tableToolbarActions"
+                :markdown-mode="TABLE_MARKDOWN_MODE"
+                :max-height-px="tableToolbarViewportMaxHeight"
+                @menu-el="tableToolbarFloatingEl = $event"
+                @select="onTableToolbarSelect($event)"
+                @close="hideTableToolbar()"
+              />
+            </div>
+
           </Teleport>
         </div>
 
@@ -1936,20 +2298,66 @@ defineExpose({
 
 .editor-holder :deep(.ProseMirror table) {
   width: 100%;
-  border-collapse: collapse;
-  margin: 0.6rem 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 0.8rem 0;
+  border: 1px solid rgb(203 213 225);
+  border-radius: 0.65rem;
+  overflow: hidden;
+  background: rgb(255 255 255 / 0.98);
+  font-size: calc(0.92rem * var(--editor-zoom, 1));
+  line-height: 1.45;
+  table-layout: fixed;
 }
 
 .editor-holder :deep(.ProseMirror th),
 .editor-holder :deep(.ProseMirror td) {
-  border: 1px solid rgb(203 213 225);
-  padding: 0.45rem 0.55rem;
+  border-right: 1px solid rgb(226 232 240);
+  border-bottom: 1px solid rgb(226 232 240);
+  padding: 0.5rem 0.62rem;
   vertical-align: top;
+  position: relative;
+  min-width: 4rem;
+  transition: background-color 120ms ease;
+}
+
+.editor-holder :deep(.ProseMirror tr:last-child > th),
+.editor-holder :deep(.ProseMirror tr:last-child > td) {
+  border-bottom: none;
+}
+
+.editor-holder :deep(.ProseMirror tr > th:last-child),
+.editor-holder :deep(.ProseMirror tr > td:last-child) {
+  border-right: none;
+}
+
+.editor-holder :deep(.ProseMirror tbody tr:hover td) {
+  background: rgb(248 250 252);
 }
 
 .editor-holder :deep(.ProseMirror th) {
-  font-weight: 700;
-  background: rgb(241 245 249);
+  font-weight: 640;
+  background: rgb(248 250 252);
+  color: rgb(30 41 59);
+}
+
+.editor-holder :deep(.ProseMirror td.selectedCell),
+.editor-holder :deep(.ProseMirror th.selectedCell) {
+  background: rgb(219 234 254);
+}
+
+.editor-holder :deep(.ProseMirror .column-resize-handle) {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  width: 4px;
+  height: 100%;
+  background: rgb(59 130 246 / 0.55);
+  pointer-events: none;
+}
+
+.editor-holder :deep(.ProseMirror.resize-cursor) {
+  cursor: col-resize;
 }
 
 .editor-holder :deep(.ProseMirror pre) {
@@ -2022,6 +2430,96 @@ defineExpose({
   letter-spacing: -0.1rem;
 }
 
+.meditor-table-trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.28rem;
+  transition: transform 120ms ease;
+  transform: translateY(0);
+}
+
+.meditor-table-trigger.is-visible {
+  opacity: 0.92;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.meditor-table-edge {
+  display: flex;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease;
+}
+
+.meditor-table-edge-top,
+.meditor-table-edge-bottom {
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+}
+
+.meditor-table-edge-left,
+.meditor-table-edge-right {
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+}
+
+.meditor-table-edge.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.meditor-table-plus-btn {
+  width: 100%;
+  height: 100%;
+  border: none;
+  border-radius: 0.34rem;
+  background: transparent;
+  color: rgb(71 85 105);
+  font-size: 0.95rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease, background-color 120ms ease;
+}
+
+.meditor-table-edge.is-visible .meditor-table-plus-btn {
+  opacity: 0.92;
+  pointer-events: auto;
+}
+
+.meditor-table-edge.is-visible .meditor-table-plus-btn:hover {
+  background: rgb(248 250 252 / 0.7);
+}
+
+.meditor-table-trigger-btn {
+  width: 1.38rem;
+  height: 1.38rem;
+  border: 1px solid rgb(203 213 225);
+  border-radius: 0.38rem;
+  background: rgb(255 255 255 / 0.92);
+  color: rgb(71 85 105);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  letter-spacing: -0.08rem;
+  font-size: 0.82rem;
+  line-height: 1;
+}
+
+.meditor-table-trigger-btn:focus-visible {
+  outline: 2px solid rgb(96 165 250 / 0.55);
+  outline-offset: 1px;
+}
+
+.meditor-table-trigger-btn:hover {
+  background: rgb(248 250 252);
+}
+
 .dark .editor-holder :deep(.meditor-block-control-btn) {
   border-color: rgb(71 85 105);
   background: rgb(15 23 42);
@@ -2032,12 +2530,54 @@ defineExpose({
   background: rgb(30 41 59);
 }
 
+.dark .meditor-table-trigger-btn {
+  border-color: rgb(71 85 105);
+  background: rgb(30 41 59 / 0.96);
+  color: rgb(226 232 240);
+  box-shadow: 0 0 0 1px rgb(15 23 42 / 0.35);
+}
+
+.dark .meditor-table-trigger-btn:hover {
+  background: rgb(30 41 59 / 0.92);
+}
+
+.dark .meditor-table-edge.is-visible .meditor-table-plus-btn {
+  color: rgb(226 232 240);
+}
+
+.dark .meditor-table-edge.is-visible .meditor-table-plus-btn:hover {
+  background: rgb(30 41 59 / 0.55);
+}
+
+.dark .meditor-table-trigger-btn:focus-visible {
+  outline: 2px solid rgb(147 197 253 / 0.65);
+}
+
 .dark .editor-holder :deep(.ProseMirror th),
 .dark .editor-holder :deep(.ProseMirror td) {
+  border-color: rgb(51 65 85);
+}
+
+.dark .editor-holder :deep(.ProseMirror table) {
   border-color: rgb(71 85 105);
+  background: rgb(15 23 42);
 }
 
 .dark .editor-holder :deep(.ProseMirror th) {
-  background: rgb(30 41 59);
+  background: rgb(30 41 59 / 0.85);
+  color: rgb(226 232 240);
+}
+
+.dark .editor-holder :deep(.ProseMirror tbody tr:hover td) {
+  background: rgb(30 41 59 / 0.45);
+}
+
+.dark .editor-holder :deep(.ProseMirror td.selectedCell),
+.dark .editor-holder :deep(.ProseMirror th.selectedCell) {
+  background: rgb(30 64 175 / 0.45);
+}
+
+.dark .editor-holder :deep(.ProseMirror .column-resize-handle) {
+  background: rgb(96 165 250 / 0.65);
 }
 </style>
