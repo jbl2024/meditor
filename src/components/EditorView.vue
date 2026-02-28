@@ -1822,6 +1822,8 @@ defineExpose({
 
 .editor-holder :deep(.ProseMirror ul[data-type="taskList"] li > div > p) {
   margin: 0;
+  min-height: 1.2em;
+  outline: 1px solid transparent;
 }
 
 .editor-holder :deep(.ProseMirror table) {
