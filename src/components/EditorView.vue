@@ -841,7 +841,6 @@ defineExpose({
           </div>
           <DragHandleVue3
             v-if="renderedEditor"
-            :key="`editor-drag:${currentPath}`"
             :editor="renderedEditor"
             :plugin-key="DRAG_HANDLE_PLUGIN_KEY"
             :compute-position-config="{ placement: 'left-start' }"

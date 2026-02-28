@@ -269,12 +269,13 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
           await new Promise<void>((resolve) => window.setTimeout(resolve, remaining))
         }
       }
+      const hadLargeDocOverlay = largeDocOverlayShownAt > 0
       uiPort.ui.isLoadingLargeDocument.value = false
       uiPort.ui.loadStageLabel.value = ''
       uiPort.ui.loadProgressPercent.value = 0
       uiPort.ui.loadProgressIndeterminate.value = false
       uiPort.ui.loadDocumentStats.value = null
-      if (DEBUG_LARGE_DOC_LOADING) {
+      if (DEBUG_LARGE_DOC_LOADING && hadLargeDocOverlay) {
         // eslint-disable-next-line no-console
         console.info('[large-doc-overlay] hide:done', { path })
       }
