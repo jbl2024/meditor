@@ -938,9 +938,8 @@ function openSlashAtSelection(query = '', options?: { preserveIndex?: boolean })
   closeBlockMenu()
   const pos = editor.state.selection.from
   const rect = editor.view.coordsAtPos(pos)
-  const holderRect = holder.value.getBoundingClientRect()
-  let left = rect.left - holderRect.left + holder.value.scrollLeft
-  let top = rect.bottom - holderRect.top + holder.value.scrollTop + 8
+  let left = rect.left
+  let top = rect.bottom + 8
 
   const estimatedWidth = 240
   const estimatedHeight = 360
@@ -1173,9 +1172,8 @@ function syncWikilinkUiFromPluginState() {
     Math.min(editor.state.selection.from, state.editingRange.to - 1)
   )
   const rect = editor.view.coordsAtPos(anchorPos)
-  const holderRect = holder.value.getBoundingClientRect()
-  let left = rect.left - holderRect.left + holder.value.scrollLeft
-  let top = rect.bottom - holderRect.top + holder.value.scrollTop + 8
+  let left = rect.left
+  let top = rect.bottom + 8
 
   const estimatedWidth = 320
   const estimatedHeight = 280
@@ -1661,28 +1659,32 @@ defineExpose({
             <button type="button" class="px-2 py-1 text-xs" :class="isMarkActive('link') ? 'bg-slate-200 dark:bg-slate-700' : ''" @mousedown.prevent @click="toggleLink">Link</button>
           </div>
 
-          <EditorSlashMenu
-            :open="slashOpen"
-            :index="slashIndex"
-            :left="slashLeft"
-            :top="slashTop"
-            :commands="visibleSlashCommands"
-            @update:index="slashIndex = $event"
-            @select="closeSlashMenu(); insertBlockFromDescriptor($event.type, $event.data)"
-          />
-
-          <EditorWikilinkMenu
-            :open="wikilinkOpen"
-            :index="wikilinkIndex"
-            :left="wikilinkLeft"
-            :top="wikilinkTop"
-            :results="wikilinkResults"
-            @menu-el="() => {}"
-            @update:index="onWikilinkMenuIndexUpdate($event)"
-            @select="onWikilinkMenuSelect($event)"
-          />
-
           <Teleport to="body">
+            <div :style="{ position: 'fixed', left: `${slashLeft}px`, top: `${slashTop}px`, zIndex: 50 }">
+              <EditorSlashMenu
+                :open="slashOpen"
+                :index="slashIndex"
+                :left="0"
+                :top="0"
+                :commands="visibleSlashCommands"
+                @update:index="slashIndex = $event"
+                @select="closeSlashMenu(); insertBlockFromDescriptor($event.type, $event.data)"
+              />
+            </div>
+
+            <div :style="{ position: 'fixed', left: `${wikilinkLeft}px`, top: `${wikilinkTop}px`, zIndex: 50 }">
+              <EditorWikilinkMenu
+                :open="wikilinkOpen"
+                :index="wikilinkIndex"
+                :left="0"
+                :top="0"
+                :results="wikilinkResults"
+                @menu-el="() => {}"
+                @update:index="onWikilinkMenuIndexUpdate($event)"
+                @select="onWikilinkMenuSelect($event)"
+              />
+            </div>
+
             <div :style="{ position: 'fixed', left: `${blockMenuPos.x}px`, top: `${blockMenuPos.y}px`, zIndex: 50 }">
               <EditorBlockMenu
               :open="blockMenuOpen"
