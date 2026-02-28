@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { CircleStackIcon } from '@heroicons/vue/24/solid'
 import type { FrontmatterField } from '../../lib/frontmatter'
 import type { PropertyType } from '../../lib/propertyTypes'
 import PropertyAddDropdown from '../properties/PropertyAddDropdown.vue'
@@ -12,6 +13,7 @@ type CorePropertyOption = {
 
 const props = defineProps<{
   expanded: boolean
+  hasProperties: boolean
   mode: 'structured' | 'raw'
   canUseStructuredProperties: boolean
   structuredPropertyFields: FrontmatterField[]
@@ -62,6 +64,11 @@ function checkboxValue(event: Event): boolean {
       >
         <span aria-hidden="true">{{ props.expanded ? '▾' : '▸' }}</span>
         <span>Properties</span>
+        <CircleStackIcon
+          v-if="props.hasProperties"
+          class="h-3.5 w-3.5 text-[#5e6ad2] dark:text-[#61afef]"
+          aria-label="Properties available"
+        />
       </button>
       <div v-if="props.expanded" class="flex items-center gap-1.5">
         <button

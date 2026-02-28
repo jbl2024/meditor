@@ -213,7 +213,7 @@ export function useFrontmatterProperties(options: UseFrontmatterPropertiesOption
     if (typeof propertiesExpandedByPath.value[path] === 'undefined') {
       propertiesExpandedByPath.value = {
         ...propertiesExpandedByPath.value,
-        [path]: envelope.fields.some((field) => field.key.trim().length > 0)
+        [path]: false
       }
     }
     emitProperties(path)
@@ -333,10 +333,6 @@ export function useFrontmatterProperties(options: UseFrontmatterPropertiesOption
       styleHint: inferredType === 'list' || inferredType === 'tags' ? 'inline-list' : 'plain'
     })
     updateFrontmatterFields(path, fields)
-    propertiesExpandedByPath.value = {
-      ...propertiesExpandedByPath.value,
-      [path]: true
-    }
     if (normalizedKey) {
       const normalizedSchemaKey = normalizePropertyKey(normalizedKey)
       if (normalizedSchemaKey) {
@@ -472,19 +468,12 @@ export function useFrontmatterProperties(options: UseFrontmatterPropertiesOption
   }
 
   /**
-   * Returns whether the path has at least one non-empty structured key.
-   */
-  function hasStructuredProperties(path: string): boolean {
-    return (frontmatterByPath.value[path]?.fields ?? []).some((field) => field.key.trim().length > 0)
-  }
-
-  /**
    * Returns the expansion state for the properties panel.
    */
   function propertiesExpanded(path: string): boolean {
     const stored = propertiesExpandedByPath.value[path]
     if (typeof stored === 'boolean') return stored
-    return hasStructuredProperties(path)
+    return false
   }
 
   /**

@@ -856,6 +856,7 @@ defineExpose({
     <div v-else class="editor-shell flex min-h-0 flex-1 flex-col overflow-hidden border-x border-[#e5e7eb] bg-white dark:border-slate-800 dark:bg-[#282c34]">
       <EditorPropertiesPanel
         :expanded="propertiesExpanded(path)"
+        :has-properties="structuredPropertyKeys.length > 0 || activeParseErrors.length > 0"
         :mode="propertyEditorMode"
         :can-use-structured-properties="canUseStructuredProperties"
         :structured-property-fields="structuredPropertyFields"
