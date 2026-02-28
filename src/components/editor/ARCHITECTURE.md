@@ -17,6 +17,7 @@
 - Input routing (keydown/keyup/paste/contextmenu): `useEditorInputHandlers`
 - Path/open-path watchers + mount lifecycle: `useEditorPathWatchers`
 - Gutter hitbox/layout metrics + line counting: `useEditorLayoutMetrics`
+- Mounted multi-instance session list for in-memory tab switching: `useEditorMountedSessions`
 - Slash overlay rendering: `EditorSlashOverlay.vue`
 - Wikilink overlay rendering: `EditorWikilinkOverlay.vue`
 - Block + table overlays rendering: `EditorContextOverlays.vue`
@@ -29,6 +30,7 @@
 - Feature modules should expose at most 5 top-level dependencies; larger contracts must be grouped ports.
 - `useEditorPersistence` is removed; do not reintroduce parallel lifecycle ownership.
 - `useEditorWikilinkOverlayState` should be initialized before binding tiptap callbacks that invoke it.
+- Editor content rendering is multi-instance and path-scoped; only active path is visible/interactable.
 
 ## Anti-patterns
 - Duplicated behavior in both `EditorView` and composables.

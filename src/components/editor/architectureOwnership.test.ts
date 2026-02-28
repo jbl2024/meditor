@@ -28,6 +28,7 @@ describe('editor architecture ownership guardrails', () => {
     expect(editorViewSource).toContain('useEditorSlashInsertion')
     expect(editorViewSource).toContain('useEditorTableInteractions')
     expect(editorViewSource).toContain('useEditorPathWatchers')
+    expect(editorViewSource).toContain('useEditorMountedSessions')
     expect(editorViewSource).toContain('useEditorBlockHandleControls')
     expect(editorViewSource).toContain('useEditorVirtualTitleDocument')
     expect(editorViewSource).not.toContain('function createEditorOptions(')
@@ -42,6 +43,12 @@ describe('editor architecture ownership guardrails', () => {
     expect(editorViewSource).not.toContain('function loadWikilinkHeadings(')
     expect(editorViewSource).not.toContain('switch (type)')
     expect(editorViewSource).not.toContain('function onEditorMouseMove(')
+  })
+
+  it('keeps multi-instance editor content rendering wired by session path', () => {
+    expect(editorViewSource).toContain('v-for="sessionPath in renderPaths"')
+    expect(editorViewSource).toContain('editor-content:${sessionPath}')
+    expect(editorViewSource).not.toContain('editor-content:${currentPath}')
   })
 
   it('kept composables avoid computed side-effect pattern', () => {

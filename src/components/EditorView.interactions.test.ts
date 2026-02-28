@@ -59,4 +59,53 @@ describe('EditorView interactions contract', () => {
     document.body.innerHTML = ''
   })
 
+  it('keeps interaction surface tied to active mounted editor during tab switches', async () => {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+    const path = ref('a.md')
+
+    const Harness = defineComponent({
+      setup() {
+        return () =>
+          h(EditorView, {
+            path: path.value,
+            openPaths: ['a.md', 'b.md'],
+            openFile: async (valuePath: string) => (valuePath === 'a.md' ? '# A\n\nAlpha' : '# B\n\nBeta'),
+            saveFile: async () => ({ persisted: true }),
+            renameFileFromTitle: async (valuePath: string, title: string) => ({ path: valuePath, title }),
+            loadLinkTargets: async () => ['a.md', 'b.md'],
+            loadLinkHeadings: async () => ['H1'],
+            loadPropertyTypeSchema: async () => ({}),
+            savePropertyTypeSchema: async () => {},
+            openLinkTarget: async () => true,
+            onStatus: () => {},
+            onOutline: () => {},
+            onProperties: () => {},
+            onPathRenamed: () => {}
+          })
+      }
+    })
+
+    const app = createApp(Harness)
+    app.mount(root)
+    await flushUi()
+
+    const before = root.querySelector('.editor-session-pane[data-active="true"]')
+    expect(before?.getAttribute('data-session-path')).toBe('a.md')
+
+    path.value = 'b.md'
+    await flushUi()
+
+    const after = root.querySelector('.editor-session-pane[data-active="true"]')
+    expect(after?.getAttribute('data-session-path')).toBe('b.md')
+
+    const holder = root.querySelector('.editor-holder') as HTMLElement
+    holder.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    holder.dispatchEvent(new KeyboardEvent('keyup', { key: 'Escape', bubbles: true }))
+    await flushUi()
+
+    app.unmount()
+    document.body.innerHTML = ''
+  })
+
 })

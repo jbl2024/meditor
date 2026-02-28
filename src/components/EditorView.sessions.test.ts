@@ -57,12 +57,18 @@ function mountHarness(options: {
 }
 
 function editorText(root: HTMLElement): string {
-  const all = Array.from(root.querySelectorAll('.ProseMirror'))
-  return (all[all.length - 1]?.textContent ?? '')
+  const activePane = root.querySelector('.editor-session-pane[data-active="true"]')
+  return (activePane?.querySelector('.ProseMirror')?.textContent ?? '')
 }
 
 function allEditorTexts(root: HTMLElement): string[] {
   return Array.from(root.querySelectorAll('.ProseMirror')).map((el) => el.textContent ?? '')
+}
+
+function mountedSessionPaths(root: HTMLElement): string[] {
+  return Array.from(root.querySelectorAll('.editor-session-pane'))
+    .map((el) => el.getAttribute('data-session-path') ?? '')
+    .filter(Boolean)
 }
 
 
@@ -91,7 +97,8 @@ describe('EditorView per-document sessions', () => {
     controls.path.value = 'b.md'
     await flushEditorUi()
     expect(openFile).toHaveBeenCalledWith('b.md')
-    expect(allEditorTexts(mounted.root).length).toBeGreaterThanOrEqual(1)
+    expect(mountedSessionPaths(mounted.root)).toEqual(expect.arrayContaining(['a.md', 'b.md']))
+    expect(allEditorTexts(mounted.root).length).toBeGreaterThanOrEqual(2)
     expect(editorText(mounted.root)).toContain('Beta body')
 
     controls.path.value = 'a.md'
@@ -154,6 +161,7 @@ describe('EditorView per-document sessions', () => {
 
     controls.openPaths.value = ['b.md']
     await flushEditorUi()
+    expect(mountedSessionPaths(mounted.root)).not.toContain('a.md')
 
     controls.path.value = 'a.md'
     controls.openPaths.value = ['a.md', 'b.md']

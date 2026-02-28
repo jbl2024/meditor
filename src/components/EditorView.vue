@@ -38,6 +38,7 @@ import { useEditorBlockHandleControls } from '../composables/useEditorBlockHandl
 import { useEditorSessionStatus } from '../composables/useEditorSessionStatus'
 import { useEditorCaretOutline } from '../composables/useEditorCaretOutline'
 import { useEditorLayoutMetrics } from '../composables/useEditorLayoutMetrics'
+import { useEditorMountedSessions } from '../composables/useEditorMountedSessions'
 import { normalizeBlockId, normalizeHeadingAnchor, slugifyHeading } from '../lib/wikilinks'
 import { toTiptapDoc } from '../lib/tiptap/editorBlocksToTiptapDoc'
 import { fromTiptapDoc } from '../lib/tiptap/tiptapDocToEditorBlocks'
@@ -147,14 +148,6 @@ const TURN_INTO_LABELS: Record<TurnIntoType, string> = {
   blockquote: 'Quote',
 }
 const currentPath = computed(() => props.path?.trim() || '')
-watch(
-  () => [currentPath.value, isLoadingLargeDocument.value, loadStageLabel.value, loadProgressPercent.value] as const,
-  ([path, loading, stage, progress]) => {
-    // eslint-disable-next-line no-console
-    console.info('[large-doc-overlay] editor-view', { path, loading, stage, progress })
-  },
-  { immediate: true }
-)
 const sessionStore = useDocumentEditorSessions({
   createEditor: (path) => createSessionEditor(path)
 })
@@ -519,6 +512,21 @@ function createSessionEditor(path: string): Editor {
   return tiptapSetup.createSessionEditor(path)
 }
 
+const mountedSessions = useEditorMountedSessions({
+  openPaths: computed(() => props.openPaths ?? []),
+  currentPath,
+  ensureSession
+})
+const renderPaths = mountedSessions.renderPaths
+const isActiveMountedPath = mountedSessions.isActivePath
+const renderedEditorsByPath = computed<Record<string, Editor | null>>(() => {
+  const byPath: Record<string, Editor | null> = {}
+  for (const path of renderPaths.value) {
+    byPath[path] = getSession(path)?.editor ?? null
+  }
+  return byPath
+})
+
 const fileLifecycle = useEditorFileLifecycle({
   sessionPort: {
     currentPath,
@@ -833,12 +841,25 @@ defineExpose({
           @click="closeSlashMenu(); closeWikilinkMenu(); closeBlockMenu()"
         >
           <div ref="contentShell" class="editor-content-shell">
-            <EditorContent
-              v-if="renderedEditor"
-              :key="`editor-content:${currentPath}`"
-              :editor="renderedEditor"
-            />
+            <div
+              v-for="sessionPath in renderPaths"
+              :key="`editor-pane:${sessionPath}`"
+              class="editor-session-pane"
+              :data-session-path="sessionPath"
+              :data-active="isActiveMountedPath(sessionPath) ? 'true' : 'false'"
+              :aria-hidden="isActiveMountedPath(sessionPath) ? undefined : 'true'"
+              :tabindex="isActiveMountedPath(sessionPath) ? undefined : -1"
+              :inert="isActiveMountedPath(sessionPath) ? undefined : true"
+              v-show="isActiveMountedPath(sessionPath)"
+            >
+              <EditorContent
+                v-if="renderedEditorsByPath[sessionPath]"
+                :key="`editor-content:${sessionPath}`"
+                :editor="renderedEditorsByPath[sessionPath]!"
+              />
+            </div>
           </div>
+          <!-- Invariant: interactive overlays/drag-handle stay bound to active editor only. -->
           <DragHandleVue3
             v-if="renderedEditor"
             :editor="renderedEditor"
