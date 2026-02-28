@@ -18,6 +18,16 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.5.1] - 2026-02-28
+
+### Added
+- feat(editor): add smart paste html-to-markdown conversion with confidence fallback (d7597e7)
+
+### Fixed
+- fix(ui): increase default left sidebar width (7f12c8f)
+- fix(editor): align block controls to content edge with minimal gap (25e3d76)
+- fix(editor): set content max-width to 700px for improved readability (2b9f991)
+
 ## [0.5.0] - 2026-02-28
 
 ### Added
