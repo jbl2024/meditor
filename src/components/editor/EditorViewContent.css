@@ -73,8 +73,7 @@
   font-size: calc(1.6rem * var(--editor-zoom, 1));
   line-height: 1.35;
   margin: 0.95rem 0 0.8rem;
-  padding-bottom: 0.35rem;
-  border-bottom: 1px solid rgb(229 231 235);
+  text-decoration: none;
 }
 
 .editor-holder .ProseMirror h3 {
@@ -105,6 +104,7 @@
   line-height: 1.35;
   margin: 0.45rem 0 0.22rem;
   color: #5b6472;
+  text-decoration: none;
 }
 
 .editor-holder .ProseMirror :not(pre) > code {
@@ -438,10 +438,6 @@
 .dark .editor-holder .ProseMirror th,
 .dark .editor-holder .ProseMirror td {
   border-color: rgb(51 65 85);
-}
-
-.dark .editor-holder .ProseMirror h2 {
-  border-bottom-color: rgb(71 85 105);
 }
 
 .dark .editor-holder .ProseMirror {
