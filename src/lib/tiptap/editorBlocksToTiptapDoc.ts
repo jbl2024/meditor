@@ -6,14 +6,6 @@ import { TIPTAP_NODE_TYPES } from './types'
 
 type TiptapNode = JSONContent
 
-function plainTextFromHtml(value: unknown): string {
-  const html = String(value ?? '')
-  if (!html.trim()) return ''
-  const div = document.createElement('div')
-  div.innerHTML = html
-  return (div.textContent ?? '').replace(/\u00a0/g, ' ').replace(/\u200b/g, '').trim()
-}
-
 function marksForElement(element: HTMLElement): Array<{ type: string; attrs?: Record<string, unknown> }> {
   const out: Array<{ type: string; attrs?: Record<string, unknown> }> = []
   const tag = element.tagName.toLowerCase()
@@ -82,10 +74,11 @@ function inlineNodesFromHtml(value: unknown): TiptapNode[] {
   return out
 }
 
-function listItemNode(content: string, checked?: boolean, task = false, nested?: TiptapNode): TiptapNode {
+function listItemNode(contentHtml: unknown, checked?: boolean, task = false, nested?: TiptapNode): TiptapNode {
+  const paragraphContent = inlineNodesFromHtml(contentHtml)
   const paragraph: TiptapNode = {
     type: 'paragraph',
-    content: content ? [{ type: 'text', text: content }] : []
+    content: paragraphContent
   }
   const attrs = typeof checked === 'boolean' ? { checked } : undefined
   const nodeType = task ? 'taskItem' : 'listItem'
@@ -101,7 +94,7 @@ function listItemNode(content: string, checked?: boolean, task = false, nested?:
 function richItemToNode(entry: unknown, style: 'ordered' | 'unordered' | 'checklist'): TiptapNode | null {
   if (!entry || typeof entry !== 'object') return null
   const item = entry as Record<string, unknown>
-  const text = plainTextFromHtml(item.content)
+  const contentHtml = item.content
   const checkedRaw = (item.meta as { checked?: boolean } | undefined)?.checked
 
   let nested: TiptapNode | undefined
@@ -118,7 +111,7 @@ function richItemToNode(entry: unknown, style: 'ordered' | 'unordered' | 'checkl
     }
   }
 
-  return listItemNode(text, style === 'checklist' ? Boolean(checkedRaw) : undefined, style === 'checklist', nested)
+  return listItemNode(contentHtml, style === 'checklist' ? Boolean(checkedRaw) : undefined, style === 'checklist', nested)
 }
 
 function blockToNode(block: EditorBlock): TiptapNode | null {
