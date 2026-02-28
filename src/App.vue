@@ -1245,8 +1245,11 @@ async function onSearchResultOpen(hit: SearchHit) {
   await editorRef.value?.revealSnippet(hit.snippet)
 }
 
-function onTabClick(path: string) {
-  void setActiveTabWithAutosave(path)
+async function onTabClick(path: string) {
+  const opened = await setActiveTabWithAutosave(path)
+  if (!opened) return
+  await nextTick()
+  editorRef.value?.focusEditor()
 }
 
 async function openNextTabWithAutosave() {
@@ -1256,7 +1259,10 @@ async function openNextTabWithAutosave() {
   const nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % tabs.length
   const nextPath = tabs[nextIndex]?.path
   if (!nextPath) return
-  await setActiveTabWithAutosave(nextPath)
+  const opened = await setActiveTabWithAutosave(nextPath)
+  if (!opened) return
+  await nextTick()
+  editorRef.value?.focusEditor()
 }
 
 async function onBacklinkOpen(path: string) {
@@ -2755,6 +2761,7 @@ onBeforeUnmount(() => {
             <EditorView
               ref="editorRef"
               :path="activeFilePath"
+              :openPaths="workspace.openTabs.value.map((tab) => tab.path)"
               :openFile="openFile"
               :saveFile="saveFile"
               :renameFileFromTitle="renameFileFromTitle"

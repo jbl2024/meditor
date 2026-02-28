@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Editor, EditorContent, Extension } from '@tiptap/vue-3'
-import { NodeSelection, TextSelection } from '@tiptap/pm/state'
+import { NodeSelection, TextSelection, type Transaction } from '@tiptap/pm/state'
+import type { EditorView as ProseMirrorEditorView } from '@tiptap/pm/view'
 import StarterKit from '@tiptap/starter-kit'
 import { DragHandle as DragHandleVue3 } from '@tiptap/extension-drag-handle-vue-3'
 import { Table, TableRow, TableHeader, TableCell } from '@tiptap/extension-table'
@@ -31,7 +32,7 @@ import { normalizeBlockId, normalizeHeadingAnchor, parseWikilinkTarget, slugifyH
 import { toTiptapDoc } from '../lib/tiptap/editorBlocksToTiptapDoc'
 import { fromTiptapDoc } from '../lib/tiptap/tiptapDocToEditorBlocks'
 import { TIPTAP_NODE_TYPES } from '../lib/tiptap/types'
-import { useTiptapInstance } from '../composables/useTiptapInstance'
+import { useDocumentEditorSessions, type PaneId } from '../composables/useDocumentEditorSessions'
 import { CalloutNode } from '../lib/tiptap/extensions/CalloutNode'
 import { MermaidNode } from '../lib/tiptap/extensions/MermaidNode'
 import { QuoteNode } from '../lib/tiptap/extensions/QuoteNode'
@@ -64,6 +65,7 @@ const SLASH_COMMANDS = EDITOR_SLASH_COMMANDS
 
 const props = defineProps<{
   path: string
+  openPaths?: string[]
   openFile: (path: string) => Promise<string>
   saveFile: (path: string, text: string, options: { explicit: boolean }) => Promise<{ persisted: boolean }>
   renameFileFromTitle: (path: string, title: string) => Promise<{ path: string; title: string }>
@@ -85,15 +87,8 @@ const holder = ref<HTMLDivElement | null>(null)
 const contentShell = ref<HTMLDivElement | null>(null)
 let editor: Editor | null = null
 let suppressOnChange = false
-
-const loadedTextByPath = ref<Record<string, string>>({})
-const dirtyByPath = ref<Record<string, boolean>>({})
-const savingByPath = ref<Record<string, boolean>>({})
-const saveErrorByPath = ref<Record<string, string>>({})
-const scrollTopByPath = ref<Record<string, number>>({})
-const caretByPath = ref<Record<string, { kind: 'pm-selection'; from: number; to: number }>>({})
-let autosaveTimer: ReturnType<typeof setTimeout> | null = null
-let outlineTimer: ReturnType<typeof setTimeout> | null = null
+let pathLoadToken = 0
+const MAIN_PANE_ID: PaneId = 'main'
 const isLoadingLargeDocument = ref(false)
 const loadStageLabel = ref('')
 const loadProgressPercent = ref(0)
@@ -160,6 +155,9 @@ const TURN_INTO_LABELS: Record<TurnIntoType, string> = {
   blockquote: 'Quote',
 }
 const currentPath = computed(() => props.path?.trim() || '')
+const sessionStore = useDocumentEditorSessions({
+  createEditor: (path) => createSessionEditor(path)
+})
 const visibleSlashCommands = computed(() => {
   const query = slashQuery.value.trim().toLowerCase()
   if (!query) return SLASH_COMMANDS
@@ -177,11 +175,14 @@ const WIKILINK_TARGETS_TTL_MS = 15_000
 const WIKILINK_HEADINGS_TTL_MS = 30_000
 const computedDragLock = computed(() => computeHandleLock(dragHandleUiState.value))
 const debugTargetPos = computed(() => String(dragHandleUiState.value.activeTarget?.pos ?? ''))
+// Keep template binding reactive when active session editor changes.
+const renderedEditor = computed(() => sessionStore.getActiveSession(MAIN_PANE_ID)?.editor ?? null)
 const blockMenuActionTarget = computed(() => resolveActiveTarget(dragHandleUiState.value.activeTarget, lastStableBlockMenuTarget.value))
 const blockMenuActions = computed<BlockMenuActionItem[]>(() => {
+  const currentEditor = renderedEditor.value
   const target = blockMenuActionTarget.value
-  const canMoveUpValue = Boolean(editor && target && !target.isVirtualTitle && canMoveUp(editor, target))
-  const canMoveDownValue = Boolean(editor && target && !target.isVirtualTitle && canMoveDown(editor, target))
+  const canMoveUpValue = Boolean(currentEditor && target && !target.isVirtualTitle && canMoveUp(currentEditor, target))
+  const canMoveDownValue = Boolean(currentEditor && target && !target.isVirtualTitle && canMoveDown(currentEditor, target))
   const base: BlockMenuActionItem[] = [
     { id: 'insert_above', actionId: 'insert_above', label: 'Insert above', disabled: !target },
     { id: 'insert_below', actionId: 'insert_below', label: 'Insert below', disabled: !target },
@@ -206,34 +207,51 @@ const blockMenuConvertActions = computed<BlockMenuActionItem[]>(() => {
 const { editorZoomStyle, initFromStorage: initEditorZoomFromStorage, zoomBy: zoomEditorBy, resetZoom: resetEditorZoom, getZoom } = useEditorZoom()
 const { mermaidReplaceDialog, resolveMermaidReplaceDialog, requestMermaidReplaceConfirm } = useMermaidReplaceDialog()
 
+function getSession(path: string) {
+  return sessionStore.getSession(path)
+}
+
+function ensureSession(path: string) {
+  return sessionStore.ensureSession(path)
+}
+
 function emitStatus(path: string) {
+  const session = getSession(path)
+  if (!session) return
   emit('status', {
     path,
-    dirty: Boolean(dirtyByPath.value[path]),
-    saving: Boolean(savingByPath.value[path]),
-    saveError: saveErrorByPath.value[path] ?? ''
+    dirty: session.dirty,
+    saving: session.saving,
+    saveError: session.saveError
   })
 }
 
 function setDirty(path: string, dirty: boolean) {
-  dirtyByPath.value = { ...dirtyByPath.value, [path]: dirty }
+  const session = getSession(path)
+  if (!session) return
+  session.dirty = dirty
   emitStatus(path)
 }
 
 function setSaving(path: string, saving: boolean) {
-  savingByPath.value = { ...savingByPath.value, [path]: saving }
+  const session = getSession(path)
+  if (!session) return
+  session.saving = saving
   emitStatus(path)
 }
 
 function setSaveError(path: string, message: string) {
-  saveErrorByPath.value = { ...saveErrorByPath.value, [path]: message }
+  const session = getSession(path)
+  if (!session) return
+  session.saveError = message
   emitStatus(path)
 }
 
-function clearAutosaveTimer() {
-  if (!autosaveTimer) return
-  clearTimeout(autosaveTimer)
-  autosaveTimer = null
+function clearAutosaveTimer(path: string) {
+  const session = getSession(path)
+  if (!session || !session.autosaveTimer) return
+  clearTimeout(session.autosaveTimer)
+  session.autosaveTimer = null
 }
 
 function countLines(input: string): number {
@@ -246,9 +264,11 @@ async function flushUiFrame() {
   await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()))
 }
 
-function scheduleAutosave() {
-  clearAutosaveTimer()
-  autosaveTimer = setTimeout(() => {
+function scheduleAutosave(path: string) {
+  const session = getSession(path)
+  if (!session) return
+  clearAutosaveTimer(path)
+  session.autosaveTimer = setTimeout(() => {
     void saveCurrentFile(false)
   }, 1800)
 }
@@ -328,16 +348,15 @@ async function renderBlocks(blocks: EditorBlock[]) {
 
 function captureCaret(path: string) {
   if (!editor || !path) return
+  const session = getSession(path)
+  if (!session) return
   const { from, to } = editor.state.selection
-  caretByPath.value = {
-    ...caretByPath.value,
-    [path]: { kind: 'pm-selection', from, to }
-  }
+  session.caret = { kind: 'pm-selection', from, to }
 }
 
 function restoreCaret(path: string) {
   if (!editor || !path) return false
-  const snapshot = caretByPath.value[path]
+  const snapshot = getSession(path)?.caret
   if (!snapshot) return false
   const max = Math.max(1, editor.state.doc.content.size)
   const from = Math.max(1, Math.min(snapshot.from, max))
@@ -361,15 +380,19 @@ function parseOutlineFromDoc(): HeadingNode[] {
   return headings
 }
 
-function clearOutlineTimer() {
-  if (!outlineTimer) return
-  clearTimeout(outlineTimer)
-  outlineTimer = null
+function clearOutlineTimer(path: string) {
+  const session = getSession(path)
+  if (!session || !session.outlineTimer) return
+  clearTimeout(session.outlineTimer)
+  session.outlineTimer = null
 }
 
-function emitOutlineSoon() {
-  clearOutlineTimer()
-  outlineTimer = setTimeout(() => {
+function emitOutlineSoon(path: string) {
+  const session = getSession(path)
+  if (!session) return
+  clearOutlineTimer(path)
+  session.outlineTimer = setTimeout(() => {
+    if (currentPath.value !== path) return
     emit('outline', parseOutlineFromDoc())
   }, 120)
 }
@@ -625,7 +648,7 @@ const {
   onDirty: (path) => {
     setDirty(path, true)
     setSaveError(path, '')
-    scheduleAutosave()
+    scheduleAutosave(path)
   },
   emitProperties: (payload) => emit('properties', payload)
 })
@@ -650,14 +673,16 @@ watch(editorZoomStyle, () => {
   void nextTick().then(() => updateGutterHitboxStyle())
 }, { deep: true })
 
-const { ensureEditor, destroyEditor } = useTiptapInstance({
-  holder,
-  getEditor: () => editor,
-  setEditor: (instance) => {
-    editor = instance
-    lastAppliedDragHandleLock = null
-  },
-  createOptions: (_holderEl, onEditorChange) => ({
+function onEditorDocChanged(path: string) {
+  if (suppressOnChange || !path) return
+  setDirty(path, true)
+  setSaveError(path, '')
+  scheduleAutosave(path)
+  emitOutlineSoon(path)
+}
+
+function createEditorOptions(path: string) {
+  return {
     autofocus: false,
     extensions: [
       StarterKit.configure({
@@ -702,7 +727,7 @@ const { ensureEditor, destroyEditor } = useTiptapInstance({
         markSlashActivatedByUser()
         return false
       },
-      handleClick: (_view, _pos, event) => {
+      handleClick: (_view: ProseMirrorEditorView, _pos: number, event: MouseEvent) => {
         const anchor = closestAnchorFromEventTarget(event.target)
         if (!anchor) return false
 
@@ -725,7 +750,9 @@ const { ensureEditor, destroyEditor } = useTiptapInstance({
             const candidates = [pos, pos - 1, pos + 1]
             for (const candidate of candidates) {
               if (candidate < 0 || candidate > view.state.doc.content.size) continue
-              const range = enterWikilinkEditFromNode(editor!, candidate)
+              const targetEditor = getSession(path)?.editor ?? editor
+              if (!targetEditor) continue
+              const range = enterWikilinkEditFromNode(targetEditor, candidate)
               if (!range) continue
               view.dispatch(view.state.tr.setMeta(WIKILINK_STATE_KEY, { type: 'startEditing', range }))
               return true
@@ -748,48 +775,38 @@ const { ensureEditor, destroyEditor } = useTiptapInstance({
       }
     },
     onUpdate: () => {
+      if (currentPath.value !== path) return
       syncSlashMenuFromSelection({ preserveIndex: true })
       syncWikilinkUiFromPluginState()
     },
     onSelectionUpdate: () => {
-      const path = currentPath.value
-      if (path) captureCaret(path)
+      if (currentPath.value !== path) return
+      const activePath = currentPath.value
+      if (activePath) captureCaret(activePath)
       syncSlashMenuFromSelection({ preserveIndex: true })
       updateFormattingToolbar()
       syncWikilinkUiFromPluginState()
     },
-    onTransaction: ({ transaction }) => {
+    onTransaction: (payload: { transaction: Transaction }) => {
+      const { transaction } = payload
       if (transaction.docChanged) {
-        onEditorChange()
+        onEditorDocChanged(path)
       }
+      if (currentPath.value !== path) return
       syncWikilinkUiFromPluginState()
     }
-  }),
-  onEditorChange: () => {
-    const path = currentPath.value
-    if (suppressOnChange || !path) return
-    setDirty(path, true)
-    setSaveError(path, '')
-    scheduleAutosave()
-    emitOutlineSoon()
-  },
-  beforeDestroy: () => {
-    lastAppliedDragHandleLock = null
-    clearAutosaveTimer()
-    clearOutlineTimer()
-    closeSlashMenu()
-    closeWikilinkMenu()
   }
-})
+}
 
-async function loadCurrentFile(path: string) {
-  if (!path) return
-  await ensureEditor()
-  await ensurePropertySchemaLoaded()
-  if (!editor) return
+function createSessionEditor(path: string): Editor {
+  return new Editor({
+    content: '',
+    element: document.createElement('div'),
+    ...createEditorOptions(path)
+  })
+}
 
-  setSaveError(path, '')
-  clearAutosaveTimer()
+function resetTransientUiState() {
   slashActivatedByUser.value = false
   closeSlashMenu()
   closeWikilinkMenu()
@@ -798,45 +815,75 @@ async function loadCurrentFile(path: string) {
   lastStableBlockMenuTarget.value = null
   dragHandleUiState.value = { ...dragHandleUiState.value, activeTarget: null }
   formatToolbarOpen.value = false
+  cachedLinkTargetsAt.value = 0
+  cachedHeadingsByTarget.value = {}
+  cachedHeadingsAt.value = {}
+}
+
+function setActiveSession(path: string) {
+  sessionStore.setActivePath(MAIN_PANE_ID, path)
+  const session = getSession(path)
+  editor = session?.editor ?? null
+  lastAppliedDragHandleLock = null
+}
+
+async function loadCurrentFile(path: string, options?: { forceReload?: boolean; requestId?: number; skipActivate?: boolean }) {
+  if (!path) return
+  await ensurePropertySchemaLoaded()
+  if (typeof options?.requestId === 'number' && options.requestId !== pathLoadToken) return
+  const session = ensureSession(path)
+  if (!options?.skipActivate) {
+    setActiveSession(path)
+  }
+  if (typeof options?.requestId === 'number' && options.requestId !== pathLoadToken) return
+  if (!editor) return
+
+  setSaveError(path, '')
+  clearAutosaveTimer(path)
+  clearOutlineTimer(path)
+  resetTransientUiState()
   isLoadingLargeDocument.value = false
   loadStageLabel.value = ''
   loadProgressPercent.value = 0
   loadProgressIndeterminate.value = false
   loadDocumentStats.value = null
-  cachedLinkTargetsAt.value = 0
-  cachedHeadingsByTarget.value = {}
-  cachedHeadingsAt.value = {}
 
   try {
-    const txt = await props.openFile(path)
-    parseAndStoreFrontmatter(path, txt)
-    const body = frontmatterByPath.value[path]?.body ?? txt
-    const isLargeDocument = txt.length >= LARGE_DOC_THRESHOLD
-    if (isLargeDocument) {
-      isLoadingLargeDocument.value = true
-      loadDocumentStats.value = { chars: body.length, lines: countLines(body) }
-      loadStageLabel.value = 'Parsing markdown blocks...'
-      loadProgressPercent.value = 35
-      loadProgressIndeterminate.value = false
-      await flushUiFrame()
-    }
-    const parsed = markdownToEditorData(body)
-    const normalized = withVirtualTitle(parsed.blocks as EditorBlock[], noteTitleFromPath(path)).blocks
+    if (!session.isLoaded || options?.forceReload) {
+      const txt = await props.openFile(path)
+      if (typeof options?.requestId === 'number' && options.requestId !== pathLoadToken) return
+      parseAndStoreFrontmatter(path, txt)
+      const body = frontmatterByPath.value[path]?.body ?? txt
+      const isLargeDocument = txt.length >= LARGE_DOC_THRESHOLD
+      if (isLargeDocument) {
+        isLoadingLargeDocument.value = true
+        loadDocumentStats.value = { chars: body.length, lines: countLines(body) }
+        loadStageLabel.value = 'Parsing markdown blocks...'
+        loadProgressPercent.value = 35
+        loadProgressIndeterminate.value = false
+        await flushUiFrame()
+      }
+      const parsed = markdownToEditorData(body)
+      const normalized = withVirtualTitle(parsed.blocks as EditorBlock[], noteTitleFromPath(path)).blocks
 
-    suppressOnChange = true
-    if (isLargeDocument) {
-      loadStageLabel.value = 'Rendering blocks in editor...'
-      loadProgressPercent.value = 70
-      await flushUiFrame()
-    }
-    editor.commands.setContent(toTiptapDoc(normalized), { emitUpdate: false })
-    suppressOnChange = false
+      suppressOnChange = true
+      if (isLargeDocument) {
+        loadStageLabel.value = 'Rendering blocks in editor...'
+        loadProgressPercent.value = 70
+        await flushUiFrame()
+      }
+      session.editor.commands.setContent(toTiptapDoc(normalized), { emitUpdate: false })
+      suppressOnChange = false
 
-    loadedTextByPath.value = { ...loadedTextByPath.value, [path]: txt }
-    setDirty(path, false)
+      session.loadedText = txt
+      session.isLoaded = true
+      setDirty(path, false)
+    }
 
     await nextTick()
-    const remembered = scrollTopByPath.value[path]
+    if (typeof options?.requestId === 'number' && options.requestId !== pathLoadToken) return
+    if (currentPath.value !== path) return
+    const remembered = session.scrollTop
     if (holder.value && typeof remembered === 'number') {
       holder.value.scrollTop = remembered
     }
@@ -844,12 +891,13 @@ async function loadCurrentFile(path: string) {
       editor.commands.focus('end')
     }
 
-    emitOutlineSoon()
+    emitOutlineSoon(path)
     syncWikilinkUiFromPluginState()
     updateGutterHitboxStyle()
   } catch (error) {
     setSaveError(path, error instanceof Error ? error.message : 'Could not read file.')
   } finally {
+    if (typeof options?.requestId === 'number' && options.requestId !== pathLoadToken) return
     isLoadingLargeDocument.value = false
     loadStageLabel.value = ''
     loadProgressPercent.value = 0
@@ -858,26 +906,10 @@ async function loadCurrentFile(path: string) {
   }
 }
 
-function movePathState(from: string, to: string) {
-  if (!from || !to || from === to) return
-  const move = <T,>(record: Record<string, T>) => {
-    if (!(from in record)) return record
-    const next = { ...record }
-    next[to] = next[from]
-    delete next[from]
-    return next
-  }
-  loadedTextByPath.value = move(loadedTextByPath.value)
-  dirtyByPath.value = move(dirtyByPath.value)
-  savingByPath.value = move(savingByPath.value)
-  saveErrorByPath.value = move(saveErrorByPath.value)
-  scrollTopByPath.value = move(scrollTopByPath.value)
-  caretByPath.value = move(caretByPath.value)
-}
-
 async function saveCurrentFile(manual = true) {
   const initialPath = currentPath.value
-  if (!initialPath || !editor || savingByPath.value[initialPath]) return
+  const initialSession = getSession(initialPath)
+  if (!initialPath || !editor || !initialSession || initialSession.saving) return
 
   let savePath = initialPath
   setSaving(savePath, true)
@@ -886,7 +918,7 @@ async function saveCurrentFile(manual = true) {
   try {
     const rawBlocks = serializeCurrentDocBlocks()
     const requestedTitle = readVirtualTitle(rawBlocks) || blockTextCandidate(rawBlocks[0]) || noteTitleFromPath(initialPath)
-    const lastLoaded = loadedTextByPath.value[initialPath] ?? ''
+    const lastLoaded = initialSession.loadedText
 
     const latestOnDisk = await props.openFile(initialPath)
     if (latestOnDisk !== lastLoaded) {
@@ -910,7 +942,7 @@ async function saveCurrentFile(manual = true) {
     }
 
     if (savePath !== initialPath) {
-      movePathState(initialPath, savePath)
+      sessionStore.renamePath(initialPath, savePath)
       moveFrontmatterPathState(initialPath, savePath)
       emit('path-renamed', { from: initialPath, to: savePath, manual })
     }
@@ -925,14 +957,10 @@ async function saveCurrentFile(manual = true) {
       return
     }
 
-    loadedTextByPath.value = {
-      ...loadedTextByPath.value,
-      [savePath]: markdown
-    }
-    if (savePath !== initialPath) {
-      const next = { ...loadedTextByPath.value }
-      delete next[initialPath]
-      loadedTextByPath.value = next
+    const savedSession = getSession(savePath)
+    if (savedSession) {
+      savedSession.loadedText = markdown
+      savedSession.isLoaded = true
     }
 
     parseAndStoreFrontmatter(savePath, markdown)
@@ -941,7 +969,7 @@ async function saveCurrentFile(manual = true) {
     setSaveError(savePath, error instanceof Error ? error.message : 'Could not save file.')
   } finally {
     setSaving(savePath, false)
-    emitOutlineSoon()
+    emitOutlineSoon(savePath)
   }
 }
 
@@ -1235,10 +1263,11 @@ function onWikilinkMenuIndexUpdate(index: number) {
 
 async function openLinkTargetWithAutosave(target: string) {
   const path = currentPath.value
-  if (path && dirtyByPath.value[path]) {
-    clearAutosaveTimer()
+  const session = path ? getSession(path) : null
+  if (path && session?.dirty) {
+    clearAutosaveTimer(path)
     await saveCurrentFile(false)
-    if (dirtyByPath.value[path]) return
+    if (getSession(path)?.dirty) return
   }
   await props.openLinkTarget(target)
 }
@@ -1391,33 +1420,63 @@ watch(
   async (next, prev) => {
     if (prev && holder.value) {
       captureCaret(prev)
-      scrollTopByPath.value = {
-        ...scrollTopByPath.value,
-        [prev]: holder.value.scrollTop
-      }
+      const prevSession = getSession(prev)
+      if (prevSession) prevSession.scrollTop = holder.value.scrollTop
     }
 
     const nextPath = next?.trim()
     if (!nextPath) {
+      pathLoadToken += 1
+      const activePath = sessionStore.getActivePath(MAIN_PANE_ID)
+      if (activePath) {
+        captureCaret(activePath)
+        if (holder.value) {
+          const activeSession = getSession(activePath)
+          if (activeSession) activeSession.scrollTop = holder.value.scrollTop
+        }
+      }
+      sessionStore.setActivePath(MAIN_PANE_ID, '')
+      editor = null
       resetPropertySchemaState()
       emit('properties', { path: '', items: [], parseErrorCount: 0 })
-      await destroyEditor()
+      closeSlashMenu()
+      closeWikilinkMenu()
+      closeBlockMenu()
       emit('outline', [])
       return
     }
 
+    const requestId = ++pathLoadToken
+    ensureSession(nextPath)
+    setActiveSession(nextPath)
     await nextTick()
-    await loadCurrentFile(nextPath)
+    await loadCurrentFile(nextPath, { requestId, skipActivate: true })
   }
+)
+
+watch(
+  () => props.openPaths ?? [],
+  (nextOpenPaths) => {
+    const keep = new Set(nextOpenPaths.map((path) => path.trim()).filter(Boolean))
+    const activePath = sessionStore.getActivePath(MAIN_PANE_ID) || currentPath.value
+    for (const sessionPath of sessionStore.listPaths()) {
+      if (sessionPath === activePath) continue
+      if (!keep.has(sessionPath)) {
+        sessionStore.closePath(sessionPath)
+      }
+    }
+  },
+  { deep: true }
 )
 
 onMounted(async () => {
   initEditorZoomFromStorage()
 
   if (currentPath.value) {
-    await loadCurrentFile(currentPath.value)
-  } else {
-    await ensureEditor()
+    const requestId = ++pathLoadToken
+    ensureSession(currentPath.value)
+    setActiveSession(currentPath.value)
+    await loadCurrentFile(currentPath.value, { requestId, skipActivate: true })
   }
 
   holder.value?.addEventListener('keydown', onEditorKeydown, true)
@@ -1433,8 +1492,6 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(async () => {
-  clearOutlineTimer()
-  clearAutosaveTimer()
   if (mermaidReplaceDialog.value.resolve) {
     mermaidReplaceDialog.value.resolve(false)
   }
@@ -1445,7 +1502,8 @@ onBeforeUnmount(async () => {
   holder.value?.removeEventListener('scroll', updateGutterHitboxStyle, true)
   window.removeEventListener('resize', updateGutterHitboxStyle)
   document.removeEventListener('mousedown', onDocumentMouseDown, true)
-  await destroyEditor()
+  sessionStore.closeAll()
+  editor = null
 })
 
 async function revealOutlineHeading(index: number) {
@@ -1545,7 +1603,10 @@ defineExpose({
   },
   reloadCurrent: async () => {
     if (!currentPath.value) return
-    await loadCurrentFile(currentPath.value)
+    const requestId = ++pathLoadToken
+    ensureSession(currentPath.value)
+    setActiveSession(currentPath.value)
+    await loadCurrentFile(currentPath.value, { forceReload: true, requestId, skipActivate: true })
   },
   focusEditor,
   focusFirstContentBlock,
@@ -1623,11 +1684,16 @@ defineExpose({
           @click="closeSlashMenu(); closeWikilinkMenu(); closeBlockMenu()"
         >
           <div ref="contentShell" class="editor-content-shell">
-            <EditorContent v-if="editor" :editor="editor" />
+            <EditorContent
+              v-if="renderedEditor"
+              :key="`editor-content:${currentPath}`"
+              :editor="renderedEditor"
+            />
           </div>
           <DragHandleVue3
-            v-if="editor"
-            :editor="editor"
+            v-if="renderedEditor"
+            :key="`editor-drag:${currentPath}`"
+            :editor="renderedEditor"
             :plugin-key="DRAG_HANDLE_PLUGIN_KEY"
             :compute-position-config="{ placement: 'left' }"
             class="meditor-drag-handle"
