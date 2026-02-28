@@ -2,6 +2,13 @@
 import mermaid from 'mermaid'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { NodeViewWrapper } from '@tiptap/vue-3'
+import UiFilterableDropdown, { type FilterableDropdownItem } from '../../ui/UiFilterableDropdown.vue'
+import {
+  MERMAID_TEMPLATES,
+  resolveMermaidTemplateId,
+  toMermaidTemplateItems,
+  type MermaidTemplateDropdownItem
+} from '../../../lib/tiptap/mermaidTemplates'
 
 const props = defineProps<{
   node: { attrs: { code?: string } }
@@ -13,38 +20,59 @@ const props = defineProps<{
 const code = computed(() => String(props.node.attrs.code ?? ''))
 const error = ref('')
 const previewEl = ref<HTMLDivElement | null>(null)
-let mermaidInitialized = false
+const textareaEl = ref<HTMLTextAreaElement | null>(null)
+const showTemplateMenu = ref(false)
+const templateQuery = ref('')
+const activeTemplateIndex = ref(0)
+const showCodeEditor = ref(false)
+const currentTemplateId = computed(() => resolveMermaidTemplateId(code.value))
+const templateItems = computed(() => toMermaidTemplateItems(MERMAID_TEMPLATES))
+let renderRequestId = 0
 let renderCount = 0
 
-const templates = [
-  { id: 'flowchart', label: 'Flowchart', code: 'flowchart TD\n  A[Start] --> B[End]' },
-  { id: 'sequence', label: 'Sequence', code: 'sequenceDiagram\n  User->>App: Request\n  App-->>User: Response' },
-  { id: 'class', label: 'Class', code: 'classDiagram\n  class Note\n  class Workspace\n  Workspace --> Note' }
-]
+type MermaidRuntimeState = {
+  initialized: boolean
+  instanceSeq: number
+}
+
+function runtimeState(): MermaidRuntimeState {
+  const target = window as typeof window & { __meditorMermaidRuntime?: MermaidRuntimeState }
+  if (!target.__meditorMermaidRuntime) {
+    target.__meditorMermaidRuntime = { initialized: false, instanceSeq: 0 }
+  }
+  return target.__meditorMermaidRuntime
+}
+
+const instanceId = ++runtimeState().instanceSeq
 
 function ensureMermaid() {
-  if (mermaidInitialized) return
+  const runtime = runtimeState()
+  if (runtime.initialized) return
   mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', suppressErrorRendering: true })
-  mermaidInitialized = true
+  runtime.initialized = true
 }
 
 async function renderPreview() {
-  if (!previewEl.value) return
+  const target = previewEl.value
+  if (!target) return
+  const requestId = ++renderRequestId
   const value = code.value.trim()
   if (!value) {
-    previewEl.value.innerHTML = ''
+    target.innerHTML = ''
     error.value = 'Diagram is empty.'
     return
   }
 
   ensureMermaid()
   try {
-    const id = `meditor-mermaid-${++renderCount}`
+    const id = `meditor-mermaid-${instanceId}-${++renderCount}`
     const rendered = await mermaid.render(id, value)
-    previewEl.value.innerHTML = rendered.svg
+    if (requestId !== renderRequestId) return
+    target.innerHTML = rendered.svg
     error.value = ''
   } catch (err) {
-    previewEl.value.innerHTML = ''
+    if (requestId !== renderRequestId) return
+    target.innerHTML = ''
     error.value = err instanceof Error ? err.message : 'Invalid Mermaid diagram.'
   }
 }
@@ -54,24 +82,29 @@ function onInput(event: Event) {
   props.updateAttributes({ code: value })
 }
 
-async function onTemplateChange(event: Event) {
-  const target = event.target as HTMLSelectElement | null
-  const selected = templates.find((item) => item.id === (target?.value ?? ''))
+function templateMatcher(item: FilterableDropdownItem, query: string): boolean {
+  const aliases = Array.isArray(item.aliases) ? item.aliases.map((entry) => String(entry)) : []
+  return [String(item.label), ...aliases].some((token) => token.toLowerCase().includes(query))
+}
+
+async function onTemplateSelect(item: FilterableDropdownItem) {
+  const selected = templateItems.value.find((entry) => entry.value === item.value) as MermaidTemplateDropdownItem | undefined
   if (!selected) return
 
   const current = code.value.trim()
-  const nextCode = selected.code.trim()
+  const nextCode = String(selected.code).trim()
   if (current && current !== nextCode) {
     const confirmReplace = props.extension.options?.confirmReplace
-    const approved = confirmReplace ? await confirmReplace({ templateLabel: selected.label }) : true
+    const approved = confirmReplace ? await confirmReplace({ templateLabel: String(selected.label) }) : true
     if (!approved) {
-      if (target) target.value = ''
       return
     }
   }
 
-  props.updateAttributes({ code: selected.code })
-  if (target) target.value = ''
+  props.updateAttributes({ code: String(selected.code) })
+  showCodeEditor.value = true
+  await nextTick()
+  textareaEl.value?.focus()
 }
 
 onMounted(() => {
@@ -81,29 +114,182 @@ onMounted(() => {
 watch(code, () => {
   void nextTick().then(renderPreview)
 })
+
+function onPreviewClick(event: MouseEvent) {
+  if (!props.editor.isEditable) return
+  event.preventDefault()
+  event.stopPropagation()
+  showCodeEditor.value = true
+  void nextTick().then(() => {
+    textareaEl.value?.focus()
+    const size = textareaEl.value?.value.length ?? 0
+    textareaEl.value?.setSelectionRange(size, size)
+  })
+}
+
+function onPreviewPointerDown(event: MouseEvent) {
+  onPreviewClick(event)
+}
+
+function onEditorToggle(event?: MouseEvent) {
+  if (event) {
+    event.preventDefault()
+    event.stopPropagation()
+  }
+  showCodeEditor.value = !showCodeEditor.value
+  if (showCodeEditor.value) {
+    void nextTick().then(() => textareaEl.value?.focus())
+  }
+}
+
+function onEditorKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Escape') return
+  event.preventDefault()
+  showCodeEditor.value = false
+}
 </script>
 
 <template>
-  <NodeViewWrapper class="meditor-mermaid">
-    <div class="meditor-mermaid-header">
+  <NodeViewWrapper
+    class="meditor-mermaid"
+    :class="{ 'is-editing': editor.isEditable && showCodeEditor }"
+  >
+    <div class="meditor-mermaid-header" contenteditable="false">
       <span class="meditor-mermaid-title">Mermaid</span>
-      <select v-if="editor.isEditable" class="meditor-mermaid-template" @change="onTemplateChange">
-        <option value="">Template</option>
-        <option v-for="item in templates" :key="item.id" :value="item.id">{{ item.label }}</option>
-      </select>
+      <div class="meditor-mermaid-actions" v-if="editor.isEditable">
+        <UiFilterableDropdown
+          class="meditor-mermaid-template-select"
+          :items="templateItems"
+          :model-value="showTemplateMenu"
+          :query="templateQuery"
+          :active-index="activeTemplateIndex"
+          :matcher="templateMatcher"
+          filter-placeholder="Filter template..."
+          :show-filter="true"
+          :max-height="240"
+          @open-change="showTemplateMenu = $event"
+          @query-change="templateQuery = $event"
+          @active-index-change="activeTemplateIndex = $event"
+          @select="void onTemplateSelect($event)"
+        >
+          <template #trigger="{ toggleMenu }">
+            <button
+              type="button"
+              class="meditor-mermaid-template-btn"
+              @click.stop="toggleMenu"
+              @mousedown.prevent
+            >
+              {{ currentTemplateId ? `Template: ${currentTemplateId}` : 'Template' }}
+            </button>
+          </template>
+          <template #item="{ item, active }">
+            <span :class="{ 'meditor-mermaid-template-active': active, 'meditor-mermaid-template-selected': item.value === currentTemplateId }">
+              {{ item.label }}
+            </span>
+          </template>
+        </UiFilterableDropdown>
+        <button
+          type="button"
+          class="meditor-mermaid-edit-btn"
+          @mousedown.stop.prevent="onEditorToggle($event)"
+        >
+          {{ showCodeEditor ? 'Done' : 'Edit' }}
+        </button>
+      </div>
     </div>
 
     <div class="meditor-mermaid-body">
       <textarea
-        v-if="editor.isEditable"
+        v-if="editor.isEditable && showCodeEditor"
+        ref="textareaEl"
         class="meditor-mermaid-code"
         :value="code"
         spellcheck="false"
         @input="onInput"
+        @keydown="onEditorKeydown"
       />
-      <pre v-else class="meditor-mermaid-code">{{ code }}</pre>
-      <div ref="previewEl" class="meditor-mermaid-preview"></div>
-      <div v-if="error" class="meditor-mermaid-error">{{ error }}</div>
+      <div
+        ref="previewEl"
+        class="meditor-mermaid-preview"
+        :class="{ 'is-editable': editor.isEditable }"
+        contenteditable="false"
+        @mousedown.stop.prevent="onPreviewPointerDown"
+      ></div>
+      <div v-if="editor.isEditable && !showCodeEditor" class="meditor-mermaid-hint" contenteditable="false">
+        Click diagram to edit code
+      </div>
+      <textarea
+        v-if="!editor.isEditable"
+        class="meditor-mermaid-code"
+        :value="code"
+        readonly
+      ></textarea>
+      <div v-if="error" class="meditor-mermaid-error" contenteditable="false">{{ error }}</div>
     </div>
   </NodeViewWrapper>
 </template>
+
+<style scoped>
+.meditor-mermaid-actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.meditor-mermaid-template-select {
+  position: relative;
+}
+
+.meditor-mermaid-template-btn,
+.meditor-mermaid-edit-btn {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+.meditor-mermaid-template-btn:hover,
+.meditor-mermaid-edit-btn:hover {
+  background: var(--color-bg-hover);
+}
+
+.meditor-mermaid-template-select :deep(.ui-filterable-dropdown-menu) {
+  min-width: 220px;
+  max-width: 280px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 40;
+}
+
+.meditor-mermaid-template-active {
+  font-weight: 600;
+}
+
+.meditor-mermaid-template-selected {
+  text-decoration: underline;
+}
+
+.meditor-mermaid-preview.is-editable {
+  cursor: text;
+  user-select: none;
+}
+
+.meditor-mermaid-hint {
+  color: #64748b;
+  font-size: 12px;
+  margin-top: 8px;
+}
+
+.meditor-mermaid-code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.45;
+  margin-bottom: 10px;
+  min-height: 120px;
+  width: 100%;
+}
+</style>
