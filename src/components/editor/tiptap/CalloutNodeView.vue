@@ -1,8 +1,22 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, type Component } from 'vue'
 import { NodeViewWrapper } from '@tiptap/vue-3'
+import {
+  BeakerIcon,
+  BugAntIcon,
+  ChatBubbleLeftRightIcon,
+  CheckCircleIcon,
+  DocumentTextIcon,
+  ExclamationTriangleIcon,
+  InformationCircleIcon,
+  LightBulbIcon,
+  QuestionMarkCircleIcon,
+  QueueListIcon,
+  ShieldExclamationIcon,
+  XCircleIcon
+} from '@heroicons/vue/24/outline'
 import UiFilterableDropdown, { type FilterableDropdownItem } from '../../ui/UiFilterableDropdown.vue'
-import { CANONICAL_CALLOUT_KINDS, calloutKindLabel, normalizeCalloutKind } from '../../../lib/callouts'
+import { CANONICAL_CALLOUT_KINDS, calloutKindLabel, normalizeCalloutKind, type CanonicalCalloutKind } from '../../../lib/callouts'
 
 const props = defineProps<{
   node: { attrs: { kind?: string; message?: string } }
@@ -15,14 +29,30 @@ const message = computed(() => String(props.node.attrs.message ?? ''))
 const showKindMenu = ref(false)
 const kindQuery = ref('')
 const activeKindIndex = ref(0)
+const iconByKind: Record<CanonicalCalloutKind, Component> = {
+  NOTE: DocumentTextIcon,
+  ABSTRACT: QueueListIcon,
+  INFO: InformationCircleIcon,
+  TIP: LightBulbIcon,
+  SUCCESS: CheckCircleIcon,
+  QUESTION: QuestionMarkCircleIcon,
+  WARNING: ExclamationTriangleIcon,
+  FAILURE: XCircleIcon,
+  DANGER: ShieldExclamationIcon,
+  BUG: BugAntIcon,
+  EXAMPLE: BeakerIcon,
+  QUOTE: ChatBubbleLeftRightIcon
+}
 const kindItems = computed<Array<FilterableDropdownItem & { value: string; aliases: string[] }>>(() =>
   CANONICAL_CALLOUT_KINDS.map((item) => ({
     id: `callout-kind:${item}`,
     label: calloutKindLabel(item),
     value: item,
-    aliases: [item.toLowerCase(), calloutKindLabel(item).toLowerCase()]
+    aliases: [item.toLowerCase(), calloutKindLabel(item).toLowerCase()],
+    icon: iconByKind[item]
   }))
 )
+const currentKindIcon = computed(() => iconByKind[kind.value])
 
 function kindMatcher(item: FilterableDropdownItem, query: string): boolean {
   const aliases = Array.isArray(item.aliases) ? item.aliases.map((entry) => String(entry)) : []
@@ -43,9 +73,6 @@ function onMessageInput(event: Event) {
 <template>
   <NodeViewWrapper class="meditor-callout" :data-callout-kind="kind.toLowerCase()">
     <div class="meditor-callout-header">
-      <div class="meditor-callout-title">
-        <span class="meditor-callout-label">{{ calloutKindLabel(kind) }}</span>
-      </div>
       <UiFilterableDropdown
         v-if="editor.isEditable"
         class="meditor-callout-kind-select"
@@ -65,19 +92,29 @@ function onMessageInput(event: Event) {
         <template #trigger="{ toggleMenu }">
           <button
             type="button"
-            class="meditor-callout-kind"
+            class="meditor-callout-title meditor-callout-title-trigger"
             @mousedown.prevent
             @click.stop="toggleMenu"
           >
-            {{ kind }}
+            <span class="meditor-callout-icon">
+              <component :is="currentKindIcon" class="meditor-callout-icon-svg" aria-hidden="true" />
+            </span>
+            <span class="meditor-callout-label">{{ calloutKindLabel(kind) }}</span>
           </button>
         </template>
         <template #item="{ item, active }">
-          <span :class="{ 'meditor-callout-kind-active': active, 'meditor-callout-kind-selected': item.value === kind }">
-            {{ item.label }}
+          <span class="meditor-callout-kind-option" :class="{ 'meditor-callout-kind-active': active, 'meditor-callout-kind-selected': item.value === kind }">
+            <component :is="item.icon" class="meditor-callout-kind-option-icon" aria-hidden="true" />
+            <span>{{ item.label }}</span>
           </span>
         </template>
       </UiFilterableDropdown>
+      <div v-else class="meditor-callout-title">
+        <span class="meditor-callout-icon">
+          <component :is="currentKindIcon" class="meditor-callout-icon-svg" aria-hidden="true" />
+        </span>
+        <span class="meditor-callout-label">{{ calloutKindLabel(kind) }}</span>
+      </div>
     </div>
     <textarea
       class="meditor-quote-source meditor-callout-message"
@@ -93,13 +130,37 @@ function onMessageInput(event: Event) {
 <style scoped>
 .meditor-callout-kind-select {
   position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.meditor-callout-title-trigger {
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.meditor-callout-icon-svg,
+.meditor-callout-kind-option-icon {
+  height: 0.9rem;
+  width: 0.9rem;
+}
+
+.meditor-callout-kind-option {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.45rem;
 }
 
 .meditor-callout-kind-select :deep(.ui-filterable-dropdown-menu) {
   min-width: 240px;
   max-width: 300px;
   position: absolute;
-  right: 0;
+  left: 0;
   top: calc(100% + 6px);
   z-index: 40;
 }

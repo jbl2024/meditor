@@ -798,10 +798,26 @@ html.dark .ce-popover-item--focused,
     transition: opacity 120ms ease, transform 120ms ease;
   }
 
+  .editor-holder .meditor-callout-kind-select {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .editor-holder .meditor-callout:hover .meditor-callout-kind,
   .editor-holder .meditor-callout:focus-within .meditor-callout-kind {
     opacity: 1;
     pointer-events: auto;
     transform: translateY(0);
+  }
+
+  @media (hover: none) {
+    .editor-holder .meditor-callout .meditor-callout-kind {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
   }
 
   .editor-holder .meditor-callout-message {
