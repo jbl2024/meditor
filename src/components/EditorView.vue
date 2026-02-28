@@ -1,15 +1,7 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Editor, EditorContent, Extension } from '@tiptap/vue-3'
-import { TextSelection, type Transaction } from '@tiptap/pm/state'
-import type { EditorView as ProseMirrorEditorView } from '@tiptap/pm/view'
-import StarterKit from '@tiptap/starter-kit'
-import Link from '@tiptap/extension-link'
+import { computed, nextTick, ref, watch } from 'vue'
+import { Editor, EditorContent } from '@tiptap/vue-3'
 import { DragHandle as DragHandleVue3 } from '@tiptap/extension-drag-handle-vue-3'
-import { Table, TableRow, TableHeader, TableCell } from '@tiptap/extension-table'
-import { ListKit } from '@tiptap/extension-list'
-import Placeholder from '@tiptap/extension-placeholder'
-import type { JSONContent } from '@tiptap/vue-3'
 import {
   sanitizeExternalHref,
   type EditorBlock
@@ -24,6 +16,7 @@ import EditorTableEdgeControls from './editor/EditorTableEdgeControls.vue'
 import EditorInlineFormatToolbar from './editor/EditorInlineFormatToolbar.vue'
 import EditorLargeDocOverlay from './editor/EditorLargeDocOverlay.vue'
 import EditorMermaidReplaceDialog from './editor/EditorMermaidReplaceDialog.vue'
+import './editor/EditorViewContent.css'
 import { useFrontmatterProperties } from '../composables/useFrontmatterProperties'
 import { useEditorZoom } from '../composables/useEditorZoom'
 import { useMermaidReplaceDialog } from '../composables/useMermaidReplaceDialog'
@@ -34,34 +27,24 @@ import { useBlockMenuControls } from '../composables/useBlockMenuControls'
 import { useTableToolbarControls } from '../composables/useTableToolbarControls'
 import { useEditorFileLifecycle } from '../composables/useEditorFileLifecycle'
 import { useEditorTableGeometry } from '../composables/useEditorTableGeometry'
+import { useEditorSlashInsertion } from '../composables/useEditorSlashInsertion'
+import { useEditorWikilinkOverlayState } from '../composables/useEditorWikilinkOverlayState'
+import { useEditorTiptapSetup } from '../composables/useEditorTiptapSetup'
+import { useEditorTableInteractions } from '../composables/useEditorTableInteractions'
+import { useEditorPathWatchers } from '../composables/useEditorPathWatchers'
 import { normalizeBlockId, normalizeHeadingAnchor, parseWikilinkTarget, slugifyHeading } from '../lib/wikilinks'
 import { toTiptapDoc } from '../lib/tiptap/editorBlocksToTiptapDoc'
 import { fromTiptapDoc } from '../lib/tiptap/tiptapDocToEditorBlocks'
-import { TIPTAP_NODE_TYPES } from '../lib/tiptap/types'
 import { toPersistedTextSelection } from '../lib/tiptap/selectionSnapshot'
 import { useDocumentEditorSessions, type PaneId } from '../composables/useDocumentEditorSessions'
 import { useEditorNavigation, type EditorHeadingNode } from '../composables/useEditorNavigation'
 import { useSlashMenu } from '../composables/useSlashMenu'
-import { CalloutNode } from '../lib/tiptap/extensions/CalloutNode'
-import { MermaidNode } from '../lib/tiptap/extensions/MermaidNode'
-import { QuoteNode } from '../lib/tiptap/extensions/QuoteNode'
-import { WikilinkNode } from '../lib/tiptap/extensions/WikilinkNode'
-import { VirtualTitleGuard } from '../lib/tiptap/extensions/VirtualTitleGuard'
-import { CodeBlockNode } from '../lib/tiptap/extensions/CodeBlockNode'
-import { WIKILINK_STATE_KEY, getWikilinkPluginState, type WikilinkCandidate } from '../lib/tiptap/plugins/wikilinkState'
+import { type WikilinkCandidate } from '../lib/tiptap/plugins/wikilinkState'
 import { buildWikilinkCandidates } from '../lib/tiptap/wikilinkCandidates'
-import { enterWikilinkEditFromNode, parseWikilinkToken, type WikilinkEditingRange } from '../lib/tiptap/extensions/wikilinkCommands'
 import type { BlockMenuActionItem, BlockMenuTarget, TurnIntoType } from '../lib/tiptap/blockMenu/types'
 import { canCopyAnchor, toBlockMenuTarget } from '../lib/tiptap/blockMenu/guards'
 import { deleteNode, duplicateNode, insertAbove, insertBelow, moveNodeDown, moveNodeUp, turnInto } from '../lib/tiptap/blockMenu/actions'
 import { computeHandleLock, type DragHandleUiState } from '../lib/tiptap/blockMenu/dragHandleState'
-import {
-  buildTableToolbarActions,
-  type TableActionId,
-  type TableCommandCapabilities,
-  type TableToolbarAction
-} from '../lib/tiptap/tableToolbarActions'
-import { applyTableAction } from '../lib/tiptap/tableCommands'
 
 const VIRTUAL_TITLE_BLOCK_ID = '__virtual_title__'
 
@@ -111,17 +94,10 @@ const loadProgressIndeterminate = ref(false)
 const loadDocumentStats = ref<{ chars: number; lines: number } | null>(null)
 const LARGE_DOC_THRESHOLD = 50_000
 
-const wikilinkOpen = ref(false)
-const wikilinkIndex = ref(0)
-const wikilinkLeft = ref(0)
-const wikilinkTop = ref(0)
-const wikilinkResults = ref<Array<{ id: string; label: string; target: string; isCreate: boolean }>>([])
-const wikilinkEditingRange = ref<WikilinkEditingRange | null>(null)
 const lastStableBlockMenuTarget = ref<BlockMenuTarget | null>(null)
 const blockMenuFloatingEl = ref<HTMLDivElement | null>(null)
 const blockMenuPos = ref({ x: 0, y: 0 })
 const tableToolbarFloatingEl = ref<HTMLDivElement | null>(null)
-const tableToolbarOpen = ref(false)
 const tableToolbarLeft = ref(0) // menu anchor, holder-relative
 const tableToolbarTop = ref(0) // menu anchor, holder-relative
 const tableToolbarViewportLeft = ref(0)
@@ -133,9 +109,6 @@ const tableBoxLeft = ref(0)
 const tableBoxTop = ref(0)
 const tableBoxWidth = ref(0)
 const tableBoxHeight = ref(0)
-const tableToolbarHovering = ref(false)
-const tableToolbarActions = ref<TableToolbarAction[]>([])
-let tableHoverHideTimer: ReturnType<typeof setTimeout> | null = null
 const TABLE_EDGE_SHOW_THRESHOLD = 20
 const TABLE_EDGE_STICKY_THRESHOLD = 44
 const TABLE_EDGE_STICKY_MS = 280
@@ -271,6 +244,34 @@ const tableGeometry = useEditorTableGeometry({
     tableToolbarViewportMaxHeight
   }
 })
+const tableInteractions = useEditorTableInteractions({
+  getEditor: () => editor,
+  holder,
+  floatingMenuEl: tableToolbarFloatingEl,
+  visibility: {
+    tableToolbarTriggerVisible,
+    tableAddTopVisible,
+    tableAddBottomVisible,
+    tableAddLeftVisible,
+    tableAddRightVisible
+  },
+  hideEdgeControls: () => tableControls.hideAll(),
+  updateEdgeControlsFromDistances: (distances) => tableControls.updateFromDistances(distances),
+  updateTableToolbarPosition: (cellEl, tableEl) => tableGeometry.updateTableToolbarPosition(cellEl, tableEl)
+})
+const tableToolbarOpen = tableInteractions.tableToolbarOpen
+const tableToolbarActions = tableInteractions.tableToolbarActions
+const hideTableToolbar = tableInteractions.hideTableToolbar
+const hideTableToolbarAnchor = tableInteractions.hideTableToolbarAnchor
+const updateTableToolbar = tableInteractions.updateTableToolbar
+const onTableToolbarSelect = tableInteractions.onTableToolbarSelect
+const toggleTableToolbar = tableInteractions.toggleTableToolbar
+const addRowAfterFromTrigger = tableInteractions.addRowAfterFromTrigger
+const addRowBeforeFromTrigger = tableInteractions.addRowBeforeFromTrigger
+const addColumnBeforeFromTrigger = tableInteractions.addColumnBeforeFromTrigger
+const addColumnAfterFromTrigger = tableInteractions.addColumnAfterFromTrigger
+const onEditorMouseMove = tableInteractions.onEditorMouseMove
+const onEditorMouseLeave = tableInteractions.onEditorMouseLeave
 
 function getSession(path: string) {
   return sessionStore.getSession(path)
@@ -436,13 +437,6 @@ function emitOutlineSoon(path: string) {
   }, 120)
 }
 
-function closeWikilinkMenu() {
-  wikilinkOpen.value = false
-  wikilinkIndex.value = 0
-  wikilinkResults.value = []
-  wikilinkEditingRange.value = null
-}
-
 function closeBlockMenu(unlock = true) {
   const wasOpen = blockMenuOpen.value || blockMenuIndex.value !== 0 || dragHandleUiState.value.menuOpen
   if (!wasOpen) return
@@ -546,53 +540,6 @@ function onBlockMenuSelect(item: BlockMenuActionItem) {
   closeBlockMenu()
 }
 
-function onTableToolbarSelect(actionId: TableActionId) {
-  if (!editor) return
-  applyTableAction(editor, actionId)
-  updateTableToolbar()
-}
-
-function toggleTableToolbar(event: MouseEvent) {
-  event.preventDefault()
-  event.stopPropagation()
-  if (!tableToolbarTriggerVisible.value) return
-  const opening = !tableToolbarOpen.value
-  if (opening) updateTableToolbar()
-  tableToolbarOpen.value = opening
-}
-
-function addRowAfterFromTrigger(event: MouseEvent) {
-  event.preventDefault()
-  event.stopPropagation()
-  if (!editor || !tableToolbarTriggerVisible.value) return
-  editor.chain().focus().addRowAfter().run()
-  updateTableToolbar()
-}
-
-function addRowBeforeFromTrigger(event: MouseEvent) {
-  event.preventDefault()
-  event.stopPropagation()
-  if (!editor || !tableToolbarTriggerVisible.value) return
-  editor.chain().focus().addRowBefore().run()
-  updateTableToolbar()
-}
-
-function addColumnBeforeFromTrigger(event: MouseEvent) {
-  event.preventDefault()
-  event.stopPropagation()
-  if (!editor || !tableToolbarTriggerVisible.value) return
-  editor.chain().focus().addColumnBefore().run()
-  updateTableToolbar()
-}
-
-function addColumnAfterFromTrigger(event: MouseEvent) {
-  event.preventDefault()
-  event.stopPropagation()
-  if (!editor || !tableToolbarTriggerVisible.value) return
-  editor.chain().focus().addColumnAfter().run()
-  updateTableToolbar()
-}
-
 function onDocumentMouseDown(event: MouseEvent) {
   const target = event.target
   if (!(target instanceof Node)) return
@@ -676,129 +623,6 @@ function updateFormattingToolbar() {
   inlineFormatToolbar.updateFormattingToolbar()
 }
 
-function hideTableToolbar() {
-  tableToolbarOpen.value = false
-}
-
-function hideTableToolbarAnchor() {
-  if (tableHoverHideTimer) {
-    clearTimeout(tableHoverHideTimer)
-    tableHoverHideTimer = null
-  }
-  hideTableToolbar()
-  tableToolbarHovering.value = false
-  tableControls.hideAll()
-  tableToolbarActions.value = []
-}
-
-function activeTableElement(): HTMLElement | null {
-  if (!editor) return null
-  const domAt = editor.view.domAtPos(editor.state.selection.$from.pos)
-  const baseEl = domAt.node instanceof Element ? domAt.node : domAt.node.parentElement
-  return baseEl?.closest('table') as HTMLElement | null
-}
-
-function activeTableCellElement(): HTMLElement | null {
-  if (!editor) return null
-  const domAt = editor.view.domAtPos(editor.state.selection.$from.pos)
-  const baseEl = domAt.node instanceof Element ? domAt.node : domAt.node.parentElement
-  return baseEl?.closest('td,th') as HTMLElement | null
-}
-
-function readTableCommandCapabilities(currentEditor: Editor): TableCommandCapabilities {
-  const canRun = (command: (chain: ReturnType<ReturnType<Editor['can']>['chain']>) => ReturnType<ReturnType<Editor['can']>['chain']>) =>
-    command(currentEditor.can().chain().focus()).run()
-  return {
-    addRowBefore: canRun((chain) => chain.addRowBefore()),
-    addRowAfter: canRun((chain) => chain.addRowAfter()),
-    deleteRow: canRun((chain) => chain.deleteRow()),
-    addColumnBefore: canRun((chain) => chain.addColumnBefore()),
-    addColumnAfter: canRun((chain) => chain.addColumnAfter()),
-    deleteColumn: canRun((chain) => chain.deleteColumn()),
-    toggleHeaderRow: canRun((chain) => chain.toggleHeaderRow()),
-    toggleHeaderColumn: canRun((chain) => chain.toggleHeaderColumn()),
-    toggleHeaderCell: canRun((chain) => chain.toggleHeaderCell()),
-    deleteTable: canRun((chain) => chain.deleteTable())
-  }
-}
-
-function updateTableToolbar() {
-  if (!editor || !holder.value) {
-    hideTableToolbarAnchor()
-    return
-  }
-  if (!editor.isActive('table')) {
-    hideTableToolbarAnchor()
-    return
-  }
-
-  tableToolbarActions.value = buildTableToolbarActions(readTableCommandCapabilities(editor))
-  const tableEl = activeTableElement()
-  const cellEl = activeTableCellElement()
-  if (!tableEl || !cellEl) {
-    hideTableToolbarAnchor()
-    return
-  }
-  tableToolbarTriggerVisible.value = true
-  tableGeometry.updateTableToolbarPosition(cellEl, tableEl)
-}
-
-function onEditorMouseMove(event: MouseEvent) {
-  if (tableHoverHideTimer) {
-    clearTimeout(tableHoverHideTimer)
-    tableHoverHideTimer = null
-  }
-  if (!editor?.isActive('table')) {
-    tableToolbarHovering.value = false
-    tableControls.hideAll()
-    return
-  }
-  const target = event.target
-  if (!(target instanceof Element)) return
-  const tableEl = activeTableElement()
-  if (!tableEl) return
-  const rect = tableEl.getBoundingClientRect()
-  const x = event.clientX
-  const y = event.clientY
-  const inVerticalBand = y >= rect.top - 24 && y <= rect.bottom + 24
-  const inHorizontalBand = x >= rect.left - 24 && x <= rect.right + 24
-  tableControls.updateFromDistances({
-    left: inVerticalBand ? Math.abs(x - rect.left) : Number.POSITIVE_INFINITY,
-    right: inVerticalBand ? Math.abs(x - rect.right) : Number.POSITIVE_INFINITY,
-    top: inHorizontalBand ? Math.abs(y - rect.top) : Number.POSITIVE_INFINITY,
-    bottom: inHorizontalBand ? Math.abs(y - rect.bottom) : Number.POSITIVE_INFINITY
-  })
-  const inToolbar = Boolean(tableToolbarFloatingEl.value?.contains(target))
-  const inControls = Boolean(target.closest('.meditor-table-control'))
-  const inTable = Boolean(target.closest('.ProseMirror table'))
-  if (inControls || tableToolbarOpen.value) {
-    tableAddTopVisible.value = true
-    tableAddBottomVisible.value = true
-    tableAddLeftVisible.value = true
-    tableAddRightVisible.value = true
-  }
-  tableToolbarHovering.value = inTable || inToolbar || inControls || tableToolbarOpen.value
-}
-
-function onEditorMouseLeave() {
-  if (tableToolbarOpen.value) return
-  if (tableHoverHideTimer) clearTimeout(tableHoverHideTimer)
-  tableHoverHideTimer = setTimeout(() => {
-    tableToolbarHovering.value = false
-    tableControls.hideAll()
-    tableHoverHideTimer = null
-  }, 120)
-}
-
-function closestAnchorFromEventTarget(target: EventTarget | null): HTMLAnchorElement | null {
-  const element = target instanceof Element
-    ? target
-    : target instanceof Node
-      ? target.parentElement
-      : null
-  return element?.closest('a') as HTMLAnchorElement | null
-}
-
 const {
   propertyEditorMode,
   frontmatterByPath,
@@ -837,22 +661,6 @@ const {
   emitProperties: (payload) => emit('properties', payload)
 })
 
-const HeadingMeta = Extension.create({
-  name: 'headingMeta',
-  addGlobalAttributes() {
-    return [
-      {
-        types: ['heading'],
-        attributes: {
-          isVirtualTitle: {
-            default: false
-          }
-        }
-      }
-    ]
-  }
-})
-
 watch(editorZoomStyle, () => {
   void nextTick().then(() => updateGutterHitboxStyle())
 }, { deep: true })
@@ -865,158 +673,33 @@ function onEditorDocChanged(path: string) {
   emitOutlineSoon(path)
 }
 
-function createEditorOptions(path: string) {
-  return {
-    autofocus: false,
-    extensions: [
-      StarterKit.configure({
-        blockquote: false,
-        codeBlock: false,
-        bulletList: false,
-        orderedList: false,
-        listItem: false,
-        listKeymap: false,
-        link: false
-      }),
-      Link.configure({
-        openOnClick: false
-      }),
-      HeadingMeta,
-      ListKit.configure({
-        taskItem: {
-          nested: true
-        }
-      }),
-      Table.configure({ resizable: true }),
-      TableRow,
-      TableHeader,
-      TableCell,
-      Placeholder.configure({ placeholder: 'Write here...' }),
-      CalloutNode,
-      MermaidNode.configure({ confirmReplace: requestMermaidReplaceConfirm }),
-      QuoteNode,
-      CodeBlockNode,
-      WikilinkNode.configure({
-        getCandidates: (query: string) => getWikilinkCandidates(query),
-        onNavigate: (target: string) => openLinkTargetWithAutosave(target),
-        onCreate: async (_target: string) => {},
-        resolve: (target: string) => resolveWikilinkTarget(target)
-      }),
-      VirtualTitleGuard
-    ],
-    editorProps: {
-      attributes: {
-        class: 'ProseMirror meditor-prosemirror'
-      },
-      handleKeyDown: () => {
-        markSlashActivatedByUser()
-        return false
-      },
-      handleClick: (_view: ProseMirrorEditorView, _pos: number, event: MouseEvent) => {
-        const anchor = closestAnchorFromEventTarget(event.target)
-        if (!anchor) return false
-
-        const wikilinkTarget = (
-          anchor.getAttribute('data-target') ??
-          anchor.getAttribute('data-wikilink-target') ??
-          ''
-        ).trim()
-        if (wikilinkTarget) {
-          if (event.metaKey || event.ctrlKey) {
-            event.preventDefault()
-            event.stopPropagation()
-            const view = _view
-            let pos = 0
-            try {
-              pos = view.posAtDOM(anchor, 0)
-            } catch {
-              pos = 0
-            }
-            const candidates = [pos, pos - 1, pos + 1]
-            for (const candidate of candidates) {
-              if (candidate < 0 || candidate > view.state.doc.content.size) continue
-              const targetEditor = getSession(path)?.editor ?? editor
-              if (!targetEditor) continue
-              const range = enterWikilinkEditFromNode(targetEditor, candidate)
-              if (!range) continue
-              view.dispatch(view.state.tr.setMeta(WIKILINK_STATE_KEY, { type: 'startEditing', range }))
-              return true
-            }
-            return true
-          }
-          event.preventDefault()
-          event.stopPropagation()
-          void openLinkTargetWithAutosave(wikilinkTarget)
-          return true
-        }
-
-        const href = anchor.getAttribute('href')?.trim() ?? ''
-        const safe = sanitizeExternalHref(href)
-        if (!safe) return false
-        if (event.metaKey || event.ctrlKey) {
-          event.preventDefault()
-          event.stopPropagation()
-          const targetEditor = getSession(path)?.editor ?? editor
-          if (!targetEditor) return true
-
-          let pos = 0
-          try {
-            pos = _view.posAtDOM(anchor, 0)
-          } catch {
-            pos = 0
-          }
-
-          const candidates = [_pos, _pos + 1, _pos - 1, pos, pos + 1, pos - 1]
-          for (const candidate of candidates) {
-            if (candidate < 0 || candidate > _view.state.doc.content.size) continue
-            targetEditor.chain().focus().setTextSelection(candidate).extendMarkRange('link').run()
-            const { from, to, empty } = targetEditor.state.selection
-            if (empty || from === to || !targetEditor.isActive('link')) continue
-            inlineFormatToolbar.updateFormattingToolbar()
-            inlineFormatToolbar.openLinkPopover()
-            return true
-          }
-          return true
-        }
-        event.preventDefault()
-        event.stopPropagation()
-        void openExternalUrl(safe)
-        return true
-      }
-    },
-    onUpdate: () => {
-      if (currentPath.value !== path) return
-      syncSlashMenuFromSelection({ preserveIndex: true })
-      updateTableToolbar()
-      syncWikilinkUiFromPluginState()
-    },
-    onSelectionUpdate: () => {
-      if (currentPath.value !== path) return
-      const activePath = currentPath.value
-      if (activePath) captureCaret(activePath)
-      syncSlashMenuFromSelection({ preserveIndex: true })
-      updateFormattingToolbar()
-      updateTableToolbar()
-      syncWikilinkUiFromPluginState()
-    },
-    onTransaction: (payload: { transaction: Transaction }) => {
-      const { transaction } = payload
-      if (transaction.docChanged) {
-        onEditorDocChanged(path)
-      }
-      if (currentPath.value !== path) return
-      updateTableToolbar()
-      syncWikilinkUiFromPluginState()
-    }
+const tiptapSetup = useEditorTiptapSetup({
+  currentPath,
+  getCurrentEditor: () => editor,
+  getSessionEditor: (path) => getSession(path)?.editor ?? null,
+  markSlashActivatedByUser,
+  syncSlashMenuFromSelection,
+  updateTableToolbar,
+  syncWikilinkUiFromPluginState: () => {
+    wikilinkOverlay.syncWikilinkUiFromPluginState()
+  },
+  captureCaret,
+  updateFormattingToolbar,
+  onEditorDocChanged,
+  requestMermaidReplaceConfirm,
+  getWikilinkCandidates,
+  openLinkTargetWithAutosave,
+  resolveWikilinkTarget,
+  sanitizeExternalHref,
+  openExternalUrl,
+  inlineFormatToolbar: {
+    updateFormattingToolbar: inlineFormatToolbar.updateFormattingToolbar,
+    openLinkPopover: inlineFormatToolbar.openLinkPopover
   }
-}
+})
 
 function createSessionEditor(path: string): Editor {
-  return new Editor({
-    content: '',
-    element: document.createElement('div'),
-    ...createEditorOptions(path)
-  })
+  return tiptapSetup.createSessionEditor(path)
 }
 
 function resetTransientUiState() {
@@ -1041,60 +724,87 @@ function setActiveSession(path: string) {
   lastAppliedDragHandleLock = null
 }
 
-const fileLifecycle = useEditorFileLifecycle({
-  currentPath,
-  holder,
+const wikilinkOverlay = useEditorWikilinkOverlayState({
   getEditor: () => editor,
-  getSession,
-  ensureSession,
-  ensurePropertySchemaLoaded,
-  openFile: props.openFile,
-  saveFile: props.saveFile,
-  renameFileFromTitle: props.renameFileFromTitle,
-  parseAndStoreFrontmatter,
-  frontmatterByPath,
-  propertyEditorMode,
-  rawYamlByPath,
-  serializableFrontmatterFields,
-  moveFrontmatterPathState,
-  renameSessionPath: (from, to) => {
-    sessionStore.renamePath(from, to)
+  holder,
+  blockMenuOpen,
+  isDragMenuOpen: () => dragHandleUiState.value.menuOpen,
+  closeBlockMenu: () => closeBlockMenu()
+})
+const wikilinkOpen = wikilinkOverlay.wikilinkOpen
+const wikilinkIndex = wikilinkOverlay.wikilinkIndex
+const wikilinkLeft = wikilinkOverlay.wikilinkLeft
+const wikilinkTop = wikilinkOverlay.wikilinkTop
+const wikilinkResults = wikilinkOverlay.wikilinkResults
+const closeWikilinkMenu = wikilinkOverlay.closeWikilinkMenu
+const syncWikilinkUiFromPluginState = wikilinkOverlay.syncWikilinkUiFromPluginState
+const onWikilinkMenuSelect = wikilinkOverlay.onWikilinkMenuSelect
+const onWikilinkMenuIndexUpdate = wikilinkOverlay.onWikilinkMenuIndexUpdate
+
+const fileLifecycle = useEditorFileLifecycle({
+  sessionPort: {
+    currentPath,
+    holder,
+    getEditor: () => editor,
+    getSession,
+    ensureSession,
+    renameSessionPath: (from, to) => {
+      sessionStore.renamePath(from, to)
+    },
+    moveLifecyclePathState: (from, to) => lifecycle.movePathState(from, to),
+    setSuppressOnChange: (value) => {
+      suppressOnChange = value
+    },
+    restoreCaret,
+    setDirty,
+    setSaving,
+    setSaveError
   },
-  moveLifecyclePathState: (from, to) => lifecycle.movePathState(from, to),
-  emitPathRenamed: (payload) => emit('path-renamed', payload),
-  clearAutosaveTimer,
-  clearOutlineTimer,
-  emitOutlineSoon,
-  resetTransientUiState,
-  countLines,
-  noteTitleFromPath,
-  readVirtualTitle,
-  blockTextCandidate,
-  withVirtualTitle,
-  stripVirtualTitle,
-  serializeCurrentDocBlocks,
-  renderBlocks,
-  restoreCaret,
-  setSuppressOnChange: (value) => {
-    suppressOnChange = value
+  documentPort: {
+    ensurePropertySchemaLoaded,
+    parseAndStoreFrontmatter,
+    frontmatterByPath,
+    propertyEditorMode,
+    rawYamlByPath,
+    serializableFrontmatterFields,
+    moveFrontmatterPathState,
+    countLines,
+    noteTitleFromPath,
+    readVirtualTitle,
+    blockTextCandidate,
+    withVirtualTitle,
+    stripVirtualTitle,
+    serializeCurrentDocBlocks,
+    renderBlocks
   },
-  setDirty,
-  setSaving,
-  setSaveError,
-  updateGutterHitboxStyle,
-  syncWikilinkUiFromPluginState,
-  isCurrentRequest: (requestId) => lifecycle.isCurrentRequest(requestId),
-  largeDocThreshold: LARGE_DOC_THRESHOLD,
-  ui: {
-    isLoadingLargeDocument,
-    loadStageLabel,
-    loadProgressPercent,
-    loadProgressIndeterminate,
-    loadDocumentStats
+  uiPort: {
+    clearAutosaveTimer,
+    clearOutlineTimer,
+    emitOutlineSoon,
+    emitPathRenamed: (payload) => emit('path-renamed', payload),
+    resetTransientUiState,
+    updateGutterHitboxStyle,
+    syncWikilinkUiFromPluginState,
+    largeDocThreshold: LARGE_DOC_THRESHOLD,
+    ui: {
+      isLoadingLargeDocument,
+      loadStageLabel,
+      loadProgressPercent,
+      loadProgressIndeterminate,
+      loadDocumentStats
+    }
+  },
+  ioPort: {
+    openFile: props.openFile,
+    saveFile: props.saveFile,
+    renameFileFromTitle: props.renameFileFromTitle
+  },
+  requestPort: {
+    isCurrentRequest: (requestId) => lifecycle.isCurrentRequest(requestId)
   }
 })
 
-async function loadCurrentFile(path: string, options?: { forceReload?: boolean; requestId?: number; skipActivate?: boolean }) {
+async function loadCurrentFile(path: string, options?: { forceReload?: boolean; requestId?: number }) {
   await fileLifecycle.loadCurrentFile(path, options)
 }
 
@@ -1102,65 +812,12 @@ async function saveCurrentFile(manual = true) {
   await fileLifecycle.saveCurrentFile(manual)
 }
 
-function insertBlockFromDescriptor(type: string, data: Record<string, unknown>) {
-  if (!editor) return false
-  const context = currentTextSelectionContext()
-  if (!context) return false
-  const slashContext = readSlashContext()
-
-  if (type === 'list') {
-    const style = data.style === 'ordered' ? 'ordered' : data.style === 'checklist' ? 'checklist' : 'unordered'
-    const chain = editor.chain().focus()
-    if (slashContext) {
-      chain.deleteRange({ from: slashContext.from, to: slashContext.to })
-    }
-    if (style === 'ordered') {
-      chain.toggleOrderedList().run()
-      return true
-    }
-    if (style === 'checklist') {
-      chain.toggleTaskList().run()
-      return true
-    }
-    chain.toggleBulletList().run()
-    return true
-  }
-
-  const content: JSONContent | null = (() => {
-    switch (type) {
-      case 'header':
-        return { type: 'heading', attrs: { level: Number(data.level ?? 2) }, content: [] }
-      case 'table':
-        return {
-          type: 'table',
-          content: [
-            { type: 'tableRow', content: [{ type: 'tableHeader', content: [{ type: 'paragraph' }] }, { type: 'tableHeader', content: [{ type: 'paragraph' }] }] },
-            { type: 'tableRow', content: [{ type: 'tableCell', content: [{ type: 'paragraph' }] }, { type: 'tableCell', content: [{ type: 'paragraph' }] }] }
-          ]
-        }
-      case 'callout':
-        return { type: 'calloutBlock', attrs: { kind: String(data.kind ?? 'NOTE'), message: '' } }
-      case 'mermaid':
-        return { type: 'mermaidBlock', attrs: { code: String(data.code ?? '') } }
-      case 'code':
-        return { type: 'codeBlock', attrs: { language: '' }, content: [] }
-      case 'quote':
-        return { type: 'quoteBlock', attrs: { text: String(data.text ?? '') } }
-      case 'delimiter':
-        return { type: 'horizontalRule' }
-      default:
-        return { type: 'paragraph', content: [] }
-    }
-  })()
-
-  if (!content) return false
-  if (slashContext) {
-    editor.chain().focus().deleteRange({ from: slashContext.from, to: slashContext.to }).insertContent(content).run()
-  } else {
-    editor.chain().focus().insertContent(content).run()
-  }
-  return true
-}
+const slashInsertion = useEditorSlashInsertion({
+  getEditor: () => editor,
+  currentTextSelectionContext,
+  readSlashContext
+})
+const insertBlockFromDescriptor = slashInsertion.insertBlockFromDescriptor
 
 async function loadWikilinkTargets() {
   const now = Date.now()
@@ -1219,112 +876,6 @@ async function getWikilinkCandidates(query: string): Promise<WikilinkCandidate[]
   })
 }
 
-function syncWikilinkUiFromPluginState() {
-  if (!editor || !holder.value) {
-    closeWikilinkMenu()
-    return
-  }
-
-  const state = getWikilinkPluginState(editor.state)
-  if (state.mode === 'editing' && state.editingRange) {
-    const selection = editor.state.selection
-    const stillInside = selection.from > state.editingRange.from && selection.to < state.editingRange.to
-    if (!stillInside) {
-      const token = editor.state.doc.textBetween(state.editingRange.from, state.editingRange.to, '', '')
-      const parsed = parseWikilinkToken(token)
-      if (parsed) {
-        const nodeType = editor.state.schema.nodes[TIPTAP_NODE_TYPES.wikilink]
-        if (nodeType) {
-          const node = nodeType.create({
-            target: parsed.target,
-            label: parsed.label,
-            exists: true
-          })
-          const exitOnLeft = selection.from <= state.editingRange.from
-          const tr = editor.state.tr.replaceWith(state.editingRange.from, state.editingRange.to, node)
-          const pos = exitOnLeft ? state.editingRange.from : state.editingRange.from + node.nodeSize
-          tr.setSelection(TextSelection.create(tr.doc, Math.max(1, Math.min(pos, tr.doc.content.size))))
-          editor.view.dispatch(tr)
-        }
-      }
-      editor.view.dispatch(editor.state.tr.setMeta(WIKILINK_STATE_KEY, { type: 'setIdle' }))
-      closeWikilinkMenu()
-      return
-    }
-  }
-
-  if (!state.open || state.mode !== 'editing' || !state.editingRange) {
-    closeWikilinkMenu()
-    return
-  }
-
-  wikilinkOpen.value = true
-  if (blockMenuOpen.value || dragHandleUiState.value.menuOpen) {
-    closeBlockMenu()
-  }
-  wikilinkIndex.value = state.selectedIndex
-  wikilinkEditingRange.value = state.editingRange
-  wikilinkResults.value = state.candidates.map((candidate) => ({
-    id: `${candidate.isCreate ? 'create' : 'existing'}:${candidate.target}`,
-    label: candidate.label ?? candidate.target,
-    target: candidate.target,
-    isCreate: Boolean(candidate.isCreate)
-  }))
-
-  const anchorPos = Math.max(
-    state.editingRange.from + 2,
-    Math.min(editor.state.selection.from, state.editingRange.to - 1)
-  )
-  const rect = editor.view.coordsAtPos(anchorPos)
-  let left = rect.left
-  let top = rect.bottom + 8
-
-  const estimatedWidth = 320
-  const estimatedHeight = 280
-  const maxX = Math.max(12, window.innerWidth - estimatedWidth - 12)
-  const maxY = Math.max(12, window.innerHeight - estimatedHeight - 12)
-
-  left = Math.max(12, Math.min(left, maxX))
-  top = Math.max(12, Math.min(top, maxY))
-
-  wikilinkLeft.value = left
-  wikilinkTop.value = top
-}
-
-function onWikilinkMenuSelect(target: string) {
-  applyWikilinkCandidateToken(target, 'after')
-}
-
-function applyWikilinkCandidateToken(target: string, placement: 'after' | 'inside') {
-  if (!editor || !wikilinkEditingRange.value) return
-  const trimmedTarget = target.trim()
-  if (!trimmedTarget) return
-  const range = wikilinkEditingRange.value
-  const token = `[[${trimmedTarget}]]`
-  const tr = editor.state.tr.insertText(token, range.from, range.to)
-  const nextPos = placement === 'inside'
-    ? range.from + token.length - 2
-    : range.from + token.length
-  tr.setSelection(TextSelection.create(tr.doc, Math.min(nextPos, tr.doc.content.size)))
-  editor.view.dispatch(tr)
-  if (placement === 'inside') {
-    editor.view.dispatch(editor.state.tr.setMeta(WIKILINK_STATE_KEY, {
-      type: 'startEditing',
-      range: { from: range.from, to: range.from + token.length }
-    }))
-  } else {
-    editor.view.dispatch(editor.state.tr.setMeta(WIKILINK_STATE_KEY, { type: 'setIdle' }))
-  }
-  syncWikilinkUiFromPluginState()
-}
-
-function onWikilinkMenuIndexUpdate(index: number) {
-  wikilinkIndex.value = index
-  if (!editor) return
-  const tr = editor.state.tr.setMeta(WIKILINK_STATE_KEY, { type: 'setSelectedIndex', index })
-  editor.view.dispatch(tr)
-}
-
 async function openLinkTargetWithAutosave(target: string) {
   const path = currentPath.value
   const session = path ? getSession(path) : null
@@ -1373,100 +924,71 @@ const onEditorKeyup = inputHandlers.onEditorKeyup
 const onEditorContextMenu = inputHandlers.onEditorContextMenu
 const onEditorPaste = inputHandlers.onEditorPaste
 
-watch(
-  () => props.path,
-  async (next, prev) => {
-    if (prev && holder.value) {
-      captureCaret(prev)
-      const prevSession = getSession(prev)
-      if (prevSession) prevSession.scrollTop = holder.value.scrollTop
-    }
-
-    const nextPath = next?.trim()
-    if (!nextPath) {
-      lifecycle.nextRequestId()
-      const activePath = sessionStore.getActivePath(MAIN_PANE_ID)
-      if (activePath) {
-        captureCaret(activePath)
-        if (holder.value) {
-          const activeSession = getSession(activePath)
-          if (activeSession) activeSession.scrollTop = holder.value.scrollTop
-        }
-      }
-      sessionStore.setActivePath(MAIN_PANE_ID, '')
-      editor = null
-      resetPropertySchemaState()
-      emit('properties', { path: '', items: [], parseErrorCount: 0 })
-      closeSlashMenu()
-      closeWikilinkMenu()
-      closeBlockMenu()
-      hideTableToolbarAnchor()
-      emit('outline', [])
-      return
-    }
-
-    const requestId = lifecycle.nextRequestId()
-    ensureSession(nextPath)
-    setActiveSession(nextPath)
-    await nextTick()
-    await loadCurrentFile(nextPath, { requestId, skipActivate: true })
-  }
-)
-
-watch(
-  () => props.openPaths ?? [],
-  (nextOpenPaths) => {
-    const keep = new Set(nextOpenPaths.map((path) => path.trim()).filter(Boolean))
-    const activePath = sessionStore.getActivePath(MAIN_PANE_ID) || currentPath.value
-    for (const sessionPath of sessionStore.listPaths()) {
-      if (sessionPath === activePath) continue
-      if (!keep.has(sessionPath)) {
-        sessionStore.closePath(sessionPath)
-      }
-    }
+useEditorPathWatchers({
+  path: computed(() => props.path ?? ''),
+  openPaths: computed(() => props.openPaths ?? []),
+  holder,
+  currentPath,
+  nextRequestId: () => lifecycle.nextRequestId(),
+  ensureSession,
+  setActiveSession,
+  loadCurrentFile,
+  captureCaret,
+  getSession,
+  getActivePath: () => sessionStore.getActivePath(MAIN_PANE_ID),
+  setActivePath: (path) => sessionStore.setActivePath(MAIN_PANE_ID, path),
+  clearActiveEditor: () => {
+    editor = null
   },
-  { deep: true }
-)
+  listPaths: () => sessionStore.listPaths(),
+  closePath: (path) => sessionStore.closePath(path),
+  resetPropertySchemaState,
+  emitEmptyProperties: () => {
+    emit('properties', { path: '', items: [], parseErrorCount: 0 })
+  },
+  closeSlashMenu,
+  closeWikilinkMenu,
+  closeBlockMenu: () => closeBlockMenu(),
+  hideTableToolbarAnchor,
+  emitEmptyOutline: () => {
+    emit('outline', [])
+  },
+  onMountInit: async () => {
+    initEditorZoomFromStorage()
 
-onMounted(async () => {
-  initEditorZoomFromStorage()
+    if (currentPath.value) {
+      const requestId = lifecycle.nextRequestId()
+      ensureSession(currentPath.value)
+      setActiveSession(currentPath.value)
+      await loadCurrentFile(currentPath.value, { requestId })
+    }
 
-  if (currentPath.value) {
-    const requestId = lifecycle.nextRequestId()
-    ensureSession(currentPath.value)
-    setActiveSession(currentPath.value)
-    await loadCurrentFile(currentPath.value, { requestId, skipActivate: true })
+    holder.value?.addEventListener('keydown', onEditorKeydown, true)
+    holder.value?.addEventListener('keyup', onEditorKeyup, true)
+    holder.value?.addEventListener('contextmenu', onEditorContextMenu, true)
+    holder.value?.addEventListener('paste', onEditorPaste, true)
+    holder.value?.addEventListener('scroll', onHolderScroll, true)
+    window.addEventListener('resize', updateGutterHitboxStyle)
+    await nextTick()
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    updateGutterHitboxStyle()
+    document.addEventListener('mousedown', onDocumentMouseDown, true)
+  },
+  onUnmountCleanup: async () => {
+    tableInteractions.clearTimers()
+    if (mermaidReplaceDialog.value.resolve) {
+      mermaidReplaceDialog.value.resolve(false)
+    }
+    holder.value?.removeEventListener('keydown', onEditorKeydown, true)
+    holder.value?.removeEventListener('keyup', onEditorKeyup, true)
+    holder.value?.removeEventListener('contextmenu', onEditorContextMenu, true)
+    holder.value?.removeEventListener('paste', onEditorPaste, true)
+    holder.value?.removeEventListener('scroll', onHolderScroll, true)
+    window.removeEventListener('resize', updateGutterHitboxStyle)
+    document.removeEventListener('mousedown', onDocumentMouseDown, true)
+    sessionStore.closeAll()
+    editor = null
   }
-
-  holder.value?.addEventListener('keydown', onEditorKeydown, true)
-  holder.value?.addEventListener('keyup', onEditorKeyup, true)
-  holder.value?.addEventListener('contextmenu', onEditorContextMenu, true)
-  holder.value?.addEventListener('paste', onEditorPaste, true)
-  holder.value?.addEventListener('scroll', onHolderScroll, true)
-  window.addEventListener('resize', updateGutterHitboxStyle)
-  await nextTick()
-  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
-  updateGutterHitboxStyle()
-  document.addEventListener('mousedown', onDocumentMouseDown, true)
-})
-
-onBeforeUnmount(async () => {
-  if (tableHoverHideTimer) {
-    clearTimeout(tableHoverHideTimer)
-    tableHoverHideTimer = null
-  }
-  if (mermaidReplaceDialog.value.resolve) {
-    mermaidReplaceDialog.value.resolve(false)
-  }
-  holder.value?.removeEventListener('keydown', onEditorKeydown, true)
-  holder.value?.removeEventListener('keyup', onEditorKeyup, true)
-  holder.value?.removeEventListener('contextmenu', onEditorContextMenu, true)
-  holder.value?.removeEventListener('paste', onEditorPaste, true)
-  holder.value?.removeEventListener('scroll', onHolderScroll, true)
-  window.removeEventListener('resize', updateGutterHitboxStyle)
-  document.removeEventListener('mousedown', onDocumentMouseDown, true)
-  sessionStore.closeAll()
-  editor = null
 })
 
 function focusEditor() {
@@ -1500,7 +1022,7 @@ defineExpose({
     const requestId = lifecycle.nextRequestId()
     ensureSession(currentPath.value)
     setActiveSession(currentPath.value)
-    await loadCurrentFile(currentPath.value, { forceReload: true, requestId, skipActivate: true })
+    await loadCurrentFile(currentPath.value, { forceReload: true, requestId })
   },
   focusEditor,
   focusFirstContentBlock,
@@ -1723,431 +1245,3 @@ defineExpose({
     />
   </div>
 </template>
-
-<style scoped>
-.editor-holder {
-  --meditor-link-color: #2563eb;
-}
-
-.editor-content-shell {
-  max-width: 880px;
-  margin: 0 auto;
-  padding-left: 2.5rem;
-}
-
-.editor-gutter-hitbox {
-  min-width: 36px;
-  z-index: 1;
-  pointer-events: none;
-  background: transparent;
-}
-
-.editor-holder :deep(.ProseMirror > *),
-.editor-holder :deep(.ProseMirror li) {
-  position: relative;
-}
-
-.editor-holder :deep(.ProseMirror > *::after),
-.editor-holder :deep(.ProseMirror li::after) {
-  content: '';
-  position: absolute;
-  left: -5rem;
-  width: 5rem;
-  top: -0.25rem;
-  bottom: -0.25rem;
-  pointer-events: auto;
-}
-
-@media (max-width: 840px) {
-  .editor-content-shell {
-    max-width: 100%;
-    padding-left: 0.5rem;
-  }
-}
-
-.dark .editor-holder {
-  --meditor-link-color: #60a5fa;
-}
-
-.editor-holder :deep(a.wikilink) {
-  color: var(--meditor-link-color);
-  text-decoration: underline;
-}
-
-.editor-holder :deep(a.wikilink.is-missing) {
-  color: rgb(220 38 38);
-  text-decoration-style: dashed;
-}
-
-.editor-holder :deep(.ProseMirror) {
-  min-height: 100%;
-  outline: none;
-}
-
-.editor-holder :deep(.ProseMirror p) {
-  margin: 0.35rem 0;
-}
-
-.editor-holder :deep(.ProseMirror h1) {
-  font-size: calc(2rem * var(--editor-zoom, 1));
-  margin: 0.6rem 0;
-}
-
-.editor-holder :deep(.ProseMirror h2) {
-  font-size: calc(1.6rem * var(--editor-zoom, 1));
-  margin: 0.55rem 0;
-}
-
-.editor-holder :deep(.ProseMirror h3) {
-  font-size: calc(1.35rem * var(--editor-zoom, 1));
-  margin: 0.5rem 0;
-}
-
-.editor-holder :deep(.ProseMirror ul),
-.editor-holder :deep(.ProseMirror ol) {
-  margin: 0.45rem 0 0.45rem 1.35rem;
-  padding: 0;
-}
-
-.editor-holder :deep(.ProseMirror ul) {
-  list-style: disc;
-}
-
-.editor-holder :deep(.ProseMirror ol) {
-  list-style: decimal;
-}
-
-.editor-holder :deep(.ProseMirror ul ul) {
-  list-style: circle;
-}
-
-.editor-holder :deep(.ProseMirror ol ol) {
-  list-style: lower-alpha;
-}
-
-.editor-holder :deep(.ProseMirror li) {
-  margin: 0.2rem 0;
-}
-
-.editor-holder :deep(.ProseMirror ul[data-type="taskList"]) {
-  list-style: none;
-  margin-left: 0.25rem;
-}
-
-.editor-holder :deep(.ProseMirror ul[data-type="taskList"] li) {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.45rem;
-}
-
-.editor-holder :deep(.ProseMirror ul[data-type="taskList"] li > label) {
-  margin-top: 0;
-  display: inline-flex;
-  align-items: center;
-  padding-top: 0.15rem;
-}
-
-.editor-holder :deep(.ProseMirror ul[data-type="taskList"] li > label input[type="checkbox"]) {
-  width: 1.1rem;
-  height: 1.1rem;
-  accent-color: rgb(37 99 235);
-  cursor: pointer;
-}
-
-.dark .editor-holder :deep(.ProseMirror ul[data-type="taskList"] li > label input[type="checkbox"]) {
-  color-scheme: dark;
-  background-color: rgb(30 41 59);
-  border-color: rgb(100 116 139);
-}
-
-.editor-holder :deep(.ProseMirror ul[data-type="taskList"] li > div > p) {
-  margin: 0;
-  min-height: 1.2em;
-  outline: 1px solid transparent;
-}
-
-.editor-holder :deep(.ProseMirror table) {
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-  margin: 0.8rem 0;
-  border: 1px solid rgb(203 213 225);
-  border-radius: 0.65rem;
-  overflow: hidden;
-  background: rgb(255 255 255 / 0.98);
-  font-size: calc(0.92rem * var(--editor-zoom, 1));
-  line-height: 1.45;
-  table-layout: fixed;
-}
-
-.editor-holder :deep(.ProseMirror th),
-.editor-holder :deep(.ProseMirror td) {
-  border-right: 1px solid rgb(226 232 240);
-  border-bottom: 1px solid rgb(226 232 240);
-  padding: 0.5rem 0.62rem;
-  vertical-align: top;
-  position: relative;
-  min-width: 4rem;
-  transition: background-color 120ms ease;
-}
-
-.editor-holder :deep(.ProseMirror tr:last-child > th),
-.editor-holder :deep(.ProseMirror tr:last-child > td) {
-  border-bottom: none;
-}
-
-.editor-holder :deep(.ProseMirror tr > th:last-child),
-.editor-holder :deep(.ProseMirror tr > td:last-child) {
-  border-right: none;
-}
-
-.editor-holder :deep(.ProseMirror tbody tr:hover td) {
-  background: rgb(248 250 252);
-}
-
-.editor-holder :deep(.ProseMirror th) {
-  font-weight: 640;
-  background: rgb(248 250 252);
-  color: rgb(30 41 59);
-}
-
-.editor-holder :deep(.ProseMirror td.selectedCell),
-.editor-holder :deep(.ProseMirror th.selectedCell) {
-  background: rgb(219 234 254);
-}
-
-.editor-holder :deep(.ProseMirror .column-resize-handle) {
-  position: absolute;
-  right: -2px;
-  top: 0;
-  width: 4px;
-  height: 100%;
-  background: rgb(59 130 246 / 0.55);
-  pointer-events: none;
-}
-
-.editor-holder :deep(.ProseMirror.resize-cursor) {
-  cursor: col-resize;
-}
-
-.editor-holder :deep(.ProseMirror pre) {
-  border: 1px solid rgb(226 232 240);
-  border-radius: 0.6rem;
-  padding: 0.8rem;
-  overflow: auto;
-}
-
-.editor-holder :deep(.meditor-code-node) {
-  margin: 0.5rem 0;
-}
-
-.editor-holder :deep(.meditor-code-node-actions) {
-  display: flex;
-  gap: 0.36rem;
-  justify-content: flex-end;
-  margin-bottom: 0.35rem;
-}
-
-.editor-holder :deep(.meditor-code-node pre.meditor-code-wrap-enabled) {
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.editor-holder :deep(.meditor-code-copy-btn),
-.editor-holder :deep(.meditor-code-wrap-btn) {
-  border: 1px solid rgb(203 213 225);
-  border-radius: 0.4rem;
-  background: white;
-  color: rgb(51 65 85);
-  font-size: 0.7rem;
-  line-height: 1;
-  padding: 0.28rem 0.45rem;
-  cursor: pointer;
-}
-
-.editor-holder :deep(.meditor-drag-handle) {
-  z-index: 35;
-}
-
-.editor-holder :deep(.meditor-block-controls) {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.12rem;
-  padding-right: 0.8rem;
-  line-height: 1;
-}
-
-.editor-holder :deep(.meditor-block-control-btn) {
-  width: 1.7rem;
-  height: 1.7rem;
-  border: 1px solid rgb(203 213 225);
-  border-radius: 0.4rem;
-  background: white;
-  color: rgb(71 85 105);
-  font-size: 0.95rem;
-  line-height: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.editor-holder :deep(.meditor-block-control-btn:hover) {
-  background: rgb(241 245 249);
-}
-
-.editor-holder :deep(.meditor-block-grip-btn) {
-  letter-spacing: -0.1rem;
-}
-
-.meditor-table-trigger {
-  display: flex;
-  align-items: center;
-  gap: 0.28rem;
-  transition: transform 120ms ease;
-  transform: translateY(0);
-}
-
-.meditor-table-trigger.is-visible {
-  opacity: 0.92;
-  pointer-events: auto;
-  transform: translateY(0);
-}
-
-.meditor-table-edge {
-  display: flex;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 140ms ease;
-}
-
-.meditor-table-edge-top,
-.meditor-table-edge-bottom {
-  align-items: center;
-  justify-content: center;
-  height: 20px;
-}
-
-.meditor-table-edge-left,
-.meditor-table-edge-right {
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-}
-
-.meditor-table-edge.is-visible {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.meditor-table-plus-btn {
-  width: 100%;
-  height: 100%;
-  border: none;
-  border-radius: 0.34rem;
-  background: transparent;
-  color: rgb(71 85 105);
-  font-size: 0.95rem;
-  line-height: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 120ms ease, background-color 120ms ease;
-}
-
-.meditor-table-edge.is-visible .meditor-table-plus-btn {
-  opacity: 0.92;
-  pointer-events: auto;
-}
-
-.meditor-table-edge.is-visible .meditor-table-plus-btn:hover {
-  background: rgb(248 250 252 / 0.7);
-}
-
-.meditor-table-trigger-btn {
-  width: 1.38rem;
-  height: 1.38rem;
-  border: 1px solid rgb(203 213 225);
-  border-radius: 0.38rem;
-  background: rgb(255 255 255 / 0.92);
-  color: rgb(71 85 105);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  letter-spacing: -0.08rem;
-  font-size: 0.82rem;
-  line-height: 1;
-}
-
-.meditor-table-trigger-btn:focus-visible {
-  outline: 2px solid rgb(96 165 250 / 0.55);
-  outline-offset: 1px;
-}
-
-.meditor-table-trigger-btn:hover {
-  background: rgb(248 250 252);
-}
-
-.dark .editor-holder :deep(.meditor-block-control-btn) {
-  border-color: rgb(71 85 105);
-  background: rgb(15 23 42);
-  color: rgb(203 213 225);
-}
-
-.dark .editor-holder :deep(.meditor-block-control-btn:hover) {
-  background: rgb(30 41 59);
-}
-
-.dark .meditor-table-trigger-btn {
-  border-color: rgb(71 85 105);
-  background: rgb(30 41 59 / 0.96);
-  color: rgb(226 232 240);
-  box-shadow: 0 0 0 1px rgb(15 23 42 / 0.35);
-}
-
-.dark .meditor-table-trigger-btn:hover {
-  background: rgb(30 41 59 / 0.92);
-}
-
-.dark .meditor-table-edge.is-visible .meditor-table-plus-btn {
-  color: rgb(226 232 240);
-}
-
-.dark .meditor-table-edge.is-visible .meditor-table-plus-btn:hover {
-  background: rgb(30 41 59 / 0.55);
-}
-
-.dark .meditor-table-trigger-btn:focus-visible {
-  outline: 2px solid rgb(147 197 253 / 0.65);
-}
-
-.dark .editor-holder :deep(.ProseMirror th),
-.dark .editor-holder :deep(.ProseMirror td) {
-  border-color: rgb(51 65 85);
-}
-
-.dark .editor-holder :deep(.ProseMirror table) {
-  border-color: rgb(71 85 105);
-  background: rgb(15 23 42);
-}
-
-.dark .editor-holder :deep(.ProseMirror th) {
-  background: rgb(30 41 59 / 0.85);
-  color: rgb(226 232 240);
-}
-
-.dark .editor-holder :deep(.ProseMirror tbody tr:hover td) {
-  background: rgb(30 41 59 / 0.45);
-}
-
-.dark .editor-holder :deep(.ProseMirror td.selectedCell),
-.dark .editor-holder :deep(.ProseMirror th.selectedCell) {
-  background: rgb(30 64 175 / 0.45);
-}
-
-.dark .editor-holder :deep(.ProseMirror .column-resize-handle) {
-  background: rgb(96 165 250 / 0.65);
-}
-</style>

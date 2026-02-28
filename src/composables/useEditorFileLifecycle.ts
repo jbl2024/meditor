@@ -22,38 +22,34 @@ export type EditorLoadUiState = {
 }
 
 /**
- * Runtime dependencies required by {@link useEditorFileLifecycle}.
- *
- * Boundary:
- * - This composable delegates all host ownership (session map, status store, emits) through
- *   callbacks instead of mutating external stores directly.
- *
- * Failure behavior:
- * - `openFile`/`saveFile`/`renameFileFromTitle` errors are surfaced through `setSaveError`.
+ * Session/runtime ownership callbacks used by file lifecycle orchestration.
  */
-export type UseEditorFileLifecycleOptions = {
+export type EditorFileLifecycleSessionPort = {
   currentPath: Ref<string>
   holder: Ref<HTMLDivElement | null>
   getEditor: () => Editor | null
   getSession: (path: string) => DocumentSession | null
   ensureSession: (path: string) => DocumentSession
+  renameSessionPath: (from: string, to: string) => void
+  moveLifecyclePathState: (from: string, to: string) => void
+  setSuppressOnChange: (value: boolean) => void
+  restoreCaret: (path: string) => boolean
+  setDirty: (path: string, dirty: boolean) => void
+  setSaving: (path: string, saving: boolean) => void
+  setSaveError: (path: string, message: string) => void
+}
+
+/**
+ * Document parsing/serialization and title/frontmatter callbacks.
+ */
+export type EditorFileLifecycleDocumentPort = {
   ensurePropertySchemaLoaded: () => Promise<void>
-  openFile: (path: string) => Promise<string>
-  saveFile: (path: string, text: string, options: { explicit: boolean }) => Promise<{ persisted: boolean }>
-  renameFileFromTitle: (path: string, title: string) => Promise<{ path: string; title: string }>
   parseAndStoreFrontmatter: (path: string, sourceMarkdown: string) => void
   frontmatterByPath: Ref<Record<string, FrontmatterEnvelope>>
   propertyEditorMode: Ref<'structured' | 'raw'>
   rawYamlByPath: Ref<Record<string, string>>
   serializableFrontmatterFields: (fields: FrontmatterEnvelope['fields']) => FrontmatterEnvelope['fields']
   moveFrontmatterPathState: (from: string, to: string) => void
-  renameSessionPath: (from: string, to: string) => void
-  moveLifecyclePathState: (from: string, to: string) => void
-  emitPathRenamed: (payload: { from: string; to: string; manual: boolean }) => void
-  clearAutosaveTimer: () => void
-  clearOutlineTimer: (path: string) => void
-  emitOutlineSoon: (path: string) => void
-  resetTransientUiState: () => void
   countLines: (input: string) => number
   noteTitleFromPath: (path: string) => string
   readVirtualTitle: (blocks: EditorBlock[]) => string
@@ -62,16 +58,52 @@ export type UseEditorFileLifecycleOptions = {
   stripVirtualTitle: (blocks: EditorBlock[]) => EditorBlock[]
   serializeCurrentDocBlocks: () => EditorBlock[]
   renderBlocks: (blocks: EditorBlock[]) => Promise<void>
-  restoreCaret: (path: string) => boolean
-  setSuppressOnChange: (value: boolean) => void
-  setDirty: (path: string, dirty: boolean) => void
-  setSaving: (path: string, saving: boolean) => void
-  setSaveError: (path: string, message: string) => void
+}
+
+/**
+ * Host UI side effects and emits coordinated during load/save flows.
+ */
+export type EditorFileLifecycleUiPort = {
+  clearAutosaveTimer: () => void
+  clearOutlineTimer: (path: string) => void
+  emitOutlineSoon: (path: string) => void
+  emitPathRenamed: (payload: { from: string; to: string; manual: boolean }) => void
+  resetTransientUiState: () => void
   updateGutterHitboxStyle: () => void
   syncWikilinkUiFromPluginState: () => void
-  isCurrentRequest: (requestId: number) => boolean
-  largeDocThreshold: number
   ui: EditorLoadUiState
+  largeDocThreshold: number
+}
+
+/**
+ * Read/write IO adapters for markdown documents.
+ */
+export type EditorFileLifecycleIoPort = {
+  openFile: (path: string) => Promise<string>
+  saveFile: (path: string, text: string, options: { explicit: boolean }) => Promise<{ persisted: boolean }>
+  renameFileFromTitle: (path: string, title: string) => Promise<{ path: string; title: string }>
+}
+
+/**
+ * Request-token guard adapter.
+ */
+export type EditorFileLifecycleRequestPort = {
+  isCurrentRequest: (requestId: number) => boolean
+}
+
+/**
+ * Runtime dependencies required by {@link useEditorFileLifecycle}.
+ *
+ * Boundary:
+ * - This composable delegates host ownership through grouped ports.
+ * - Grouped ports keep the top-level contract stable and reviewable.
+ */
+export type UseEditorFileLifecycleOptions = {
+  sessionPort: EditorFileLifecycleSessionPort
+  documentPort: EditorFileLifecycleDocumentPort
+  uiPort: EditorFileLifecycleUiPort
+  ioPort: EditorFileLifecycleIoPort
+  requestPort: EditorFileLifecycleRequestPort
 }
 
 /**
@@ -87,7 +119,7 @@ export type UseEditorFileLifecycleOptions = {
  *
  * Boundaries:
  * - Does not define editor schema/interaction behavior.
- * - Consumes callbacks for path/session state ownership.
+ * - Consumes grouped ports for path/session state ownership.
  *
  * Side effects:
  * - Reads/writes session state through injected callbacks.
@@ -95,6 +127,8 @@ export type UseEditorFileLifecycleOptions = {
  * - Emits path rename + outline refresh via injected callbacks.
  */
 export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
+  const { sessionPort, documentPort, uiPort, ioPort, requestPort } = options
+
   async function flushUiFrame() {
     await nextTick()
     await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()))
@@ -110,84 +144,84 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
    * Failure behavior:
    * - Catches read/parse errors and stores a user-safe message via `setSaveError`.
    */
-  async function loadCurrentFile(path: string, loadOptions?: { forceReload?: boolean; requestId?: number; skipActivate?: boolean }) {
+  async function loadCurrentFile(path: string, loadOptions?: { forceReload?: boolean; requestId?: number }) {
     if (!path) return
-    await options.ensurePropertySchemaLoaded()
-    if (typeof loadOptions?.requestId === 'number' && !options.isCurrentRequest(loadOptions.requestId)) return
+    await documentPort.ensurePropertySchemaLoaded()
+    if (typeof loadOptions?.requestId === 'number' && !requestPort.isCurrentRequest(loadOptions.requestId)) return
 
-    const session = options.ensureSession(path)
-    const editor = options.getEditor()
+    const session = sessionPort.ensureSession(path)
+    const editor = sessionPort.getEditor()
     if (!editor) return
 
-    options.setSaveError(path, '')
-    options.clearAutosaveTimer()
-    options.clearOutlineTimer(path)
-    options.resetTransientUiState()
-    options.ui.isLoadingLargeDocument.value = false
-    options.ui.loadStageLabel.value = ''
-    options.ui.loadProgressPercent.value = 0
-    options.ui.loadProgressIndeterminate.value = false
-    options.ui.loadDocumentStats.value = null
+    sessionPort.setSaveError(path, '')
+    uiPort.clearAutosaveTimer()
+    uiPort.clearOutlineTimer(path)
+    uiPort.resetTransientUiState()
+    uiPort.ui.isLoadingLargeDocument.value = false
+    uiPort.ui.loadStageLabel.value = ''
+    uiPort.ui.loadProgressPercent.value = 0
+    uiPort.ui.loadProgressIndeterminate.value = false
+    uiPort.ui.loadDocumentStats.value = null
 
     try {
       if (!session.isLoaded || loadOptions?.forceReload) {
-        const txt = await options.openFile(path)
-        if (typeof loadOptions?.requestId === 'number' && !options.isCurrentRequest(loadOptions.requestId)) return
+        const txt = await ioPort.openFile(path)
+        if (typeof loadOptions?.requestId === 'number' && !requestPort.isCurrentRequest(loadOptions.requestId)) return
 
-        options.parseAndStoreFrontmatter(path, txt)
-        const body = options.frontmatterByPath.value[path]?.body ?? txt
-        const isLargeDocument = txt.length >= options.largeDocThreshold
+        documentPort.parseAndStoreFrontmatter(path, txt)
+        const body = documentPort.frontmatterByPath.value[path]?.body ?? txt
+        const isLargeDocument = txt.length >= uiPort.largeDocThreshold
 
         if (isLargeDocument) {
-          options.ui.isLoadingLargeDocument.value = true
-          options.ui.loadDocumentStats.value = { chars: body.length, lines: options.countLines(body) }
-          options.ui.loadStageLabel.value = 'Parsing markdown blocks...'
-          options.ui.loadProgressPercent.value = 35
-          options.ui.loadProgressIndeterminate.value = false
+          uiPort.ui.isLoadingLargeDocument.value = true
+          uiPort.ui.loadDocumentStats.value = { chars: body.length, lines: documentPort.countLines(body) }
+          uiPort.ui.loadStageLabel.value = 'Parsing markdown blocks...'
+          uiPort.ui.loadProgressPercent.value = 35
+          uiPort.ui.loadProgressIndeterminate.value = false
           await flushUiFrame()
         }
 
         const parsed = markdownToEditorData(body)
-        const normalized = options.withVirtualTitle(parsed.blocks as EditorBlock[], options.noteTitleFromPath(path)).blocks
+        const normalized = documentPort.withVirtualTitle(parsed.blocks as EditorBlock[], documentPort.noteTitleFromPath(path)).blocks
 
         if (isLargeDocument) {
-          options.ui.loadStageLabel.value = 'Rendering blocks in editor...'
-          options.ui.loadProgressPercent.value = 70
+          uiPort.ui.loadStageLabel.value = 'Rendering blocks in editor...'
+          uiPort.ui.loadProgressPercent.value = 70
           await flushUiFrame()
         }
 
-        options.setSuppressOnChange(true)
+        sessionPort.setSuppressOnChange(true)
         session.editor.commands.setContent(toTiptapDoc(normalized), { emitUpdate: false })
-        options.setSuppressOnChange(false)
+        sessionPort.setSuppressOnChange(false)
         session.loadedText = txt
         session.isLoaded = true
-        options.setDirty(path, false)
+        sessionPort.setDirty(path, false)
       }
 
       await nextTick()
-      if (typeof loadOptions?.requestId === 'number' && !options.isCurrentRequest(loadOptions.requestId)) return
-      if (options.currentPath.value !== path) return
+      if (typeof loadOptions?.requestId === 'number' && !requestPort.isCurrentRequest(loadOptions.requestId)) return
+      if (sessionPort.currentPath.value !== path) return
 
       const remembered = session.scrollTop
-      if (options.holder.value && typeof remembered === 'number') {
-        options.holder.value.scrollTop = remembered
+      if (sessionPort.holder.value && typeof remembered === 'number') {
+        sessionPort.holder.value.scrollTop = remembered
       }
-      if (!options.restoreCaret(path)) {
+      if (!sessionPort.restoreCaret(path)) {
         editor.commands.focus('end')
       }
 
-      options.emitOutlineSoon(path)
-      options.syncWikilinkUiFromPluginState()
-      options.updateGutterHitboxStyle()
+      uiPort.emitOutlineSoon(path)
+      uiPort.syncWikilinkUiFromPluginState()
+      uiPort.updateGutterHitboxStyle()
     } catch (error) {
-      options.setSaveError(path, error instanceof Error ? error.message : 'Could not read file.')
+      sessionPort.setSaveError(path, error instanceof Error ? error.message : 'Could not read file.')
     } finally {
-      if (typeof loadOptions?.requestId === 'number' && !options.isCurrentRequest(loadOptions.requestId)) return
-      options.ui.isLoadingLargeDocument.value = false
-      options.ui.loadStageLabel.value = ''
-      options.ui.loadProgressPercent.value = 0
-      options.ui.loadProgressIndeterminate.value = false
-      options.ui.loadDocumentStats.value = null
+      if (typeof loadOptions?.requestId === 'number' && !requestPort.isCurrentRequest(loadOptions.requestId)) return
+      uiPort.ui.isLoadingLargeDocument.value = false
+      uiPort.ui.loadStageLabel.value = ''
+      uiPort.ui.loadProgressPercent.value = 0
+      uiPort.ui.loadProgressIndeterminate.value = false
+      uiPort.ui.loadDocumentStats.value = null
     }
   }
 
@@ -204,71 +238,71 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
    * - Any step failure records an error with `setSaveError` and still clears `saving` in `finally`.
    */
   async function saveCurrentFile(manual = true) {
-    const editor = options.getEditor()
-    const initialPath = options.currentPath.value
-    const initialSession = options.getSession(initialPath)
+    const editor = sessionPort.getEditor()
+    const initialPath = sessionPort.currentPath.value
+    const initialSession = sessionPort.getSession(initialPath)
     if (!initialPath || !editor || !initialSession || initialSession.saving) return
 
     let savePath = initialPath
-    options.setSaving(savePath, true)
-    if (manual) options.setSaveError(savePath, '')
+    sessionPort.setSaving(savePath, true)
+    if (manual) sessionPort.setSaveError(savePath, '')
 
     try {
-      const rawBlocks = options.serializeCurrentDocBlocks()
-      const requestedTitle = options.readVirtualTitle(rawBlocks) || options.blockTextCandidate(rawBlocks[0]) || options.noteTitleFromPath(initialPath)
+      const rawBlocks = documentPort.serializeCurrentDocBlocks()
+      const requestedTitle = documentPort.readVirtualTitle(rawBlocks) || documentPort.blockTextCandidate(rawBlocks[0]) || documentPort.noteTitleFromPath(initialPath)
       const lastLoaded = initialSession.loadedText
 
-      const latestOnDisk = await options.openFile(initialPath)
+      const latestOnDisk = await ioPort.openFile(initialPath)
       if (latestOnDisk !== lastLoaded) {
         throw new Error('File changed on disk. Reload before saving to avoid overwrite.')
       }
 
-      const renameResult = await options.renameFileFromTitle(initialPath, requestedTitle)
+      const renameResult = await ioPort.renameFileFromTitle(initialPath, requestedTitle)
       savePath = renameResult.path
-      const normalized = options.withVirtualTitle(rawBlocks, renameResult.title)
-      const markdownBlocks = options.stripVirtualTitle(normalized.blocks)
+      const normalized = documentPort.withVirtualTitle(rawBlocks, renameResult.title)
+      const markdownBlocks = documentPort.stripVirtualTitle(normalized.blocks)
       const bodyMarkdown = editorDataToMarkdown({ blocks: markdownBlocks })
-      const frontmatterState = options.frontmatterByPath.value[savePath] ?? options.frontmatterByPath.value[initialPath]
-      const frontmatterYaml = options.propertyEditorMode.value === 'raw'
-        ? (options.rawYamlByPath.value[savePath] ?? options.rawYamlByPath.value[initialPath] ?? '')
-        : serializeFrontmatter(options.serializableFrontmatterFields(frontmatterState?.fields ?? []))
+      const frontmatterState = documentPort.frontmatterByPath.value[savePath] ?? documentPort.frontmatterByPath.value[initialPath]
+      const frontmatterYaml = documentPort.propertyEditorMode.value === 'raw'
+        ? (documentPort.rawYamlByPath.value[savePath] ?? documentPort.rawYamlByPath.value[initialPath] ?? '')
+        : serializeFrontmatter(documentPort.serializableFrontmatterFields(frontmatterState?.fields ?? []))
       const markdown = composeMarkdownDocument(bodyMarkdown, frontmatterYaml)
 
       if (!manual && savePath === initialPath && markdown === lastLoaded) {
-        options.setDirty(savePath, false)
+        sessionPort.setDirty(savePath, false)
         return
       }
 
       if (savePath !== initialPath) {
-        options.renameSessionPath(initialPath, savePath)
-        options.moveLifecyclePathState(initialPath, savePath)
-        options.moveFrontmatterPathState(initialPath, savePath)
-        options.emitPathRenamed({ from: initialPath, to: savePath, manual })
+        sessionPort.renameSessionPath(initialPath, savePath)
+        sessionPort.moveLifecyclePathState(initialPath, savePath)
+        documentPort.moveFrontmatterPathState(initialPath, savePath)
+        uiPort.emitPathRenamed({ from: initialPath, to: savePath, manual })
       }
 
       if (normalized.changed) {
-        await options.renderBlocks(normalized.blocks)
+        await documentPort.renderBlocks(normalized.blocks)
       }
 
-      const result = await options.saveFile(savePath, markdown, { explicit: manual })
+      const result = await ioPort.saveFile(savePath, markdown, { explicit: manual })
       if (!result.persisted) {
-        options.setDirty(savePath, true)
+        sessionPort.setDirty(savePath, true)
         return
       }
 
-      const savedSession = options.getSession(savePath)
+      const savedSession = sessionPort.getSession(savePath)
       if (savedSession) {
         savedSession.loadedText = markdown
         savedSession.isLoaded = true
       }
 
-      options.parseAndStoreFrontmatter(savePath, markdown)
-      options.setDirty(savePath, false)
+      documentPort.parseAndStoreFrontmatter(savePath, markdown)
+      sessionPort.setDirty(savePath, false)
     } catch (error) {
-      options.setSaveError(savePath, error instanceof Error ? error.message : 'Could not save file.')
+      sessionPort.setSaveError(savePath, error instanceof Error ? error.message : 'Could not save file.')
     } finally {
-      options.setSaving(savePath, false)
-      options.emitOutlineSoon(savePath)
+      sessionPort.setSaving(savePath, false)
+      uiPort.emitOutlineSoon(savePath)
     }
   }
 

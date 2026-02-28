@@ -2,7 +2,15 @@ import { nextTick, ref } from 'vue'
 import { describe, expect, it, vi } from 'vitest'
 import type { EditorBlock } from '../lib/markdownBlocks'
 import type { DocumentSession } from './useDocumentEditorSessions'
-import { useEditorFileLifecycle, type UseEditorFileLifecycleOptions } from './useEditorFileLifecycle'
+import {
+  type EditorFileLifecycleDocumentPort,
+  useEditorFileLifecycle,
+  type EditorFileLifecycleIoPort,
+  type EditorFileLifecycleRequestPort,
+  type EditorFileLifecycleSessionPort,
+  type EditorFileLifecycleUiPort,
+  type UseEditorFileLifecycleOptions
+} from './useEditorFileLifecycle'
 
 type Deferred<T> = {
   promise: Promise<T>
@@ -37,19 +45,27 @@ function createSession(path: string): DocumentSession {
   }
 }
 
-function createOptions(overrides: Partial<UseEditorFileLifecycleOptions> = {}) {
+type UseEditorFileLifecycleOverrides = {
+  sessionPort?: Partial<EditorFileLifecycleSessionPort>
+  documentPort?: Partial<EditorFileLifecycleDocumentPort>
+  uiPort?: Partial<EditorFileLifecycleUiPort>
+  ioPort?: Partial<EditorFileLifecycleIoPort>
+  requestPort?: Partial<EditorFileLifecycleRequestPort>
+}
+
+function createOptions(overrides: UseEditorFileLifecycleOverrides = {}) {
   const currentPath = ref('a.md')
   const holder = ref<HTMLDivElement | null>(document.createElement('div'))
   const activeEditor = {
     commands: {
       focus: vi.fn()
     }
-  } as unknown as UseEditorFileLifecycleOptions['getEditor'] extends () => infer T ? T : never
+  } as unknown as DocumentSession['editor']
   const sessions: Record<string, DocumentSession> = {
     'a.md': createSession('a.md')
   }
 
-  const base: UseEditorFileLifecycleOptions = {
+  const sessionPort: EditorFileLifecycleSessionPort = {
     currentPath,
     holder,
     getEditor: () => activeEditor,
@@ -58,16 +74,6 @@ function createOptions(overrides: Partial<UseEditorFileLifecycleOptions> = {}) {
       if (!sessions[path]) sessions[path] = createSession(path)
       return sessions[path]
     },
-    ensurePropertySchemaLoaded: async () => {},
-    openFile: vi.fn(async () => '# Title\n\nBody'),
-    saveFile: vi.fn(async () => ({ persisted: true })),
-    renameFileFromTitle: vi.fn(async (path, title) => ({ path, title })),
-    parseAndStoreFrontmatter: vi.fn(),
-    frontmatterByPath: ref({}),
-    propertyEditorMode: ref<'structured' | 'raw'>('structured'),
-    rawYamlByPath: ref({}),
-    serializableFrontmatterFields: (fields) => fields,
-    moveFrontmatterPathState: vi.fn(),
     renameSessionPath: vi.fn((from: string, to: string) => {
       const session = sessions[from]
       if (!session) return
@@ -76,11 +82,21 @@ function createOptions(overrides: Partial<UseEditorFileLifecycleOptions> = {}) {
       sessions[to] = session
     }),
     moveLifecyclePathState: vi.fn(),
-    emitPathRenamed: vi.fn(),
-    clearAutosaveTimer: vi.fn(),
-    clearOutlineTimer: vi.fn(),
-    emitOutlineSoon: vi.fn(),
-    resetTransientUiState: vi.fn(),
+    setSuppressOnChange: vi.fn(),
+    restoreCaret: vi.fn(() => false),
+    setDirty: vi.fn(),
+    setSaving: vi.fn(),
+    setSaveError: vi.fn()
+  }
+
+  const documentPort: EditorFileLifecycleDocumentPort = {
+    ensurePropertySchemaLoaded: async () => {},
+    parseAndStoreFrontmatter: vi.fn(),
+    frontmatterByPath: ref({}),
+    propertyEditorMode: ref<'structured' | 'raw'>('structured'),
+    rawYamlByPath: ref({}),
+    serializableFrontmatterFields: (fields) => fields,
+    moveFrontmatterPathState: vi.fn(),
     countLines: (input) => input.split('\n').length,
     noteTitleFromPath: () => 'Title',
     readVirtualTitle: () => 'Title',
@@ -88,15 +104,17 @@ function createOptions(overrides: Partial<UseEditorFileLifecycleOptions> = {}) {
     withVirtualTitle: (blocks, _title) => ({ blocks, changed: false }),
     stripVirtualTitle: (blocks) => blocks,
     serializeCurrentDocBlocks: () => [{ id: 'b1', type: 'paragraph', data: { text: 'Body' } }] as EditorBlock[],
-    renderBlocks: vi.fn(async () => {}),
-    restoreCaret: vi.fn(() => false),
-    setSuppressOnChange: vi.fn(),
-    setDirty: vi.fn(),
-    setSaving: vi.fn(),
-    setSaveError: vi.fn(),
+    renderBlocks: vi.fn(async () => {})
+  }
+
+  const uiPort: EditorFileLifecycleUiPort = {
+    clearAutosaveTimer: vi.fn(),
+    clearOutlineTimer: vi.fn(),
+    emitOutlineSoon: vi.fn(),
+    emitPathRenamed: vi.fn(),
+    resetTransientUiState: vi.fn(),
     updateGutterHitboxStyle: vi.fn(),
     syncWikilinkUiFromPluginState: vi.fn(),
-    isCurrentRequest: vi.fn(() => true),
     largeDocThreshold: 50_000,
     ui: {
       isLoadingLargeDocument: ref(false),
@@ -107,8 +125,33 @@ function createOptions(overrides: Partial<UseEditorFileLifecycleOptions> = {}) {
     }
   }
 
+  const ioPort: EditorFileLifecycleIoPort = {
+    openFile: vi.fn(async () => '# Title\n\nBody'),
+    saveFile: vi.fn(async () => ({ persisted: true })),
+    renameFileFromTitle: vi.fn(async (path, title) => ({ path, title }))
+  }
+
+  const requestPort: EditorFileLifecycleRequestPort = {
+    isCurrentRequest: vi.fn(() => true)
+  }
+
+  const base: UseEditorFileLifecycleOptions = {
+    sessionPort,
+    documentPort,
+    uiPort,
+    ioPort,
+    requestPort
+  }
+
   return {
-    options: { ...base, ...overrides },
+    options: {
+      ...base,
+      sessionPort: { ...sessionPort, ...(overrides.sessionPort ?? {}) },
+      documentPort: { ...documentPort, ...(overrides.documentPort ?? {}) },
+      uiPort: { ...uiPort, ...(overrides.uiPort ?? {}) },
+      ioPort: { ...ioPort, ...(overrides.ioPort ?? {}) },
+      requestPort: { ...requestPort, ...(overrides.requestPort ?? {}) }
+    },
     sessions,
     currentPath
   }
@@ -119,8 +162,8 @@ describe('useEditorFileLifecycle', () => {
     const openFileDeferred = deferred<string>()
     const isCurrentRequest = vi.fn((requestId: number) => requestId === 1)
     const { options } = createOptions({
-      openFile: vi.fn(() => openFileDeferred.promise),
-      isCurrentRequest
+      ioPort: { openFile: vi.fn(() => openFileDeferred.promise) } as Partial<EditorFileLifecycleIoPort>,
+      requestPort: { isCurrentRequest } as Partial<EditorFileLifecycleRequestPort>
     })
 
     const lifecycle = useEditorFileLifecycle(options)
@@ -129,42 +172,42 @@ describe('useEditorFileLifecycle', () => {
     openFileDeferred.resolve('# Title\n\nBody')
     await loadPromise
 
-    expect(options.parseAndStoreFrontmatter).not.toHaveBeenCalled()
-    expect(options.setSuppressOnChange).not.toHaveBeenCalled()
+    expect(options.documentPort.parseAndStoreFrontmatter).not.toHaveBeenCalled()
+    expect(options.sessionPort.setSuppressOnChange).not.toHaveBeenCalled()
   })
 
   it('renames path state before persisting when title-triggered rename occurs', async () => {
     const { options, sessions } = createOptions({
-      renameFileFromTitle: vi.fn(async () => ({ path: 'b.md', title: 'Renamed' }))
+      ioPort: { renameFileFromTitle: vi.fn(async () => ({ path: 'b.md', title: 'Renamed' })) } as Partial<EditorFileLifecycleIoPort>
     })
     sessions['a.md'].loadedText = 'saved-before'
-    options.openFile = vi.fn(async () => 'saved-before')
+    options.ioPort.openFile = vi.fn(async () => 'saved-before')
 
     const lifecycle = useEditorFileLifecycle(options)
     await lifecycle.saveCurrentFile(false)
 
-    expect(options.renameSessionPath).toHaveBeenCalledWith('a.md', 'b.md')
-    expect(options.moveLifecyclePathState).toHaveBeenCalledWith('a.md', 'b.md')
-    expect(options.moveFrontmatterPathState).toHaveBeenCalledWith('a.md', 'b.md')
-    expect(options.emitPathRenamed).toHaveBeenCalledWith({ from: 'a.md', to: 'b.md', manual: false })
-    expect(options.saveFile).toHaveBeenCalledWith('b.md', expect.any(String), { explicit: false })
+    expect(options.sessionPort.renameSessionPath).toHaveBeenCalledWith('a.md', 'b.md')
+    expect(options.sessionPort.moveLifecyclePathState).toHaveBeenCalledWith('a.md', 'b.md')
+    expect(options.documentPort.moveFrontmatterPathState).toHaveBeenCalledWith('a.md', 'b.md')
+    expect(options.uiPort.emitPathRenamed).toHaveBeenCalledWith({ from: 'a.md', to: 'b.md', manual: false })
+    expect(options.ioPort.saveFile).toHaveBeenCalledWith('b.md', expect.any(String), { explicit: false })
 
-    const renameOrder = (options.renameSessionPath as any).mock.invocationCallOrder[0]
-    const saveOrder = (options.saveFile as any).mock.invocationCallOrder[0]
+    const renameOrder = (options.sessionPort.renameSessionPath as any).mock.invocationCallOrder[0]
+    const saveOrder = (options.ioPort.saveFile as any).mock.invocationCallOrder[0]
     expect(renameOrder).toBeLessThan(saveOrder)
   })
 
   it('reports save error and skips write when on-disk content changed', async () => {
     const { options, sessions } = createOptions()
     sessions['a.md'].loadedText = 'original'
-    options.openFile = vi.fn(async () => 'external-change')
+    options.ioPort.openFile = vi.fn(async () => 'external-change')
 
     const lifecycle = useEditorFileLifecycle(options)
     await lifecycle.saveCurrentFile(false)
     await nextTick()
 
-    expect(options.saveFile).not.toHaveBeenCalled()
-    expect(options.setSaveError).toHaveBeenCalledWith('a.md', 'File changed on disk. Reload before saving to avoid overwrite.')
-    expect(options.setSaving).toHaveBeenCalledWith('a.md', false)
+    expect(options.ioPort.saveFile).not.toHaveBeenCalled()
+    expect(options.sessionPort.setSaveError).toHaveBeenCalledWith('a.md', 'File changed on disk. Reload before saving to avoid overwrite.')
+    expect(options.sessionPort.setSaving).toHaveBeenCalledWith('a.md', false)
   })
 })
