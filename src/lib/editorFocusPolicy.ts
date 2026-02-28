@@ -16,6 +16,17 @@
  * - Prevents accidental caret placement (often at doc end) when switching tabs from non-editor UI.
  */
 export function shouldRefocusEditorAfterTabSwitch(activeElement: Element | null): boolean {
-  if (!(activeElement instanceof HTMLElement)) return false
-  return Boolean(activeElement.closest('.editor-holder'))
+  if (!(activeElement instanceof HTMLElement)) {
+    // eslint-disable-next-line no-console
+    console.info('[tab-caret-debug] focus-policy:evaluate', { shouldRefocus: false, reason: 'not-html-element' })
+    return false
+  }
+  const shouldRefocus = Boolean(activeElement.closest('.editor-holder'))
+  // eslint-disable-next-line no-console
+  console.info('[tab-caret-debug] focus-policy:evaluate', {
+    shouldRefocus,
+    tag: activeElement.tagName,
+    className: activeElement.className
+  })
+  return shouldRefocus
 }

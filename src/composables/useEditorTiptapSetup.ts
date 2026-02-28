@@ -34,6 +34,10 @@ export type UseEditorTiptapSetupOptions = {
   updateTableToolbar: () => void
   syncWikilinkUiFromPluginState: () => void
   captureCaret: (path: string) => void
+  /**
+   * Optional gate used to avoid persisting programmatic/non-user selection changes.
+   */
+  shouldCaptureCaret?: (path: string) => boolean
   updateFormattingToolbar: () => void
   onEditorDocChanged: (path: string) => void
   requestMermaidReplaceConfirm: (payload: { templateLabel: string }) => Promise<boolean>
@@ -212,7 +216,16 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
       onSelectionUpdate: () => {
         if (options.currentPath.value !== path) return
         const activePath = options.currentPath.value
-        if (activePath) options.captureCaret(activePath)
+        const allowCapture = activePath
+          ? (options.shouldCaptureCaret ? options.shouldCaptureCaret(activePath) : true)
+          : false
+        // eslint-disable-next-line no-console
+        console.info('[tab-caret-debug] tiptap:selection-update', {
+          path,
+          activePath,
+          allowCapture
+        })
+        if (activePath && allowCapture) options.captureCaret(activePath)
         options.syncSlashMenuFromSelection({ preserveIndex: true })
         options.updateFormattingToolbar()
         options.updateTableToolbar()

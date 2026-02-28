@@ -60,6 +60,19 @@ describe('useEditorTiptapSetup', () => {
     expect(options.onEditorDocChanged).toHaveBeenCalledWith('a.md')
   })
 
+  it('does not capture caret on selection update when capture gate rejects it', () => {
+    const { setup, options } = createSetup({
+      shouldCaptureCaret: vi.fn(() => false)
+    })
+    const editorOptions = setup.createEditorOptions('a.md') as any
+
+    editorOptions.onSelectionUpdate()
+
+    expect(options.captureCaret).not.toHaveBeenCalled()
+    expect(options.syncSlashMenuFromSelection).toHaveBeenCalled()
+    expect(options.updateFormattingToolbar).toHaveBeenCalled()
+  })
+
   it('handles wikilink and external link click behavior', async () => {
     const openLinkTargetWithAutosave = vi.fn(async () => {})
     const openExternalUrl = vi.fn(async () => {})

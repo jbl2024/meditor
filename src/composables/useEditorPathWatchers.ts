@@ -52,7 +52,16 @@ export function useEditorPathWatchers(options: UseEditorPathWatchersOptions) {
   watch(
     () => options.path.value,
     async (next, prev) => {
+      // eslint-disable-next-line no-console
+      console.info('[tab-caret-debug] path-watch:start', { prev, next })
       if (prev && options.holder.value) {
+        const shouldCapturePrev = shouldCaptureCaretFromHolder()
+        // eslint-disable-next-line no-console
+        console.info('[tab-caret-debug] path-watch:before-switch', {
+          prev,
+          shouldCapturePrev,
+          holderScrollTop: options.holder.value.scrollTop
+        })
         if (shouldCaptureCaretFromHolder()) {
           options.captureCaret(prev)
         }
@@ -64,6 +73,8 @@ export function useEditorPathWatchers(options: UseEditorPathWatchersOptions) {
       if (!nextPath) {
         options.nextRequestId()
         const activePath = options.getActivePath()
+        // eslint-disable-next-line no-console
+        console.info('[tab-caret-debug] path-watch:clear-active', { activePath })
         if (activePath) {
           if (shouldCaptureCaretFromHolder()) {
             options.captureCaret(activePath)
@@ -86,6 +97,8 @@ export function useEditorPathWatchers(options: UseEditorPathWatchersOptions) {
       }
 
       const requestId = options.nextRequestId()
+      // eslint-disable-next-line no-console
+      console.info('[tab-caret-debug] path-watch:activate', { nextPath, requestId })
       options.ensureSession(nextPath)
       options.setActiveSession(nextPath)
       await nextTick()

@@ -94,7 +94,6 @@ function createOptions(overrides: UseEditorFileLifecycleOverrides = {}) {
     moveLifecyclePathState: vi.fn(),
     setSuppressOnChange: vi.fn(),
     restoreCaret: vi.fn(() => false),
-    initializeCaretAtStart: vi.fn(),
     setDirty: vi.fn(),
     setSaving: vi.fn(),
     setSaveError: vi.fn()
@@ -288,7 +287,7 @@ describe('useEditorFileLifecycle', () => {
     await lifecycle.loadCurrentFile('a.md', { requestId: 1 })
 
     expect(focusSpy).not.toHaveBeenCalled()
-    expect(options.sessionPort.initializeCaretAtStart).toHaveBeenCalledWith('a.md')
+    expect(options.sessionPort.restoreCaret).toHaveBeenCalledWith('a.md')
   })
 
   it('does not initialize first-character caret when persisted caret restore succeeds', async () => {
@@ -302,7 +301,6 @@ describe('useEditorFileLifecycle', () => {
     await lifecycle.loadCurrentFile('a.md', { requestId: 1 })
 
     expect(options.sessionPort.restoreCaret).toHaveBeenCalledWith('a.md')
-    expect(options.sessionPort.initializeCaretAtStart).not.toHaveBeenCalled()
   })
 
   it('waits for heavy async render idle before hiding large-doc overlay', async () => {

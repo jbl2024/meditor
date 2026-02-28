@@ -149,6 +149,8 @@ const TURN_INTO_LABELS: Record<TurnIntoType, string> = {
   blockquote: 'Quote',
 }
 const currentPath = computed(() => props.path?.trim() || '')
+const lastEditorInteractionAt = ref(0)
+const USER_INTERACTION_CAPTURE_WINDOW_MS = 1200
 const sessionStore = useDocumentEditorSessions({
   createEditor: (path) => createSessionEditor(path)
 })
@@ -464,6 +466,12 @@ function setActiveSession(path: string) {
   sessionStore.setActivePath(MAIN_PANE_ID, path)
   const session = getSession(path)
   editor = session?.editor ?? null
+  // eslint-disable-next-line no-console
+  console.info('[tab-caret-debug] editor-view:set-active-session', {
+    path,
+    hasSession: Boolean(session),
+    hasEditor: Boolean(editor)
+  })
   blockHandleControls.resetLockState()
 }
 
@@ -495,6 +503,22 @@ const tiptapSetup = useEditorTiptapSetup({
   updateTableToolbar,
   syncWikilinkUiFromPluginState,
   captureCaret,
+  shouldCaptureCaret: (path) => {
+    if (!path || currentPath.value !== path) return false
+    if (suppressOnChange) return false
+    if (!holder.value) return false
+    const active = typeof document !== 'undefined' ? document.activeElement : null
+    if (!active || !holder.value.contains(active)) return false
+    const hasRecentUserInteraction = Date.now() - lastEditorInteractionAt.value <= USER_INTERACTION_CAPTURE_WINDOW_MS
+    // eslint-disable-next-line no-console
+    console.info('[tab-caret-debug] editor-view:should-capture-caret', {
+      path,
+      hasRecentUserInteraction,
+      suppressOnChange,
+      activeElementTag: active instanceof HTMLElement ? active.tagName : null
+    })
+    return hasRecentUserInteraction
+  },
   updateFormattingToolbar,
   onEditorDocChanged,
   requestMermaidReplaceConfirm,
@@ -543,13 +567,6 @@ const fileLifecycle = useEditorFileLifecycle({
       suppressOnChange = value
     },
     restoreCaret,
-    initializeCaretAtStart: (path) => {
-      if (!path) return
-      const session = getSession(path)
-      const targetEditor = session?.editor ?? editor
-      if (!targetEditor) return
-      targetEditor.commands.setTextSelection({ from: 1, to: 1 })
-    },
     setDirty,
     setSaving,
     setSaveError
@@ -601,6 +618,12 @@ const fileLifecycle = useEditorFileLifecycle({
 })
 
 async function loadCurrentFile(path: string, options?: { forceReload?: boolean; requestId?: number }) {
+  // eslint-disable-next-line no-console
+  console.info('[tab-caret-debug] editor-view:load-current-file', {
+    path,
+    forceReload: Boolean(options?.forceReload),
+    requestId: options?.requestId
+  })
   await fileLifecycle.loadCurrentFile(path, options)
 }
 
@@ -673,6 +696,29 @@ const onEditorKeyup = inputHandlers.onEditorKeyup
 const onEditorContextMenu = inputHandlers.onEditorContextMenu
 const onEditorPaste = inputHandlers.onEditorPaste
 
+function markEditorInteraction() {
+  lastEditorInteractionAt.value = Date.now()
+}
+
+function onHolderPointerDownMarkInteraction() {
+  markEditorInteraction()
+}
+
+function onHolderKeydown(event: KeyboardEvent) {
+  markEditorInteraction()
+  onEditorKeydown(event)
+}
+
+function onHolderContextMenu(event: MouseEvent) {
+  markEditorInteraction()
+  onEditorContextMenu(event)
+}
+
+function onHolderPaste(event: ClipboardEvent) {
+  markEditorInteraction()
+  onEditorPaste(event)
+}
+
 useEditorPathWatchers({
   path: computed(() => props.path ?? ''),
   openPaths: computed(() => props.openPaths ?? []),
@@ -712,10 +758,11 @@ useEditorPathWatchers({
       await loadCurrentFile(currentPath.value, { requestId })
     }
 
-    holder.value?.addEventListener('keydown', onEditorKeydown, true)
+    holder.value?.addEventListener('pointerdown', onHolderPointerDownMarkInteraction, true)
+    holder.value?.addEventListener('keydown', onHolderKeydown, true)
     holder.value?.addEventListener('keyup', onEditorKeyup, true)
-    holder.value?.addEventListener('contextmenu', onEditorContextMenu, true)
-    holder.value?.addEventListener('paste', onEditorPaste, true)
+    holder.value?.addEventListener('contextmenu', onHolderContextMenu, true)
+    holder.value?.addEventListener('paste', onHolderPaste, true)
     holder.value?.addEventListener('scroll', onHolderScroll, true)
     window.addEventListener('resize', updateGutterHitboxStyle)
     await nextTick()
@@ -728,10 +775,11 @@ useEditorPathWatchers({
     if (mermaidReplaceDialog.value.resolve) {
       mermaidReplaceDialog.value.resolve(false)
     }
-    holder.value?.removeEventListener('keydown', onEditorKeydown, true)
+    holder.value?.removeEventListener('pointerdown', onHolderPointerDownMarkInteraction, true)
+    holder.value?.removeEventListener('keydown', onHolderKeydown, true)
     holder.value?.removeEventListener('keyup', onEditorKeyup, true)
-    holder.value?.removeEventListener('contextmenu', onEditorContextMenu, true)
-    holder.value?.removeEventListener('paste', onEditorPaste, true)
+    holder.value?.removeEventListener('contextmenu', onHolderContextMenu, true)
+    holder.value?.removeEventListener('paste', onHolderPaste, true)
     holder.value?.removeEventListener('scroll', onHolderScroll, true)
     window.removeEventListener('resize', updateGutterHitboxStyle)
     document.removeEventListener('mousedown', onDocumentMouseDown, true)
@@ -741,6 +789,11 @@ useEditorPathWatchers({
 })
 
 function focusEditor() {
+  // eslint-disable-next-line no-console
+  console.info('[tab-caret-debug] editor-view:focus-editor', {
+    path: currentPath.value,
+    activeElementTag: typeof document !== 'undefined' ? document.activeElement?.tagName : null
+  })
   editor?.commands.focus()
 }
 
