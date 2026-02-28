@@ -2,7 +2,9 @@
 
 ## Ownership Map
 - Session lifecycle/status/autosave/request token: `useEditorSessionLifecycle`
+- Session status mutation bridge for session store + lifecycle emits: `useEditorSessionStatus`
 - File load/save orchestration: `useEditorFileLifecycle`
+- Caret snapshot/restore + debounced outline emission: `useEditorCaretOutline`
 - Tiptap setup/hooks/link behavior: `useEditorTiptapSetup`
 - Wikilink overlay state machine: `useEditorWikilinkOverlayState`
 - Wikilink target/headings cache and resolve: `useEditorWikilinkDataSource`
@@ -14,6 +16,7 @@
 - Table toolbar/hover/action orchestration: `useEditorTableInteractions`
 - Input routing (keydown/keyup/paste/contextmenu): `useEditorInputHandlers`
 - Path/open-path watchers + mount lifecycle: `useEditorPathWatchers`
+- Gutter hitbox/layout metrics + line counting: `useEditorLayoutMetrics`
 - Slash overlay rendering: `EditorSlashOverlay.vue`
 - Wikilink overlay rendering: `EditorWikilinkOverlay.vue`
 - Block + table overlays rendering: `EditorContextOverlays.vue`

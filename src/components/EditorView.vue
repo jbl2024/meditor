@@ -35,10 +35,12 @@ import { useEditorPathWatchers } from '../composables/useEditorPathWatchers'
 import { useEditorVirtualTitleDocument } from '../composables/useEditorVirtualTitleDocument'
 import { useEditorWikilinkDataSource } from '../composables/useEditorWikilinkDataSource'
 import { useEditorBlockHandleControls } from '../composables/useEditorBlockHandleControls'
+import { useEditorSessionStatus } from '../composables/useEditorSessionStatus'
+import { useEditorCaretOutline } from '../composables/useEditorCaretOutline'
+import { useEditorLayoutMetrics } from '../composables/useEditorLayoutMetrics'
 import { normalizeBlockId, normalizeHeadingAnchor, slugifyHeading } from '../lib/wikilinks'
 import { toTiptapDoc } from '../lib/tiptap/editorBlocksToTiptapDoc'
 import { fromTiptapDoc } from '../lib/tiptap/tiptapDocToEditorBlocks'
-import { toPersistedTextSelection } from '../lib/tiptap/selectionSnapshot'
 import { useDocumentEditorSessions, type PaneId } from '../composables/useDocumentEditorSessions'
 import { useEditorNavigation, type EditorHeadingNode } from '../composables/useEditorNavigation'
 import { useSlashMenu } from '../composables/useSlashMenu'
@@ -120,13 +122,6 @@ const dragHandleUiState = ref<DragHandleUiState>({
   controlsHover: false,
   dragging: false,
   activeTarget: null,
-})
-const gutterHitboxStyle = ref<Record<string, string>>({
-  position: 'absolute',
-  top: '0',
-  left: '0px',
-  bottom: '0',
-  width: '0px',
 })
 const TURN_INTO_TYPES: TurnIntoType[] = [
   'paragraph',
@@ -265,6 +260,20 @@ const lifecycle = useEditorSessionLifecycle({
   isEditingVirtualTitle: () => isEditingVirtualTitle(),
   autosaveIdleMs: 1800
 })
+const sessionStatus = useEditorSessionStatus({
+  getSession: (path) => sessionStore.getSession(path),
+  ensureSession: (path) => sessionStore.ensureSession(path),
+  patchStatus: (path, patch) => lifecycle.patchStatus(path, patch),
+  clearAutosaveTimer: () => lifecycle.clearAutosaveTimer(),
+  scheduleAutosave: () => lifecycle.scheduleAutosave()
+})
+const getSession = sessionStatus.getSession
+const ensureSession = sessionStatus.ensureSession
+const setDirty = sessionStatus.setDirty
+const setSaving = sessionStatus.setSaving
+const setSaveError = sessionStatus.setSaveError
+const clearAutosaveTimer = sessionStatus.clearAutosaveTimer
+const scheduleAutosave = sessionStatus.scheduleAutosave
 
 const tableGeometry = useEditorTableGeometry({
   holder,
@@ -311,49 +320,6 @@ const addColumnAfterFromTrigger = tableInteractions.addColumnAfterFromTrigger
 const onEditorMouseMove = tableInteractions.onEditorMouseMove
 const onEditorMouseLeave = tableInteractions.onEditorMouseLeave
 
-function getSession(path: string) {
-  return sessionStore.getSession(path)
-}
-
-function ensureSession(path: string) {
-  return sessionStore.ensureSession(path)
-}
-
-function setDirty(path: string, dirty: boolean) {
-  const session = getSession(path)
-  if (!session) return
-  session.dirty = dirty
-  lifecycle.patchStatus(path, { dirty })
-}
-
-function setSaving(path: string, saving: boolean) {
-  const session = getSession(path)
-  if (!session) return
-  session.saving = saving
-  lifecycle.patchStatus(path, { saving })
-}
-
-function setSaveError(path: string, message: string) {
-  const session = getSession(path)
-  if (!session) return
-  session.saveError = message
-  lifecycle.patchStatus(path, { saveError: message })
-}
-
-function clearAutosaveTimer() {
-  lifecycle.clearAutosaveTimer()
-}
-
-function countLines(input: string): number {
-  if (!input) return 0
-  return input.replace(/\r\n?/g, '\n').split('\n').length
-}
-
-function scheduleAutosave(path: string) {
-  if (!getSession(path)) return
-  lifecycle.scheduleAutosave()
-}
-
 function isEditingVirtualTitle(): boolean {
   if (!editor) return false
   const { $from } = editor.state.selection
@@ -382,41 +348,19 @@ async function renderBlocks(blocks: EditorBlock[]) {
   if (holder.value) holder.value.scrollTop = rememberedScroll
 }
 
-function captureCaret(path: string) {
-  if (!editor || !path) return
-  const session = getSession(path)
-  if (!session) return
-  const snapshot = toPersistedTextSelection(editor.state.selection)
-  session.caret = { kind: 'pm-selection', from: snapshot.from, to: snapshot.to }
-}
-
-function restoreCaret(path: string) {
-  if (!editor || !path) return false
-  const snapshot = getSession(path)?.caret
-  if (!snapshot) return false
-  const max = Math.max(1, editor.state.doc.content.size)
-  const from = Math.max(1, Math.min(snapshot.from, max))
-  const to = Math.max(1, Math.min(snapshot.to, max))
-  editor.commands.setTextSelection({ from, to })
-  return true
-}
-
-function clearOutlineTimer(path: string) {
-  const session = getSession(path)
-  if (!session || !session.outlineTimer) return
-  clearTimeout(session.outlineTimer)
-  session.outlineTimer = null
-}
-
-function emitOutlineSoon(path: string) {
-  const session = getSession(path)
-  if (!session) return
-  clearOutlineTimer(path)
-  session.outlineTimer = setTimeout(() => {
-    if (currentPath.value !== path) return
-    emit('outline', navigation.parseOutlineFromDoc())
-  }, 120)
-}
+const caretOutline = useEditorCaretOutline({
+  currentPath,
+  getSession,
+  getEditor: () => editor,
+  emitOutline: (payload) => {
+    emit('outline', payload.headings)
+  },
+  parseOutlineFromDoc: () => navigation.parseOutlineFromDoc()
+})
+const captureCaret = caretOutline.captureCaret
+const restoreCaret = caretOutline.restoreCaret
+const clearOutlineTimer = caretOutline.clearOutlineTimer
+const emitOutlineSoon = caretOutline.emitOutlineSoon
 
 function onDocumentMouseDown(event: MouseEvent) {
   const target = event.target
@@ -436,27 +380,15 @@ function onDocumentMouseDown(event: MouseEvent) {
   }
 }
 
-function updateGutterHitboxStyle() {
-  if (!holder.value || !contentShell.value) return
-  const holderRect = holder.value.getBoundingClientRect()
-  const shellRect = contentShell.value.getBoundingClientRect()
-  const shellStyle = window.getComputedStyle(contentShell.value)
-  const shellPaddingLeft = Number.parseFloat(shellStyle.paddingLeft || '0') || 0
-  const textStart = shellRect.left + shellPaddingLeft
-  const width = Math.max(48, textStart - holderRect.left + 8)
-  gutterHitboxStyle.value = {
-    position: 'absolute',
-    top: '0',
-    left: '0px',
-    bottom: '0',
-    width: `${width}px`,
-  }
-}
-
-function onHolderScroll() {
-  updateGutterHitboxStyle()
-  updateTableToolbar()
-}
+const layoutMetrics = useEditorLayoutMetrics({
+  holder,
+  contentShell,
+  onScrollSync: () => updateTableToolbar()
+})
+const gutterHitboxStyle = layoutMetrics.gutterHitboxStyle
+const countLines = layoutMetrics.countLines
+const updateGutterHitboxStyle = layoutMetrics.updateGutterHitboxStyle
+const onHolderScroll = layoutMetrics.onHolderScroll
 
 function updateFormattingToolbar() {
   inlineFormatToolbar.updateFormattingToolbar()
