@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUpdated, ref, watch } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, onUpdated, ref, watch } from 'vue'
 import {
   ArrowDownIcon,
   ArrowUpIcon,
@@ -33,6 +33,11 @@ const emit = defineEmits<{
 
 const rootEl = ref<HTMLDivElement | null>(null)
 const convertOpen = ref(false)
+const convertButtonEl = ref<HTMLButtonElement | null>(null)
+const convertMenuEl = ref<HTMLDivElement | null>(null)
+const clearPrimarySelection = ref(false)
+const convertMenuSide = ref<'left' | 'right'>('right')
+const convertMenuOffsetY = ref(0)
 
 function syncRootEl() {
   emit('menu-el', rootEl.value)
@@ -41,22 +46,90 @@ function syncRootEl() {
 watch(
   () => props.open,
   (open) => {
-    if (!open) return
+    if (!open) {
+      closeConvertMenu()
+      return
+    }
     requestAnimationFrame(() => {
       rootEl.value?.focus()
     })
   }
 )
 
-onMounted(syncRootEl)
+function onViewportChange() {
+  if (!convertOpen.value) return
+  positionConvertMenu()
+}
+
+onMounted(() => {
+  syncRootEl()
+  window.addEventListener('resize', onViewportChange)
+  window.addEventListener('scroll', onViewportChange, true)
+})
 onUpdated(syncRootEl)
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', onViewportChange)
+  window.removeEventListener('scroll', onViewportChange, true)
+})
+
+function positionConvertMenu() {
+  const trigger = convertButtonEl.value
+  const menu = convertMenuEl.value
+  if (!trigger || !menu) return
+
+  const viewportPadding = 8
+  const triggerRect = trigger.getBoundingClientRect()
+  const menuRect = menu.getBoundingClientRect()
+  const availableRight = window.innerWidth - triggerRect.right - viewportPadding
+  const availableLeft = triggerRect.left - viewportPadding
+
+  convertMenuSide.value = availableRight >= menuRect.width || availableRight >= availableLeft ? 'right' : 'left'
+
+  let offset = 0
+  const overflowBottom = triggerRect.top + menuRect.height - (window.innerHeight - viewportPadding)
+  if (overflowBottom > 0) {
+    offset -= overflowBottom
+  }
+  const topClamp = viewportPadding - triggerRect.top
+  if (offset < topClamp) {
+    offset = topClamp
+  }
+  convertMenuOffsetY.value = offset
+}
+
+function openConvertMenu() {
+  convertOpen.value = true
+  clearPrimarySelection.value = true
+  nextTick(() => {
+    positionConvertMenu()
+  })
+}
+
+function closeConvertMenu() {
+  convertOpen.value = false
+  clearPrimarySelection.value = false
+  convertMenuOffsetY.value = 0
+}
+
+function onPrimaryItemHover(index: number, disabled: boolean) {
+  if (disabled) return
+  closeConvertMenu()
+  emit('update:index', index)
+}
+
+watch(convertOpen, (open) => {
+  if (!open) return
+  nextTick(() => {
+    positionConvertMenu()
+  })
+})
 
 function onMenuKeydown(event: KeyboardEvent) {
   if (!props.open) return
 
   if (event.key === 'Escape') {
     event.preventDefault()
-    convertOpen.value = false
+    closeConvertMenu()
     emit('close')
     return
   }
@@ -125,7 +198,7 @@ function iconFor(item: BlockMenuActionItem) {
     tabindex="-1"
     class="meditor-block-menu z-40 w-64 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl outline-none dark:border-slate-700 dark:bg-slate-900"
     @keydown="onMenuKeydown"
-    @mouseleave="convertOpen = false"
+    @mouseleave="closeConvertMenu()"
   >
     <button
       v-for="(item, idx) in props.actions"
@@ -136,9 +209,9 @@ function iconFor(item: BlockMenuActionItem) {
         item.disabled
           ? 'cursor-not-allowed text-slate-400 dark:text-slate-600'
           : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800',
-        idx === props.index && !item.disabled ? 'bg-slate-100 dark:bg-slate-800' : '',
+        idx === props.index && !item.disabled && !clearPrimarySelection ? 'bg-slate-100 dark:bg-slate-800' : '',
       ]"
-      @mouseenter="!item.disabled && emit('update:index', idx)"
+      @mouseenter="onPrimaryItemHover(idx, Boolean(item.disabled))"
       @mousedown.prevent
       @click.stop.prevent="!item.disabled && emit('select', item)"
     >
@@ -148,11 +221,12 @@ function iconFor(item: BlockMenuActionItem) {
 
     <div class="relative">
       <button
+        ref="convertButtonEl"
         type="button"
         class="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-        @mouseenter="convertOpen = true"
+        @mouseenter="openConvertMenu()"
         @mousedown.prevent
-        @click.stop.prevent="convertOpen = !convertOpen"
+        @click.stop.prevent="convertOpen ? closeConvertMenu() : openConvertMenu()"
       >
         <DocumentTextIcon class="h-4 w-4 shrink-0" />
         <span class="flex-1 truncate">Convert to</span>
@@ -161,7 +235,10 @@ function iconFor(item: BlockMenuActionItem) {
 
       <div
         v-if="convertOpen"
-        class="absolute left-full top-0 z-50 ml-2 w-56 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-900"
+        ref="convertMenuEl"
+        class="absolute top-0 z-50 w-56 max-h-[calc(100vh-16px)] overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-900"
+        :class="convertMenuSide === 'right' ? 'left-full ml-2' : 'right-full mr-2'"
+        :style="{ top: `${convertMenuOffsetY}px` }"
       >
         <button
           v-for="item in props.convertActions"
