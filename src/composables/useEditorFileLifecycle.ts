@@ -70,6 +70,10 @@ export type EditorFileLifecycleSessionPort = {
   moveLifecyclePathState: (from: string, to: string) => void
   setSuppressOnChange: (value: boolean) => void
   restoreCaret: (path: string) => boolean
+  /**
+   * Sets deterministic first-load caret when no persisted snapshot exists.
+   */
+  initializeCaretAtStart: (path: string) => void
   setDirty: (path: string, dirty: boolean) => void
   setSaving: (path: string, saving: boolean) => void
   setSaveError: (path: string, message: string) => void
@@ -341,7 +345,12 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
       // Invariant: mounted tab switches should keep in-memory selection untouched.
       // Only reload/reopen flows restore persisted caret snapshots.
       if (shouldReloadContent) {
-        sessionPort.restoreCaret(path)
+        const restored = sessionPort.restoreCaret(path)
+        if (!restored) {
+          // Why/invariant: on first load without persisted caret snapshot, pinning selection
+          // to the first character prevents accidental end-of-document default selection.
+          sessionPort.initializeCaretAtStart(path)
+        }
       }
 
       uiPort.emitOutlineSoon(path)

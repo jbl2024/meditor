@@ -543,6 +543,13 @@ const fileLifecycle = useEditorFileLifecycle({
       suppressOnChange = value
     },
     restoreCaret,
+    initializeCaretAtStart: (path) => {
+      if (!path) return
+      const session = getSession(path)
+      const targetEditor = session?.editor ?? editor
+      if (!targetEditor) return
+      targetEditor.commands.setTextSelection({ from: 1, to: 1 })
+    },
     setDirty,
     setSaving,
     setSaveError

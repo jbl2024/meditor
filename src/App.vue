@@ -15,6 +15,7 @@ import {
 } from '@heroicons/vue/24/outline'
 import EditorView from './components/EditorView.vue'
 import EditorRightPane from './components/EditorRightPane.vue'
+import { shouldRefocusEditorAfterTabSwitch } from './lib/editorFocusPolicy'
 import ExplorerTree from './components/explorer/ExplorerTree.vue'
 import UiButton from './components/ui/UiButton.vue'
 import { useDocumentHistory } from './composables/useDocumentHistory'
@@ -1247,13 +1248,16 @@ async function onSearchResultOpen(hit: SearchHit) {
 }
 
 async function onTabClick(path: string) {
+  const shouldRefocus = shouldRefocusEditorAfterTabSwitch(document.activeElement)
   const opened = await setActiveTabWithAutosave(path)
   if (!opened) return
+  if (!shouldRefocus) return
   await nextTick()
   editorRef.value?.focusEditor()
 }
 
 async function openNextTabWithAutosave() {
+  const shouldRefocus = shouldRefocusEditorAfterTabSwitch(document.activeElement)
   const tabs = workspace.openTabs.value
   if (!tabs.length) return
   const currentIndex = workspace.activeTabIndex.value
@@ -1262,6 +1266,7 @@ async function openNextTabWithAutosave() {
   if (!nextPath) return
   const opened = await setActiveTabWithAutosave(nextPath)
   if (!opened) return
+  if (!shouldRefocus) return
   await nextTick()
   editorRef.value?.focusEditor()
 }
