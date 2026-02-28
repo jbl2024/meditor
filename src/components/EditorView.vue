@@ -1811,6 +1811,7 @@ defineExpose({
   margin-top: 0;
   display: inline-flex;
   align-items: center;
+  padding-top: 0.15rem;
 }
 
 .editor-holder :deep(.ProseMirror ul[data-type="taskList"] li > label input[type="checkbox"]) {
