@@ -5,7 +5,10 @@
 - File load/save orchestration: `useEditorFileLifecycle`
 - Tiptap setup/hooks/link behavior: `useEditorTiptapSetup`
 - Wikilink overlay state machine: `useEditorWikilinkOverlayState`
+- Wikilink target/headings cache and resolve: `useEditorWikilinkDataSource`
 - Slash descriptor insertion mapping: `useEditorSlashInsertion`
+- Block handle/menu orchestration and drag lock: `useEditorBlockHandleControls`
+- Virtual-title document transforms: `useEditorVirtualTitleDocument`
 - Block menu action derivation: `useBlockMenuControls`
 - Table edge visibility + sticky timing: `useTableToolbarControls`
 - Table toolbar/hover/action orchestration: `useEditorTableInteractions`
@@ -22,6 +25,7 @@
 - Reactive `computed` values must be pure and must not mutate refs.
 - Feature modules should expose at most 5 top-level dependencies; larger contracts must be grouped ports.
 - `useEditorPersistence` is removed; do not reintroduce parallel lifecycle ownership.
+- `useEditorWikilinkOverlayState` should be initialized before binding tiptap callbacks that invoke it.
 
 ## Anti-patterns
 - Duplicated behavior in both `EditorView` and composables.
@@ -29,3 +33,5 @@
 - Side effects inside `computed` functions.
 - Monolithic input-handler signatures that mix unrelated feature concerns.
 - Leaving dead transitional modules in tree (for example obsolete persistence abstractions).
+- Setup-order coupling where callbacks dereference later-declared composable instances.
+- Using Vue-only selectors (for example `:deep(...)`) in extracted plain CSS files.

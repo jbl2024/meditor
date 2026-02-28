@@ -6,6 +6,12 @@ import { WIKILINK_STATE_KEY, getWikilinkPluginState } from '../lib/tiptap/plugin
 import { parseWikilinkToken, type WikilinkEditingRange } from '../lib/tiptap/extensions/wikilinkCommands'
 
 /**
+ * Module: useEditorWikilinkOverlayState
+ *
+ * Keeps wikilink plugin state and overlay UI state synchronized for EditorView.
+ */
+
+/**
  * UI-facing wikilink candidate row.
  */
 export type WikilinkOverlayItem = {

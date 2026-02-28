@@ -32,7 +32,10 @@ import { useEditorWikilinkOverlayState } from '../composables/useEditorWikilinkO
 import { useEditorTiptapSetup } from '../composables/useEditorTiptapSetup'
 import { useEditorTableInteractions } from '../composables/useEditorTableInteractions'
 import { useEditorPathWatchers } from '../composables/useEditorPathWatchers'
-import { normalizeBlockId, normalizeHeadingAnchor, parseWikilinkTarget, slugifyHeading } from '../lib/wikilinks'
+import { useEditorVirtualTitleDocument } from '../composables/useEditorVirtualTitleDocument'
+import { useEditorWikilinkDataSource } from '../composables/useEditorWikilinkDataSource'
+import { useEditorBlockHandleControls } from '../composables/useEditorBlockHandleControls'
+import { normalizeBlockId, normalizeHeadingAnchor, slugifyHeading } from '../lib/wikilinks'
 import { toTiptapDoc } from '../lib/tiptap/editorBlocksToTiptapDoc'
 import { fromTiptapDoc } from '../lib/tiptap/tiptapDocToEditorBlocks'
 import { toPersistedTextSelection } from '../lib/tiptap/selectionSnapshot'
@@ -41,12 +44,8 @@ import { useEditorNavigation, type EditorHeadingNode } from '../composables/useE
 import { useSlashMenu } from '../composables/useSlashMenu'
 import { type WikilinkCandidate } from '../lib/tiptap/plugins/wikilinkState'
 import { buildWikilinkCandidates } from '../lib/tiptap/wikilinkCandidates'
-import type { BlockMenuActionItem, BlockMenuTarget, TurnIntoType } from '../lib/tiptap/blockMenu/types'
-import { canCopyAnchor, toBlockMenuTarget } from '../lib/tiptap/blockMenu/guards'
-import { deleteNode, duplicateNode, insertAbove, insertBelow, moveNodeDown, moveNodeUp, turnInto } from '../lib/tiptap/blockMenu/actions'
+import type { BlockMenuTarget, TurnIntoType } from '../lib/tiptap/blockMenu/types'
 import { computeHandleLock, type DragHandleUiState } from '../lib/tiptap/blockMenu/dragHandleState'
-
-const VIRTUAL_TITLE_BLOCK_ID = '__virtual_title__'
 
 type HeadingNode = EditorHeadingNode
 type CorePropertyOption = { key: string; label?: string; description?: string }
@@ -115,7 +114,6 @@ const TABLE_EDGE_STICKY_MS = 280
 const TABLE_MARKDOWN_MODE = true
 const DRAG_HANDLE_PLUGIN_KEY = 'meditor-drag-handle'
 const DRAG_HANDLE_DEBUG = false
-let lastAppliedDragHandleLock: boolean | null = null
 const dragHandleUiState = ref<DragHandleUiState>({
   menuOpen: false,
   gutterHover: false,
@@ -157,10 +155,11 @@ const sessionStore = useDocumentEditorSessions({
   createEditor: (path) => createSessionEditor(path)
 })
 const slashCommandSource = computed(() => SLASH_COMMANDS)
+let closeCompetingBlockMenu = () => {}
 const slashMenu = useSlashMenu({
   getEditor: () => editor,
   commands: slashCommandSource,
-  closeCompetingMenus: () => closeBlockMenu()
+  closeCompetingMenus: () => closeCompetingBlockMenu()
 })
 const slashOpen = slashMenu.slashOpen
 const slashIndex = slashMenu.slashIndex
@@ -173,18 +172,17 @@ const currentTextSelectionContext = slashMenu.currentTextSelectionContext
 const readSlashContext = slashMenu.readSlashContext
 const openSlashAtSelection = slashMenu.openSlashAtSelection
 const syncSlashMenuFromSelection = slashMenu.syncSlashMenuFromSelection
+let closeWikilinkMenuForBlockControls = () => {}
 
 const inlineFormatToolbar = useInlineFormatToolbar({
   holder,
   getEditor: () => editor,
   sanitizeHref: sanitizeExternalHref
 })
-const cachedLinkTargets = ref<string[]>([])
-const cachedLinkTargetsAt = ref(0)
-const cachedHeadingsByTarget = ref<Record<string, string[]>>({})
-const cachedHeadingsAt = ref<Record<string, number>>({})
-const WIKILINK_TARGETS_TTL_MS = 15_000
-const WIKILINK_HEADINGS_TTL_MS = 30_000
+const wikilinkDataSource = useEditorWikilinkDataSource({
+  loadLinkTargets: props.loadLinkTargets,
+  loadLinkHeadings: props.loadLinkHeadings
+})
 const computedDragLock = computed(() => computeHandleLock(dragHandleUiState.value))
 const debugTargetPos = computed(() => String(dragHandleUiState.value.activeTarget?.pos ?? ''))
 // Keep template binding reactive when active session editor changes.
@@ -202,6 +200,45 @@ const blockMenuTarget = blockMenuControls.blockMenuTarget
 const blockMenuActionTarget = blockMenuControls.actionTarget
 const blockMenuActions = blockMenuControls.actions
 const blockMenuConvertActions = blockMenuControls.convertActions
+const blockHandleControls = useEditorBlockHandleControls({
+  getEditor: () => editor,
+  blockMenuOpen,
+  blockMenuIndex,
+  blockMenuTarget,
+  blockMenuActionTarget,
+  dragHandleUiState,
+  lastStableBlockMenuTarget,
+  setBlockMenuPos: (payload) => {
+    blockMenuPos.value = payload
+  },
+  setDragHandleLockMeta: (locked) => {
+    if (!editor) return
+    editor.commands.setMeta('lockDragHandle', locked)
+  },
+  closeSlashMenu,
+  closeWikilinkMenu: () => closeWikilinkMenuForBlockControls(),
+  openSlashAtSelection,
+  copyTextToClipboard: (text) => {
+    if (!navigator.clipboard?.writeText) return
+    void navigator.clipboard.writeText(text)
+  },
+  debug: DRAG_HANDLE_DEBUG
+    ? (event, detail) => {
+      // eslint-disable-next-line no-console
+      console.info('[drag-handle]', event, detail ?? '', dragHandleUiState.value)
+    }
+    : undefined
+})
+const closeBlockMenu = blockHandleControls.closeBlockMenu
+const onBlockHandleNodeChange = blockHandleControls.onBlockHandleNodeChange
+const toggleBlockMenu = blockHandleControls.toggleBlockMenu
+const onBlockMenuPlus = blockHandleControls.onBlockMenuPlus
+const onBlockMenuSelect = blockHandleControls.onBlockMenuSelect
+const onHandleControlsEnter = blockHandleControls.onHandleControlsEnter
+const onHandleControlsLeave = blockHandleControls.onHandleControlsLeave
+const onHandleDragStart = blockHandleControls.onHandleDragStart
+const onHandleDragEnd = blockHandleControls.onHandleDragEnd
+closeCompetingBlockMenu = () => closeBlockMenu()
 const tableControls = useTableToolbarControls({
   showThreshold: TABLE_EDGE_SHOW_THRESHOLD,
   stickyThreshold: TABLE_EDGE_STICKY_THRESHOLD,
@@ -212,6 +249,7 @@ const tableAddTopVisible = tableControls.tableAddTopVisible
 const tableAddBottomVisible = tableControls.tableAddBottomVisible
 const tableAddLeftVisible = tableControls.tableAddLeftVisible
 const tableAddRightVisible = tableControls.tableAddRightVisible
+const virtualTitleDoc = useEditorVirtualTitleDocument()
 const { editorZoomStyle, initFromStorage: initEditorZoomFromStorage, zoomBy: zoomEditorBy, resetZoom: resetEditorZoom, getZoom } = useEditorZoom()
 const { mermaidReplaceDialog, resolveMermaidReplaceDialog, requestMermaidReplaceConfirm } = useMermaidReplaceDialog()
 const navigation = useEditorNavigation({
@@ -316,14 +354,6 @@ function scheduleAutosave(path: string) {
   lifecycle.scheduleAutosave()
 }
 
-function noteTitleFromPath(path: string): string {
-  const normalized = path.replace(/\\/g, '/')
-  const parts = normalized.split('/')
-  const name = parts[parts.length - 1] || normalized
-  const stem = name.replace(/\.(md|markdown)$/i, '').trim()
-  return stem || 'Untitled'
-}
-
 function isEditingVirtualTitle(): boolean {
   if (!editor) return false
   const { $from } = editor.state.selection
@@ -334,55 +364,6 @@ function isEditingVirtualTitle(): boolean {
     }
   }
   return false
-}
-
-function extractPlainText(value: unknown): string {
-  const html = String(value ?? '')
-  if (!html.trim()) return ''
-  const container = document.createElement('div')
-  container.innerHTML = html
-  return (container.textContent ?? '').replace(/\u200B/g, ' ').replace(/\s+/g, ' ').trim()
-}
-
-function blockTextCandidate(block: EditorBlock | undefined): string {
-  if (!block) return ''
-  if (typeof block.data?.text !== 'undefined') return extractPlainText(block.data.text)
-  if (typeof block.data?.code === 'string') return block.data.code.trim()
-  return ''
-}
-
-function virtualTitleBlock(title: string): EditorBlock {
-  return {
-    id: VIRTUAL_TITLE_BLOCK_ID,
-    type: 'header',
-    data: { level: 1, text: title.trim() || 'Untitled' }
-  }
-}
-
-function stripVirtualTitle(blocks: EditorBlock[]): EditorBlock[] {
-  return blocks.filter((block) => block.id !== VIRTUAL_TITLE_BLOCK_ID)
-}
-
-function readVirtualTitle(blocks: EditorBlock[]): string {
-  const virtual = blocks.find((block) => block.id === VIRTUAL_TITLE_BLOCK_ID)
-  return blockTextCandidate(virtual)
-}
-
-function withVirtualTitle(blocks: EditorBlock[], title: string): { blocks: EditorBlock[]; changed: boolean } {
-  const content = stripVirtualTitle(blocks.map((block) => ({ ...block, data: { ...(block.data ?? {}) } })))
-  const desired = title.trim() || 'Untitled'
-  const next = [virtualTitleBlock(desired), ...content]
-  const first = blocks[0]
-  const firstLevel = Number(first?.data?.level ?? 0)
-  const firstText = blockTextCandidate(first)
-  const hasSingleLeadingVirtual = Boolean(first) &&
-    first.id === VIRTUAL_TITLE_BLOCK_ID &&
-    first.type === 'header' &&
-    firstLevel === 1 &&
-    firstText === desired &&
-    !blocks.slice(1).some((block) => block.id === VIRTUAL_TITLE_BLOCK_ID)
-
-  return { blocks: next, changed: !hasSingleLeadingVirtual || blocks.length !== next.length }
 }
 
 function serializeCurrentDocBlocks(): EditorBlock[] {
@@ -437,109 +418,6 @@ function emitOutlineSoon(path: string) {
   }, 120)
 }
 
-function closeBlockMenu(unlock = true) {
-  const wasOpen = blockMenuOpen.value || blockMenuIndex.value !== 0 || dragHandleUiState.value.menuOpen
-  if (!wasOpen) return
-  blockMenuOpen.value = false
-  blockMenuIndex.value = 0
-  dragHandleUiState.value = { ...dragHandleUiState.value, menuOpen: false }
-  if (unlock) {
-    syncDragHandleLockFromState('close-menu')
-  }
-}
-
-function onBlockHandleNodeChange(payload: { pos: number; node: { type: { name: string }; attrs?: Record<string, unknown>; textContent?: string; nodeSize: number } | null }) {
-  if (!payload.node) return
-  const nodeAtPos = editor?.state.doc.nodeAt(payload.pos)
-  if (!nodeAtPos) return
-  const nextTarget = toBlockMenuTarget(nodeAtPos, payload.pos)
-  blockMenuTarget.value = nextTarget
-  lastStableBlockMenuTarget.value = nextTarget
-  dragHandleUiState.value = {
-    ...dragHandleUiState.value,
-    activeTarget: nextTarget,
-  }
-  debugDragHandle('target-change', nextTarget.pos)
-}
-
-function toggleBlockMenu(event: MouseEvent) {
-  const handleRoot = (event.currentTarget instanceof HTMLElement)
-    ? event.currentTarget.closest('.meditor-drag-handle')
-    : null
-  if (handleRoot?.getAttribute('data-dragging') === 'true') {
-    dragHandleUiState.value = { ...dragHandleUiState.value, dragging: true }
-    syncDragHandleLockFromState('drag-guard')
-    return
-  }
-  event.preventDefault()
-  event.stopPropagation()
-  if (!editor) return
-  const target = blockMenuActionTarget.value
-  if (!target) return
-  blockMenuTarget.value = target
-
-  if (blockMenuOpen.value) {
-    closeBlockMenu()
-    return
-  }
-
-  if (event.currentTarget instanceof HTMLElement) {
-    const rect = event.currentTarget.getBoundingClientRect()
-    const estimatedWidth = 260
-    const estimatedHeight = 360
-    const maxX = Math.max(12, window.innerWidth - estimatedWidth - 12)
-    const maxY = Math.max(12, window.innerHeight - estimatedHeight - 12)
-    blockMenuPos.value = {
-      x: Math.max(12, Math.min(rect.right + 8, maxX)),
-      y: Math.max(12, Math.min(rect.top, maxY)),
-    }
-  }
-
-  closeSlashMenu()
-  closeWikilinkMenu()
-  blockMenuOpen.value = true
-  dragHandleUiState.value = { ...dragHandleUiState.value, menuOpen: true }
-  blockMenuIndex.value = 0
-  syncDragHandleLockFromState('open-menu')
-}
-
-function onBlockMenuPlus(event: MouseEvent) {
-  event.preventDefault()
-  event.stopPropagation()
-  if (!editor) return
-  const target = blockMenuActionTarget.value
-  if (!target) return
-  blockMenuTarget.value = target
-  closeSlashMenu()
-  closeWikilinkMenu()
-  insertBelow(editor, target)
-  openSlashAtSelection('')
-}
-
-function copyAnchorTarget(target: BlockMenuTarget) {
-  if (!target.text.trim()) return
-  const text = `[[#${target.text.trim()}]]`
-  if (navigator.clipboard?.writeText) {
-    void navigator.clipboard.writeText(text)
-  }
-}
-
-function onBlockMenuSelect(item: BlockMenuActionItem) {
-  if (!editor || item.disabled) return
-  const target = blockMenuActionTarget.value
-  if (!target) return
-  blockMenuTarget.value = target
-  if (item.actionId === 'insert_above') insertAbove(editor, target)
-  if (item.actionId === 'insert_below') insertBelow(editor, target)
-  if (item.actionId === 'move_up') moveNodeUp(editor, target)
-  if (item.actionId === 'move_down') moveNodeDown(editor, target)
-  if (item.actionId === 'duplicate') duplicateNode(editor, target)
-  if (item.actionId === 'delete') deleteNode(editor, target)
-  if (item.actionId === 'copy_anchor' && canCopyAnchor(target)) copyAnchorTarget(target)
-  if (item.actionId === 'turn_into' && item.turnIntoType) turnInto(editor, target, item.turnIntoType)
-  closeBlockMenu()
-}
-
 function onDocumentMouseDown(event: MouseEvent) {
   const target = event.target
   if (!(target instanceof Node)) return
@@ -578,45 +456,6 @@ function updateGutterHitboxStyle() {
 function onHolderScroll() {
   updateGutterHitboxStyle()
   updateTableToolbar()
-}
-
-function debugDragHandle(event: string, detail?: unknown) {
-  if (!DRAG_HANDLE_DEBUG) return
-  // eslint-disable-next-line no-console
-  console.info('[drag-handle]', event, detail ?? '', dragHandleUiState.value)
-}
-
-function syncDragHandleLockFromState(reason: string) {
-  if (!editor) return
-  const shouldLock = computeHandleLock(dragHandleUiState.value)
-  if (lastAppliedDragHandleLock === shouldLock) return
-  lastAppliedDragHandleLock = shouldLock
-  editor.commands.setMeta('lockDragHandle', shouldLock)
-  debugDragHandle(`sync-lock:${reason}`, shouldLock)
-}
-
-function onHandleControlsEnter() {
-  if (dragHandleUiState.value.controlsHover) return
-  dragHandleUiState.value = { ...dragHandleUiState.value, controlsHover: true }
-  syncDragHandleLockFromState('controls-enter')
-}
-
-function onHandleControlsLeave() {
-  if (!dragHandleUiState.value.controlsHover) return
-  dragHandleUiState.value = { ...dragHandleUiState.value, controlsHover: false }
-  syncDragHandleLockFromState('controls-leave')
-}
-
-function onHandleDragStart() {
-  if (dragHandleUiState.value.dragging) return
-  dragHandleUiState.value = { ...dragHandleUiState.value, dragging: true }
-  syncDragHandleLockFromState('drag-start')
-}
-
-function onHandleDragEnd() {
-  if (!dragHandleUiState.value.dragging) return
-  dragHandleUiState.value = { ...dragHandleUiState.value, dragging: false }
-  syncDragHandleLockFromState('drag-end')
 }
 
 function updateFormattingToolbar() {
@@ -673,35 +512,6 @@ function onEditorDocChanged(path: string) {
   emitOutlineSoon(path)
 }
 
-const tiptapSetup = useEditorTiptapSetup({
-  currentPath,
-  getCurrentEditor: () => editor,
-  getSessionEditor: (path) => getSession(path)?.editor ?? null,
-  markSlashActivatedByUser,
-  syncSlashMenuFromSelection,
-  updateTableToolbar,
-  syncWikilinkUiFromPluginState: () => {
-    wikilinkOverlay.syncWikilinkUiFromPluginState()
-  },
-  captureCaret,
-  updateFormattingToolbar,
-  onEditorDocChanged,
-  requestMermaidReplaceConfirm,
-  getWikilinkCandidates,
-  openLinkTargetWithAutosave,
-  resolveWikilinkTarget,
-  sanitizeExternalHref,
-  openExternalUrl,
-  inlineFormatToolbar: {
-    updateFormattingToolbar: inlineFormatToolbar.updateFormattingToolbar,
-    openLinkPopover: inlineFormatToolbar.openLinkPopover
-  }
-})
-
-function createSessionEditor(path: string): Editor {
-  return tiptapSetup.createSessionEditor(path)
-}
-
 function resetTransientUiState() {
   slashMenu.slashActivatedByUser.value = false
   closeSlashMenu()
@@ -712,16 +522,14 @@ function resetTransientUiState() {
   dragHandleUiState.value = { ...dragHandleUiState.value, activeTarget: null }
   inlineFormatToolbar.dismissToolbar()
   hideTableToolbarAnchor()
-  cachedLinkTargetsAt.value = 0
-  cachedHeadingsByTarget.value = {}
-  cachedHeadingsAt.value = {}
+  wikilinkDataSource.resetCache()
 }
 
 function setActiveSession(path: string) {
   sessionStore.setActivePath(MAIN_PANE_ID, path)
   const session = getSession(path)
   editor = session?.editor ?? null
-  lastAppliedDragHandleLock = null
+  blockHandleControls.resetLockState()
 }
 
 const wikilinkOverlay = useEditorWikilinkOverlayState({
@@ -740,6 +548,35 @@ const closeWikilinkMenu = wikilinkOverlay.closeWikilinkMenu
 const syncWikilinkUiFromPluginState = wikilinkOverlay.syncWikilinkUiFromPluginState
 const onWikilinkMenuSelect = wikilinkOverlay.onWikilinkMenuSelect
 const onWikilinkMenuIndexUpdate = wikilinkOverlay.onWikilinkMenuIndexUpdate
+closeWikilinkMenuForBlockControls = closeWikilinkMenu
+
+// Invariant: wikilink overlay must be initialized before tiptap callbacks are bound.
+const tiptapSetup = useEditorTiptapSetup({
+  currentPath,
+  getCurrentEditor: () => editor,
+  getSessionEditor: (path) => getSession(path)?.editor ?? null,
+  markSlashActivatedByUser,
+  syncSlashMenuFromSelection,
+  updateTableToolbar,
+  syncWikilinkUiFromPluginState,
+  captureCaret,
+  updateFormattingToolbar,
+  onEditorDocChanged,
+  requestMermaidReplaceConfirm,
+  getWikilinkCandidates,
+  openLinkTargetWithAutosave,
+  resolveWikilinkTarget: wikilinkDataSource.resolveWikilinkTarget,
+  sanitizeExternalHref,
+  openExternalUrl,
+  inlineFormatToolbar: {
+    updateFormattingToolbar: inlineFormatToolbar.updateFormattingToolbar,
+    openLinkPopover: inlineFormatToolbar.openLinkPopover
+  }
+})
+
+function createSessionEditor(path: string): Editor {
+  return tiptapSetup.createSessionEditor(path)
+}
 
 const fileLifecycle = useEditorFileLifecycle({
   sessionPort: {
@@ -769,11 +606,11 @@ const fileLifecycle = useEditorFileLifecycle({
     serializableFrontmatterFields,
     moveFrontmatterPathState,
     countLines,
-    noteTitleFromPath,
-    readVirtualTitle,
-    blockTextCandidate,
-    withVirtualTitle,
-    stripVirtualTitle,
+    noteTitleFromPath: virtualTitleDoc.noteTitleFromPath,
+    readVirtualTitle: virtualTitleDoc.readVirtualTitle,
+    blockTextCandidate: virtualTitleDoc.blockTextCandidate,
+    withVirtualTitle: virtualTitleDoc.withVirtualTitle,
+    stripVirtualTitle: virtualTitleDoc.stripVirtualTitle,
     serializeCurrentDocBlocks,
     renderBlocks
   },
@@ -819,60 +656,13 @@ const slashInsertion = useEditorSlashInsertion({
 })
 const insertBlockFromDescriptor = slashInsertion.insertBlockFromDescriptor
 
-async function loadWikilinkTargets() {
-  const now = Date.now()
-  if (cachedLinkTargets.value.length && now - cachedLinkTargetsAt.value < WIKILINK_TARGETS_TTL_MS) {
-    return cachedLinkTargets.value
-  }
-  try {
-    const targets = await props.loadLinkTargets()
-    cachedLinkTargets.value = targets
-    cachedLinkTargetsAt.value = Date.now()
-    return targets
-  } catch {
-    cachedLinkTargets.value = []
-    cachedLinkTargetsAt.value = Date.now()
-    return []
-  }
-}
-
-async function loadWikilinkHeadings(target: string) {
-  const key = target.trim().toLowerCase()
-  const now = Date.now()
-  if (
-    key &&
-    cachedHeadingsByTarget.value[key] &&
-    now - (cachedHeadingsAt.value[key] ?? 0) < WIKILINK_HEADINGS_TTL_MS
-  ) {
-    return cachedHeadingsByTarget.value[key]
-  }
-  try {
-    const headings = await props.loadLinkHeadings(target)
-    if (key) {
-      cachedHeadingsByTarget.value = { ...cachedHeadingsByTarget.value, [key]: headings }
-      cachedHeadingsAt.value = { ...cachedHeadingsAt.value, [key]: Date.now() }
-    }
-    return headings
-  } catch {
-    return []
-  }
-}
-
-async function resolveWikilinkTarget(target: string): Promise<boolean> {
-  const parsed = parseWikilinkTarget(target)
-  if (!parsed.notePath) return true
-  const targets = await loadWikilinkTargets()
-  const wanted = parsed.notePath.toLowerCase()
-  return targets.some((entry) => entry.toLowerCase() === wanted)
-}
-
 async function getWikilinkCandidates(query: string): Promise<WikilinkCandidate[]> {
   return buildWikilinkCandidates({
     query,
-    loadTargets: () => loadWikilinkTargets(),
-    loadHeadings: (target) => loadWikilinkHeadings(target),
+    loadTargets: () => wikilinkDataSource.loadWikilinkTargets(),
+    loadHeadings: (target) => wikilinkDataSource.loadWikilinkHeadings(target),
     currentHeadings: () => navigation.parseOutlineFromDoc().map((item) => item.text),
-    resolve: (target) => resolveWikilinkTarget(target)
+    resolve: (target) => wikilinkDataSource.resolveWikilinkTarget(target)
   })
 }
 

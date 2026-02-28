@@ -17,6 +17,12 @@ import { WIKILINK_STATE_KEY, type WikilinkCandidate } from '../lib/tiptap/plugin
 import { enterWikilinkEditFromNode } from '../lib/tiptap/extensions/wikilinkCommands'
 
 /**
+ * Module: useEditorTiptapSetup
+ *
+ * Owns Tiptap extension wiring and editor event-hook translation for EditorView sessions.
+ */
+
+/**
  * Dependencies required by {@link useEditorTiptapSetup}.
  */
 export type UseEditorTiptapSetupOptions = {

@@ -48,4 +48,39 @@ describe('EditorView smoke wiring', () => {
 
     app.unmount()
   })
+
+  it('mounts safely with active path and initializes editor callbacks without setup-order errors', async () => {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+
+    const Harness = defineComponent({
+      setup() {
+        return () =>
+          h(EditorView, {
+            path: 'a.md',
+            openPaths: ['a.md'],
+            openFile: async () => '# Title\\n\\nBody',
+            saveFile: async () => ({ persisted: true }),
+            renameFileFromTitle: async (path: string, title: string) => ({ path, title }),
+            loadLinkTargets: async () => ['a.md'],
+            loadLinkHeadings: async () => ['H1'],
+            loadPropertyTypeSchema: async () => ({}),
+            savePropertyTypeSchema: async () => {},
+            openLinkTarget: async () => true,
+            onStatus: () => {},
+            onOutline: () => {},
+            onProperties: () => {},
+            onPathRenamed: () => {}
+          })
+      }
+    })
+
+    const app = createApp(Harness)
+    app.mount(root)
+    await nextTick()
+
+    expect(root.querySelector('.editor-holder')).toBeTruthy()
+
+    app.unmount()
+  })
 })
