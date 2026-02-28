@@ -411,6 +411,7 @@ export function createWikilinkStatePlugin(editor: Editor, options: WikilinkState
           if (!range) return false
 
           if (event.key === 'ArrowDown') {
+            if (!state.open) return false
             event.preventDefault()
             if (!state.candidates.length) return true
             dispatchAction(view, {
@@ -421,6 +422,7 @@ export function createWikilinkStatePlugin(editor: Editor, options: WikilinkState
           }
 
           if (event.key === 'ArrowUp') {
+            if (!state.open) return false
             event.preventDefault()
             if (!state.candidates.length) return true
             dispatchAction(view, {
