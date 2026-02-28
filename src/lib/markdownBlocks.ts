@@ -124,7 +124,8 @@ function parseInlineSegment(value: string): string {
 
 function inlineMarkdownToHtml(value: string): string {
   const tokenRe = /\[\[([^\|\]\n]+)(?:\|([^\|\]\n]*))?\]\]|\[([^\]]+)\]\(([^)\s]+)\)/g
-  let html = ''
+  const tokens: string[] = []
+  let expanded = ''
   let lastIndex = 0
   let match: RegExpExecArray | null
 
@@ -137,7 +138,7 @@ function inlineMarkdownToHtml(value: string): string {
       continue
     }
 
-    html += parseInlineSegment(value.slice(lastIndex, index))
+    expanded += value.slice(lastIndex, index)
     if (match[1]) {
       const target = match[1].trim()
       const alias = (match[2] ?? '').trim()
@@ -145,25 +146,33 @@ function inlineMarkdownToHtml(value: string): string {
       const defaultLabel = parsed.anchor?.heading && !parsed.notePath ? parsed.anchor.heading : target
       const label = alias || defaultLabel
       if (!target) {
-        html += parseInlineSegment(full)
+        expanded += full
       } else {
         const href = `wikilink:${encodeURIComponent(target)}`
-        html += `<a href="${escapeHtml(href)}" data-wikilink-target="${escapeHtml(target)}">${parseInlineSegment(label)}</a>`
+        const token = `\u0000MDLINK${tokens.length}\u0000`
+        tokens.push(`<a href="${escapeHtml(href)}" data-wikilink-target="${escapeHtml(target)}">${parseInlineSegment(label)}</a>`)
+        expanded += token
       }
     } else {
       const text = match[3]
       const href = match[4]
       const safeHref = sanitizeExternalHref(href)
       if (safeHref) {
-        html += `<a href="${escapeHtml(safeHref)}" target="_blank" rel="noopener noreferrer">${parseInlineSegment(text)}</a>`
+        const token = `\u0000MDLINK${tokens.length}\u0000`
+        tokens.push(`<a href="${escapeHtml(safeHref)}" target="_blank" rel="noopener noreferrer">${parseInlineSegment(text)}</a>`)
+        expanded += token
       } else {
-        html += parseInlineSegment(full)
+        expanded += full
       }
     }
     lastIndex = index + full.length
   }
 
-  html += parseInlineSegment(value.slice(lastIndex))
+  expanded += value.slice(lastIndex)
+  let html = parseInlineSegment(expanded)
+  tokens.forEach((tokenHtml, index) => {
+    html = html.split(`\u0000MDLINK${index}\u0000`).join(tokenHtml)
+  })
   return html
 }
 
