@@ -5,12 +5,20 @@ const { mermaidInitialize, mermaidRender } = vi.hoisted(() => ({
   mermaidInitialize: vi.fn(),
   mermaidRender: vi.fn<(id: string, code: string) => Promise<{ svg: string }>>()
 }))
+const { beginHeavyRender, endHeavyRender } = vi.hoisted(() => ({
+  beginHeavyRender: vi.fn<(scope?: string) => string>(),
+  endHeavyRender: vi.fn<(token: string) => void>()
+}))
 
 vi.mock('mermaid', () => ({
   default: {
     initialize: mermaidInitialize,
     render: mermaidRender
   }
+}))
+vi.mock('../../../lib/tiptap/renderStabilizer', () => ({
+  beginHeavyRender,
+  endHeavyRender
 }))
 
 import MermaidNodeView from './MermaidNodeView.vue'
@@ -60,9 +68,12 @@ describe('MermaidNodeView', () => {
   beforeEach(() => {
     mermaidInitialize.mockReset()
     mermaidRender.mockReset()
+    beginHeavyRender.mockReset()
+    endHeavyRender.mockReset()
     mermaidRender.mockImplementation(async (id, source) => ({
       svg: `<svg data-render-id="${id}"><text>${source}</text></svg>`
     }))
+    beginHeavyRender.mockImplementation(() => `token-${beginHeavyRender.mock.calls.length + 1}`)
     ;(window as typeof window & { __meditorMermaidRuntime?: unknown }).__meditorMermaidRuntime = undefined
   })
 
@@ -76,6 +87,8 @@ describe('MermaidNodeView', () => {
 
     expect(mermaidInitialize).toHaveBeenCalledTimes(1)
     expect(mermaidRender).toHaveBeenCalledTimes(1)
+    expect(beginHeavyRender).toHaveBeenCalledTimes(1)
+    expect(endHeavyRender).toHaveBeenCalledTimes(1)
     expect(harness.root.querySelector('.meditor-mermaid-preview svg')).toBeTruthy()
 
     harness.app.unmount()
@@ -220,6 +233,19 @@ describe('MermaidNodeView', () => {
     const preview = harness.root.querySelector('.meditor-mermaid-preview') as HTMLDivElement
     expect(preview.innerHTML).toContain('data-version="new"')
     expect(preview.innerHTML).not.toContain('data-version="old"')
+    expect(beginHeavyRender).toHaveBeenCalledTimes(2)
+    expect(endHeavyRender).toHaveBeenCalledTimes(2)
+
+    harness.app.unmount()
+  })
+
+  it('ends heavy render token when mermaid rendering fails', async () => {
+    mermaidRender.mockRejectedValueOnce(new Error('boom'))
+    const harness = mountHarness({ initialCode: 'flowchart TD\n  A --> B' })
+    await flush()
+
+    expect(beginHeavyRender).toHaveBeenCalledTimes(1)
+    expect(endHeavyRender).toHaveBeenCalledTimes(1)
 
     harness.app.unmount()
   })

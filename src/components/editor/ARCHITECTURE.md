@@ -6,6 +6,7 @@
 - File load/save orchestration: `useEditorFileLifecycle`
 - Caret snapshot/restore + debounced outline emission: `useEditorCaretOutline`
 - Tiptap setup/hooks/link behavior: `useEditorTiptapSetup`
+- Async heavy node-render idle coordination: `renderStabilizer` (`src/lib/tiptap/renderStabilizer.ts`)
 - Wikilink overlay state machine: `useEditorWikilinkOverlayState`
 - Wikilink target/headings cache and resolve: `useEditorWikilinkDataSource`
 - Slash descriptor insertion mapping: `useEditorSlashInsertion`
@@ -31,6 +32,7 @@
 - `useEditorPersistence` is removed; do not reintroduce parallel lifecycle ownership.
 - `useEditorWikilinkOverlayState` should be initialized before binding tiptap callbacks that invoke it.
 - Editor content rendering is multi-instance and path-scoped; only active path is visible/interactable.
+- Loading overlays for complex docs should remain visible until `waitForHeavyRenderIdle` settles after `setContent`.
 
 ## Anti-patterns
 - Duplicated behavior in both `EditorView` and composables.
@@ -40,3 +42,4 @@
 - Leaving dead transitional modules in tree (for example obsolete persistence abstractions).
 - Setup-order coupling where callbacks dereference later-declared composable instances.
 - Using Vue-only selectors (for example `:deep(...)`) in extracted plain CSS files.
+- Hiding the large-document overlay before async heavy node views (Mermaid/tables) have settled.

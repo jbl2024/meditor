@@ -47,6 +47,7 @@ import { useEditorNavigation, type EditorHeadingNode } from '../composables/useE
 import { useSlashMenu } from '../composables/useSlashMenu'
 import { type WikilinkCandidate } from '../lib/tiptap/plugins/wikilinkState'
 import { buildWikilinkCandidates } from '../lib/tiptap/wikilinkCandidates'
+import { waitForHeavyRenderIdle } from '../lib/tiptap/renderStabilizer'
 import type { BlockMenuTarget, TurnIntoType } from '../lib/tiptap/blockMenu/types'
 import { computeHandleLock, type DragHandleUiState } from '../lib/tiptap/blockMenu/dragHandleState'
 
@@ -587,7 +588,8 @@ const fileLifecycle = useEditorFileLifecycle({
   },
   requestPort: {
     isCurrentRequest: (requestId) => lifecycle.isCurrentRequest(requestId)
-  }
+  },
+  waitForHeavyRenderIdle
 })
 
 async function loadCurrentFile(path: string, options?: { forceReload?: boolean; requestId?: number }) {

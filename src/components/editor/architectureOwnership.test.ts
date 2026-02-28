@@ -61,6 +61,7 @@ describe('editor architecture ownership guardrails', () => {
     expect(architectureDoc).toContain('Anti-patterns')
     expect(architectureDoc).toContain('useEditorSessionLifecycle')
     expect(architectureDoc).toContain('useEditorFileLifecycle')
+    expect(architectureDoc).toContain('renderStabilizer')
   })
 
   it('uses grouped ports in file lifecycle and removes dead load options', () => {
@@ -69,6 +70,14 @@ describe('editor architecture ownership guardrails', () => {
     expect(fileLifecycleSource).toContain('uiPort')
     expect(fileLifecycleSource).toContain('ioPort')
     expect(fileLifecycleSource).toContain('requestPort')
+    expect(fileLifecycleSource).toContain('waitForHeavyRenderIdle')
     expect(fileLifecycleSource).not.toContain('skipActivate')
+  })
+
+  it('keeps heavy render coordination out of EditorView and in lifecycle/stabilizer modules', () => {
+    expect(editorViewSource).toContain('waitForHeavyRenderIdle')
+    expect(editorViewSource).not.toContain('beginHeavyRender(')
+    expect(editorViewSource).not.toContain('endHeavyRender(')
+    expect(fileLifecycleSource).toContain('isHeavyRenderMarkdown')
   })
 })

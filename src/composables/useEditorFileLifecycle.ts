@@ -7,6 +7,28 @@ import { toTiptapDoc } from '../lib/tiptap/editorBlocksToTiptapDoc'
 import type { DocumentSession } from './useDocumentEditorSessions'
 
 /**
+ * Adapter contract for waiting on async heavy node rendering (for example Mermaid node views).
+ *
+ * Failure behavior:
+ * - Resolves `false` when the wait times out; callers should continue deterministic load completion.
+ */
+export type WaitForHeavyRenderIdle = (options?: { timeoutMs?: number; settleMs?: number }) => Promise<boolean>
+
+// Regex-driven heavy render detection:
+// - Mermaid example detected: "```mermaid\nflowchart TD\nA-->B\n```"
+const MERMAID_FENCE_RE = /```[ \t]*mermaid\b/i
+const MARKDOWN_TABLE_SEPARATOR_RE = /^\s*\|?(?:\s*:?-{3,}:?\s*\|){1,}\s*$/gm
+const MARKDOWN_TABLE_ROW_RE = /^\s*\|.+\|\s*$/gm
+
+function isHeavyRenderMarkdown(source: string): boolean {
+  if (MERMAID_FENCE_RE.test(source)) return true
+  const separatorCount = source.match(MARKDOWN_TABLE_SEPARATOR_RE)?.length ?? 0
+  if (separatorCount === 0) return false
+  const rowCount = source.match(MARKDOWN_TABLE_ROW_RE)?.length ?? 0
+  return rowCount >= 6
+}
+
+/**
  * Mutable loading-overlay refs controlled by file load orchestration.
  *
  * Invariant:
@@ -105,6 +127,10 @@ export type UseEditorFileLifecycleOptions = {
   ioPort: EditorFileLifecycleIoPort
   requestPort: EditorFileLifecycleRequestPort
   /**
+   * Optional hook that waits for async heavy node rendering to settle.
+   */
+  waitForHeavyRenderIdle?: WaitForHeavyRenderIdle
+  /**
    * Minimum overlay visibility once large-document loading is shown.
    *
    * Why/invariant:
@@ -112,6 +138,14 @@ export type UseEditorFileLifecycleOptions = {
    *   minimum prevents imperceptible flash and keeps loading feedback discoverable.
    */
   minLargeDocOverlayVisibleMs?: number
+  /**
+   * Timeout for optional heavy-render idle wait.
+   */
+  heavyRenderIdleTimeoutMs?: number
+  /**
+   * Settle window for optional heavy-render idle wait.
+   */
+  heavyRenderIdleSettleMs?: number
 }
 
 /**
@@ -137,10 +171,20 @@ export type UseEditorFileLifecycleOptions = {
 export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
   const { sessionPort, documentPort, uiPort, ioPort, requestPort } = options
   const minLargeDocOverlayVisibleMs = options.minLargeDocOverlayVisibleMs ?? 220
+  const heavyRenderIdleTimeoutMs = options.heavyRenderIdleTimeoutMs ?? 1_200
+  const heavyRenderIdleSettleMs = options.heavyRenderIdleSettleMs ?? 48
 
   async function flushUiFrame() {
     await nextTick()
     await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()))
+  }
+
+  async function flushPaintBarrier() {
+    await nextTick()
+    await new Promise<void>((resolve) => {
+      const raf = window.requestAnimationFrame ?? ((callback: FrameRequestCallback) => window.setTimeout(() => callback(performance.now()), 16))
+      raf(() => resolve())
+    })
   }
 
   /**
@@ -197,6 +241,7 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
 
         const parsed = markdownToEditorData(body)
         const normalized = documentPort.withVirtualTitle(parsed.blocks as EditorBlock[], documentPort.noteTitleFromPath(path)).blocks
+        const shouldWaitForHeavyRender = isLargeDocument && isHeavyRenderMarkdown(body) && typeof options.waitForHeavyRenderIdle === 'function'
 
         if (isLargeDocument) {
           uiPort.ui.loadStageLabel.value = 'Rendering blocks in editor...'
@@ -207,6 +252,22 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
         sessionPort.setSuppressOnChange(true)
         session.editor.commands.setContent(toTiptapDoc(normalized), { emitUpdate: false })
         sessionPort.setSuppressOnChange(false)
+
+        if (shouldWaitForHeavyRender) {
+          // Why/invariant: Mermaid/table node views may resolve asynchronously after setContent.
+          // Waiting for heavy render idle avoids first-load reveal flicker on complex documents.
+          uiPort.ui.loadStageLabel.value = 'Finalizing rich blocks...'
+          uiPort.ui.loadProgressPercent.value = 90
+          uiPort.ui.loadProgressIndeterminate.value = true
+          await options.waitForHeavyRenderIdle?.({
+            timeoutMs: heavyRenderIdleTimeoutMs,
+            settleMs: heavyRenderIdleSettleMs
+          })
+          if (typeof loadOptions?.requestId === 'number' && !requestPort.isCurrentRequest(loadOptions.requestId)) return
+          await flushPaintBarrier()
+          uiPort.ui.loadProgressIndeterminate.value = false
+        }
+
         session.loadedText = txt
         session.isLoaded = true
         sessionPort.setDirty(path, false)

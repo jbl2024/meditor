@@ -3,6 +3,7 @@ import mermaid from 'mermaid'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { NodeViewWrapper } from '@tiptap/vue-3'
 import UiFilterableDropdown, { type FilterableDropdownItem } from '../../ui/UiFilterableDropdown.vue'
+import { beginHeavyRender, endHeavyRender } from '../../../lib/tiptap/renderStabilizer'
 import {
   MERMAID_TEMPLATES,
   resolveMermaidTemplateId,
@@ -65,16 +66,21 @@ async function renderPreview() {
   }
 
   ensureMermaid()
+  const renderToken = beginHeavyRender('mermaid-node-view')
   try {
     const id = `meditor-mermaid-${instanceId}-${++renderCount}`
     const rendered = await mermaid.render(id, value)
+    // Invariant: stale async render completions must not mutate DOM after a newer request won.
     if (requestId !== renderRequestId) return
     target.innerHTML = rendered.svg
     error.value = ''
   } catch (err) {
+    // Invariant: stale async failures should be ignored for the same reason as stale successes.
     if (requestId !== renderRequestId) return
     target.innerHTML = ''
     error.value = err instanceof Error ? err.message : 'Invalid Mermaid diagram.'
+  } finally {
+    endHeavyRender(renderToken)
   }
 }
 

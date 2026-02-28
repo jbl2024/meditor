@@ -9,6 +9,7 @@ import {
   type EditorFileLifecycleRequestPort,
   type EditorFileLifecycleSessionPort,
   type EditorFileLifecycleUiPort,
+  type WaitForHeavyRenderIdle,
   type UseEditorFileLifecycleOptions
 } from './useEditorFileLifecycle'
 
@@ -51,6 +52,10 @@ type UseEditorFileLifecycleOverrides = {
   uiPort?: Partial<EditorFileLifecycleUiPort>
   ioPort?: Partial<EditorFileLifecycleIoPort>
   requestPort?: Partial<EditorFileLifecycleRequestPort>
+  waitForHeavyRenderIdle?: WaitForHeavyRenderIdle
+  minLargeDocOverlayVisibleMs?: number
+  heavyRenderIdleTimeoutMs?: number
+  heavyRenderIdleSettleMs?: number
 }
 
 function createOptions(overrides: UseEditorFileLifecycleOverrides = {}) {
@@ -150,7 +155,11 @@ function createOptions(overrides: UseEditorFileLifecycleOverrides = {}) {
       documentPort: { ...documentPort, ...(overrides.documentPort ?? {}) },
       uiPort: { ...uiPort, ...(overrides.uiPort ?? {}) },
       ioPort: { ...ioPort, ...(overrides.ioPort ?? {}) },
-      requestPort: { ...requestPort, ...(overrides.requestPort ?? {}) }
+      requestPort: { ...requestPort, ...(overrides.requestPort ?? {}) },
+      waitForHeavyRenderIdle: overrides.waitForHeavyRenderIdle,
+      minLargeDocOverlayVisibleMs: overrides.minLargeDocOverlayVisibleMs,
+      heavyRenderIdleTimeoutMs: overrides.heavyRenderIdleTimeoutMs,
+      heavyRenderIdleSettleMs: overrides.heavyRenderIdleSettleMs
     },
     sessions,
     currentPath
@@ -270,6 +279,69 @@ describe('useEditorFileLifecycle', () => {
     await lifecycle.loadCurrentFile('a.md', { requestId: 1 })
 
     expect(focusSpy).not.toHaveBeenCalled()
+  })
+
+  it('waits for heavy async render idle before hiding large-doc overlay', async () => {
+    vi.useFakeTimers()
+    const waitDeferred = deferred<boolean>()
+    const waitForHeavyRenderIdle = vi.fn(() => waitDeferred.promise)
+    const heavyDoc = `${'x'.repeat(60_000)}\n\`\`\`mermaid\nflowchart TD\nA --> B\n\`\`\``
+    const { options } = createOptions({
+      ioPort: { openFile: vi.fn(async () => heavyDoc) } as Partial<EditorFileLifecycleIoPort>,
+      uiPort: { largeDocThreshold: 40_000 } as Partial<EditorFileLifecycleUiPort>,
+      waitForHeavyRenderIdle,
+      minLargeDocOverlayVisibleMs: 0
+    })
+    const lifecycle = useEditorFileLifecycle(options)
+
+    const loadPromise = lifecycle.loadCurrentFile('a.md', { requestId: 1 })
+    await vi.advanceTimersByTimeAsync(120)
+    expect(waitForHeavyRenderIdle).toHaveBeenCalledTimes(1)
+    expect(options.uiPort.ui.isLoadingLargeDocument.value).toBe(true)
+
+    await vi.advanceTimersByTimeAsync(500)
+    expect(options.uiPort.ui.isLoadingLargeDocument.value).toBe(true)
+
+    waitDeferred.resolve(true)
+    await vi.runAllTimersAsync()
+    await loadPromise
+    expect(options.uiPort.ui.isLoadingLargeDocument.value).toBe(false)
+    vi.useRealTimers()
+  })
+
+  it('still hides large-doc overlay when heavy render idle wait reports timeout', async () => {
+    vi.useFakeTimers()
+    const heavyDoc = `${'x'.repeat(60_000)}\n\`\`\`mermaid\nflowchart TD\nA --> B\n\`\`\``
+    const waitForHeavyRenderIdle = vi.fn(async () => false)
+    const { options } = createOptions({
+      ioPort: { openFile: vi.fn(async () => heavyDoc) } as Partial<EditorFileLifecycleIoPort>,
+      uiPort: { largeDocThreshold: 40_000 } as Partial<EditorFileLifecycleUiPort>,
+      waitForHeavyRenderIdle,
+      minLargeDocOverlayVisibleMs: 0
+    })
+    const lifecycle = useEditorFileLifecycle(options)
+
+    const loadPromise = lifecycle.loadCurrentFile('a.md', { requestId: 1 })
+    await vi.runAllTimersAsync()
+    await loadPromise
+
+    expect(waitForHeavyRenderIdle).toHaveBeenCalledTimes(1)
+    expect(options.uiPort.ui.isLoadingLargeDocument.value).toBe(false)
+    vi.useRealTimers()
+  })
+
+  it('does not wait for heavy render idle when content is not a heavy markdown shape', async () => {
+    const waitForHeavyRenderIdle = vi.fn(async () => true)
+    const largePlainDoc = 'x'.repeat(60_000)
+    const { options } = createOptions({
+      ioPort: { openFile: vi.fn(async () => largePlainDoc) } as Partial<EditorFileLifecycleIoPort>,
+      uiPort: { largeDocThreshold: 40_000 } as Partial<EditorFileLifecycleUiPort>,
+      waitForHeavyRenderIdle
+    })
+    const lifecycle = useEditorFileLifecycle(options)
+
+    await lifecycle.loadCurrentFile('a.md', { requestId: 1 })
+    expect(waitForHeavyRenderIdle).not.toHaveBeenCalled()
   })
 
   it('keeps mounted-tab switch lightweight when session is already loaded', async () => {
