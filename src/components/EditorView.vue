@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Editor, EditorContent, Extension } from '@tiptap/vue-3'
-import { NodeSelection, TextSelection, type Transaction } from '@tiptap/pm/state'
+import { TextSelection, type Transaction } from '@tiptap/pm/state'
 import type { EditorView as ProseMirrorEditorView } from '@tiptap/pm/view'
 import StarterKit from '@tiptap/starter-kit'
+import Link from '@tiptap/extension-link'
 import { DragHandle as DragHandleVue3 } from '@tiptap/extension-drag-handle-vue-3'
 import { Table, TableRow, TableHeader, TableCell } from '@tiptap/extension-table'
 import { ListKit } from '@tiptap/extension-list'
@@ -22,12 +23,14 @@ import EditorSlashMenu from './editor/EditorSlashMenu.vue'
 import EditorWikilinkMenu from './editor/EditorWikilinkMenu.vue'
 import EditorBlockMenu from './editor/EditorBlockMenu.vue'
 import EditorTableToolbar from './editor/EditorTableToolbar.vue'
+import EditorInlineFormatToolbar from './editor/EditorInlineFormatToolbar.vue'
 import EditorLargeDocOverlay from './editor/EditorLargeDocOverlay.vue'
 import EditorMermaidReplaceDialog from './editor/EditorMermaidReplaceDialog.vue'
 import { composeMarkdownDocument, serializeFrontmatter } from '../lib/frontmatter'
 import { useFrontmatterProperties } from '../composables/useFrontmatterProperties'
 import { useEditorZoom } from '../composables/useEditorZoom'
 import { useMermaidReplaceDialog } from '../composables/useMermaidReplaceDialog'
+import { useInlineFormatToolbar } from '../composables/useInlineFormatToolbar'
 import { applyMarkdownShortcut, isEditorZoomModifier, isLikelyMarkdownPaste, isZoomInShortcut, isZoomOutShortcut, isZoomResetShortcut } from '../lib/editorInteractions'
 import { normalizeBlockId, normalizeHeadingAnchor, parseWikilinkTarget, slugifyHeading } from '../lib/wikilinks'
 import { toTiptapDoc } from '../lib/tiptap/editorBlocksToTiptapDoc'
@@ -202,9 +205,11 @@ const visibleSlashCommands = computed(() => {
   return SLASH_COMMANDS.filter((command) => command.label.toLowerCase().includes(query) || command.id.toLowerCase().includes(query))
 })
 
-const formatToolbarOpen = ref(false)
-const formatToolbarLeft = ref(0)
-const formatToolbarTop = ref(0)
+const inlineFormatToolbar = useInlineFormatToolbar({
+  holder,
+  getEditor: () => editor,
+  sanitizeHref: sanitizeExternalHref
+})
 const cachedLinkTargets = ref<string[]>([])
 const cachedLinkTargetsAt = ref(0)
 const cachedHeadingsByTarget = ref<Record<string, string[]>>({})
@@ -682,26 +687,7 @@ function onHandleDragEnd() {
 }
 
 function updateFormattingToolbar() {
-  if (!editor || !holder.value) {
-    formatToolbarOpen.value = false
-    return
-  }
-  if (editor.state.selection instanceof NodeSelection) {
-    formatToolbarOpen.value = false
-    return
-  }
-  const { from, to, empty } = editor.state.selection
-  if (empty || from === to) {
-    formatToolbarOpen.value = false
-    return
-  }
-  const start = editor.view.coordsAtPos(from)
-  const end = editor.view.coordsAtPos(to)
-  const holderRect = holder.value.getBoundingClientRect()
-  const centerX = (start.left + end.right) / 2
-  formatToolbarLeft.value = centerX - holderRect.left + holder.value.scrollLeft
-  formatToolbarTop.value = Math.min(start.top, end.top) - holderRect.top + holder.value.scrollTop - 10
-  formatToolbarOpen.value = true
+  inlineFormatToolbar.updateFormattingToolbar()
 }
 
 function hideTableToolbar() {
@@ -987,9 +973,10 @@ function createEditorOptions(path: string) {
         orderedList: false,
         listItem: false,
         listKeymap: false,
-        link: {
-          openOnClick: false
-        }
+        link: false
+      }),
+      Link.configure({
+        openOnClick: false
       }),
       HeadingMeta,
       ListKit.configure({
@@ -1063,6 +1050,31 @@ function createEditorOptions(path: string) {
         const href = anchor.getAttribute('href')?.trim() ?? ''
         const safe = sanitizeExternalHref(href)
         if (!safe) return false
+        if (event.metaKey || event.ctrlKey) {
+          event.preventDefault()
+          event.stopPropagation()
+          const targetEditor = getSession(path)?.editor ?? editor
+          if (!targetEditor) return true
+
+          let pos = 0
+          try {
+            pos = _view.posAtDOM(anchor, 0)
+          } catch {
+            pos = 0
+          }
+
+          const candidates = [_pos, _pos + 1, _pos - 1, pos, pos + 1, pos - 1]
+          for (const candidate of candidates) {
+            if (candidate < 0 || candidate > _view.state.doc.content.size) continue
+            targetEditor.chain().focus().setTextSelection(candidate).extendMarkRange('link').run()
+            const { from, to, empty } = targetEditor.state.selection
+            if (empty || from === to || !targetEditor.isActive('link')) continue
+            inlineFormatToolbar.updateFormattingToolbar()
+            inlineFormatToolbar.openLinkPopover()
+            return true
+          }
+          return true
+        }
         event.preventDefault()
         event.stopPropagation()
         void openExternalUrl(safe)
@@ -1112,7 +1124,7 @@ function resetTransientUiState() {
   blockMenuTarget.value = null
   lastStableBlockMenuTarget.value = null
   dragHandleUiState.value = { ...dragHandleUiState.value, activeTarget: null }
-  formatToolbarOpen.value = false
+  inlineFormatToolbar.dismissToolbar()
   hideTableToolbarAnchor()
   cachedLinkTargetsAt.value = 0
   cachedHeadingsByTarget.value = {}
@@ -1649,6 +1661,12 @@ function onEditorKeydown(event: KeyboardEvent) {
     return
   }
 
+  if (event.key === 'Escape' && inlineFormatToolbar.linkPopoverOpen.value) {
+    event.preventDefault()
+    inlineFormatToolbar.cancelLink()
+    return
+  }
+
   if (event.key === 'Escape' && tableToolbarOpen.value) {
     event.preventDefault()
     hideTableToolbar()
@@ -1661,38 +1679,6 @@ function onEditorKeyup() {
   syncSlashMenuFromSelection({ preserveIndex: true })
   updateFormattingToolbar()
   updateTableToolbar()
-}
-
-function isMarkActive(name: 'bold' | 'italic' | 'strike' | 'underline' | 'code' | 'link') {
-  if (!editor) return false
-  return editor.isActive(name)
-}
-
-function toggleMark(name: 'bold' | 'italic' | 'strike' | 'underline' | 'code') {
-  if (!editor) return
-  const chain = editor.chain().focus()
-  if (name === 'bold') chain.toggleBold().run()
-  if (name === 'italic') chain.toggleItalic().run()
-  if (name === 'strike') chain.toggleStrike().run()
-  if (name === 'underline') chain.toggleUnderline().run()
-  if (name === 'code') chain.toggleCode().run()
-  updateFormattingToolbar()
-}
-
-function toggleLink() {
-  if (!editor) return
-  const existing = editor.getAttributes('link').href as string | undefined
-  const next = window.prompt('URL', existing ?? 'https://')
-  if (next === null) return
-  const href = next.trim()
-  if (!href) {
-    editor.chain().focus().unsetLink().run()
-  } else {
-    const safe = sanitizeExternalHref(href)
-    if (!safe) return
-    editor.chain().focus().setLink({ href: safe, target: '_blank', rel: 'noopener noreferrer' }).run()
-  }
-  updateFormattingToolbar()
 }
 
 function onEditorContextMenu(event: MouseEvent) {
@@ -2037,18 +2023,28 @@ defineExpose({
             </div>
           </DragHandleVue3>
 
-          <div
-            v-if="formatToolbarOpen"
-            class="absolute z-30 flex -translate-x-1/2 -translate-y-full items-center gap-1 rounded-md border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
-            :style="{ left: `${formatToolbarLeft}px`, top: `${formatToolbarTop}px` }"
-          >
-            <button type="button" class="px-2 py-1 text-xs" :class="isMarkActive('bold') ? 'bg-slate-200 dark:bg-slate-700' : ''" @mousedown.prevent @click="toggleMark('bold')">B</button>
-            <button type="button" class="px-2 py-1 text-xs italic" :class="isMarkActive('italic') ? 'bg-slate-200 dark:bg-slate-700' : ''" @mousedown.prevent @click="toggleMark('italic')">I</button>
-            <button type="button" class="px-2 py-1 text-xs line-through" :class="isMarkActive('strike') ? 'bg-slate-200 dark:bg-slate-700' : ''" @mousedown.prevent @click="toggleMark('strike')">S</button>
-            <button type="button" class="px-2 py-1 text-xs underline" :class="isMarkActive('underline') ? 'bg-slate-200 dark:bg-slate-700' : ''" @mousedown.prevent @click="toggleMark('underline')">U</button>
-            <button type="button" class="px-2 py-1 text-xs font-mono" :class="isMarkActive('code') ? 'bg-slate-200 dark:bg-slate-700' : ''" @mousedown.prevent @click="toggleMark('code')">{ }</button>
-            <button type="button" class="px-2 py-1 text-xs" :class="isMarkActive('link') ? 'bg-slate-200 dark:bg-slate-700' : ''" @mousedown.prevent @click="toggleLink">Link</button>
-          </div>
+          <EditorInlineFormatToolbar
+            :open="inlineFormatToolbar.formatToolbarOpen.value"
+            :left="inlineFormatToolbar.formatToolbarLeft.value"
+            :top="inlineFormatToolbar.formatToolbarTop.value"
+            :active-marks="{
+              bold: inlineFormatToolbar.isMarkActive('bold'),
+              italic: inlineFormatToolbar.isMarkActive('italic'),
+              strike: inlineFormatToolbar.isMarkActive('strike'),
+              underline: inlineFormatToolbar.isMarkActive('underline'),
+              code: inlineFormatToolbar.isMarkActive('code'),
+              link: inlineFormatToolbar.isMarkActive('link')
+            }"
+            :link-popover-open="inlineFormatToolbar.linkPopoverOpen.value"
+            :link-value="inlineFormatToolbar.linkValue.value"
+            :link-error="inlineFormatToolbar.linkError.value"
+            @toggle-mark="inlineFormatToolbar.toggleMark"
+            @open-link="inlineFormatToolbar.openLinkPopover"
+            @apply-link="inlineFormatToolbar.applyLink"
+            @unlink="inlineFormatToolbar.unlinkLink"
+            @cancel-link="inlineFormatToolbar.cancelLink"
+            @update:linkValue="(value) => { inlineFormatToolbar.linkValue.value = value }"
+          />
 
           <div
             v-if="tableToolbarTriggerVisible"
