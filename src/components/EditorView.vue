@@ -106,6 +106,7 @@ const slashIndex = ref(0)
 const slashLeft = ref(0)
 const slashTop = ref(0)
 const slashQuery = ref('')
+const slashActivatedByUser = ref(false)
 
 const wikilinkOpen = ref(false)
 const wikilinkIndex = ref(0)
@@ -377,6 +378,10 @@ function closeSlashMenu() {
   slashOpen.value = false
   slashIndex.value = 0
   slashQuery.value = ''
+}
+
+function markSlashActivatedByUser() {
+  slashActivatedByUser.value = true
 }
 
 function closeWikilinkMenu() {
@@ -693,6 +698,10 @@ const { ensureEditor, destroyEditor } = useTiptapInstance({
       attributes: {
         class: 'ProseMirror meditor-prosemirror'
       },
+      handleKeyDown: () => {
+        markSlashActivatedByUser()
+        return false
+      },
       handleClick: (_view, _pos, event) => {
         const anchor = closestAnchorFromEventTarget(event.target)
         if (!anchor) return false
@@ -779,6 +788,7 @@ async function loadCurrentFile(path: string) {
 
   setSaveError(path, '')
   clearAutosaveTimer()
+  slashActivatedByUser.value = false
   closeSlashMenu()
   closeWikilinkMenu()
   closeBlockMenu()
@@ -964,7 +974,7 @@ function openSlashAtSelection(query = '', options?: { preserveIndex?: boolean })
 
 function syncSlashMenuFromSelection(options?: { preserveIndex?: boolean }) {
   const slash = readSlashContext()
-  if (slash) {
+  if (slash && slashActivatedByUser.value) {
     openSlashAtSelection(slash.query, { preserveIndex: options?.preserveIndex ?? true })
   } else {
     closeSlashMenu()
