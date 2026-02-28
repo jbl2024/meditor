@@ -161,20 +161,23 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
     const session = sessionPort.ensureSession(path)
     const editor = sessionPort.getEditor()
     if (!editor) return
+    const shouldReloadContent = !session.isLoaded || Boolean(loadOptions?.forceReload)
 
-    sessionPort.setSaveError(path, '')
-    uiPort.clearAutosaveTimer()
-    uiPort.clearOutlineTimer(path)
-    uiPort.resetTransientUiState()
-    uiPort.ui.isLoadingLargeDocument.value = false
-    uiPort.ui.loadStageLabel.value = ''
-    uiPort.ui.loadProgressPercent.value = 0
-    uiPort.ui.loadProgressIndeterminate.value = false
-    uiPort.ui.loadDocumentStats.value = null
+    if (shouldReloadContent) {
+      sessionPort.setSaveError(path, '')
+      uiPort.clearAutosaveTimer()
+      uiPort.clearOutlineTimer(path)
+      uiPort.resetTransientUiState()
+      uiPort.ui.isLoadingLargeDocument.value = false
+      uiPort.ui.loadStageLabel.value = ''
+      uiPort.ui.loadProgressPercent.value = 0
+      uiPort.ui.loadProgressIndeterminate.value = false
+      uiPort.ui.loadDocumentStats.value = null
+    }
 
     let largeDocOverlayShownAt = 0
     try {
-      if (!session.isLoaded || loadOptions?.forceReload) {
+      if (shouldReloadContent) {
         const txt = await ioPort.openFile(path)
         if (typeof loadOptions?.requestId === 'number' && !requestPort.isCurrentRequest(loadOptions.requestId)) return
 
@@ -217,8 +220,10 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
       if (sessionPort.holder.value && typeof remembered === 'number') {
         sessionPort.holder.value.scrollTop = remembered
       }
-      if (!sessionPort.restoreCaret(path)) {
-        editor.commands.focus('end')
+      // Invariant: mounted tab switches should keep in-memory selection untouched.
+      // Only reload/reopen flows restore persisted caret snapshots.
+      if (shouldReloadContent) {
+        sessionPort.restoreCaret(path)
       }
 
       uiPort.emitOutlineSoon(path)
@@ -228,18 +233,20 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
       sessionPort.setSaveError(path, error instanceof Error ? error.message : 'Could not read file.')
     } finally {
       if (typeof loadOptions?.requestId === 'number' && !requestPort.isCurrentRequest(loadOptions.requestId)) return
-      if (largeDocOverlayShownAt > 0) {
+      if (shouldReloadContent && largeDocOverlayShownAt > 0) {
         const elapsed = Date.now() - largeDocOverlayShownAt
         const remaining = minLargeDocOverlayVisibleMs - elapsed
         if (remaining > 0) {
           await new Promise<void>((resolve) => window.setTimeout(resolve, remaining))
         }
       }
-      uiPort.ui.isLoadingLargeDocument.value = false
-      uiPort.ui.loadStageLabel.value = ''
-      uiPort.ui.loadProgressPercent.value = 0
-      uiPort.ui.loadProgressIndeterminate.value = false
-      uiPort.ui.loadDocumentStats.value = null
+      if (shouldReloadContent) {
+        uiPort.ui.isLoadingLargeDocument.value = false
+        uiPort.ui.loadStageLabel.value = ''
+        uiPort.ui.loadProgressPercent.value = 0
+        uiPort.ui.loadProgressIndeterminate.value = false
+        uiPort.ui.loadDocumentStats.value = null
+      }
     }
   }
 

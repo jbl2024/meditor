@@ -43,11 +43,19 @@ export type UseEditorPathWatchersOptions = {
  * - Run host-provided mount/unmount lifecycle hooks.
  */
 export function useEditorPathWatchers(options: UseEditorPathWatchersOptions) {
+  function shouldCaptureCaretFromHolder(): boolean {
+    if (!options.holder.value) return false
+    const active = typeof document !== 'undefined' ? document.activeElement : null
+    return Boolean(active && options.holder.value.contains(active))
+  }
+
   watch(
     () => options.path.value,
     async (next, prev) => {
       if (prev && options.holder.value) {
-        options.captureCaret(prev)
+        if (shouldCaptureCaretFromHolder()) {
+          options.captureCaret(prev)
+        }
         const prevSession = options.getSession(prev)
         if (prevSession) prevSession.scrollTop = options.holder.value.scrollTop
       }
@@ -57,7 +65,9 @@ export function useEditorPathWatchers(options: UseEditorPathWatchersOptions) {
         options.nextRequestId()
         const activePath = options.getActivePath()
         if (activePath) {
-          options.captureCaret(activePath)
+          if (shouldCaptureCaretFromHolder()) {
+            options.captureCaret(activePath)
+          }
           if (options.holder.value) {
             const activeSession = options.getSession(activePath)
             if (activeSession) activeSession.scrollTop = options.holder.value.scrollTop

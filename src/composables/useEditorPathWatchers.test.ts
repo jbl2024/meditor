@@ -178,4 +178,66 @@ describe('useEditorPathWatchers', () => {
     app.unmount()
     document.body.innerHTML = ''
   })
+
+  it('captures caret only when holder owns focus', async () => {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+
+    const path = ref('a.md')
+    const openPaths = ref(['a.md', 'b.md'])
+    const holderEl = document.createElement('div')
+    const focusable = document.createElement('button')
+    holderEl.appendChild(focusable)
+    document.body.appendChild(holderEl)
+    const captureCaret = vi.fn()
+
+    const Harness = defineComponent({
+      setup() {
+        useEditorPathWatchers({
+          path,
+          openPaths,
+          holder: ref(holderEl),
+          currentPath: ref('a.md'),
+          nextRequestId: vi.fn(() => 1),
+          ensureSession: vi.fn(() => ({ scrollTop: 0 } as any)),
+          setActiveSession: vi.fn(),
+          loadCurrentFile: vi.fn(async () => {}),
+          captureCaret,
+          getSession: vi.fn(() => ({ scrollTop: 0 } as any)),
+          getActivePath: vi.fn(() => 'a.md'),
+          setActivePath: vi.fn(),
+          clearActiveEditor: vi.fn(),
+          listPaths: vi.fn(() => ['a.md', 'b.md']),
+          closePath: vi.fn(),
+          resetPropertySchemaState: vi.fn(),
+          emitEmptyProperties: vi.fn(),
+          closeSlashMenu: vi.fn(),
+          closeWikilinkMenu: vi.fn(),
+          closeBlockMenu: vi.fn(),
+          hideTableToolbarAnchor: vi.fn(),
+          emitEmptyOutline: vi.fn(),
+          onMountInit: vi.fn(async () => {}),
+          onUnmountCleanup: vi.fn(async () => {})
+        })
+        return () => null
+      }
+    })
+
+    const app = createApp(Harness)
+    app.mount(root)
+    await flushUi()
+
+    path.value = 'b.md'
+    await flushUi()
+    expect(captureCaret).not.toHaveBeenCalled()
+
+    focusable.focus()
+    path.value = 'a.md'
+    await flushUi()
+    expect(captureCaret).toHaveBeenCalledWith('b.md')
+
+    app.unmount()
+    holderEl.remove()
+    document.body.innerHTML = ''
+  })
 })

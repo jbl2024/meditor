@@ -256,4 +256,36 @@ describe('useEditorFileLifecycle', () => {
     await loadPromise
     vi.useRealTimers()
   })
+
+  it('does not force focus-to-end when no caret snapshot exists', async () => {
+    const focusSpy = vi.fn()
+    const { options } = createOptions({
+      sessionPort: {
+        restoreCaret: vi.fn(() => false),
+        getEditor: () => ({ commands: { focus: focusSpy } } as any)
+      } as Partial<EditorFileLifecycleSessionPort>
+    })
+
+    const lifecycle = useEditorFileLifecycle(options)
+    await lifecycle.loadCurrentFile('a.md', { requestId: 1 })
+
+    expect(focusSpy).not.toHaveBeenCalled()
+  })
+
+  it('keeps mounted-tab switch lightweight when session is already loaded', async () => {
+    const { options, sessions } = createOptions()
+    sessions['a.md'].isLoaded = true
+    sessions['a.md'].scrollTop = 42
+
+    const lifecycle = useEditorFileLifecycle(options)
+    await lifecycle.loadCurrentFile('a.md', { requestId: 1 })
+
+    expect(options.ioPort.openFile).not.toHaveBeenCalled()
+    expect(options.sessionPort.restoreCaret).not.toHaveBeenCalled()
+    expect(options.uiPort.clearAutosaveTimer).not.toHaveBeenCalled()
+    expect(options.uiPort.resetTransientUiState).not.toHaveBeenCalled()
+    expect(options.uiPort.emitOutlineSoon).toHaveBeenCalledWith('a.md')
+    expect(options.uiPort.updateGutterHitboxStyle).toHaveBeenCalled()
+    expect(options.sessionPort.holder.value?.scrollTop).toBe(42)
+  })
 })
