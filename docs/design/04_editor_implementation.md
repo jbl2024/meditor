@@ -20,7 +20,7 @@ Non-goal:
 
 ## 2. Why This Architecture
 
-`EditorView` has to coordinate multiple concerns around one EditorJS instance:
+`EditorView` has to coordinate multiple concerns around one Tiptap instance:
 
 - document lifecycle (open/reload/render)
 - save/autosave flow
@@ -42,7 +42,7 @@ This keeps behavior focused and unit-testable while preserving one clear integra
 
 It should:
 
-- own the EditorJS instance lifecycle
+- own the Tiptap Editor instance lifecycle
 - wire composables together
 - connect UI events to behavior APIs
 - expose imperative methods to parent components (`saveNow`, `reloadCurrent`, zoom/reveal helpers)
@@ -80,7 +80,7 @@ It should not:
 
 External boundaries:
 - File and schema operations enter through typed props (frontend service wrappers)
-- EditorJS tools registry is provided by dedicated module
+- Tiptap extensions registry is provided by dedicated module
 ```
 
 ## 5. Main Runtime Flows
@@ -92,8 +92,8 @@ External boundaries:
    -> ensure editor instance
    -> load file content
    -> parse frontmatter + body
-   -> convert markdown body to blocks
-   -> render blocks
+   -> convert markdown body to Tiptap JSON
+   -> render editor content
    -> restore scroll/caret
    -> emit outline/properties state
 ```
@@ -112,7 +112,7 @@ External boundaries:
 
 ```text
 [manual save or autosave trigger]
-   -> read EditorJS blocks
+   -> read Tiptap JSON content
    -> resolve virtual title/rename when needed
    -> serialize frontmatter + markdown body
    -> persist via saveFile prop
@@ -124,7 +124,7 @@ External boundaries:
 
 ### `useEditorInstance`
 
-- What: owns creation/destruction of EditorJS and DOM listener wiring.
+- What: owns creation/destruction of Tiptap Editor and DOM listener wiring.
 - Why: isolates risky lifecycle code from feature logic.
 - How: receives callbacks and hooks from `EditorView` (on change, observers, cleanup actions).
 
@@ -168,19 +168,19 @@ External boundaries:
 
 - What: virtual title block policy and title extraction rules.
 - Why: title semantics affect both rendering and save/rename behavior.
-- How: exposes helpers to inject/remove/read virtual title around block arrays.
+- How: exposes helpers to inject/remove/read virtual title around document content.
 
-### `useEditorBlocks`
+### `useEditorNodes`
 
-- What: block-level operations around current selection/caret.
-- Why: block mutations should be reusable by multiple interactions.
-- How: provides replacement/insertion/focus utilities over current EditorJS block context.
+- What: node-level operations around current selection/caret.
+- Why: node mutations should be reusable by multiple interactions.
+- How: provides replacement/insertion/focus utilities over current Tiptap/ProseMirror state.
 
 ### `useEditorOutlineNavigation`
 
 - What: outline extraction and heading/snippet reveal helpers.
 - Why: keeps document navigation logic separate from editor orchestration.
-- How: parses rendered DOM headings and offers normalized anchor/block navigation helpers.
+- How: parses editor heading nodes and offers normalized anchor/node navigation helpers.
 
 ### `useCodeBlockUi`
 
@@ -192,7 +192,7 @@ External boundaries:
 
 - What: capture/restore caret snapshots by path.
 - Why: preserving editing position is key for multi-file workflows.
-- How: stores/restores position with holder-aware helpers.
+- How: stores/restores position with ProseMirror position-aware helpers.
 
 ### `useEditorZoom`
 
@@ -208,11 +208,11 @@ External boundaries:
 
 ## 7. Extracted Static Modules
 
-### `editorTools`
+### `editorExtensions`
 
-- What: EditorJS tools registry factory.
+- What: Tiptap extensions registry factory.
 - Why: large static config is noisy inside orchestration code.
-- How: one function builds tool map and injects Mermaid confirm callback.
+- How: one function builds extension list and injects Mermaid confirm callback.
 
 ### `editorSlashCommands`
 
