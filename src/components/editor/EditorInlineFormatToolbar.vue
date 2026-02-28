@@ -74,7 +74,7 @@ function onLinkInputKeydown(event: KeyboardEvent) {
   >
     <button
       type="button"
-      class="px-2 py-1 text-xs"
+      class="inline-flex items-center justify-center rounded-md px-2 py-1 text-xs transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 active:translate-y-px active:scale-[0.98] active:bg-slate-200 dark:hover:bg-slate-800 dark:hover:text-slate-100 dark:active:bg-slate-700"
       data-action="bold"
       :class="activeMarks.bold ? 'bg-slate-200 dark:bg-slate-700' : ''"
       @mousedown.prevent
@@ -84,7 +84,7 @@ function onLinkInputKeydown(event: KeyboardEvent) {
     </button>
     <button
       type="button"
-      class="px-2 py-1 text-xs italic"
+      class="inline-flex items-center justify-center rounded-md px-2 py-1 text-xs italic transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 active:translate-y-px active:scale-[0.98] active:bg-slate-200 dark:hover:bg-slate-800 dark:hover:text-slate-100 dark:active:bg-slate-700"
       data-action="italic"
       :class="activeMarks.italic ? 'bg-slate-200 dark:bg-slate-700' : ''"
       @mousedown.prevent
@@ -94,7 +94,7 @@ function onLinkInputKeydown(event: KeyboardEvent) {
     </button>
     <button
       type="button"
-      class="px-2 py-1 text-xs line-through"
+      class="inline-flex items-center justify-center rounded-md px-2 py-1 text-xs line-through transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 active:translate-y-px active:scale-[0.98] active:bg-slate-200 dark:hover:bg-slate-800 dark:hover:text-slate-100 dark:active:bg-slate-700"
       data-action="strike"
       :class="activeMarks.strike ? 'bg-slate-200 dark:bg-slate-700' : ''"
       @mousedown.prevent
@@ -104,7 +104,7 @@ function onLinkInputKeydown(event: KeyboardEvent) {
     </button>
     <button
       type="button"
-      class="px-2 py-1 text-xs underline"
+      class="inline-flex items-center justify-center rounded-md px-2 py-1 text-xs underline transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 active:translate-y-px active:scale-[0.98] active:bg-slate-200 dark:hover:bg-slate-800 dark:hover:text-slate-100 dark:active:bg-slate-700"
       data-action="underline"
       :class="activeMarks.underline ? 'bg-slate-200 dark:bg-slate-700' : ''"
       @mousedown.prevent
@@ -114,7 +114,7 @@ function onLinkInputKeydown(event: KeyboardEvent) {
     </button>
     <button
       type="button"
-      class="px-2 py-1 text-xs"
+      class="inline-flex items-center justify-center rounded-md px-2 py-1 text-xs transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 active:translate-y-px active:scale-[0.98] active:bg-slate-200 dark:hover:bg-slate-800 dark:hover:text-slate-100 dark:active:bg-slate-700"
       data-action="code"
       aria-label="Code"
       title="Code"
@@ -126,7 +126,7 @@ function onLinkInputKeydown(event: KeyboardEvent) {
     </button>
     <button
       type="button"
-      class="px-2 py-1 text-xs"
+      class="inline-flex items-center justify-center rounded-md px-2 py-1 text-xs transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 active:translate-y-px active:scale-[0.98] active:bg-slate-200 dark:hover:bg-slate-800 dark:hover:text-slate-100 dark:active:bg-slate-700"
       data-action="link"
       aria-label="Link"
       title="Link"
