@@ -108,14 +108,6 @@ onUpdated(syncRootEl)
   box-shadow: inset 0 0 0 1px rgb(203 213 225);
 }
 
-.dark .editor-wikilink-dropdown :deep(.ui-filterable-dropdown-option) {
-  color: rgb(226 232 240);
-}
-
-.dark .editor-wikilink-dropdown :deep(.ui-filterable-dropdown-option[data-active='true']) {
-  box-shadow: inset 0 0 0 1px rgb(71 85 105);
-}
-
 .editor-wikilink-active {
   font-weight: 600;
 }

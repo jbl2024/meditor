@@ -65,6 +65,33 @@ html.dark .ce-popover-item--focused,
   background: #1e293b;
 }
 
+html.dark .editor-wikilink-dropdown,
+.dark .editor-wikilink-dropdown {
+  --ui-dropdown-bg: rgb(15 23 42);
+  --ui-dropdown-border: rgb(51 65 85);
+  --ui-dropdown-text: rgb(226 232 240);
+  --ui-dropdown-muted: rgb(148 163 184);
+  --ui-dropdown-hover: rgb(30 41 59);
+}
+
+html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-option,
+.dark .editor-wikilink-dropdown .ui-filterable-dropdown-option {
+  color: rgb(226 232 240);
+}
+
+html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-option:hover,
+html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-option[data-active='true'],
+.dark .editor-wikilink-dropdown .ui-filterable-dropdown-option:hover,
+.dark .editor-wikilink-dropdown .ui-filterable-dropdown-option[data-active='true'] {
+  background: rgb(30 41 59);
+  box-shadow: none;
+}
+
+html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-empty,
+.dark .editor-wikilink-dropdown .ui-filterable-dropdown-empty {
+  color: rgb(148 163 184);
+}
+
 @layer base {
   html,
   body,
