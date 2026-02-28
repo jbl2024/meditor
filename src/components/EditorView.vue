@@ -137,7 +137,7 @@ const TURN_INTO_TYPES: TurnIntoType[] = [
   'orderedList',
   'taskList',
   'codeBlock',
-  'blockquote',
+  'quote',
 ]
 const TURN_INTO_LABELS: Record<TurnIntoType, string> = {
   paragraph: 'Paragraph',
@@ -148,7 +148,7 @@ const TURN_INTO_LABELS: Record<TurnIntoType, string> = {
   orderedList: 'Ordered list',
   taskList: 'Task list',
   codeBlock: 'Code block',
-  blockquote: 'Quote',
+  quote: 'Quote',
 }
 const currentPath = computed(() => props.path?.trim() || '')
 const lastEditorInteractionAt = ref(0)

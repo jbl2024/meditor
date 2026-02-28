@@ -182,7 +182,7 @@ const ICONS: Record<string, unknown> = {
   orderedList: NumberedListIcon,
   taskList: QueueListIcon,
   codeBlock: DocumentTextIcon,
-  blockquote: DocumentTextIcon,
+  quote: DocumentTextIcon,
 }
 
 function iconFor(item: BlockMenuActionItem) {

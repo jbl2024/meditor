@@ -17,7 +17,7 @@ export type TurnIntoType =
   | 'orderedList'
   | 'taskList'
   | 'codeBlock'
-  | 'blockquote'
+  | 'quote'
 
 export type BlockMenuTarget = {
   pos: number

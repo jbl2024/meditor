@@ -9,10 +9,11 @@ describe('useBlockMenuControls', () => {
     const stableTarget = ref<BlockMenuTarget | null>(null)
     const controls = useBlockMenuControls({
       getEditor: () => null,
-      turnIntoTypes: ['paragraph', 'heading1'],
+      turnIntoTypes: ['paragraph', 'heading1', 'quote'],
       turnIntoLabels: {
         paragraph: 'Paragraph',
-        heading1: 'Heading 1'
+        heading1: 'Heading 1',
+        quote: 'Quote'
       } as never,
       activeTarget,
       stableTarget
@@ -30,6 +31,7 @@ describe('useBlockMenuControls', () => {
 
     expect(controls.actions.value.some((item) => item.id === 'delete' && item.disabled === false)).toBe(true)
     expect(controls.actions.value.some((item) => item.id === 'move_up' && item.disabled === true)).toBe(true)
-    expect(controls.convertActions.value).toHaveLength(2)
+    expect(controls.convertActions.value).toHaveLength(3)
+    expect(controls.convertActions.value.some((item) => item.id === 'turn_into:quote' && item.label === 'Quote')).toBe(true)
   })
 })

@@ -3,16 +3,31 @@ import { Fragment, type Node as ProseNode, type Schema } from '@tiptap/pm/model'
 import { TextSelection } from '@tiptap/pm/state'
 import type { BlockMenuTarget, TurnIntoType } from './types'
 
+function createInlineContent(schema: Schema, text = ''): ProseNode[] | undefined {
+  if (!text) return undefined
+  const hardBreak = schema.nodes.hardBreak
+  if (!hardBreak || !text.includes('\n')) {
+    return [schema.text(text)]
+  }
+
+  const parts = text.split('\n')
+  const content: ProseNode[] = []
+  for (let i = 0; i < parts.length; i += 1) {
+    if (parts[i]) content.push(schema.text(parts[i]))
+    if (i < parts.length - 1) content.push(hardBreak.create())
+  }
+  return content.length ? content : undefined
+}
+
 function createParagraph(schema: Schema, text = ''): ProseNode | null {
   const paragraph = schema.nodes.paragraph
   if (!paragraph) return null
-  const content = text ? [schema.text(text)] : undefined
+  const content = createInlineContent(schema, text)
   return paragraph.create(null, content)
 }
 
 function createTurnIntoNode(schema: Schema, type: TurnIntoType, text: string): ProseNode | null {
-  const safeText = text.trim()
-  const paragraph = createParagraph(schema, safeText)
+  const paragraph = createParagraph(schema, text)
   if (!paragraph) return null
 
   if (type === 'paragraph') return paragraph
@@ -24,16 +39,16 @@ function createTurnIntoNode(schema: Schema, type: TurnIntoType, text: string): P
     return heading.create({ level }, paragraph.content)
   }
 
-  if (type === 'blockquote') {
-    const blockquote = schema.nodes.blockquote
-    if (!blockquote) return null
-    return blockquote.create(null, [paragraph])
+  if (type === 'quote') {
+    const quoteBlock = schema.nodes.quoteBlock
+    if (!quoteBlock) return null
+    return quoteBlock.create({ text })
   }
 
   if (type === 'codeBlock') {
     const codeBlock = schema.nodes.codeBlock
     if (!codeBlock) return null
-    return codeBlock.create(null, safeText ? [schema.text(safeText)] : undefined)
+    return codeBlock.create(null, text ? [schema.text(text)] : undefined)
   }
 
   if (type === 'bulletList' || type === 'orderedList') {
@@ -53,10 +68,90 @@ function createTurnIntoNode(schema: Schema, type: TurnIntoType, text: string): P
   return null
 }
 
+function lineText(node: ProseNode | null | undefined): string {
+  if (!node) return ''
+  switch (node.type.name) {
+    case 'quoteBlock':
+      return String(node.attrs.text ?? '')
+    case 'calloutBlock':
+      return String(node.attrs.message ?? '')
+    case 'mermaidBlock':
+      return String(node.attrs.code ?? '')
+    case 'hardBreak':
+      return '\n'
+    case 'codeBlock':
+    case 'paragraph':
+    case 'heading':
+      return node.textContent ?? ''
+    case 'listItem':
+    case 'taskItem': {
+      const lines: string[] = []
+      node.forEach((child) => {
+        if (child.type.name === 'bulletList' || child.type.name === 'orderedList' || child.type.name === 'taskList') {
+          const nested = lineText(child)
+          if (nested) lines.push(nested)
+          return
+        }
+        const text = lineText(child)
+        if (text) lines.push(text)
+      })
+      return lines.join('\n')
+    }
+    case 'bulletList':
+    case 'orderedList':
+    case 'taskList': {
+      const items: string[] = []
+      node.forEach((child) => {
+        const text = lineText(child)
+        if (text) items.push(text)
+      })
+      return items.join('\n')
+    }
+    case 'table': {
+      const rows: string[] = []
+      node.forEach((row) => {
+        if (row.type.name !== 'tableRow') return
+        const cells: string[] = []
+        row.forEach((cell) => {
+          const cellLines: string[] = []
+          cell.forEach((child) => {
+            const text = lineText(child)
+            if (text) cellLines.push(text)
+          })
+          cells.push(cellLines.join('\n'))
+        })
+        rows.push(cells.join(' | '))
+      })
+      return rows.join('\n')
+    }
+    default: {
+      if (!node.childCount) return node.textContent ?? ''
+      const lines: string[] = []
+      node.forEach((child) => {
+        const text = lineText(child)
+        if (text) lines.push(text)
+      })
+      return lines.length ? lines.join('\n') : (node.textContent ?? '')
+    }
+  }
+}
+
+function sourceTextForTurnInto(node: ProseNode): string {
+  return lineText(node) || node.textContent || ''
+}
+
 function focusNearPos(editor: Editor, pos: number) {
-  const max = Math.max(1, editor.state.doc.content.size)
+  const { doc } = editor.state
+  const max = Math.max(1, doc.content.size)
   const nextPos = Math.max(1, Math.min(pos, max))
-  editor.commands.focus(nextPos)
+  const resolved = doc.resolve(nextPos)
+  const nextSelection = TextSelection.findFrom(resolved, 1, true) ?? TextSelection.findFrom(resolved, -1, true)
+  if (!nextSelection) {
+    editor.commands.focus()
+    return
+  }
+  editor.view.dispatch(editor.state.tr.setSelection(nextSelection))
+  editor.commands.focus(nextSelection.from)
 }
 
 function topLevelEntryByPos(editor: Editor, pos: number): { index: number; pos: number; node: ProseNode } | null {
@@ -169,7 +264,7 @@ export function deleteNode(editor: Editor, target: BlockMenuTarget): boolean {
 export function turnInto(editor: Editor, target: BlockMenuTarget, type: TurnIntoType): boolean {
   const node = editor.state.doc.nodeAt(target.pos)
   if (!node) return false
-  const replacement = createTurnIntoNode(editor.state.schema, type, node.textContent ?? '')
+  const replacement = createTurnIntoNode(editor.state.schema, type, sourceTextForTurnInto(node))
   if (!replacement) return false
 
   const tr = editor.state.tr.replaceWith(target.pos, target.pos + node.nodeSize, replacement)
