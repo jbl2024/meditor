@@ -99,7 +99,9 @@ export function useEditorNavigation(options: UseEditorNavigationOptions) {
     })
 
     if (targetPos <= 0) return
-    editor.chain().focus().setTextSelection(targetPos).scrollIntoView().run()
+    // Keep navigation deterministic from side panes: focus directly at target position,
+    // never via implicit "focus at end" fallback.
+    editor.chain().focus(targetPos).scrollIntoView().run()
   }
 
   /** Reveals the first text node containing the normalized snippet text. */
@@ -127,7 +129,7 @@ export function useEditorNavigation(options: UseEditorNavigationOptions) {
     })
 
     if (targetPos <= 0) return
-    editor.chain().focus().setTextSelection(targetPos + 1).scrollIntoView().run()
+    editor.chain().focus(targetPos + 1).scrollIntoView().run()
   }
 
   /** Reveals a heading anchor or `^block-id` anchor and returns success. */
@@ -160,7 +162,7 @@ export function useEditorNavigation(options: UseEditorNavigationOptions) {
     }
 
     if (targetPos <= 0) return false
-    editor.chain().focus().setTextSelection(targetPos).scrollIntoView().run()
+    editor.chain().focus(targetPos).scrollIntoView().run()
     return true
   }
 

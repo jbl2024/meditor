@@ -14,6 +14,7 @@ import {
   XMarkIcon
 } from '@heroicons/vue/24/outline'
 import EditorView from './components/EditorView.vue'
+import EditorRightPane from './components/EditorRightPane.vue'
 import ExplorerTree from './components/explorer/ExplorerTree.vue'
 import UiButton from './components/ui/UiButton.vue'
 import { useDocumentHistory } from './composables/useDocumentHistory'
@@ -1327,8 +1328,13 @@ function onEditorProperties(payload: { path: string; items: PropertyPreviewRow[]
   propertyParseErrorCount.value = payload.parseErrorCount
 }
 
-async function onOutlineHeadingClick(index: number) {
-  await editorRef.value?.revealOutlineHeading(index)
+async function onOutlineHeadingClick(payload: { index: number; heading: { level: 1 | 2 | 3; text: string } }) {
+  const heading = payload.heading.text.trim()
+  if (heading) {
+    const revealed = await editorRef.value?.revealAnchor({ heading })
+    if (revealed) return
+  }
+  await editorRef.value?.revealOutlineHeading(payload.index)
 }
 
 function setSidebarMode(mode: SidebarMode) {
@@ -2783,65 +2789,19 @@ onBeforeUnmount(() => {
             @mousedown="beginResize('right', $event)"
           ></div>
 
-          <aside
+          <EditorRightPane
             v-if="workspace.rightPaneVisible.value"
-            class="right-pane"
-            :style="{ width: `${rightPaneWidth}px` }"
-          >
-            <div class="pane-section">
-              <h3>Outline</h3>
-              <div v-if="!editorState.activeOutline.value.length" class="placeholder">No headings</div>
-              <button
-                v-for="(heading, idx) in editorState.activeOutline.value"
-                :key="`${heading.text}-${idx}`"
-                type="button"
-                class="outline-row"
-                :style="{ paddingLeft: `${(heading.level - 1) * 12 + 8}px` }"
-                @click="onOutlineHeadingClick(idx)"
-              >
-                {{ heading.text }}
-              </button>
-            </div>
-
-            <div class="pane-section">
-              <h3>Backlinks</h3>
-              <div v-if="backlinksLoading" class="placeholder">Loading...</div>
-              <div v-else-if="!backlinks.length" class="placeholder">No backlinks</div>
-              <button
-                v-for="path in backlinks"
-                :key="path"
-                type="button"
-                class="outline-row"
-                @click="void onBacklinkOpen(path)"
-              >
-                {{ toRelativePath(path) }}
-              </button>
-            </div>
-
-            <div class="pane-section">
-              <h3>Metadata</h3>
-              <div class="metadata-grid">
-                <div v-for="row in metadataRows" :key="row.label" class="meta-row">
-                  <span>{{ row.label }}</span>
-                  <span :title="row.value">{{ row.value }}</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="pane-section">
-              <h3>Properties</h3>
-              <div v-if="propertyParseErrorCount > 0" class="placeholder">
-                {{ propertyParseErrorCount }} parse error{{ propertyParseErrorCount > 1 ? 's' : '' }}
-              </div>
-              <div v-else-if="!propertiesPreview.length" class="placeholder">No properties</div>
-              <div v-else class="metadata-grid">
-                <div v-for="row in propertiesPreview" :key="row.key" class="meta-row">
-                  <span>{{ row.key }}</span>
-                  <span :title="row.value">{{ row.value }}</span>
-                </div>
-              </div>
-            </div>
-          </aside>
+            :width="rightPaneWidth"
+            :outline="editorState.activeOutline.value"
+            :backlinks="backlinks"
+            :backlinks-loading="backlinksLoading"
+            :metadata-rows="metadataRows"
+            :properties-preview="propertiesPreview"
+            :property-parse-error-count="propertyParseErrorCount"
+            :to-relative-path="toRelativePath"
+            @outline-click="void onOutlineHeadingClick($event)"
+            @backlink-open="void onBacklinkOpen($event)"
+          />
         </div>
       </section>
     </div>
@@ -3530,8 +3490,7 @@ onBeforeUnmount(() => {
   color: #abb2bf;
 }
 
-.left-sidebar,
-.right-pane {
+.left-sidebar {
   min-width: 0;
   min-height: 0;
   background: #f8fafc;
@@ -3545,14 +3504,7 @@ onBeforeUnmount(() => {
   padding-top: 28px;
 }
 
-.right-pane {
-  border-right: 0;
-  border-left: 1px solid #e2e8f0;
-  overflow-y: auto;
-}
-
-.ide-root.dark .left-sidebar,
-.ide-root.dark .right-pane {
+.ide-root.dark .left-sidebar {
   background: #21252b;
   border-color: #3e4451;
 }
@@ -3726,61 +3678,6 @@ onBeforeUnmount(() => {
 
 .ide-root.dark .center-area {
   background: #282c34;
-}
-
-.pane-section {
-  border-bottom: 1px solid #e2e8f0;
-  padding: 10px;
-}
-
-.ide-root.dark .pane-section {
-  border-bottom-color: #3e4451;
-}
-
-.pane-section h3 {
-  margin: 0 0 8px;
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #64748b;
-}
-
-.outline-row {
-  display: block;
-  width: 100%;
-  border: 0;
-  background: transparent;
-  text-align: left;
-  padding-top: 3px;
-  padding-bottom: 3px;
-  font-size: 12px;
-  color: inherit;
-}
-
-.metadata-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.meta-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 11px;
-  color: #64748b;
-}
-
-.meta-row span:last-child {
-  color: #334155;
-  text-align: right;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.ide-root.dark .meta-row span:last-child {
-  color: #abb2bf;
 }
 
 .status-bar {

@@ -27,19 +27,17 @@ function createEditor(nodes: Array<{ node: DescNode; pos: number }>) {
       }
     },
     chain: () => ({
-      focus: () => ({
-        setTextSelection: (pos: number) => {
-          chainState.selectionPos = pos
-          return {
-            scrollIntoView: () => ({
-              run: () => {
-                chainState.scrolled = true
-                return true
-              }
-            })
-          }
+      focus: (pos?: number) => {
+        if (typeof pos === 'number') chainState.selectionPos = pos
+        return {
+          scrollIntoView: () => ({
+            run: () => {
+              chainState.scrolled = true
+              return true
+            }
+          })
         }
-      })
+      }
     })
   }
 
