@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onMounted, onUpdated, ref } from 'vue'
+import { computed, onMounted, onUpdated, ref } from 'vue'
+import UiFilterableDropdown, { type FilterableDropdownItem } from '../ui/UiFilterableDropdown.vue'
 
 type WikilinkItem = {
   id: string
@@ -22,10 +23,24 @@ const emit = defineEmits<{
   'menu-el': [value: HTMLDivElement | null]
 }>()
 
-const rootEl = ref<HTMLDivElement | null>(null)
+const dropdownRef = ref<{ menuEl: HTMLElement | null } | null>(null)
+const items = computed<Array<FilterableDropdownItem & { target: string; isCreate: boolean }>>(() =>
+  props.results.map((item) => ({
+    id: item.id,
+    label: item.label,
+    target: item.target,
+    isCreate: item.isCreate
+  }))
+)
 
 function syncRootEl() {
-  emit('menu-el', rootEl.value)
+  emit('menu-el', (dropdownRef.value?.menuEl as HTMLDivElement | null) ?? null)
+}
+
+function onSelect(item: FilterableDropdownItem) {
+  const target = String(item.target ?? '')
+  if (!target) return
+  emit('select', target)
 }
 
 onMounted(syncRootEl)
@@ -33,28 +48,75 @@ onUpdated(syncRootEl)
 </script>
 
 <template>
-  <div
-    v-if="props.open"
-    ref="rootEl"
-    class="absolute z-20 w-80 max-w-[calc(100%-1rem)] rounded-md border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-800 dark:bg-slate-900"
-    :style="{ left: `${props.left}px`, top: `${props.top}px` }"
-  >
-    <button
-      v-for="(item, idx) in props.results"
-      :key="item.id"
-      type="button"
-      class="block w-full min-w-0 overflow-hidden rounded px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-900"
-      :class="
-        idx === props.index
-          ? 'bg-slate-100 ring-1 ring-inset ring-slate-300 dark:bg-slate-800 dark:ring-slate-600'
-          : ''
-      "
-      :title="item.label"
-      @mousedown.prevent="emit('update:index', idx)"
-      @click.stop.prevent="emit('select', item.target)"
+  <div class="editor-wikilink-dropdown-anchor" :style="{ left: `${props.left}px`, top: `${props.top}px` }">
+    <UiFilterableDropdown
+      ref="dropdownRef"
+      class="editor-wikilink-dropdown"
+      :items="items"
+      :model-value="props.open"
+      query=""
+      :active-index="props.index"
+      :show-filter="false"
+      :auto-focus-on-open="false"
+      :close-on-outside="false"
+      :close-on-select="false"
+      :max-height="320"
+      @open-change="() => {}"
+      @query-change="() => {}"
+      @active-index-change="emit('update:index', $event)"
+      @select="onSelect($event)"
     >
-      <span class="block min-w-0 truncate">{{ item.label }}</span>
-    </button>
-    <div v-if="!props.results.length" class="px-3 py-1.5 text-sm text-slate-500 dark:text-slate-400">No matches</div>
+      <template #item="{ item, active }">
+        <span
+          class="block min-w-0 truncate"
+          :class="active ? 'editor-wikilink-active' : ''"
+          :title="item.label"
+        >
+          {{ item.label }}
+        </span>
+      </template>
+      <template #empty>
+        No matches
+      </template>
+    </UiFilterableDropdown>
   </div>
 </template>
+
+<style scoped>
+.editor-wikilink-dropdown-anchor {
+  position: absolute;
+}
+
+.editor-wikilink-dropdown :deep(.ui-filterable-dropdown-menu) {
+  left: 0;
+  max-width: calc(100vw - 1rem);
+  min-width: 18rem;
+  position: absolute;
+  top: 0;
+  width: 20rem;
+  z-index: 20;
+}
+
+.editor-wikilink-dropdown :deep(.ui-filterable-dropdown-option) {
+  border-radius: 0.25rem;
+  color: rgb(51 65 85);
+  font-size: 0.875rem;
+  padding: 0.375rem 0.75rem;
+}
+
+.editor-wikilink-dropdown :deep(.ui-filterable-dropdown-option[data-active='true']) {
+  box-shadow: inset 0 0 0 1px rgb(203 213 225);
+}
+
+.dark .editor-wikilink-dropdown :deep(.ui-filterable-dropdown-option) {
+  color: rgb(226 232 240);
+}
+
+.dark .editor-wikilink-dropdown :deep(.ui-filterable-dropdown-option[data-active='true']) {
+  box-shadow: inset 0 0 0 1px rgb(71 85 105);
+}
+
+.editor-wikilink-active {
+  font-weight: 600;
+}
+</style>

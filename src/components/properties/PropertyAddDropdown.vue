@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
+import UiFilterableDropdown, { type FilterableDropdownItem } from '../ui/UiFilterableDropdown.vue'
 
 type PropertyOption = {
   key: string
@@ -20,20 +21,26 @@ const emit = defineEmits<{
 }>()
 
 const open = ref(false)
+const query = ref('')
+const activeIndex = ref(0)
 const customKey = ref('')
-const rootRef = ref<HTMLElement | null>(null)
 
 const existingSet = computed(() => new Set(props.existingKeys.map((key) => key.trim().toLowerCase())))
-const availableOptions = computed(() =>
-  props.options.filter((option) => !existingSet.value.has(option.key.trim().toLowerCase()))
+const availableOptions = computed<Array<FilterableDropdownItem & { key: string; description: string }>>(() =>
+  props.options
+    .filter((option) => !existingSet.value.has(option.key.trim().toLowerCase()))
+    .map((option) => ({
+      id: `property:${option.key}`,
+      label: option.label || option.key,
+      key: option.key,
+      description: option.description ?? ''
+    }))
 )
-
-function toggleOpen() {
-  open.value = !open.value
-}
 
 function close() {
   open.value = false
+  query.value = ''
+  activeIndex.value = 0
 }
 
 function selectOption(key: string) {
@@ -48,67 +55,57 @@ function submitCustomKey() {
   if (existingSet.value.has(next.toLowerCase())) return
   selectOption(next)
 }
-
-function onDocumentMousedown(event: MouseEvent) {
-  const root = rootRef.value
-  if (!root) return
-  const target = event.target as Node | null
-  if (target && root.contains(target)) return
-  close()
-}
-
-onMounted(() => {
-  document.addEventListener('mousedown', onDocumentMousedown)
-})
-
-onBeforeUnmount(() => {
-  document.removeEventListener('mousedown', onDocumentMousedown)
-})
 </script>
 
 <template>
-  <div ref="rootRef" class="property-add-dropdown">
-    <button
-      type="button"
-      class="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 dark:border-slate-700 dark:text-slate-200"
-      @click="toggleOpen"
+  <div class="property-add-dropdown">
+    <UiFilterableDropdown
+      :items="availableOptions"
+      :model-value="open"
+      :query="query"
+      :active-index="activeIndex"
+      filter-placeholder="Search properties..."
+      :show-filter="true"
+      :max-height="220"
+      @open-change="open = $event"
+      @query-change="query = $event"
+      @active-index-change="activeIndex = $event"
+      @select="selectOption(String($event.key ?? ''))"
     >
-      Add property
-    </button>
-
-    <div
-      v-if="open"
-      class="dropdown-panel"
-    >
-      <button
-        v-for="option in availableOptions"
-        :key="option.key"
-        type="button"
-        class="dropdown-item"
-        @click="selectOption(option.key)"
-      >
-        <span>{{ option.label || option.key }}</span>
-        <small v-if="option.description">{{ option.description }}</small>
-      </button>
-
-      <div class="dropdown-divider"></div>
-      <div class="dropdown-custom-row">
-        <input
-          v-model="customKey"
-          type="text"
-          placeholder="custom key"
-          class="dropdown-custom-input"
-          @keydown.enter.prevent="submitCustomKey"
-        />
+      <template #trigger="{ toggleMenu }">
         <button
           type="button"
-          class="dropdown-custom-btn"
-          @click="submitCustomKey"
+          class="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 dark:border-slate-700 dark:text-slate-200"
+          @click="toggleMenu"
         >
-          Add
+          Add property
         </button>
-      </div>
-    </div>
+      </template>
+      <template #item="{ item }">
+        <div class="dropdown-item">
+          <span>{{ item.label }}</span>
+          <small v-if="item.description">{{ item.description }}</small>
+        </div>
+      </template>
+      <template #footer>
+        <div class="dropdown-custom-row">
+          <input
+            v-model="customKey"
+            type="text"
+            placeholder="custom key"
+            class="dropdown-custom-input"
+            @keydown.enter.prevent="submitCustomKey"
+          />
+          <button
+            type="button"
+            class="dropdown-custom-btn"
+            @click="submitCustomKey"
+          >
+            Add
+          </button>
+        </div>
+      </template>
+    </UiFilterableDropdown>
   </div>
 </template>
 
@@ -123,6 +120,13 @@ onBeforeUnmount(() => {
   top: calc(100% + 0.25rem);
   left: 0;
   z-index: 30;
+}
+
+.property-add-dropdown :deep(.ui-filterable-dropdown-menu) {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  z-index: 30;
   width: 16rem;
   border: 1px solid rgb(203 213 225 / 1);
   border-radius: 0.5rem;
@@ -131,7 +135,7 @@ onBeforeUnmount(() => {
   box-shadow: 0 8px 24px rgb(15 23 42 / 0.12);
 }
 
-.dark .property-add-dropdown .dropdown-panel {
+.dark .property-add-dropdown :deep(.ui-filterable-dropdown-menu) {
   border-color: rgb(51 65 85 / 1);
   background: rgb(15 23 42 / 1);
 }
@@ -151,10 +155,6 @@ onBeforeUnmount(() => {
   color: rgb(30 41 59 / 1);
 }
 
-.property-add-dropdown .dropdown-item:hover {
-  background: rgb(241 245 249 / 1);
-}
-
 .property-add-dropdown .dropdown-item small {
   font-size: 0.6875rem;
   color: rgb(100 116 139 / 1);
@@ -164,21 +164,8 @@ onBeforeUnmount(() => {
   color: rgb(226 232 240 / 1);
 }
 
-.dark .property-add-dropdown .dropdown-item:hover {
-  background: rgb(30 41 59 / 1);
-}
-
 .dark .property-add-dropdown .dropdown-item small {
   color: rgb(148 163 184 / 1);
-}
-
-.property-add-dropdown .dropdown-divider {
-  margin: 0.25rem 0;
-  border-top: 1px solid rgb(226 232 240 / 1);
-}
-
-.dark .property-add-dropdown .dropdown-divider {
-  border-top-color: rgb(51 65 85 / 1);
 }
 
 .property-add-dropdown .dropdown-custom-row {

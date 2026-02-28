@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import {
   ChatBubbleLeftRightIcon,
   CodeBracketIcon,
@@ -10,6 +11,7 @@ import {
   TableCellsIcon,
   ViewColumnsIcon,
 } from '@heroicons/vue/24/outline'
+import UiFilterableDropdown, { type FilterableDropdownItem } from '../ui/UiFilterableDropdown.vue'
 
 type SlashCommand = {
   id: string
@@ -57,25 +59,92 @@ const ICON_BY_TYPE: Record<string, unknown> = {
 function iconFor(command: SlashCommand) {
   return ICON_BY_ID[command.id] ?? ICON_BY_TYPE[command.type] ?? DocumentTextIcon
 }
+
+const items = computed<Array<FilterableDropdownItem & { command: SlashCommand }>>(() =>
+  props.commands.map((command) => ({
+    id: `slash:${command.id}:${command.type}`,
+    label: command.label,
+    command
+  }))
+)
+
+function onSelect(item: FilterableDropdownItem) {
+  const command = (item as FilterableDropdownItem & { command?: SlashCommand }).command
+  if (!command) return
+  emit('select', command)
+}
+
+function commandFromItem(item: unknown): SlashCommand | null {
+  const command = (item as { command?: SlashCommand } | null)?.command
+  return command ?? null
+}
+
+function labelForItem(item: unknown): string {
+  const command = commandFromItem(item)
+  return command?.label ?? ''
+}
+
+function iconForItem(item: unknown) {
+  const command = commandFromItem(item)
+  return command ? iconFor(command) : DocumentTextIcon
+}
 </script>
 
 <template>
-  <div
-    v-if="props.open"
-    class="absolute z-20 w-56 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-800 dark:bg-slate-900"
-    :style="{ left: `${props.left}px`, top: `${props.top}px` }"
-  >
-    <button
-      v-for="(command, idx) in props.commands"
-      :key="command.id"
-      type="button"
-      class="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-      :class="idx === props.index ? 'bg-slate-100 dark:bg-slate-800' : ''"
-      @mousedown.prevent="emit('update:index', idx)"
-      @click.stop.prevent="emit('select', command)"
+  <div class="editor-slash-dropdown-anchor" :style="{ left: `${props.left}px`, top: `${props.top}px` }">
+    <UiFilterableDropdown
+      class="editor-slash-dropdown"
+      :items="items"
+      :model-value="props.open"
+      query=""
+      :active-index="props.index"
+      :show-filter="false"
+      :auto-focus-on-open="false"
+      :close-on-outside="false"
+      :close-on-select="false"
+      :max-height="320"
+      @open-change="() => {}"
+      @query-change="() => {}"
+      @active-index-change="emit('update:index', $event)"
+      @select="onSelect($event)"
     >
-      <component :is="iconFor(command)" class="h-4 w-4 shrink-0" />
-      <span class="truncate">{{ command.label }}</span>
-    </button>
+      <template #item="{ item }">
+        <span class="editor-slash-item">
+          <component :is="iconForItem(item)" class="h-4 w-4 shrink-0" />
+          <span class="truncate">{{ labelForItem(item) }}</span>
+        </span>
+      </template>
+    </UiFilterableDropdown>
   </div>
 </template>
+
+<style scoped>
+.editor-slash-dropdown-anchor {
+  position: absolute;
+}
+
+.editor-slash-dropdown :deep(.ui-filterable-dropdown-menu) {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 14rem;
+  z-index: 20;
+}
+
+.editor-slash-dropdown :deep(.ui-filterable-dropdown-option) {
+  border-radius: 0.375rem;
+  color: rgb(51 65 85);
+  font-size: 0.875rem;
+  padding: 0.5rem 0.625rem;
+}
+
+.editor-slash-item {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.dark .editor-slash-dropdown :deep(.ui-filterable-dropdown-option) {
+  color: rgb(226 232 240);
+}
+</style>
