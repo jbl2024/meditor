@@ -21,10 +21,13 @@ function mountHarness(options: {
   const root = document.createElement('div')
   document.body.appendChild(root)
 
+  const editorRef = ref<unknown>(null)
+
   const Harness = defineComponent({
     setup() {
       return () =>
         h(EditorView, {
+          ref: editorRef,
           path: options.controls.path.value,
           openPaths: options.controls.openPaths.value,
           openFile: options.openFile,
@@ -48,7 +51,8 @@ function mountHarness(options: {
 
   return {
     app,
-    root
+    root,
+    editorRef
   }
 }
 
@@ -60,6 +64,7 @@ function editorText(root: HTMLElement): string {
 function allEditorTexts(root: HTMLElement): string[] {
   return Array.from(root.querySelectorAll('.ProseMirror')).map((el) => el.textContent ?? '')
 }
+
 
 describe('EditorView per-document sessions', () => {
   afterEach(() => {
@@ -250,4 +255,5 @@ describe('EditorView per-document sessions', () => {
 
     mounted.app.unmount()
   })
+
 })
