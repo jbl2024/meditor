@@ -161,8 +161,8 @@ watch(
 }
 
 .dark .property-token-input {
-  border-color: rgb(51 65 85 / 1);
-  background: rgb(15 23 42 / 1);
+  border-color: #3e4451;
+  background: #2c313a;
 }
 
 .property-token-input .token-pill {
@@ -178,8 +178,8 @@ watch(
 }
 
 .dark .property-token-input .token-pill {
-  background: rgb(51 65 85 / 1);
-  color: rgb(226 232 240 / 1);
+  background: #3a404c;
+  color: #d7dce5;
 }
 
 .property-token-input .token-remove {
@@ -204,6 +204,6 @@ watch(
 }
 
 .dark .property-token-input .token-editor {
-  color: rgb(241 245 249 / 1);
+  color: #abb2bf;
 }
 </style>

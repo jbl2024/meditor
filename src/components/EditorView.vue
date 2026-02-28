@@ -848,12 +848,12 @@ defineExpose({
   <div class="flex h-full min-h-0 flex-col">
     <div
       v-if="!path"
-      class="flex min-h-0 flex-1 items-center justify-center bg-white px-8 py-6 text-sm text-slate-500 dark:bg-slate-950 dark:text-slate-400"
+      class="flex min-h-0 flex-1 items-center justify-center bg-[#f9f9fb] px-8 py-6 text-sm text-[#737a87] dark:bg-slate-950 dark:text-slate-400"
     >
       Open a file to start editing
     </div>
 
-    <div v-else class="editor-shell flex min-h-0 flex-1 flex-col overflow-hidden bg-white dark:bg-slate-950">
+    <div v-else class="editor-shell flex min-h-0 flex-1 flex-col overflow-hidden border-x border-[#e5e7eb] bg-white dark:border-slate-800 dark:bg-[#282c34]">
       <EditorPropertiesPanel
         :expanded="propertiesExpanded(path)"
         :mode="propertyEditorMode"
@@ -897,7 +897,7 @@ defineExpose({
         />
         <div
           ref="holder"
-          class="editor-holder relative h-full min-h-0 overflow-y-auto px-8 py-6"
+          class="editor-holder relative h-full min-h-0 overflow-y-auto bg-white px-8 py-6 dark:bg-[#282c34]"
           :style="editorZoomStyle"
           @mousemove="onEditorMouseMove"
           @mouseleave="onEditorMouseLeave"

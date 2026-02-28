@@ -37,22 +37,27 @@ function iconForNode(node: TreeNode) {
 
 <template>
   <div
-    class="group flex items-center gap-2 rounded-lg px-2 py-1 text-xs"
+    class="group relative flex items-center gap-1.5 rounded-md px-2 py-1 text-[13px] leading-[1.35] transition-colors"
     :class="[
-      selected ? 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-slate-100' : 'text-slate-700 dark:text-slate-300',
-      active ? 'font-semibold text-slate-950 dark:text-white' : '',
-      focused ? 'ring-1 ring-blue-500/50 dark:ring-blue-400/35' : '',
+      selected ? 'bg-[#e6eaf5] text-[#1f2937] dark:bg-[#2d3440] dark:text-[#d7dce5]' : 'text-[#4b5563] dark:text-[#abb2bf]',
+      active ? 'bg-[rgb(94_106_210_/_0.12)] font-medium text-[#5e6ad2] dark:text-white' : '',
+      focused ? 'bg-[#e9edf7] dark:bg-slate-800/90' : '',
       cutPending ? 'opacity-45' : 'opacity-100',
-      editing ? 'cursor-default' : 'cursor-pointer select-none'
+      editing ? 'cursor-default' : 'cursor-pointer select-none hover:bg-[#eceff6] hover:text-[#111827] dark:hover:bg-[#2f3540] dark:hover:text-[#d7dce5]'
     ]"
     :style="{ paddingLeft: `${depth * 14 + 8}px` }"
     @click="emit('click', $event, node)"
     @dblclick="emit('doubleclick', node)"
     @contextmenu.prevent="emit('contextmenu', { event: $event, node })"
   >
+    <span
+      v-if="active"
+      class="absolute bottom-[3px] left-0 top-[3px] w-[3px] rounded-r bg-[#5e6ad2]"
+      aria-hidden="true"
+    />
     <button
       type="button"
-      class="inline-flex h-4 w-4 items-center justify-center rounded text-[10px] text-slate-500 dark:text-slate-400"
+      class="inline-flex h-4 w-4 items-center justify-center rounded text-[10px] text-[#4b5563] dark:text-[#9aa3b2]"
       @click.stop="node.is_dir && emit('toggle', node.path)"
     >
       <component :is="iconForNode(node)" class="h-4 w-4" />
@@ -66,12 +71,19 @@ function iconForNode(node: TreeNode) {
         @confirm="emit('renameConfirm')"
         @cancel="emit('renameCancel')"
       />
-      <span v-else class="block truncate" :title="node.path">{{ node.name }}</span>
+      <span
+        v-else
+        class="block truncate"
+        :class="node.is_dir ? 'font-medium text-[#2d313a] dark:text-[#d7dce5]' : 'font-normal'"
+        :title="node.path"
+      >
+        {{ node.name }}
+      </span>
     </div>
 
     <button
       type="button"
-      class="rounded-md px-1.5 text-sm leading-none text-slate-500 opacity-0 transition hover:bg-slate-200/70 hover:opacity-100 focus-visible:opacity-100 group-hover:opacity-100 dark:text-slate-300 dark:hover:bg-slate-700/70"
+      class="rounded-md px-1.5 text-sm leading-none text-[#4b5563] opacity-0 transition hover:bg-[#e8ebf2] hover:text-[#111827] hover:opacity-100 focus-visible:opacity-100 group-hover:opacity-100 dark:text-[#9aa3b2] dark:hover:bg-[#343b47] dark:hover:text-[#d7dce5]"
       title="Actions"
       @click.stop="emit('rowaction', { event: $event, node })"
     >

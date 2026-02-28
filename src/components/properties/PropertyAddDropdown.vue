@@ -136,8 +136,8 @@ function submitCustomKey() {
 }
 
 .dark .property-add-dropdown :deep(.ui-filterable-dropdown-menu) {
-  border-color: rgb(51 65 85 / 1);
-  background: rgb(15 23 42 / 1);
+  border-color: #3e4451;
+  background: #21252b;
 }
 
 .property-add-dropdown .dropdown-item {
@@ -161,11 +161,11 @@ function submitCustomKey() {
 }
 
 .dark .property-add-dropdown .dropdown-item {
-  color: rgb(226 232 240 / 1);
+  color: #abb2bf;
 }
 
 .dark .property-add-dropdown .dropdown-item small {
-  color: rgb(148 163 184 / 1);
+  color: #8b93a3;
 }
 
 .property-add-dropdown .dropdown-custom-row {
@@ -184,9 +184,9 @@ function submitCustomKey() {
 }
 
 .dark .property-add-dropdown .dropdown-custom-input {
-  border-color: rgb(51 65 85 / 1);
-  background: rgb(15 23 42 / 1);
-  color: rgb(226 232 240 / 1);
+  border-color: #3e4451;
+  background: #2c313a;
+  color: #abb2bf;
 }
 
 .property-add-dropdown .dropdown-custom-btn {
@@ -201,8 +201,8 @@ function submitCustomKey() {
 }
 
 .dark .property-add-dropdown .dropdown-custom-btn {
-  border-color: rgb(51 65 85 / 1);
-  background: rgb(30 41 59 / 1);
-  color: rgb(226 232 240 / 1);
+  border-color: #3e4451;
+  background: #2c313a;
+  color: #abb2bf;
 }
 </style>

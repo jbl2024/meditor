@@ -108,7 +108,7 @@ let searchRequestToken = 0
 const quickOpenVisible = ref(false)
 const quickOpenQuery = ref('')
 const quickOpenActiveIndex = ref(0)
-const leftPaneWidth = ref(300)
+const leftPaneWidth = ref(236)
 const rightPaneWidth = ref(300)
 const allWorkspaceFiles = ref<string[]>([])
 const loadingAllFiles = ref(false)
@@ -794,7 +794,7 @@ function onPointerMove(event: MouseEvent) {
   const delta = event.clientX - startX
 
   if (side === 'left') {
-    leftPaneWidth.value = Math.min(520, Math.max(220, startWidth + delta))
+    leftPaneWidth.value = Math.min(420, Math.max(180, startWidth + delta))
     return
   }
   rightPaneWidth.value = Math.min(560, Math.max(220, startWidth - delta))
@@ -2500,7 +2500,7 @@ onBeforeUnmount(() => {
           <h2 class="panel-title">{{ workspace.sidebarMode.value }}</h2>
         </div>
 
-        <div class="panel-body">
+        <div class="panel-body" :class="{ 'panel-body-explorer': workspace.sidebarMode.value === 'explorer' }">
           <div v-if="workspace.sidebarMode.value === 'explorer'" class="panel-fill">
             <ExplorerTree
               v-if="filesystem.hasWorkspace.value"
@@ -3056,8 +3056,8 @@ onBeforeUnmount(() => {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: #ffffff;
-  color: #0f172a;
+  background: #f9f9fb;
+  color: #2d313a;
 }
 
 .ide-root.dark {
@@ -3070,8 +3070,8 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid #e2e8f0;
-  background: #f8fafc;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f2f4f8;
 }
 
 .ide-root.dark .topbar {
@@ -3090,6 +3090,11 @@ onBeforeUnmount(() => {
   align-items: stretch;
   overflow-x: auto;
   height: 100%;
+  background: #f2f4f8;
+}
+
+.ide-root.dark .tab-scroll {
+  background: #21252b;
 }
 
 .tab-item {
@@ -3097,10 +3102,10 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   border: 0;
-  border-right: 1px solid #e2e8f0;
+  border-right: 1px solid #e5e7eb;
   border-bottom: 2px solid transparent;
   background: transparent;
-  color: #94a3b8;
+  color: #5b6472;
   min-width: 140px;
   max-width: 220px;
   padding: 0 12px;
@@ -3109,31 +3114,38 @@ onBeforeUnmount(() => {
 
 .ide-root.dark .tab-item {
   border-right-color: #3e4451;
-  color: #5c6370;
+  background: #252a33;
+  color: #8b93a3;
 }
 
 .tab-item.active {
-  border-bottom-color: #000000;
-  background: transparent;
-  color: #0f172a;
+  border: 1px solid #e5e7eb;
+  border-bottom-color: #ffffff;
+  background: #ffffff;
+  color: #2d313a;
+  font-weight: 600;
+  margin-bottom: -1px;
 }
 
 .ide-root.dark .tab-item.active {
-  border-bottom-color: #abb2bf;
-  background: transparent;
-  color: #abb2bf;
+  border-color: #3e4451;
+  border-bottom-color: #282c34;
+  background: #282c34;
+  color: #d7dce5;
 }
 
 .ide-root.dark .tab-item:not(.active):hover {
-  color: #abb2bf;
+  background: #2c313a;
+  color: #d7dce5;
 }
 
 .tab-item:not(.active):hover {
-  color: #64748b;
+  color: #1f2937;
+  background: #e8ecf3;
 }
 
 .ide-root.dark .tab-item:not(.active):hover {
-  color: #cbd5e1;
+  color: #d7dce5;
 }
 
 .tab-name {
@@ -3169,7 +3181,7 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   padding: 0 12px;
-  color: #64748b;
+  color: #5b6472;
   font-size: 12px;
 }
 
@@ -3187,7 +3199,7 @@ onBeforeUnmount(() => {
   gap: 4px;
   margin-right: 2px;
   padding-right: 6px;
-  border-right: 1px solid #e2e8f0;
+  border-right: 1px solid #e5e7eb;
 }
 
 .history-nav-wrap {
@@ -3204,7 +3216,7 @@ onBeforeUnmount(() => {
   z-index: 90;
   min-width: 220px;
   max-width: 320px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid #e5e7eb;
   border-radius: 10px;
   background: #ffffff;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
@@ -3218,7 +3230,7 @@ onBeforeUnmount(() => {
 .history-menu-item {
   border: 0;
   background: transparent;
-  color: #334155;
+  color: #5b6472;
   border-radius: 8px;
   text-align: left;
   padding: 7px 8px;
@@ -3229,13 +3241,14 @@ onBeforeUnmount(() => {
 }
 
 .history-menu-item:hover {
-  background: #f1f5f9;
+  background: #f1f2f6;
+  color: #2d313a;
 }
 
 .history-menu-empty {
   padding: 7px 8px;
   font-size: 12px;
-  color: #64748b;
+  color: #5b6472;
 }
 
 .toolbar-icon-btn {
@@ -3244,7 +3257,7 @@ onBeforeUnmount(() => {
   border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
-  color: #64748b;
+  color: #5b6472;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -3252,8 +3265,8 @@ onBeforeUnmount(() => {
 }
 
 .toolbar-icon-btn:hover {
-  background: #e2e8f0;
-  color: #334155;
+  background: #f1f2f6;
+  color: #1f2937;
 }
 
 .toolbar-icon-btn:disabled {
@@ -3263,9 +3276,9 @@ onBeforeUnmount(() => {
 }
 
 .toolbar-icon-btn.active {
-  border-color: #cbd5e1;
+  border-color: #e5e7eb;
   background: #ffffff;
-  color: #0f172a;
+  color: #2d313a;
 }
 
 .toolbar-icon-btn svg {
@@ -3277,18 +3290,18 @@ onBeforeUnmount(() => {
 }
 
 .ide-root.dark .toolbar-icon-btn {
-  color: #5c6370;
+  color: #8b93a3;
 }
 
 .ide-root.dark .toolbar-icon-btn:hover {
   background: #2c313a;
-  color: #abb2bf;
+  color: #d7dce5;
 }
 
 .ide-root.dark .toolbar-icon-btn.active {
   border-color: #3e4451;
   background: #282c34;
-  color: #abb2bf;
+  color: #d7dce5;
 }
 
 .ide-root.dark .nav-actions {
@@ -3302,7 +3315,7 @@ onBeforeUnmount(() => {
 }
 
 .ide-root.dark .history-menu-item {
-  color: #abb2bf;
+  color: #c8d0dc;
 }
 
 .ide-root.dark .history-menu-item:hover {
@@ -3310,7 +3323,7 @@ onBeforeUnmount(() => {
 }
 
 .ide-root.dark .history-menu-empty {
-  color: #5c6370;
+  color: #8b93a3;
 }
 
 .overflow-wrap {
@@ -3323,7 +3336,7 @@ onBeforeUnmount(() => {
   right: 0;
   z-index: 30;
   min-width: 160px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid #e5e7eb;
   border-radius: 12px;
   background: #ffffff;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
@@ -3342,7 +3355,7 @@ onBeforeUnmount(() => {
 .overflow-item {
   border: 0;
   background: transparent;
-  color: #334155;
+  color: #5b6472;
   border-radius: 8px;
   display: inline-flex;
   align-items: center;
@@ -3354,7 +3367,8 @@ onBeforeUnmount(() => {
 }
 
 .overflow-item:hover {
-  background: #f1f5f9;
+  background: #f1f2f6;
+  color: #1f2937;
 }
 
 .overflow-item:disabled {
@@ -3363,17 +3377,18 @@ onBeforeUnmount(() => {
 }
 
 .overflow-item.active {
-  background: #e2e8f0;
-  color: #0f172a;
+  background: rgb(94 106 210 / 0.12);
+  color: #5e6ad2;
   font-weight: 500;
 }
 
 .ide-root.dark .overflow-item {
-  color: #abb2bf;
+  color: #c8d0dc;
 }
 
 .ide-root.dark .overflow-item:hover {
   background: #2c313a;
+  color: #d7dce5;
 }
 
 .ide-root.dark .overflow-item:disabled {
@@ -3408,7 +3423,7 @@ onBeforeUnmount(() => {
 .overflow-zoom-state {
   padding: 2px 10px 4px;
   font-size: 11px;
-  color: #64748b;
+  color: #5b6472;
 }
 
 .ide-root.dark .overflow-zoom-state {
@@ -3417,7 +3432,7 @@ onBeforeUnmount(() => {
 
 .overflow-divider {
   height: 1px;
-  background: #e2e8f0;
+  background: #e5e7eb;
   margin: 4px 0;
 }
 
@@ -3428,7 +3443,7 @@ onBeforeUnmount(() => {
 .overflow-label {
   padding: 2px 10px 4px;
   font-size: 11px;
-  color: #64748b;
+  color: #5b6472;
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
@@ -3461,8 +3476,8 @@ onBeforeUnmount(() => {
 
 .activity-bar {
   width: 44px;
-  border-right: 1px solid #e2e8f0;
-  background: #f8fafc;
+  border-right: 1px solid #e5e7eb;
+  background: #f2f4f8;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -3485,7 +3500,7 @@ onBeforeUnmount(() => {
   border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
-  color: #64748b;
+  color: #5b6472;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -3493,13 +3508,14 @@ onBeforeUnmount(() => {
 }
 
 .activity-btn:hover {
-  background: #e2e8f0;
-  color: #334155;
+  background: #f1f2f6;
+  color: #1f2937;
 }
 
 .activity-btn.active {
-  color: #0f172a;
-  border-color: #cbd5e1;
+  color: #5e6ad2;
+  border-color: #e5e7eb;
+  box-shadow: inset 2px 0 0 #5e6ad2;
   background: #ffffff;
 }
 
@@ -3510,25 +3526,25 @@ onBeforeUnmount(() => {
 }
 
 .ide-root.dark .activity-btn {
-  color: #5c6370;
+  color: #8b93a3;
 }
 
 .ide-root.dark .activity-btn.active {
-  color: #abb2bf;
+  color: #d7dce5;
   border-color: #3e4451;
   background: #282c34;
 }
 
 .ide-root.dark .activity-btn:hover {
   background: #2c313a;
-  color: #abb2bf;
+  color: #d7dce5;
 }
 
 .left-sidebar {
   min-width: 0;
   min-height: 0;
-  background: #f8fafc;
-  border-right: 1px solid #e2e8f0;
+  background: #f2f4f8;
+  border-right: 1px solid #e5e7eb;
   display: flex;
   flex-direction: column;
 }
@@ -3545,7 +3561,7 @@ onBeforeUnmount(() => {
 
 .panel-header {
   height: 34px;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid #e5e7eb;
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -3561,13 +3577,21 @@ onBeforeUnmount(() => {
   font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #475569;
+  color: #4b5563;
+}
+
+.ide-root.dark .panel-title {
+  color: #8b93a3;
 }
 
 .panel-body {
   flex: 1;
   min-height: 0;
   padding: 8px;
+}
+
+.panel-body.panel-body-explorer {
+  padding: 6px 6px 8px;
 }
 
 .panel-fill {
@@ -3585,7 +3609,7 @@ onBeforeUnmount(() => {
 .inline-link-btn {
   border: 0;
   background: transparent;
-  color: #2563eb;
+  color: #5e6ad2;
   font-size: 12px;
   font-weight: 500;
   padding: 0;
@@ -3594,7 +3618,7 @@ onBeforeUnmount(() => {
 }
 
 .inline-link-btn:hover {
-  color: #1d4ed8;
+  color: #2d313a;
 }
 
 .ide-root.dark .inline-link-btn {
@@ -3619,10 +3643,10 @@ onBeforeUnmount(() => {
 .tool-input {
   width: 100%;
   height: 30px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid #e5e7eb;
   border-radius: 4px;
   background: #ffffff;
-  color: #0f172a;
+  color: #2d313a;
   padding: 0 8px;
   font-size: 12px;
 }
@@ -3646,13 +3670,13 @@ onBeforeUnmount(() => {
 .result-file {
   margin: 0 0 4px;
   font-size: 11px;
-  color: #64748b;
+  color: #5b6472;
 }
 
 .result-item {
   width: 100%;
   text-align: left;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #e5e7eb;
   background: #ffffff;
   border-radius: 4px;
   padding: 6px;
@@ -3685,7 +3709,7 @@ onBeforeUnmount(() => {
   bottom: 0;
   left: 50%;
   width: 1px;
-  background: #94a3b8;
+  background: #e5e7eb;
   opacity: 0;
   transform: translateX(-50%);
   transition: opacity 120ms ease;
@@ -3716,11 +3740,11 @@ onBeforeUnmount(() => {
 
 .status-bar {
   height: 22px;
-  border-top: 1px solid #e2e8f0;
-  background: #f8fafc;
+  border-top: 1px solid #e5e7eb;
+  background: #f2f4f8;
   font-size: 11px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  color: #475569;
+  color: #4b5563;
   display: flex;
   align-items: center;
   gap: 0;
@@ -3731,7 +3755,7 @@ onBeforeUnmount(() => {
 .ide-root.dark .status-bar {
   border-top-color: #3e4451;
   background: #21252b;
-  color: #5c6370;
+  color: #8b93a3;
 }
 
 .status-item {

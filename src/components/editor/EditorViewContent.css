@@ -55,25 +55,64 @@
 .editor-holder .ProseMirror {
   min-height: 100%;
   outline: none;
+  line-height: 1.6;
 }
 
 .editor-holder .ProseMirror p {
-  margin: 0.35rem 0;
+  margin: 0.42rem 0;
 }
 
 .editor-holder .ProseMirror h1 {
-  font-size: calc(2rem * var(--editor-zoom, 1));
-  margin: 0.6rem 0;
+  font-size: calc(1.9rem * var(--editor-zoom, 1));
+  font-weight: 580;
+  line-height: 1.35;
+  margin: 0.68rem 0 1.12rem;
 }
 
 .editor-holder .ProseMirror h2 {
   font-size: calc(1.6rem * var(--editor-zoom, 1));
-  margin: 0.55rem 0;
+  line-height: 1.35;
+  margin: 0.95rem 0 0.8rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid rgb(229 231 235);
 }
 
 .editor-holder .ProseMirror h3 {
   font-size: calc(1.35rem * var(--editor-zoom, 1));
-  margin: 0.5rem 0;
+  line-height: 1.35;
+  margin: 0.75rem 0 0.45rem;
+}
+
+.editor-holder .ProseMirror h4 {
+  font-size: calc(1.18rem * var(--editor-zoom, 1));
+  font-weight: 560;
+  line-height: 1.35;
+  margin: 0.62rem 0 0.35rem;
+  color: #3f4754;
+}
+
+.editor-holder .ProseMirror h5 {
+  font-size: calc(1.04rem * var(--editor-zoom, 1));
+  font-weight: 540;
+  line-height: 1.35;
+  margin: 0.5rem 0 0.28rem;
+  color: #4b5563;
+}
+
+.editor-holder .ProseMirror h6 {
+  font-size: calc(0.94rem * var(--editor-zoom, 1));
+  font-weight: 520;
+  line-height: 1.35;
+  margin: 0.45rem 0 0.22rem;
+  color: #5b6472;
+}
+
+.editor-holder .ProseMirror :not(pre) > code {
+  border-radius: 0.34rem;
+  padding: 0.06rem 0.38rem;
+  font-size: 0.92em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  background: rgb(241 245 249);
 }
 
 .editor-holder .ProseMirror ul,
@@ -401,6 +440,32 @@
   border-color: rgb(51 65 85);
 }
 
+.dark .editor-holder .ProseMirror h2 {
+  border-bottom-color: rgb(71 85 105);
+}
+
+.dark .editor-holder .ProseMirror {
+  color: #abb2bf;
+}
+
+.dark .editor-holder .ProseMirror h1,
+.dark .editor-holder .ProseMirror h2,
+.dark .editor-holder .ProseMirror h3 {
+  color: #d7dce5;
+}
+
+.dark .editor-holder .ProseMirror h4 {
+  color: #c3cad6;
+}
+
+.dark .editor-holder .ProseMirror h5 {
+  color: #b6becc;
+}
+
+.dark .editor-holder .ProseMirror h6 {
+  color: #a7b0bf;
+}
+
 .dark .editor-holder .ProseMirror table {
   border-color: rgb(71 85 105);
   background: rgb(15 23 42);
@@ -422,4 +487,8 @@
 
 .dark .editor-holder .ProseMirror .column-resize-handle {
   background: rgb(96 165 250 / 0.65);
+}
+
+.dark .editor-holder .ProseMirror :not(pre) > code {
+  background: rgb(30 41 59 / 0.7);
 }

@@ -94,8 +94,8 @@ const emit = defineEmits<{
 .right-pane {
   min-width: 0;
   min-height: 0;
-  background: #f8fafc;
-  border-left: 1px solid #e2e8f0;
+  background: #f9f9fb;
+  border-left: 1px solid #e5e7eb;
   display: flex;
   flex-direction: column;
   overflow-y: auto;
@@ -107,8 +107,8 @@ const emit = defineEmits<{
 }
 
 .pane-section {
-  border-bottom: 1px solid #e2e8f0;
-  padding: 10px;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 12px 10px;
 }
 
 .ide-root.dark .pane-section {
@@ -120,7 +120,7 @@ const emit = defineEmits<{
   font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #64748b;
+  color: #737a87;
 }
 
 .outline-row {
@@ -129,16 +129,33 @@ const emit = defineEmits<{
   border: 0;
   background: transparent;
   text-align: left;
-  padding-top: 3px;
-  padding-bottom: 3px;
-  font-size: 12px;
-  color: inherit;
+  padding: 4px 8px;
+  border-radius: 8px;
+  margin: 1px 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #737a87;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.outline-row:hover {
+  background: #eff1f5;
+  color: #2d313a;
+}
+
+.ide-root.dark .outline-row {
+  color: #5c6370;
+}
+
+.ide-root.dark .outline-row:hover {
+  background: #2c313a;
+  color: #abb2bf;
 }
 
 .metadata-grid {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .meta-row {
@@ -146,11 +163,11 @@ const emit = defineEmits<{
   justify-content: space-between;
   gap: 8px;
   font-size: 11px;
-  color: #64748b;
+  color: #737a87;
 }
 
 .meta-row span:last-child {
-  color: #334155;
+  color: #2d313a;
   text-align: right;
   white-space: nowrap;
   overflow: hidden;
@@ -162,8 +179,8 @@ const emit = defineEmits<{
 }
 
 .placeholder {
-  color: #64748b;
-  font-size: 12px;
-  padding: 6px;
+  color: #737a87;
+  font-size: 11px;
+  padding: 8px;
 }
 </style>

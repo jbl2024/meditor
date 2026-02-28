@@ -1010,72 +1010,69 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="flex h-full min-h-0 flex-col gap-2">
-    <div class="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2 dark:border-slate-800">
-      <UiButton
-        size="sm"
-        class-name="h-7 rounded-lg px-2.5 text-[12px]"
+    <div class="flex flex-wrap items-center gap-1 border-b border-[#dfe3ea] pb-1 dark:border-slate-800">
+      <button
+        type="button"
+        class="inline-flex h-6.5 w-6.5 items-center justify-center rounded-md border border-transparent text-[#5b6472] transition hover:bg-[#e9edf5] hover:text-[#1f2937] disabled:opacity-40 disabled:hover:bg-transparent dark:text-slate-300 dark:hover:bg-slate-800"
         title="New note"
         aria-label="New note"
         :disabled="!folderPath"
         @click="requestCreate(folderPath, 'file')"
       >
-        <DocumentPlusIcon class="h-5 w-5" />
-      </UiButton>
-      <UiButton
-        size="sm"
-        class-name="h-7 rounded-lg px-2.5 text-[12px]"
+        <DocumentPlusIcon class="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        class="inline-flex h-6.5 w-6.5 items-center justify-center rounded-md border border-transparent text-[#5b6472] transition hover:bg-[#e9edf5] hover:text-[#1f2937] disabled:opacity-40 disabled:hover:bg-transparent dark:text-slate-300 dark:hover:bg-slate-800"
         title="New folder"
         aria-label="New folder"
         :disabled="!folderPath"
         @click="requestCreate(folderPath, 'folder')"
       >
-        <FolderPlusIcon class="h-5 w-5" />
-      </UiButton>
-      <UiButton
-        size="sm"
-        variant="ghost"
-        class-name="h-7 rounded-lg px-2.5 text-[12px]"
+        <FolderPlusIcon class="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        class="inline-flex h-6.5 w-6.5 items-center justify-center rounded-md border border-transparent text-[#5b6472] transition hover:bg-[#e9edf5] hover:text-[#1f2937] disabled:opacity-40 disabled:hover:bg-transparent dark:text-slate-300 dark:hover:bg-slate-800"
         title="Expand all folders"
         aria-label="Expand all folders"
         :disabled="!folderPath"
         @click="expandAllDirs"
       >
-        <ChevronDoubleDownIcon class="h-4 w-4" />
-      </UiButton>
-      <UiButton
-        size="sm"
-        variant="ghost"
-        class-name="h-7 rounded-lg px-2.5 text-[12px]"
+        <ChevronDoubleDownIcon class="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        class="inline-flex h-6.5 w-6.5 items-center justify-center rounded-md border border-transparent text-[#5b6472] transition hover:bg-[#e9edf5] hover:text-[#1f2937] disabled:opacity-40 disabled:hover:bg-transparent dark:text-slate-300 dark:hover:bg-slate-800"
         title="Collapse all folders"
         aria-label="Collapse all folders"
         :disabled="!folderPath"
         @click="collapseAllDirs"
       >
-        <ChevronDoubleUpIcon class="h-4 w-4" />
-      </UiButton>
-      <UiButton
-        size="sm"
-        variant="ghost"
-        class-name="h-7 rounded-lg px-2.5 text-[12px]"
+        <ChevronDoubleUpIcon class="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        class="inline-flex h-6.5 w-6.5 items-center justify-center rounded-md border border-transparent text-[#5b6472] transition hover:bg-[#e9edf5] hover:text-[#1f2937] disabled:opacity-40 disabled:hover:bg-transparent dark:text-slate-300 dark:hover:bg-slate-800"
         title="Refresh explorer"
         aria-label="Refresh explorer"
         :disabled="!folderPath"
         @click="refreshLoadedDirs"
       >
-        <ArrowPathIcon class="h-4 w-4" />
-      </UiButton>
+        <ArrowPathIcon class="h-3.5 w-3.5" />
+      </button>
     </div>
 
     <div
       ref="treeRef"
       tabindex="0"
-      class="min-h-0 flex-1 overflow-auto rounded-md border border-slate-200 bg-white p-2 outline-none focus-visible:ring-1 focus-visible:ring-slate-500 dark:border-slate-800 dark:bg-slate-950"
+      class="min-h-0 flex-1 overflow-auto bg-transparent p-0.5 outline-none focus-visible:ring-0"
       @keydown="onTreeKeydown"
       @contextmenu.prevent="onTreeContextMenu"
       @click="clearSelectionIfBackground"
     >
-      <p v-if="!folderPath" class="px-2 py-1 text-xs text-slate-500 dark:text-slate-500">Select a working folder to start.</p>
-      <p v-else-if="!visibleRows.length" class="px-2 py-1 text-xs text-slate-500 dark:text-slate-500">No files or folders. Use New file or New folder.</p>
+      <p v-if="!folderPath" class="px-2 py-1 text-xs text-[#5b6472] dark:text-slate-500">Select a working folder to start.</p>
+      <p v-else-if="!visibleRows.length" class="px-2 py-1 text-xs text-[#5b6472] dark:text-slate-500">No files or folders. Use New file or New folder.</p>
 
       <template v-else>
         <ExplorerItem

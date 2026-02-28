@@ -51,13 +51,13 @@ function checkboxValue(event: Event): boolean {
 
 <template>
   <section
-    class="properties-panel border-b border-slate-200 dark:border-slate-800"
-    :class="props.expanded ? 'px-8 py-3' : 'px-8 py-2'"
+    class="properties-panel mx-6 mb-2 mt-3 rounded-lg px-4"
+    :class="props.expanded ? 'py-3' : 'py-2'"
   >
     <div class="flex items-center justify-between gap-3" :class="props.expanded ? 'mb-2' : 'mb-0'">
       <button
         type="button"
-        class="inline-flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100"
+        class="inline-flex items-center gap-2 text-sm font-semibold text-[#2d313a] dark:text-slate-100"
         @click="emit('toggle-visibility')"
       >
         <span aria-hidden="true">{{ props.expanded ? '▾' : '▸' }}</span>
@@ -66,8 +66,8 @@ function checkboxValue(event: Event): boolean {
       <div v-if="props.expanded" class="flex items-center gap-1.5">
         <button
           type="button"
-          class="rounded border border-slate-300 px-2 py-0.5 text-[11px] text-slate-700 dark:border-slate-700 dark:text-slate-200"
-          :class="props.mode === 'structured' ? 'bg-slate-100 dark:bg-slate-800' : ''"
+          class="rounded border border-[#e5e7eb] px-2 py-0.5 text-[11px] text-[#737a87] dark:border-slate-700 dark:text-slate-300"
+          :class="props.mode === 'structured' ? 'bg-white text-[#2d313a] dark:bg-[#2c313a] dark:text-[#d7dce5]' : ''"
           :disabled="!props.canUseStructuredProperties"
           @click="emit('set-mode', 'structured')"
         >
@@ -75,8 +75,8 @@ function checkboxValue(event: Event): boolean {
         </button>
         <button
           type="button"
-          class="rounded border border-slate-300 px-2 py-0.5 text-[11px] text-slate-700 dark:border-slate-700 dark:text-slate-200"
-          :class="props.mode === 'raw' ? 'bg-slate-100 dark:bg-slate-800' : ''"
+          class="rounded border border-[#e5e7eb] px-2 py-0.5 text-[11px] text-[#737a87] dark:border-slate-700 dark:text-slate-300"
+          :class="props.mode === 'raw' ? 'bg-white text-[#2d313a] dark:bg-[#2c313a] dark:text-[#d7dce5]' : ''"
           @click="emit('set-mode', 'raw')"
         >
           Raw YAML
@@ -92,13 +92,13 @@ function checkboxValue(event: Event): boolean {
       >
         <input
           :value="field.key"
-          class="rounded border border-slate-300 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+          class="rounded border border-[#e5e7eb] bg-white px-2 py-1 text-xs text-[#2d313a] dark:border-[#3e4451] dark:bg-[#2c313a] dark:text-[#abb2bf]"
           placeholder="key"
           @input="emit('property-key-input', { index, value: inputValue($event) })"
         />
         <select
           :value="props.effectiveTypeForField(field)"
-          class="rounded border border-slate-300 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+          class="rounded border border-[#e5e7eb] bg-white px-2 py-1 text-xs text-[#737a87] dark:border-[#3e4451] dark:bg-[#2c313a] dark:text-[#abb2bf]"
           :disabled="props.isPropertyTypeLocked(field.key)"
           @change="emit('property-type-change', { index, value: selectValue($event) })"
         >
@@ -113,14 +113,14 @@ function checkboxValue(event: Event): boolean {
           <input
             v-if="props.effectiveTypeForField(field) === 'text' || props.effectiveTypeForField(field) === 'date'"
             :value="String(field.value ?? '')"
-            class="w-full rounded border border-slate-300 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            class="w-full rounded border border-[#e5e7eb] bg-white px-2 py-1 text-xs text-[#2d313a] dark:border-[#3e4451] dark:bg-[#2c313a] dark:text-[#abb2bf]"
             :placeholder="props.effectiveTypeForField(field) === 'date' ? 'YYYY-MM-DD' : 'value'"
             @input="emit('property-value-input', { index, value: inputValue($event) })"
           />
           <input
             v-else-if="props.effectiveTypeForField(field) === 'number'"
             :value="String(field.value ?? 0)"
-            class="w-full rounded border border-slate-300 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            class="w-full rounded border border-[#e5e7eb] bg-white px-2 py-1 text-xs text-[#2d313a] dark:border-[#3e4451] dark:bg-[#2c313a] dark:text-[#abb2bf]"
             type="number"
             @input="emit('property-value-input', { index, value: inputValue($event) })"
           />
@@ -130,7 +130,7 @@ function checkboxValue(event: Event): boolean {
             :placeholder="props.effectiveTypeForField(field) === 'tags' ? 'add tag' : 'add value'"
             @update:modelValue="emit('property-tokens-change', { index, tokens: $event })"
           />
-          <label v-else class="inline-flex items-center gap-2 text-xs text-slate-700 dark:text-slate-200">
+          <label v-else class="inline-flex items-center gap-2 text-xs text-[#737a87] dark:text-slate-200">
             <input
               type="checkbox"
               :checked="Boolean(field.value)"
@@ -141,7 +141,7 @@ function checkboxValue(event: Event): boolean {
         </div>
         <button
           type="button"
-          class="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 dark:border-slate-700 dark:text-slate-200"
+          class="rounded border border-[#e5e7eb] bg-white px-2 py-1 text-xs text-[#737a87] hover:bg-[#eff1f5] hover:text-[#2d313a] dark:border-slate-700 dark:bg-[#2c313a] dark:text-slate-300 dark:hover:bg-[#343b47] dark:hover:text-[#d7dce5]"
           @click="emit('remove-property', index)"
         >
           Remove
@@ -159,7 +159,7 @@ function checkboxValue(event: Event): boolean {
 
     <div v-else-if="props.expanded">
       <textarea
-        class="font-mono min-h-28 w-full rounded border border-slate-300 p-2 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+        class="font-mono min-h-28 w-full rounded border border-[#e5e7eb] bg-white p-2 text-xs text-[#2d313a] dark:border-slate-700 dark:bg-[#21252b] dark:text-[#abb2bf]"
         :value="props.activeRawYaml"
         placeholder="title: My note"
         @input="emit('raw-yaml-input', inputValue($event))"
@@ -173,3 +173,23 @@ function checkboxValue(event: Event): boolean {
     </div>
   </section>
 </template>
+
+<style scoped>
+.properties-panel {
+  background: #f9f9fb;
+}
+
+.dark .properties-panel {
+  background: #21252b;
+}
+
+.dark .properties-panel input::placeholder,
+.dark .properties-panel textarea::placeholder {
+  color: #8b93a3;
+}
+
+.property-row :is(input, select, textarea):focus-visible {
+  outline: 2px solid rgb(94 106 210 / 0.3);
+  outline-offset: 1px;
+}
+</style>
