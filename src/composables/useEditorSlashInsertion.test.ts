@@ -55,4 +55,23 @@ describe('useEditorSlashInsertion', () => {
 
     expect(insertion.insertBlockFromDescriptor('code', {})).toBe(false)
   })
+
+  it('inserts html block payload', () => {
+    const chain = createChain()
+    const editor = { chain: vi.fn(() => chain) } as any
+    const insertion = useEditorSlashInsertion({
+      getEditor: () => editor,
+      currentTextSelectionContext: () => ({ text: '/html', nodeType: 'paragraph' }),
+      readSlashContext: () => ({ from: 2, to: 7 })
+    })
+
+    const ok = insertion.insertBlockFromDescriptor('html', { html: '<div>test</div>' })
+
+    expect(ok).toBe(true)
+    expect(chain.deleteRange).toHaveBeenCalledWith({ from: 2, to: 7 })
+    expect(chain.insertContent).toHaveBeenCalledWith({
+      type: 'htmlBlock',
+      attrs: { html: '<div>test</div>' }
+    })
+  })
 })

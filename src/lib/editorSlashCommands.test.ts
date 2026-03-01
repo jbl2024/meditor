@@ -11,6 +11,7 @@ describe('EDITOR_SLASH_COMMANDS', () => {
       'callout',
       'mermaid',
       'code',
+      'html',
       'quote',
       'divider'
     ])

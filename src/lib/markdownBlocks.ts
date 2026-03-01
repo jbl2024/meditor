@@ -20,6 +20,70 @@ const TASK_LIST_RE = /^\s*[-*+]\s+\[([ xX])\]\s*(.*)$/
 const HR_RE = /^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/
 const FENCE_START_RE = /^```\s*([^`]*)$/
 const CALLOUT_MARKER_RE = /^\[!([A-Za-z0-9_-]+)\]\s*(.*)$/
+const HTML_OPEN_TAG_START_RE = /^\s*<([A-Za-z][\w:-]*)(?:\s[^>]*)?>/
+const HTML_CLOSE_TAG_START_RE = /^\s*<\/([A-Za-z][\w:-]*)\s*>/
+const HTML_COMMENT_RE = /^\s*<!--[\s\S]*?-->\s*$/
+const HTML_DOCTYPE_RE = /^\s*<!DOCTYPE\s+html[^>]*>\s*$/i
+const HTML_TAG_TOKEN_RE = /<\/?([A-Za-z][\w:-]*)(?:\s[^>]*?)?>/g
+const HTML_VOID_TAGS = new Set([
+  'area',
+  'base',
+  'br',
+  'col',
+  'embed',
+  'hr',
+  'img',
+  'input',
+  'link',
+  'meta',
+  'param',
+  'source',
+  'track',
+  'wbr'
+])
+const HTML_BLOCK_TAGS = new Set([
+  'address',
+  'article',
+  'aside',
+  'blockquote',
+  'body',
+  'canvas',
+  'center',
+  'dd',
+  'details',
+  'div',
+  'dl',
+  'dt',
+  'fieldset',
+  'figcaption',
+  'figure',
+  'footer',
+  'form',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'header',
+  'hr',
+  'html',
+  'li',
+  'main',
+  'nav',
+  'ol',
+  'p',
+  'pre',
+  'section',
+  'table',
+  'tbody',
+  'td',
+  'tfoot',
+  'th',
+  'thead',
+  'tr',
+  'ul'
+])
 
 type RichListItem = {
   content?: string
@@ -506,6 +570,82 @@ function isRawFallbackStart(line: string): boolean {
   return false
 }
 
+function firstHtmlTagName(line: string): string | null {
+  const opening = line.match(HTML_OPEN_TAG_START_RE)?.[1]
+  if (opening) return opening.toLowerCase()
+  const closing = line.match(HTML_CLOSE_TAG_START_RE)?.[1]
+  if (closing) return closing.toLowerCase()
+  return null
+}
+
+function isHtmlishLine(line: string): boolean {
+  const trimmed = line.trim()
+  if (!trimmed) return false
+  return (
+    HTML_OPEN_TAG_START_RE.test(trimmed) ||
+    HTML_CLOSE_TAG_START_RE.test(trimmed) ||
+    HTML_COMMENT_RE.test(trimmed) ||
+    HTML_DOCTYPE_RE.test(trimmed)
+  )
+}
+
+function isHtmlBlockStart(line: string): boolean {
+  if (!isHtmlishLine(line)) return false
+  const tag = firstHtmlTagName(line)
+  if (!tag) return true
+  return HTML_BLOCK_TAGS.has(tag)
+}
+
+function htmlDepthDelta(line: string): number {
+  let depth = 0
+  HTML_TAG_TOKEN_RE.lastIndex = 0
+  let match: RegExpExecArray | null
+  while ((match = HTML_TAG_TOKEN_RE.exec(line)) !== null) {
+    const token = match[0]
+    const tag = match[1]?.toLowerCase() ?? ''
+    if (!tag || HTML_VOID_TAGS.has(tag)) continue
+    if (token.startsWith('</')) {
+      depth -= 1
+      continue
+    }
+    if (!token.endsWith('/>')) {
+      depth += 1
+    }
+  }
+  return depth
+}
+
+function parseHtmlBlock(lines: string[], start: number): { html: string; next: number } {
+  const htmlLines: string[] = []
+  let depth = 0
+  let i = start
+
+  while (i < lines.length) {
+    const line = lines[i]
+    if (!line.trim()) {
+      if (depth > 0) {
+        htmlLines.push(line)
+        i += 1
+        continue
+      }
+      break
+    }
+
+    if (depth <= 0 && i > start && !isHtmlishLine(line)) {
+      break
+    }
+
+    htmlLines.push(line)
+    depth += htmlDepthDelta(line)
+    i += 1
+  }
+
+  return {
+    html: normalizeMultiline(htmlLines.join('\n')),
+    next: i
+  }
+}
+
 function parseTableCells(line: string, options?: { allowEmptyRow?: boolean }): string[] | null {
   const trimmed = line.trim()
   if (!trimmed || !trimmed.includes('|')) return null
@@ -764,6 +904,15 @@ export function markdownToEditorData(markdown: string): EditorDocument {
       continue
     }
 
+    if (isHtmlBlockStart(line)) {
+      const parsed = parseHtmlBlock(lines, i)
+      if (parsed.html) {
+        blocks.push({ type: 'html', data: { html: parsed.html } })
+        i = parsed.next
+        continue
+      }
+    }
+
     if (isRawFallbackStart(line)) {
       const rawLines: string[] = []
       while (i < lines.length && lines[i].trim()) {
@@ -779,6 +928,7 @@ export function markdownToEditorData(markdown: string): EditorDocument {
       i < lines.length &&
       lines[i].trim() &&
       !isBlockStarter(lines[i]) &&
+      !isHtmlBlockStart(lines[i]) &&
       !isRawFallbackStart(lines[i]) &&
       !isMarkdownTableStart(lines, i)
     ) {
@@ -926,6 +1076,9 @@ function blockToMarkdown(block: EditorBlock): string {
 
     case 'delimiter':
       return '---'
+
+    case 'html':
+      return normalizeMultiline(String(block.data?.html ?? ''))
 
     case 'raw':
       return normalizeMultiline(String(block.data?.markdown ?? ''))

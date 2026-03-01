@@ -77,6 +77,8 @@ function lineText(node: ProseNode | null | undefined): string {
       return String(node.attrs.message ?? '')
     case 'mermaidBlock':
       return String(node.attrs.code ?? '')
+    case 'htmlBlock':
+      return String(node.attrs.html ?? '')
     case 'hardBreak':
       return '\n'
     case 'codeBlock':

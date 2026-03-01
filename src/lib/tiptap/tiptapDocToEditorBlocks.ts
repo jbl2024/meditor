@@ -179,6 +179,14 @@ function nodeToBlock(node: JSONContent): EditorBlock | null {
         }
       }
 
+    case TIPTAP_NODE_TYPES.html:
+      return {
+        type: 'html',
+        data: {
+          html: String(node.attrs?.html ?? '')
+        }
+      }
+
     default:
       return null
   }

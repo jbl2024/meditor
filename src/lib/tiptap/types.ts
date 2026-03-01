@@ -4,5 +4,6 @@ export const TIPTAP_NODE_TYPES = {
   callout: 'calloutBlock',
   mermaid: 'mermaidBlock',
   quote: 'quoteBlock',
+  html: 'htmlBlock',
   wikilink: 'wikilink'
 } as const

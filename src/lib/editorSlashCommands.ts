@@ -46,6 +46,7 @@ export const EDITOR_SLASH_COMMANDS: SlashCommand[] = [
   { id: 'callout', label: 'Callout', type: 'callout', data: { kind: 'NOTE', message: '' } },
   { id: 'mermaid', label: 'Mermaid', type: 'mermaid', data: { code: 'flowchart TD\n  A[Start] --> B[End]' } },
   { id: 'code', label: 'Code', type: 'code', data: { code: '' } },
+  { id: 'html', label: 'HTML', type: 'html', data: { html: '<div>\n  \n</div>' } },
   { id: 'quote', label: 'Quote', type: 'quote', data: { text: '' } },
   { id: 'divider', label: 'Divider', type: 'delimiter', data: {} }
 ]

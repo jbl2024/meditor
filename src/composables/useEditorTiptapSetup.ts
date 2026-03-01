@@ -10,6 +10,7 @@ import Placeholder from '@tiptap/extension-placeholder'
 import { CalloutNode } from '../lib/tiptap/extensions/CalloutNode'
 import { MermaidNode } from '../lib/tiptap/extensions/MermaidNode'
 import { QuoteNode } from '../lib/tiptap/extensions/QuoteNode'
+import { HtmlNode } from '../lib/tiptap/extensions/HtmlNode'
 import { WikilinkNode } from '../lib/tiptap/extensions/WikilinkNode'
 import { VirtualTitleGuard } from '../lib/tiptap/extensions/VirtualTitleGuard'
 import { CodeBlockNode } from '../lib/tiptap/extensions/CodeBlockNode'
@@ -119,6 +120,7 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
         CalloutNode,
         MermaidNode.configure({ confirmReplace: options.requestMermaidReplaceConfirm }),
         QuoteNode,
+        HtmlNode,
         CodeBlockNode,
         WikilinkNode.configure({
           getCandidates: (query: string) => options.getWikilinkCandidates(query),

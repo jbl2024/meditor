@@ -253,7 +253,7 @@ describe('indented blocks', () => {
 })
 
 describe('html-like lines', () => {
-  it('treats unknown html markup as paragraph text', () => {
+  it('parses block html markup into html blocks', () => {
     const markdown = `
 <h1>hello</h1>
 
@@ -262,10 +262,22 @@ sddsd
 
     const parsed = markdownToEditorData(markdown)
     expect(parsed.blocks).toHaveLength(2)
-    expect(parsed.blocks[0].type).toBe('paragraph')
-    expect(String(parsed.blocks[0].data.text)).toContain('&lt;h1&gt;hello&lt;/h1&gt;')
+    expect(parsed.blocks[0].type).toBe('html')
+    expect(String(parsed.blocks[0].data.html)).toContain('<h1>hello</h1>')
     expect(parsed.blocks[1].type).toBe('paragraph')
     expect(String(parsed.blocks[1].data.text)).toBe('sddsd')
+  })
+
+  it('round-trips multiline html blocks as raw html markdown', () => {
+    const markdown = `
+<div style="text-align: center;">
+<strong>One<br>Two</strong>
+</div>
+`.trim()
+    const parsed = markdownToEditorData(markdown)
+    expect(parsed.blocks).toHaveLength(1)
+    expect(parsed.blocks[0].type).toBe('html')
+    expect(editorDataToMarkdown(parsed).trim()).toBe(markdown)
   })
 })
 

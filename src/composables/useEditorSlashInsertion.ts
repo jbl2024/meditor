@@ -81,6 +81,8 @@ export function useEditorSlashInsertion(options: UseEditorSlashInsertionOptions)
           return { type: 'mermaidBlock', attrs: { code: String(data.code ?? '') } }
         case 'code':
           return { type: 'codeBlock', attrs: { language: '' }, content: [] }
+        case 'html':
+          return { type: 'htmlBlock', attrs: { html: String(data.html ?? '') } }
         case 'quote':
           return { type: 'quoteBlock', attrs: { text: String(data.text ?? '') } }
         case 'delimiter':

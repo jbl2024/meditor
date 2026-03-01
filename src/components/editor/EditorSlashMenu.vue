@@ -41,6 +41,7 @@ const ICON_BY_ID: Record<string, unknown> = {
   callout: ChatBubbleLeftRightIcon,
   mermaid: RectangleGroupIcon,
   code: CodeBracketIcon,
+  html: CodeBracketIcon,
   quote: ChatBubbleLeftRightIcon,
   divider: ViewColumnsIcon,
 }
@@ -52,6 +53,7 @@ const ICON_BY_TYPE: Record<string, unknown> = {
   callout: ChatBubbleLeftRightIcon,
   mermaid: RectangleGroupIcon,
   code: CodeBracketIcon,
+  html: CodeBracketIcon,
   quote: ChatBubbleLeftRightIcon,
   delimiter: ViewColumnsIcon,
 }

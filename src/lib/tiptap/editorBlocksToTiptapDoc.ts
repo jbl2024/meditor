@@ -215,6 +215,14 @@ function blockToNode(block: EditorBlock): TiptapNode | null {
     case 'delimiter':
       return { type: 'horizontalRule' }
 
+    case 'html':
+      return {
+        type: TIPTAP_NODE_TYPES.html,
+        attrs: {
+          html: String(data.html ?? '')
+        }
+      }
+
     case 'raw':
       return {
         type: 'codeBlock',

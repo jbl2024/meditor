@@ -81,3 +81,28 @@ describe('toTiptapDoc list inline content', () => {
     })
   })
 })
+
+describe('toTiptapDoc html block', () => {
+  it('maps html blocks to htmlBlock nodes', () => {
+    const doc = toTiptapDoc([
+      {
+        type: 'html',
+        data: {
+          html: '<div><strong>Hello</strong></div>'
+        }
+      }
+    ])
+
+    expect(doc).toEqual({
+      type: 'doc',
+      content: [
+        {
+          type: 'htmlBlock',
+          attrs: {
+            html: '<div><strong>Hello</strong></div>'
+          }
+        }
+      ]
+    })
+  })
+})

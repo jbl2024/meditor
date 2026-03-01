@@ -282,6 +282,18 @@
   margin: 0.5rem 0;
 }
 
+.editor-holder .meditor-html-node {
+  margin: 0.5rem 0;
+}
+
+.editor-holder .meditor-html-preview > :first-child {
+  margin-top: 0;
+}
+
+.editor-holder .meditor-html-preview > :last-child {
+  margin-bottom: 0;
+}
+
 .editor-holder .meditor-code-node-actions {
   display: flex;
   gap: 0.36rem;
@@ -516,4 +528,8 @@
 
 .dark .editor-holder .ProseMirror :not(pre) > code {
   background: rgb(30 41 59 / 0.7);
+}
+
+.dark .editor-holder .meditor-html-preview {
+  background: rgb(15 23 42 / 0.35);
 }
