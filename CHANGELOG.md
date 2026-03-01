@@ -18,6 +18,42 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.6.0] - 2026-03-01
+
+### Added
+- feat(cosmos): add inline clear button to sidebar search input (55990b8)
+- feat(commands): add cosmos actions to command palette (09de182)
+- feat(cosmos): add folder-first colors, directional arrows, and cleaned node labels (9f1cf26)
+- feat(cosmos): require explicit open from context card and add selected note preview (20024bd)
+- feat(cosmos): add search-to-focus, focus mode, neighborhood expansion, and node stats panel (e100399)
+- feat(cosmos): add indexed 3D wikilink graph view with session toggle and tests (99ddc61)
+- feat(metadata): show created and updated timestamps in right pane (608d089)
+- feat(editor): support wikilink token rendering inside html preview blocks (4067aee)
+- feat(editor): add sanitized htmlBlock preview/source editing with markdown round-trip (cb32111)
+
+### Changed
+- chore(docs): remove absolute paths (c8a1600)
+- refactor(cosmos): move focus controls next to selected node context (0de18ed)
+- include cosmos view state in back/forward history (bfe8433)
+- style(cosmos): remove filename row from selected note card (e1ce5ac)
+- docs(cosmos): add module and action JSDoc for useCosmosController (7ee041d)
+- refactor(cosmos): extract controller and sidebar panel with stable scrollable UI (f84197c)
+- style(editor): reduce html source min-height and padding (1b6961e)
+- style(editor): no margin on html block (75a2910)
+- style(editor): show html block chrome only on hover or focus (11eaff8)
+
+### Fixed
+- fix(explorer): restore active note reveal on tree remount after sidebar toggle (6318991)
+- fix(explorer): sync selection and reveal when opening notes from cosmos (06441a4)
+- fix(editor): apply zoom scaling to paragraph font size in ProseMirror (c602599)
+- fix(cosmos): align sidebar panel with atom one dark theme palette (fe2fc2b)
+- fix(cosmos): improve label readability and show all labels on small filtered graphs (62fd58f)
+- fix(cosmos): enlarge preview area and enable full sidebar scrolling (d0e5457)
+- fix(editor): refocus editor when slash menu closes (35e2e9d)
+- fix(editor): keep html source textarea aligned with highlight mirror (1964c07)
+- fix(editor): move html toggle button inside block and hide it with border (68a31b4)
+- fix(block-menu): preserve content in convert-to actions and map quote to quoteBlock (8f24dd5)
+
 ## [0.5.1] - 2026-02-28
 
 ### Added
