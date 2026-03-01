@@ -64,6 +64,7 @@ const FOLDER_COLORS = ['#4cc9f0', '#90be6d', '#f9c74f', '#f9844a', '#43aa8b', '#
 const CLUSTER_FALLBACK_COLORS = ['#4cc9f0', '#90be6d', '#f9c74f', '#f9844a', '#577590', '#43aa8b', '#4895ef']
 const HOVER_THROTTLE_MS = 24
 const DOUBLE_CLICK_MS = 260
+const AUTO_SHOW_LABEL_THRESHOLD = 24
 
 const props = defineProps<{
   graph: CosmosGraph
@@ -79,7 +80,7 @@ const emit = defineEmits<{
 const rootEl = ref<HTMLDivElement | null>(null)
 const graphEl = ref<HTMLDivElement | null>(null)
 const graphInstance = ref<ForceGraphInstance | null>(null)
-const labels = ref<Array<{ id: string; text: string; x: number; y: number; color: string }>>([])
+const labels = ref<Array<{ id: string; text: string; x: number; y: number; color: string; emphasized: boolean }>>([])
 
 let hoverThrottleTimer: ReturnType<typeof setTimeout> | null = null
 let labelRaf = 0
@@ -143,9 +144,15 @@ function linkArrowColor(link: RenderEdge): string {
 }
 
 function labelColor(nodeId: string): string {
-  if (selectedNodeId && nodeId === selectedNodeId) return '#0f172a'
-  if (hoveredNodeId && (nodeId === hoveredNodeId || hoveredNeighborIds.has(nodeId))) return '#0f172a'
+  if (selectedNodeId && nodeId === selectedNodeId) return '#111827'
+  if (hoveredNodeId && (nodeId === hoveredNodeId || hoveredNeighborIds.has(nodeId))) return '#111827'
   return '#e2e8f0'
+}
+
+function isLabelEmphasized(nodeId: string): boolean {
+  if (selectedNodeId && nodeId === selectedNodeId) return true
+  if (hoveredNodeId && (nodeId === hoveredNodeId || hoveredNeighborIds.has(nodeId))) return true
+  return false
 }
 
 /**
@@ -214,6 +221,7 @@ function onNodeClick(node: RenderNode) {
 }
 
 function shouldShowLabel(node: CosmosGraphNode): boolean {
+  if (props.graph.nodes.length <= AUTO_SHOW_LABEL_THRESHOLD) return true
   if (node.showLabelByDefault) return true
   if (!hoveredNodeId) return false
   return node.id === hoveredNodeId || hoveredNeighborIds.has(node.id)
@@ -236,7 +244,7 @@ function updateLabelPositions() {
     return
   }
 
-  const nextLabels: Array<{ id: string; text: string; x: number; y: number; color: string }> = []
+  const nextLabels: Array<{ id: string; text: string; x: number; y: number; color: string; emphasized: boolean }> = []
   const renderData = graph.graphData() as unknown as { nodes: RenderNode[] }
 
   for (const node of renderData.nodes ?? []) {
@@ -251,7 +259,8 @@ function updateLabelPositions() {
       text: node.displayLabel,
       x: point.x,
       y: point.y,
-      color: labelColor(node.id)
+      color: labelColor(node.id),
+      emphasized: isLabelEmphasized(node.id)
     })
   }
 
@@ -483,6 +492,7 @@ defineExpose({
         v-for="item in labels"
         :key="item.id"
         class="cosmos-label"
+        :class="{ 'cosmos-label-emphasized': item.emphasized }"
         :style="{ transform: `translate(${item.x}px, ${item.y}px)`, color: item.color }"
       >
         {{ item.text }}
@@ -539,5 +549,12 @@ defineExpose({
   transform: translate(-50%, -130%);
   white-space: nowrap;
   opacity: 0.96;
+}
+
+.cosmos-label-emphasized {
+  background: rgb(255 255 255 / 78%);
+  border-radius: 6px;
+  padding: 1px 4px;
+  text-shadow: none;
 }
 </style>
