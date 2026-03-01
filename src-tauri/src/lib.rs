@@ -21,6 +21,7 @@ use directories::UserDirs;
 use rusqlite::{params, params_from_iter, types::Value as SqlValue, Connection};
 use serde::Serialize;
 use thiserror::Error;
+use unicode_normalization::UnicodeNormalization;
 
 use fs_ops::{
     clear_working_folder, copy_entry, create_entry, duplicate_entry, list_children,
@@ -309,6 +310,10 @@ fn strip_markdown_extension(path: &Path) -> PathBuf {
     }
 }
 
+fn normalize_key_text(input: &str) -> String {
+    input.to_lowercase().nfc().collect::<String>()
+}
+
 fn normalize_note_key(root: &Path, path: &Path) -> Result<String> {
     let relative = path.strip_prefix(root).map_err(|_| AppError::InvalidPath)?;
     let normalized = strip_markdown_extension(relative);
@@ -320,7 +325,7 @@ fn normalize_note_key(root: &Path, path: &Path) -> Result<String> {
     while key.starts_with("./") {
         key = key[2..].to_string();
     }
-    Ok(key.to_lowercase())
+    Ok(normalize_key_text(&key))
 }
 
 fn normalize_workspace_relative_path(root: &Path, path: &Path) -> Result<String> {
@@ -443,7 +448,7 @@ fn normalize_wikilink_target(raw: &str) -> Option<String> {
         target.truncate(target.len().saturating_sub(".md".len()));
     }
 
-    let key = target.trim_matches('/').to_lowercase();
+    let key = normalize_key_text(target.trim_matches('/'));
     if key.is_empty() {
         return None;
     }
@@ -530,7 +535,7 @@ fn parse_note_targets(markdown: &str) -> Vec<String> {
     }
 
     for target in parse_iso_date_targets(content) {
-        targets.insert(target.to_lowercase());
+        targets.insert(normalize_key_text(&target));
     }
 
     targets.into_iter().collect()
@@ -2389,6 +2394,14 @@ mod tests {
         let targets = parse_note_targets(markdown);
         assert_eq!(targets.len(), 1);
         assert!(targets.iter().any(|item| item == "folder/note"));
+    }
+
+    #[test]
+    fn parse_note_targets_normalizes_unicode_wikilink_target() {
+        let markdown = "See [[syste\u{300}me/Tools.md|Tools]]";
+        let targets = parse_note_targets(markdown);
+        assert_eq!(targets.len(), 1);
+        assert!(targets.iter().any(|item| item == "système/tools"));
     }
 
     #[test]
