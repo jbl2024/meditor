@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
+    "preflight": "npm run build",
+    "preflight:full": "npm run build && npm run tauri:build -- --bundles appimage,deb",
     "test": "vitest run",
     "preview": "vite preview",
     "tauri": "tauri",

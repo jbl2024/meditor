@@ -1,4 +1,4 @@
-.PHONY: help install dev tauri-dev build tauri-build prepare-release
+.PHONY: help install dev tauri-dev build tauri-build preflight preflight-full clean clean-frontend clean-tauri clean-deps prepare-release
 
 help:
 	@echo "Available targets:"
@@ -7,6 +7,12 @@ help:
 	@echo "  make tauri-dev    Run Tauri desktop app in dev mode"
 	@echo "  make build        Build frontend production bundle"
 	@echo "  make tauri-build  Build Tauri desktop app bundle/installers"
+	@echo "  make preflight    Run local CI-like frontend checks (typecheck + vite build)"
+	@echo "  make preflight-full  Run preflight plus Tauri Linux bundles (appimage,deb)"
+	@echo "  make clean        Remove frontend and Tauri build artifacts"
+	@echo "  make clean-frontend  Remove dist/"
+	@echo "  make clean-tauri  Remove src-tauri/target/"
+	@echo "  make clean-deps   Remove node_modules/"
 	@echo "  make prepare-release VERSION=X.Y.Z  Update app versions and build changelog release entry"
 
 install:
@@ -23,6 +29,23 @@ build:
 
 tauri-build:
 	npm run tauri:build
+
+preflight:
+	npm run preflight
+
+preflight-full:
+	npm run preflight:full
+
+clean: clean-frontend clean-tauri
+
+clean-frontend:
+	rm -rf dist
+
+clean-tauri:
+	rm -rf src-tauri/target
+
+clean-deps:
+	rm -rf node_modules
 
 prepare-release:
 	@if [ -z "$(VERSION)" ]; then \
