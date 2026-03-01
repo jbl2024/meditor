@@ -3798,7 +3798,7 @@ onBeforeUnmount(() => {
                 {{ option.label }}
               </button>
             </div>
-            <p class="search-mode-hint">Astuce: <code>semantic:</code> concept | <code>lexical:</code> terme exact</p>
+            <p class="search-mode-hint">Hint: <code>semantic:</code> concept | <code>lexical:</code> exact term</p>
 
             <div class="results-list">
               <div v-if="hasSearched && !searchLoading && !searchHits.length" class="placeholder">No results</div>

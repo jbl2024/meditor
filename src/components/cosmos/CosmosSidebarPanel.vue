@@ -91,7 +91,6 @@ function onSearchModeSelect(mode: SearchMode) {
 <template>
   <section class="cosmos-sidebar-panel">
     <div class="cosmos-panel-controls">
-      <p class="cosmos-panel-title">Cosmos</p>
       <p class="cosmos-panel-meta">{{ summary.nodes }} nodes · {{ summary.edges }} edges</p>
       <p class="cosmos-panel-help">Click a node to select it. Double-click to focus. Drag to pan, scroll to zoom, Esc to return.</p>
       <div class="cosmos-search-wrap">
@@ -131,7 +130,7 @@ function onSearchModeSelect(mode: SearchMode) {
           {{ option.label }}
         </button>
       </div>
-      <p class="cosmos-search-hint">Astuce: <code>semantic:</code> concept | <code>lexical:</code> terme exact</p>
+      <p class="cosmos-search-hint">Tip: <code>semantic:</code> concept | <code>lexical:</code> exact term</p>
       <div v-if="query.trim()" class="cosmos-match-list">
         <button
           v-for="match in matches"
