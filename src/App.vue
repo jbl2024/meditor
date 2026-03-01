@@ -121,6 +121,26 @@ type CosmosHistorySnapshot = {
 }
 type IndexRunKind = 'idle' | 'background' | 'rebuild' | 'rename'
 type IndexRunPhase = 'idle' | 'indexing_files' | 'refreshing_views' | 'done' | 'error'
+type IndexLogFilter = 'all' | 'errors' | 'slow'
+type IndexActivityState = 'running' | 'done' | 'error'
+type IndexActivityRow = {
+  id: string
+  ts: number
+  timeLabel: string
+  relativeTime: string
+  state: IndexActivityState
+  group: 'file' | 'engine' | 'rebuild' | 'system'
+  path: string
+  directory: string
+  fileName: string
+  title: string
+  detail: string
+  durationMs: number | null
+  chunks: number | null
+  targets: number | null
+  properties: number | null
+  embeddingStatus: string
+}
 
 const THEME_STORAGE_KEY = 'tomosona.theme.preference'
 const WORKING_FOLDER_STORAGE_KEY = 'tomosona.working-folder.path'
@@ -210,6 +230,7 @@ const indexRunLastFinishedAt = ref<number | null>(null)
 const indexStatusBusy = ref(false)
 const indexRuntimeStatus = ref<IndexRuntimeStatus | null>(null)
 const indexLogEntries = ref<IndexLogEntry[]>([])
+const indexLogFilter = ref<IndexLogFilter>('all')
 let indexStatusPollTimer: ReturnType<typeof setInterval> | null = null
 
 const resizeState = ref<{
@@ -345,12 +366,86 @@ const indexModelStatusLabel = computed(() => {
   if (status.model_state === 'not_initialized') return 'not initialized'
   return status.model_state
 })
-const indexLogRows = computed(() =>
-  indexLogEntries.value
-    .slice()
-    .reverse()
-    .map((entry) => formatIndexLogEntry(entry))
-)
+const indexStatusBadgeLabel = computed(() => {
+  if (indexRunPhase.value === 'error' || filesystem.indexingState.value === 'out_of_sync') return 'Needs attention'
+  if (indexRunning.value) return 'Reindexing'
+  return 'Ready'
+})
+const indexStatusBadgeClass = computed(() => {
+  if (indexRunPhase.value === 'error' || filesystem.indexingState.value === 'out_of_sync') return 'index-badge-error'
+  if (indexRunning.value) return 'index-badge-running'
+  return 'index-badge-ready'
+})
+const indexProgressTotal = computed(() => {
+  if (indexRunKind.value === 'background') {
+    return Math.max(indexRunTotal.value, indexRunCompleted.value + pendingReindexCount.value)
+  }
+  return Math.max(indexRunTotal.value, indexRunCompleted.value)
+})
+const indexProgressCurrent = computed(() => {
+  const total = indexProgressTotal.value
+  if (total <= 0) return 0
+  return Math.min(indexRunCompleted.value, total)
+})
+const indexProgressPercent = computed(() => {
+  const total = indexProgressTotal.value
+  if (total <= 0) return indexRunning.value ? 8 : filesystem.indexingState.value === 'indexed' ? 100 : 0
+  return Math.min(100, Math.max(0, Math.round((indexProgressCurrent.value / total) * 100)))
+})
+const indexProgressSummary = computed(() => {
+  if (!indexRunning.value) {
+    if (filesystem.indexingState.value === 'out_of_sync') return 'Pending reindex'
+    return indexRunLastFinishedAt.value ? `Last run ${formatTimestamp(indexRunLastFinishedAt.value)}` : 'No active run'
+  }
+  const total = indexProgressTotal.value
+  if (total <= 0) return indexProgressLabel.value
+  return `${indexProgressCurrent.value}/${total} files`
+})
+const indexModelStateClass = computed(() => {
+  if (indexModelStatusLabel.value === 'ready') return 'index-model-ready'
+  if (indexModelStatusLabel.value === 'initializing') return 'index-model-busy'
+  if (indexModelStatusLabel.value === 'failed') return 'index-model-failed'
+  return 'index-model-idle'
+})
+const indexShowWarmupNote = computed(() => {
+  const status = indexRuntimeStatus.value
+  if (!status) return false
+  return status.model_init_attempts <= 1 && status.model_state !== 'ready'
+})
+const indexAlert = computed(() => {
+  if (indexRunPhase.value === 'error') {
+    return {
+      level: 'error',
+      title: 'Index run interrupted',
+      message: indexRunMessage.value || 'An indexing step failed. You can retry a full rebuild.'
+    } as const
+  }
+  if (indexRuntimeStatus.value?.model_last_error) {
+    return {
+      level: 'warning',
+      title: 'Embedding engine issue',
+      message: indexRuntimeStatus.value.model_last_error
+    } as const
+  }
+  if (filesystem.indexingState.value === 'out_of_sync') {
+    return {
+      level: 'warning',
+      title: 'Workspace changed',
+      message: 'Some files are not indexed yet. Run a rebuild to sync search and semantic links.'
+    } as const
+  }
+  return null
+})
+const indexActivityRows = computed(() => buildIndexActivityRows(indexLogEntries.value))
+const filteredIndexActivityRows = computed(() => {
+  if (indexLogFilter.value === 'all') return indexActivityRows.value
+  if (indexLogFilter.value === 'errors') {
+    return indexActivityRows.value.filter((row) => row.state === 'error')
+  }
+  return indexActivityRows.value.filter((row) => (row.durationMs ?? 0) > 1000)
+})
+const indexErrorCount = computed(() => indexActivityRows.value.filter((row) => row.state === 'error').length)
+const indexSlowCount = computed(() => indexActivityRows.value.filter((row) => (row.durationMs ?? 0) > 1000).length)
 const cosmos = useCosmosController({
   workingFolderPath: filesystem.workingFolderPath,
   activeTabPath: workspace.activeTabPath,
@@ -667,46 +762,160 @@ function parseIndexLogFields(message: string): Record<string, string> {
   return out
 }
 
-function formatIndexLogEntry(entry: IndexLogEntry): { time: string; title: string; detail: string } {
-  const message = entry.message.trim()
-  const fields = parseIndexLogFields(message)
-  const path = fields.path ? toRelativePath(fields.path) : ''
+function toNumberOrNull(value: string | undefined): number | null {
+  if (!value) return null
+  const parsed = Number.parseInt(value, 10)
+  return Number.isFinite(parsed) ? parsed : null
+}
 
-  if (message.startsWith('reindex:start')) {
-    return {
-      time: formatTimestamp(entry.ts_ms),
-      title: path ? `Reindex start • ${path}` : 'Reindex start',
-      detail: ''
+function formatTimeOnly(value: number): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '--:--:--'
+  return `${normalizeDatePart(date.getHours())}:${normalizeDatePart(date.getMinutes())}:${normalizeDatePart(date.getSeconds())}`
+}
+
+function formatRelativeTime(value: number): string {
+  const delta = Date.now() - value
+  if (!Number.isFinite(delta) || delta < 0) return 'just now'
+  const secs = Math.floor(delta / 1000)
+  if (secs < 5) return 'just now'
+  if (secs < 60) return `${secs}s ago`
+  const mins = Math.floor(secs / 60)
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
+}
+
+function splitRelativePath(path: string): { directory: string; fileName: string } {
+  const normalized = normalizePath(path)
+  const lastSlash = normalized.lastIndexOf('/')
+  if (lastSlash < 0) {
+    return { directory: '', fileName: normalized }
+  }
+  return {
+    directory: normalized.slice(0, lastSlash),
+    fileName: normalized.slice(lastSlash + 1)
+  }
+}
+
+function buildIndexActivityRows(entries: IndexLogEntry[]): IndexActivityRow[] {
+  const sorted = entries.slice().sort((left, right) => left.ts_ms - right.ts_ms)
+  const rows: IndexActivityRow[] = []
+  const activeByPath = new Map<string, { startedAt: number; path: string }>()
+
+  for (const entry of sorted) {
+    const message = entry.message.trim()
+    const fields = parseIndexLogFields(message)
+    const resolvedPath = fields.path ? toRelativePath(fields.path) : ''
+    const split = splitRelativePath(resolvedPath)
+    const base = {
+      ts: entry.ts_ms,
+      timeLabel: formatTimeOnly(entry.ts_ms),
+      relativeTime: formatRelativeTime(entry.ts_ms),
+      path: resolvedPath,
+      directory: split.directory,
+      fileName: split.fileName,
+      chunks: toNumberOrNull(fields.chunks),
+      targets: toNumberOrNull(fields.targets),
+      properties: toNumberOrNull(fields.properties),
+      durationMs: toNumberOrNull(fields.total_ms) ?? toNumberOrNull(fields.embedding_ms),
+      embeddingStatus: fields.embedding ?? ''
+    }
+
+    if (message.startsWith('reindex:start') && resolvedPath) {
+      activeByPath.set(resolvedPath, { startedAt: entry.ts_ms, path: resolvedPath })
+      continue
+    }
+
+    if (message.startsWith('reindex:done') && resolvedPath) {
+      const run = activeByPath.get(resolvedPath)
+      const stats: string[] = []
+      if (base.chunks != null) stats.push(`🧩 ${base.chunks}`)
+      if (base.targets != null) stats.push(`🎯 ${base.targets}`)
+      if (base.properties != null) stats.push(`🏷️ ${base.properties}`)
+      if (base.embeddingStatus) stats.push(`embed ${base.embeddingStatus}`)
+      if (base.durationMs != null) stats.push(`${base.durationMs} ms`)
+      const failedEmbedding = base.embeddingStatus.includes('failed')
+      rows.push({
+        id: `done-${resolvedPath}-${entry.ts_ms}`,
+        state: failedEmbedding ? 'error' : 'done',
+        group: 'file',
+        title: run ? 'Indexed file' : 'File index update',
+        detail: stats.join(' · '),
+        ...base
+      })
+      activeByPath.delete(resolvedPath)
+      continue
+    }
+
+    if (message.startsWith('rebuild:done')) {
+      const indexed = fields.indexed ?? '?'
+      rows.push({
+        id: `rebuild-done-${entry.ts_ms}`,
+        state: 'done',
+        group: 'rebuild',
+        title: `Workspace rebuild done (${indexed} indexed)`,
+        detail: base.durationMs != null ? `${base.durationMs} ms` : '',
+        ...base
+      })
+      continue
+    }
+
+    if (message.startsWith('rebuild:start')) {
+      rows.push({
+        id: `rebuild-start-${entry.ts_ms}`,
+        state: 'running',
+        group: 'rebuild',
+        title: 'Workspace rebuild started',
+        detail: '',
+        ...base
+      })
+      continue
+    }
+
+    const isError = message.includes('failed') || message.includes(':error') || message.includes('unavailable')
+    if (isError) {
+      rows.push({
+        id: `err-${entry.ts_ms}`,
+        state: 'error',
+        group: message.includes('reindex:') ? 'engine' : 'system',
+        title: message.startsWith('reindex:')
+          ? 'Indexing warning'
+          : message.startsWith('model:')
+            ? 'Model warning'
+            : 'Indexer error',
+        detail: message,
+        ...base
+      })
+      continue
     }
   }
-  if (message.startsWith('reindex:done')) {
-    const stats = [`chunks ${fields.chunks ?? '?'}`, `targets ${fields.targets ?? '?'}`, `props ${fields.properties ?? '?'}`]
-    if (fields.embedding) stats.push(`embedding ${fields.embedding}`)
-    if (fields.embedding_ms) stats.push(`${fields.embedding_ms} ms`)
-    return {
-      time: formatTimestamp(entry.ts_ms),
-      title: path ? `Reindex done • ${path}` : 'Reindex done',
-      detail: stats.join(' · ')
-    }
+
+  for (const run of activeByPath.values()) {
+    const split = splitRelativePath(run.path)
+    rows.push({
+      id: `running-${run.path}-${run.startedAt}`,
+      ts: run.startedAt,
+      timeLabel: formatTimeOnly(run.startedAt),
+      relativeTime: formatRelativeTime(run.startedAt),
+      state: 'running',
+      group: 'file',
+      path: run.path,
+      directory: split.directory,
+      fileName: split.fileName,
+      title: 'Processing file',
+      detail: '',
+      durationMs: null,
+      chunks: null,
+      targets: null,
+      properties: null,
+      embeddingStatus: ''
+    })
   }
-  if (message.startsWith('rebuild:progress')) {
-    return {
-      time: formatTimestamp(entry.ts_ms),
-      title: `Rebuild progress • ${fields.indexed ?? '?'} indexed`,
-      detail: fields.scanned ? `${fields.scanned} scanned` : ''
-    }
-  }
-  if (message.startsWith('rebuild:start')) {
-    return { time: formatTimestamp(entry.ts_ms), title: 'Rebuild start', detail: '' }
-  }
-  if (message.startsWith('rebuild:done')) {
-    return {
-      time: formatTimestamp(entry.ts_ms),
-      title: `Rebuild done • ${fields.indexed ?? '?'} indexed`,
-      detail: fields.total_ms ? `${fields.total_ms} ms` : ''
-    }
-  }
-  return { time: formatTimestamp(entry.ts_ms), title: message, detail: '' }
+
+  return rows.sort((left, right) => right.ts - left.ts).slice(0, 120)
 }
 
 function stopIndexStatusPolling() {
@@ -745,7 +954,7 @@ async function refreshIndexLogs() {
     return
   }
   try {
-    indexLogEntries.value = await readIndexLogs(80)
+    indexLogEntries.value = await readIndexLogs(160)
   } catch {
     indexLogEntries.value = []
   }
@@ -789,6 +998,7 @@ async function onIndexPrimaryAction() {
   indexStatusBusy.value = true
   try {
     if (indexRunning.value) {
+      if (typeof window !== 'undefined' && !window.confirm('Cancel current indexing run?')) return
       await stopCurrentIndexOperation()
     } else {
       await rebuildIndexFromOverflow()
@@ -3938,23 +4148,58 @@ onBeforeUnmount(() => {
       >
         <h3 id="index-status-title" class="confirm-title">Index Status</h3>
         <div class="index-status-body">
-          <p class="confirm-text">Current state: <strong>{{ indexStateLabel }}</strong></p>
-          <p class="confirm-text">Progress: {{ indexProgressLabel }}</p>
-          <p class="confirm-text">
-            Embedding model: <strong>{{ indexRuntimeStatus?.model_name || 'n/a' }}</strong>
-            ({{ indexModelStatusLabel }})
-          </p>
-          <p v-if="indexRuntimeStatus?.model_last_duration_ms != null" class="confirm-text">
-            Last model init: {{ indexRuntimeStatus.model_last_duration_ms }} ms
-            <span v-if="indexRuntimeStatus.model_last_finished_at_ms">
-              at {{ formatTimestamp(indexRuntimeStatus.model_last_finished_at_ms) }}
-            </span>
-          </p>
-          <p v-if="indexRuntimeStatus?.model_last_error" class="confirm-text">
-            Last model error: {{ indexRuntimeStatus.model_last_error }}
-          </p>
-          <p class="confirm-text">Note: first model initialization may download weights and take longer.</p>
-          <p v-if="indexRunCurrentPath" class="confirm-text">Current file: {{ toRelativePath(indexRunCurrentPath) }}</p>
+          <section class="index-overview">
+            <div class="index-overview-main">
+              <span class="index-status-badge" :class="indexStatusBadgeClass">
+                <span class="index-status-badge-dot"></span>
+                {{ indexStatusBadgeLabel }}
+              </span>
+              <p class="index-overview-summary">{{ indexProgressSummary }}</p>
+              <p v-if="indexRunCurrentPath" class="index-overview-current">
+                Current: {{ toRelativePath(indexRunCurrentPath) }}
+              </p>
+            </div>
+            <div class="index-progress-track" role="progressbar" :aria-valuenow="indexProgressPercent" aria-valuemin="0" aria-valuemax="100">
+              <div class="index-progress-fill" :style="{ width: `${indexProgressPercent}%` }"></div>
+            </div>
+            <div class="index-progress-meta">
+              <span>{{ indexProgressLabel }}</span>
+              <span>{{ indexProgressPercent }}%</span>
+            </div>
+          </section>
+
+          <section class="index-model-card">
+            <div class="index-model-head">
+              <p class="index-model-label">Embedding model</p>
+              <span class="index-model-state" :class="indexModelStateClass">{{ indexModelStatusLabel }}</span>
+            </div>
+            <p class="index-model-name">{{ indexRuntimeStatus?.model_name || 'n/a' }}</p>
+            <p v-if="indexRuntimeStatus?.model_last_duration_ms != null" class="index-model-meta">
+              Last init {{ indexRuntimeStatus.model_last_duration_ms }} ms
+              <span v-if="indexRuntimeStatus.model_last_finished_at_ms"> at {{ formatTimestamp(indexRuntimeStatus.model_last_finished_at_ms) }}</span>
+            </p>
+            <p v-if="indexShowWarmupNote" class="index-model-hint">
+              First initialization can download model weights and take longer.
+            </p>
+          </section>
+
+          <section v-if="indexAlert" class="index-alert" :class="`index-alert-${indexAlert.level}`">
+            <div>
+              <p class="index-alert-title">{{ indexAlert.title }}</p>
+              <p class="index-alert-message">{{ indexAlert.message }}</p>
+            </div>
+            <UiButton
+              v-if="!indexRunning"
+              size="sm"
+              variant="secondary"
+              class-name="index-alert-action"
+              :disabled="indexStatusBusy"
+              @click="onIndexPrimaryAction"
+            >
+              Retry rebuild
+            </UiButton>
+          </section>
+
           <div class="index-status-sections">
             <div class="index-steps">
               <div v-for="step in indexStepRows" :key="step.title" class="index-step">
@@ -3966,14 +4211,53 @@ onBeforeUnmount(() => {
               </div>
             </div>
             <div class="index-log-panel">
-              <p class="index-log-title">Recent indexing activity</p>
-              <div v-if="!indexLogRows.length" class="index-log-empty">No index activity yet.</div>
+              <div class="index-log-header">
+                <p class="index-log-title">Recent indexing activity</p>
+                <div class="index-log-filters" role="tablist" aria-label="Index log filters">
+                  <button
+                    type="button"
+                    class="index-log-filter-btn"
+                    :class="{ active: indexLogFilter === 'all' }"
+                    @click="indexLogFilter = 'all'"
+                  >
+                    All
+                  </button>
+                  <button
+                    type="button"
+                    class="index-log-filter-btn"
+                    :class="{ active: indexLogFilter === 'errors' }"
+                    @click="indexLogFilter = 'errors'"
+                  >
+                    Errors ({{ indexErrorCount }})
+                  </button>
+                  <button
+                    type="button"
+                    class="index-log-filter-btn"
+                    :class="{ active: indexLogFilter === 'slow' }"
+                    @click="indexLogFilter = 'slow'"
+                  >
+                    Slow >1s ({{ indexSlowCount }})
+                  </button>
+                </div>
+              </div>
+              <div v-if="!filteredIndexActivityRows.length" class="index-log-empty">No matching activity.</div>
               <div v-else class="index-log-list">
-                <div v-for="(item, idx) in indexLogRows" :key="`${item.time}-${item.title}-${idx}`" class="index-log-row">
-                  <span class="index-log-time">{{ item.time }}</span>
+                <div
+                  v-for="row in filteredIndexActivityRows"
+                  :key="row.id"
+                  class="index-log-row"
+                  :class="`index-log-row-${row.state}`"
+                >
+                  <span class="index-log-time">{{ row.timeLabel }} · {{ row.relativeTime }}</span>
                   <div class="index-log-copy">
-                    <p class="index-log-main">{{ item.title }}</p>
-                    <p v-if="item.detail" class="index-log-detail">{{ item.detail }}</p>
+                    <p class="index-log-main">
+                      <span class="index-log-state-icon" aria-hidden="true">{{ row.state === 'done' ? '✅' : row.state === 'error' ? '⚠️' : '⏳' }}</span>
+                      <span>{{ row.title }}</span>
+                    </p>
+                    <p v-if="row.path" class="index-log-path">
+                      <span v-if="row.directory" class="index-log-dir">{{ row.directory }}/</span><strong>{{ row.fileName }}</strong>
+                    </p>
+                    <p v-if="row.detail" class="index-log-detail">{{ row.detail }}</p>
                   </div>
                 </div>
               </div>
@@ -3981,7 +4265,15 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <div class="confirm-actions">
-          <UiButton size="sm" :disabled="indexStatusBusy" @click="onIndexPrimaryAction">{{ indexActionLabel }}</UiButton>
+          <UiButton
+            size="sm"
+            :variant="indexRunning ? 'secondary' : 'primary'"
+            :class-name="indexRunning ? 'index-stop-btn' : ''"
+            :disabled="indexStatusBusy"
+            @click="onIndexPrimaryAction"
+          >
+            {{ indexActionLabel }}
+          </UiButton>
           <UiButton size="sm" @click="closeIndexStatusModal">Close</UiButton>
         </div>
       </div>
@@ -4970,12 +5262,280 @@ onBeforeUnmount(() => {
   max-height: calc(100vh - 48px);
   display: flex;
   flex-direction: column;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(191, 219, 254, 0.22), transparent 42%),
+    radial-gradient(circle at 100% 100%, rgba(254, 215, 170, 0.18), transparent 36%),
+    #f9fbff;
+}
+
+.ide-root.dark .index-status-modal {
+  background:
+    radial-gradient(circle at 0% 0%, rgba(30, 64, 175, 0.2), transparent 38%),
+    radial-gradient(circle at 100% 100%, rgba(120, 53, 15, 0.16), transparent 42%),
+    #1f2430;
 }
 
 .index-status-body {
   min-height: 0;
   overflow: auto;
-  padding-right: 4px;
+  padding-right: 6px;
+}
+
+.index-overview {
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.88);
+  padding: 12px;
+  margin-bottom: 10px;
+}
+
+.ide-root.dark .index-overview {
+  border-color: #334155;
+  background: rgba(30, 41, 59, 0.72);
+}
+
+.index-overview-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.index-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.index-status-badge-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+}
+
+.index-badge-ready {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.index-badge-ready .index-status-badge-dot {
+  background: #22c55e;
+}
+
+.index-badge-running {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.index-badge-running .index-status-badge-dot {
+  background: #2563eb;
+  animation: statusPulse 1.2s ease-in-out infinite;
+}
+
+.index-badge-error {
+  background: #ffedd5;
+  color: #9a3412;
+}
+
+.index-badge-error .index-status-badge-dot {
+  background: #f97316;
+}
+
+.index-overview-summary {
+  margin: 0;
+  font-size: 12px;
+  color: #1f2937;
+  font-weight: 600;
+}
+
+.index-overview-current {
+  margin: 0;
+  width: 100%;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.ide-root.dark .index-overview-summary {
+  color: #e2e8f0;
+}
+
+.ide-root.dark .index-overview-current {
+  color: #94a3b8;
+}
+
+.index-progress-track {
+  margin-top: 10px;
+  width: 100%;
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #e2e8f0;
+}
+
+.ide-root.dark .index-progress-track {
+  background: #334155;
+}
+
+.index-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2563eb 0%, #0ea5e9 100%);
+  transition: width 180ms ease;
+}
+
+.index-progress-meta {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #475569;
+  display: flex;
+  justify-content: space-between;
+}
+
+.ide-root.dark .index-progress-meta {
+  color: #94a3b8;
+}
+
+.index-model-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.84);
+  margin-bottom: 10px;
+}
+
+.ide-root.dark .index-model-card {
+  border-color: #3e4451;
+  background: rgba(30, 41, 59, 0.68);
+}
+
+.index-model-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.index-model-label {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  font-weight: 700;
+}
+
+.index-model-state {
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.index-model-ready {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.index-model-busy {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
+.index-model-failed {
+  color: #9a3412;
+  background: #ffedd5;
+}
+
+.index-model-idle {
+  color: #334155;
+  background: #e2e8f0;
+}
+
+.index-model-name {
+  margin: 7px 0 0;
+  font-size: 12px;
+  color: #111827;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+}
+
+.index-model-meta {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.index-model-hint {
+  margin: 5px 0 0;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.ide-root.dark .index-model-label,
+.ide-root.dark .index-model-meta,
+.ide-root.dark .index-model-hint {
+  color: #94a3b8;
+}
+
+.ide-root.dark .index-model-name {
+  color: #f1f5f9;
+}
+
+.index-alert {
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.index-alert-error {
+  border: 1px solid #fdba74;
+  background: #fff7ed;
+}
+
+.index-alert-warning {
+  border: 1px solid #fcd34d;
+  background: #fffbeb;
+}
+
+.ide-root.dark .index-alert-error {
+  border-color: #ea580c;
+  background: rgba(124, 45, 18, 0.28);
+}
+
+.ide-root.dark .index-alert-warning {
+  border-color: #ca8a04;
+  background: rgba(113, 63, 18, 0.28);
+}
+
+.index-alert-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #9a3412;
+}
+
+.index-alert-message {
+  margin: 3px 0 0;
+  font-size: 11px;
+  color: #7c2d12;
+}
+
+.index-alert-action {
+  white-space: nowrap;
+}
+
+.ide-root.dark .index-alert-title {
+  color: #fed7aa;
+}
+
+.ide-root.dark .index-alert-message {
+  color: #fdba74;
 }
 
 .index-status-sections {
@@ -5053,18 +5613,60 @@ onBeforeUnmount(() => {
 
 .index-log-panel {
   border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 8px;
-  background: #ffffff;
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.86);
 }
 
 .ide-root.dark .index-log-panel {
   border-color: #3e4451;
-  background: #282c34;
+  background: rgba(30, 41, 59, 0.72);
+}
+
+.index-log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.index-log-filters {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.index-log-filter-btn {
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #475569;
+  padding: 3px 9px;
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.index-log-filter-btn.active {
+  border-color: #2563eb;
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
+.ide-root.dark .index-log-filter-btn {
+  border-color: #475569;
+  color: #cbd5e1;
+  background: #1e293b;
+}
+
+.ide-root.dark .index-log-filter-btn.active {
+  border-color: #60a5fa;
+  color: #bfdbfe;
+  background: #1e3a8a;
 }
 
 .index-log-title {
-  margin: 0 0 6px;
+  margin: 0;
   font-size: 12px;
   font-weight: 600;
   color: #334155;
@@ -5083,17 +5685,43 @@ onBeforeUnmount(() => {
 .index-log-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  height: 240px;
+  gap: 8px;
+  height: 260px;
+  margin-top: 8px;
   padding-right: 4px;
   overflow: auto;
 }
 
 .index-log-row {
   display: grid;
-  grid-template-columns: 118px 1fr;
+  grid-template-columns: 110px 1fr;
   gap: 8px;
   align-items: start;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.index-log-row-running {
+  border-color: #bfdbfe;
+}
+
+.index-log-row-error {
+  border-color: #fdba74;
+}
+
+.ide-root.dark .index-log-row {
+  border-color: #3e4451;
+  background: rgba(30, 41, 59, 0.52);
+}
+
+.ide-root.dark .index-log-row-running {
+  border-color: #2563eb;
+}
+
+.ide-root.dark .index-log-row-error {
+  border-color: #ea580c;
 }
 
 .index-log-time {
@@ -5112,13 +5740,31 @@ onBeforeUnmount(() => {
   margin: 0;
   font-size: 11px;
   color: #1f2937;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.index-log-state-icon {
+  width: 14px;
+  text-align: center;
+}
+
+.index-log-path {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: #0f172a;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.index-log-dir {
+  color: #64748b;
+}
+
 .index-log-detail {
-  margin: 1px 0 0;
+  margin: 2px 0 0;
   font-size: 10px;
   color: #64748b;
   white-space: nowrap;
@@ -5132,19 +5778,51 @@ onBeforeUnmount(() => {
   color: #94a3b8;
 }
 
+.ide-root.dark .index-log-path {
+  color: #e2e8f0;
+}
+
+.ide-root.dark .index-log-dir {
+  color: #94a3b8;
+}
+
 .ide-root.dark .index-log-main {
   color: #e2e8f0;
+}
+
+.index-stop-btn {
+  border-color: #dc2626 !important;
+  background: #fef2f2 !important;
+  color: #b91c1c !important;
+}
+
+.ide-root.dark .index-stop-btn {
+  border-color: #ef4444 !important;
+  background: rgba(127, 29, 29, 0.36) !important;
+  color: #fecaca !important;
 }
 
 @media (max-width: 980px) {
   .index-status-modal {
     width: min(760px, calc(100vw - 20px));
   }
+  .index-overview-main {
+    align-items: flex-start;
+  }
+  .index-alert {
+    flex-direction: column;
+  }
+  .index-log-header {
+    align-items: flex-start;
+  }
   .index-log-list {
-    height: 200px;
+    height: 220px;
   }
   .index-log-row {
-    grid-template-columns: 104px 1fr;
+    grid-template-columns: 1fr;
+  }
+  .index-log-time {
+    white-space: normal;
   }
 }
 
