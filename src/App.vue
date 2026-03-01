@@ -2453,6 +2453,13 @@ function onCosmosJumpToRelatedNode(nodeId: string) {
   recordCosmosHistorySnapshot()
 }
 
+function onCosmosLocateSelectedNode() {
+  const selected = cosmos.selectedNode.value
+  if (!selected) return
+  cosmosRef.value?.focusNodeById(selected.id)
+  recordCosmosHistorySnapshot()
+}
+
 async function onCosmosOpenSelectedNode() {
   const selected = cosmos.openSelected()
   if (!selected) return
@@ -3605,6 +3612,7 @@ onBeforeUnmount(() => {
               @expand-neighborhood="onCosmosExpandNeighborhood"
               @jump-related="onCosmosJumpToRelatedNode"
               @open-selected="void onCosmosOpenSelectedNode()"
+              @locate-selected="onCosmosLocateSelectedNode"
               @reset-view="onCosmosResetView"
             />
           </div>

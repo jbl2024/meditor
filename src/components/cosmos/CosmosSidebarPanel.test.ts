@@ -94,6 +94,7 @@ describe('CosmosSidebarPanel', () => {
 
     const events = {
       openSelected: 0,
+      locateSelected: 0,
       resetView: 0,
       selectMatch: '' as string,
       jumpRelated: '' as string,
@@ -121,6 +122,9 @@ describe('CosmosSidebarPanel', () => {
             onOpenSelected: () => {
               events.openSelected += 1
             },
+            onLocateSelected: () => {
+              events.locateSelected += 1
+            },
             onResetView: () => {
               events.resetView += 1
             },
@@ -142,6 +146,7 @@ describe('CosmosSidebarPanel', () => {
     await flushUi()
 
     root.querySelector<HTMLButtonElement>('.cosmos-node-title-link')?.click()
+    root.querySelector<HTMLButtonElement>('.cosmos-locate-btn')?.click()
     const resetBtn = Array.from(root.querySelectorAll<HTMLButtonElement>('.cosmos-reset-btn'))
       .find((button) => (button.textContent ?? '').includes('Reset view'))
     resetBtn?.click()
@@ -151,6 +156,7 @@ describe('CosmosSidebarPanel', () => {
     await flushUi()
 
     expect(events.openSelected).toBe(1)
+    expect(events.locateSelected).toBe(1)
     expect(events.resetView).toBe(1)
     expect(events.selectMatch).toBe('a')
     expect(events.jumpRelated).toBe('b')

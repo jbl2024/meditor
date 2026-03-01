@@ -40,6 +40,7 @@ const emit = defineEmits<{
   'expand-neighborhood': []
   'jump-related': [nodeId: string]
   'open-selected': []
+  'locate-selected': []
   'reset-view': []
 }>()
 
@@ -144,9 +145,14 @@ function onClearQuery() {
       </div>
 
       <div v-if="selectedNode" class="cosmos-node-stats">
-        <button type="button" class="cosmos-node-title-link" @click="emit('open-selected')">
-          {{ selectedNode.displayLabel || selectedNode.label }}
-        </button>
+        <div class="cosmos-node-head">
+          <button type="button" class="cosmos-node-title-link" @click="emit('open-selected')">
+            {{ selectedNode.displayLabel || selectedNode.label }}
+          </button>
+          <button type="button" class="cosmos-locate-btn" @click="emit('locate-selected')">
+            Locate
+          </button>
+        </div>
         <p class="cosmos-node-meta">Degree: {{ selectedNode.degree }} · Cluster: {{ selectedNode.cluster }}</p>
         <p class="cosmos-node-meta">Visible links: {{ selectedLinkCount }}</p>
         <p v-if="previewLoading" class="cosmos-node-preview">Loading preview...</p>
@@ -396,6 +402,28 @@ function onClearQuery() {
   text-decoration: underline;
   text-underline-offset: 2px;
   cursor: pointer;
+}
+
+.cosmos-node-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cosmos-locate-btn {
+  border: 1px solid var(--cosmos-border);
+  background: var(--cosmos-button-bg);
+  color: var(--cosmos-text-secondary);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.cosmos-locate-btn:hover {
+  background: var(--cosmos-button-hover);
+  color: var(--cosmos-text-primary);
 }
 
 .cosmos-node-path,
