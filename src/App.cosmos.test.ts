@@ -221,4 +221,38 @@ describe('App cosmos integration', () => {
 
     mounted.app.unmount()
   })
+
+  it('keeps cosmos search query and matches after selecting a node', async () => {
+    window.localStorage.setItem('meditor.working-folder.path', '/vault')
+    const mounted = mountApp()
+    await flushUi()
+    await flushUi()
+
+    mounted.root.querySelector<HTMLButtonElement>('button[aria-label="Cosmos view"]')?.click()
+    await flushUi()
+    await flushUi()
+
+    const input = mounted.root.querySelector<HTMLInputElement>('.cosmos-search-input')
+    expect(input).toBeTruthy()
+    if (!input) {
+      mounted.app.unmount()
+      return
+    }
+
+    input.value = 'opened'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushUi()
+
+    expect(input.value).toBe('opened')
+    expect(mounted.root.querySelectorAll('.cosmos-match-item').length).toBeGreaterThan(0)
+
+    mounted.root.querySelector<HTMLButtonElement>('button[data-cosmos-open="true"]')?.click()
+    await flushUi()
+
+    const updatedInput = mounted.root.querySelector<HTMLInputElement>('.cosmos-search-input')
+    expect(updatedInput?.value).toBe('opened')
+    expect(mounted.root.querySelectorAll('.cosmos-match-item').length).toBeGreaterThan(0)
+
+    mounted.app.unmount()
+  })
 })

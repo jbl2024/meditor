@@ -5,7 +5,7 @@
  * Responsibilities:
  * - render the graph with `3d-force-graph`,
  * - apply hover/focus highlighting,
- * - surface node opening via emits.
+ * - surface node selection via emits.
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { CosmosGraph, CosmosGraphNode } from '../../lib/graphIndex'
@@ -157,7 +157,7 @@ function focusNode(node: RenderNode) {
 }
 
 /**
- * Handles node click with single-click open and double-click focus behavior.
+ * Handles node click with single-click select and double-click focus behavior.
  */
 function onNodeClick(node: RenderNode) {
   if (lastDraggedNodeId === node.id && Date.now() - lastDragAt < CLICK_AFTER_DRAG_GUARD_MS) {
