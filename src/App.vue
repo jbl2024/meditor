@@ -220,12 +220,9 @@ const secondBrainSessionsTabOpen = ref(false)
 const secondBrainSurface = ref<'chat' | 'sessions'>('chat')
 const secondBrainRequestedSessionId = ref('')
 const secondBrainRequestedSessionNonce = ref(0)
-const secondBrainRequestedTargetPath = ref('')
-const secondBrainRequestedTargetNonce = ref(0)
 const secondBrainRequestedContextTogglePath = ref('')
 const secondBrainRequestedContextToggleNonce = ref(0)
 const secondBrainContextPaths = ref<string[]>([])
-const secondBrainTargetPath = ref('')
 const shortcutsFilterQuery = ref('')
 const previousNonCosmosMode = ref<SidebarMode>('explorer')
 const wikilinkRewriteQueue: Array<{
@@ -1885,12 +1882,6 @@ function openSecondBrainSessionFromHistory(sessionId: string) {
   }
 }
 
-function onSecondBrainSidebarOpen(path: string) {
-  if (!path.trim()) return
-  secondBrainRequestedTargetPath.value = path
-  secondBrainRequestedTargetNonce.value += 1
-}
-
 function onSecondBrainSidebarToggleContext(path: string) {
   if (!path.trim()) return
   secondBrainRequestedContextTogglePath.value = path
@@ -1899,10 +1890,6 @@ function onSecondBrainSidebarToggleContext(path: string) {
 
 function onSecondBrainContextChanged(paths: string[]) {
   secondBrainContextPaths.value = [...paths]
-}
-
-function onSecondBrainTargetChanged(path: string) {
-  secondBrainTargetPath.value = path
 }
 
 function applySecondBrainInitPreset(provider: 'openai' | 'anthropic' | 'custom') {
@@ -2077,12 +2064,9 @@ async function closeWorkspace() {
   cosmosTabOpen.value = false
   secondBrainTabOpen.value = false
   secondBrainSessionsTabOpen.value = false
-  secondBrainRequestedTargetPath.value = ''
-  secondBrainRequestedTargetNonce.value = 0
   secondBrainRequestedContextTogglePath.value = ''
   secondBrainRequestedContextToggleNonce.value = 0
   secondBrainContextPaths.value = []
-  secondBrainTargetPath.value = ''
   filesystem.selectedCount.value = 0
   filesystem.clearWorkspacePath()
   try {
@@ -4420,10 +4404,10 @@ onBeforeUnmount(() => {
               v-if="filesystem.hasWorkspace.value"
               ref="explorerRef"
               :folder-path="filesystem.workingFolderPath.value"
-              :active-path="secondBrainTargetPath || activeFilePath"
+              :active-path="activeFilePath"
               :context-paths="secondBrainContextPaths"
               row-action-mode="context-toggle"
-              @open="onSecondBrainSidebarOpen"
+              @open="onExplorerOpen"
               @toggle-context="onSecondBrainSidebarToggleContext"
               @path-renamed="onExplorerPathRenamed"
               @request-create="onExplorerRequestCreate"
@@ -4707,21 +4691,10 @@ onBeforeUnmount(() => {
               :all-workspace-files="allWorkspaceFiles"
               :requested-session-id="secondBrainRequestedSessionId"
               :requested-session-nonce="secondBrainRequestedSessionNonce"
-              :requested-target-path="secondBrainRequestedTargetPath"
-              :requested-target-nonce="secondBrainRequestedTargetNonce"
               :requested-context-toggle-path="secondBrainRequestedContextTogglePath"
               :requested-context-toggle-nonce="secondBrainRequestedContextToggleNonce"
-              :open-file="openFile"
-              :save-file="saveFile"
-              :rename-file-from-title="renameFileFromTitle"
-              :load-link-targets="loadWikilinkTargets"
-              :load-link-headings="loadWikilinkHeadings"
-              :load-property-type-schema="loadPropertyTypeSchema"
-              :save-property-type-schema="savePropertyTypeSchema"
-              :open-link-target="openWikilinkTarget"
               @open-note="void openTabWithAutosave($event)"
               @context-changed="onSecondBrainContextChanged"
-              @target-changed="onSecondBrainTargetChanged"
             />
             <SecondBrainSessionsView
               v-if="secondBrainSessionsTabOpen"

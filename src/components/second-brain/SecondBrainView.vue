@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ClipboardDocumentIcon, PaperAirplaneIcon } from '@heroicons/vue/24/outline'
-import EditorView from '../EditorView.vue'
+import SecondBrainSessionsList from './SecondBrainSessionsList.vue'
 import {
   createDeliberationSession,
   fetchSecondBrainConfigStatus,
   fetchSecondBrainSessions,
-  linkSessionTargetNote,
   loadDeliberationSession,
   replaceSessionContext,
   runDeliberation,
@@ -19,24 +18,13 @@ const props = defineProps<{
   allWorkspaceFiles: string[]
   requestedSessionId: string
   requestedSessionNonce: number
-  requestedTargetPath: string
-  requestedTargetNonce: number
   requestedContextTogglePath: string
   requestedContextToggleNonce: number
-  openFile: (path: string) => Promise<string>
-  saveFile: (path: string, text: string, options: { explicit: boolean }) => Promise<{ persisted: boolean }>
-  renameFileFromTitle: (path: string, title: string) => Promise<{ path: string; title: string }>
-  loadLinkTargets: () => Promise<string[]>
-  loadLinkHeadings: (target: string) => Promise<string[]>
-  loadPropertyTypeSchema: () => Promise<Record<string, string>>
-  savePropertyTypeSchema: (schema: Record<string, string>) => Promise<void>
-  openLinkTarget: (target: string) => Promise<boolean>
 }>()
 
 const emit = defineEmits<{
   'open-note': [path: string]
   'context-changed': [paths: string[]]
-  'target-changed': [path: string]
 }>()
 
 const TOKEN_LIMIT = 120000
@@ -52,9 +40,8 @@ const messages = ref<SecondBrainMessage[]>([])
 const streamByMessage = ref<Record<string, string>>({})
 const sending = ref(false)
 const sendError = ref('')
-const targetNotePath = ref('')
 const sessionsIndex = ref<SecondBrainSessionSummary[]>([])
-const rightPanelWidth = ref(620)
+const rightPanelWidth = ref(360)
 const resizing = ref(false)
 const resizeState = ref<{ startX: number; startWidth: number } | null>(null)
 
@@ -162,9 +149,7 @@ async function loadSession(nextSessionId: string) {
     contextTokenEstimate.value = nextTokens
 
     messages.value = payload.messages
-    targetNotePath.value = payload.target_note_path ? asAbsolute(payload.target_note_path) : ''
     emit('context-changed', contextPaths.value)
-    emit('target-changed', targetNotePath.value)
   } catch (err) {
     sendError.value = err instanceof Error ? err.message : 'Could not load session.'
   } finally {
@@ -178,6 +163,23 @@ async function refreshSessionsIndex() {
   } catch {
     sessionsIndex.value = []
   }
+}
+
+async function onCreateSession() {
+  const seed = contextPaths.value[0] || props.allWorkspaceFiles.find((path) => /\.(md|markdown)$/i.test(path))
+  if (!seed) {
+    sendError.value = 'No markdown note found to seed a new session.'
+    return
+  }
+  const created = await createDeliberationSession({ contextPaths: [seed], title: '' })
+  sessionId.value = created.sessionId
+  sessionTitle.value = 'Second Brain Session'
+  contextPaths.value = [seed]
+  contextTokenEstimate.value = { [seed]: Math.max(1, Math.round((seed.length + 400) / 4)) }
+  messages.value = []
+  streamByMessage.value = {}
+  emit('context-changed', contextPaths.value)
+  await refreshSessionsIndex()
 }
 
 function displayMessage(message: SecondBrainMessage): string {
@@ -243,13 +245,6 @@ async function onCopyAssistantMessage(message: SecondBrainMessage) {
   } catch (err) {
     sendError.value = err instanceof Error ? err.message : 'Could not copy assistant response.'
   }
-}
-
-async function linkTargetPath(absolutePath: string) {
-  if (!sessionId.value) return
-  const linkedRelative = await linkSessionTargetNote(sessionId.value, absolutePath)
-  targetNotePath.value = asAbsolute(linkedRelative)
-  emit('target-changed', targetNotePath.value)
 }
 
 function openContextNote(path: string) {
@@ -323,20 +318,6 @@ watch(
     const [id] = value.split('::')
     if (!id.trim()) return
     void loadSession(id)
-  }
-)
-
-watch(
-  () => `${props.requestedTargetPath}::${props.requestedTargetNonce}`,
-  (value) => {
-    const [path] = value.split('::')
-    if (!path.trim()) return
-    void (async () => {
-      if (!sessionId.value) {
-        await ensureSession(path)
-      }
-      await linkTargetPath(path)
-    })()
   }
 )
 
@@ -430,27 +411,14 @@ watch(
     <aside class="sb-col sb-right">
       <div class="sb-right-inner" :style="{ width: `${rightPanelWidth}px` }">
       <header class="sb-right-head">
-        <h3>Target note</h3>
+        <h3>Sessions</h3>
       </header>
-
-      <div v-if="!targetNotePath" class="target-empty">
-        <p>No target note linked.</p>
-        <p>Click a markdown file in the left explorer.</p>
-      </div>
-      <p v-if="targetNotePath" class="sb-target-path">{{ toRelativePath(targetNotePath) }}</p>
-
-      <EditorView
-        v-if="targetNotePath"
-        :path="targetNotePath"
-        :open-paths="[targetNotePath]"
-        :open-file="props.openFile"
-        :save-file="props.saveFile"
-        :rename-file-from-title="props.renameFileFromTitle"
-        :load-link-targets="props.loadLinkTargets"
-        :load-link-headings="props.loadLinkHeadings"
-        :load-property-type-schema="props.loadPropertyTypeSchema"
-        :save-property-type-schema="props.savePropertyTypeSchema"
-        :open-link-target="props.openLinkTarget"
+      <SecondBrainSessionsList
+        :sessions="sessionsIndex"
+        :active-session-id="sessionId"
+        :loading="loading"
+        @select="loadSession"
+        @create="onCreateSession"
       />
       </div>
     </aside>
@@ -559,9 +527,7 @@ watch(
 .sb-input-row .actions { display: flex; align-items: center; gap: 10px; min-height: 18px; }
 .sb-error { color: #b91c1c; font-size: 12px; }
 .hint { color: #64748b; font-size: 12px; }
-.sb-target-path { margin: 8px 0 6px; color: #64748b; font-size: 12px; }
-.target-empty { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; justify-content: center; height: 100%; color: #64748b; font-size: 12px; }
-.sb-right-inner { width: 420px; min-width: 0; height: 100%; display: flex; flex-direction: column; }
+.sb-right-inner { width: 360px; min-width: 0; height: 100%; display: flex; flex-direction: column; }
 .sb-splitter {
   width: 8px;
   cursor: col-resize;
@@ -617,9 +583,7 @@ watch(
 }
 :global(.ide-root.dark) .card span,
 :global(.ide-root.dark) .sb-v2-hint,
-:global(.ide-root.dark) .hint,
-:global(.ide-root.dark) .target-empty,
-:global(.ide-root.dark) .sb-target-path { color: #94a3b8; }
+:global(.ide-root.dark) .hint { color: #94a3b8; }
 :global(.ide-root.dark) .sb-error { color: #e06c75; }
 :global(.ide-root.dark) .fill { background: linear-gradient(90deg, #61afef, #56b6c2); }
 :global(.ide-root.dark) .sb-loader {
