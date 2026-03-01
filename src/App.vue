@@ -5,6 +5,7 @@ import {
   ArrowRightIcon,
   ComputerDesktopIcon,
   CommandLineIcon,
+  CpuChipIcon,
   EllipsisHorizontalIcon,
   FolderIcon,
   HomeIcon,
@@ -18,6 +19,7 @@ import EditorView from './components/EditorView.vue'
 import EditorRightPane from './components/EditorRightPane.vue'
 import CosmosSidebarPanel from './components/cosmos/CosmosSidebarPanel.vue'
 import CosmosView from './components/cosmos/CosmosView.vue'
+import SecondBrainView from './components/second-brain/SecondBrainView.vue'
 import ExplorerTree from './components/explorer/ExplorerTree.vue'
 import UiButton from './components/ui/UiButton.vue'
 import { type DocumentHistoryEntry, useDocumentHistory } from './composables/useDocumentHistory'
@@ -203,6 +205,7 @@ const indexStatusModalVisible = ref(false)
 const cosmosCommandLoadingVisible = ref(false)
 const cosmosCommandLoadingLabel = ref('Loading graph...')
 const cosmosTabOpen = ref(false)
+const secondBrainTabOpen = ref(false)
 const shortcutsFilterQuery = ref('')
 const previousNonCosmosMode = ref<SidebarMode>('explorer')
 const wikilinkRewriteQueue: Array<{
@@ -272,13 +275,9 @@ const tabView = computed<TabViewItem[]>(() => {
     }
   })
 
-  if (!cosmosTabOpen.value) {
-    return fileTabs
-  }
-
-  return [
-    ...fileTabs,
-    {
+  const specialTabs: TabViewItem[] = []
+  if (cosmosTabOpen.value) {
+    specialTabs.push({
       path: COSMOS_TAB_PATH,
       title: 'Cosmos',
       pinned: true,
@@ -287,14 +286,30 @@ const tabView = computed<TabViewItem[]>(() => {
       saveError: '',
       kind: 'cosmos',
       draggable: false
-    }
-  ]
+    })
+  }
+  if (secondBrainTabOpen.value) {
+    specialTabs.push({
+      path: SECOND_BRAIN_TAB_PATH,
+      title: 'Second Brain',
+      pinned: true,
+      dirty: false,
+      saving: false,
+      saveError: '',
+      kind: 'second-brain',
+      draggable: false
+    })
+  }
+
+  return [...fileTabs, ...specialTabs]
 })
 
 const activeFilePath = computed(() => workspace.activeTabPath.value)
-const activeTabPathForView = computed(() =>
-  workspace.sidebarMode.value === 'cosmos' ? COSMOS_TAB_PATH : workspace.activeTabPath.value
-)
+const activeTabPathForView = computed(() => {
+  if (workspace.sidebarMode.value === 'cosmos') return COSMOS_TAB_PATH
+  if (workspace.sidebarMode.value === 'second-brain') return SECOND_BRAIN_TAB_PATH
+  return workspace.activeTabPath.value
+})
 const activeStatus = computed(() => editorState.getStatus(activeFilePath.value))
 const indexStateLabel = computed(() => {
   if (filesystem.indexingState.value === 'indexing') return 'reindexing'
@@ -480,6 +495,7 @@ type PaletteAction = {
 }
 
 const COSMOS_TAB_PATH = '__tomosona_cosmos_view__'
+const SECOND_BRAIN_TAB_PATH = '__tomosona_second_brain_view__'
 
 type TabViewItem = {
   path: string
@@ -488,7 +504,7 @@ type TabViewItem = {
   dirty: boolean
   saving: boolean
   saveError: string
-  kind: 'file' | 'cosmos'
+  kind: 'file' | 'cosmos' | 'second-brain'
   draggable: boolean
 }
 
@@ -499,19 +515,20 @@ const paletteActionPriority: Record<string, number> = {
   'open-yesterday': 3,
   'open-specific-date': 4,
   'open-cosmos-view': 5,
-  'open-note-in-cosmos': 6,
-  'reveal-in-explorer': 7,
-  'show-shortcuts': 8,
-  'create-new-file': 9,
-  'close-other-tabs': 10,
-  'close-all-tabs': 11,
-  'zoom-in': 12,
-  'zoom-out': 13,
-  'zoom-reset': 14,
-  'theme-light': 15,
-  'theme-dark': 16,
-  'theme-system': 17,
-  'close-workspace': 18
+  'open-second-brain-view': 6,
+  'open-note-in-cosmos': 7,
+  'reveal-in-explorer': 8,
+  'show-shortcuts': 9,
+  'create-new-file': 10,
+  'close-other-tabs': 11,
+  'close-all-tabs': 12,
+  'zoom-in': 13,
+  'zoom-out': 14,
+  'zoom-reset': 15,
+  'theme-light': 16,
+  'theme-dark': 17,
+  'theme-system': 18,
+  'close-workspace': 19
 }
 
 const paletteActions = computed<PaletteAction[]>(() => [
@@ -521,6 +538,12 @@ const paletteActions = computed<PaletteAction[]>(() => [
     run: () => openCosmosViewFromPalette(),
     closeBeforeRun: true,
     loadingLabel: 'Loading graph...'
+  },
+  {
+    id: 'open-second-brain-view',
+    label: 'Open Second Brain View',
+    run: () => openSecondBrainViewFromPalette(),
+    closeBeforeRun: true
   },
   {
     id: 'open-note-in-cosmos',
@@ -727,14 +750,17 @@ function loadThemePreference() {
 
 function loadSavedSidebarMode() {
   const saved = window.sessionStorage.getItem(VIEW_MODE_STORAGE_KEY)
-  if (saved === 'explorer' || saved === 'search' || saved === 'cosmos') {
+  if (saved === 'explorer' || saved === 'search' || saved === 'cosmos' || saved === 'second-brain') {
     workspace.sidebarMode.value = saved
     if (saved === 'cosmos') {
       cosmosTabOpen.value = true
     }
+    if (saved === 'second-brain') {
+      secondBrainTabOpen.value = true
+    }
   }
   const savedPrevious = window.sessionStorage.getItem(PREVIOUS_NON_COSMOS_VIEW_MODE_STORAGE_KEY)
-  if (savedPrevious === 'explorer' || savedPrevious === 'search') {
+  if (savedPrevious === 'explorer' || savedPrevious === 'search' || savedPrevious === 'second-brain') {
     previousNonCosmosMode.value = savedPrevious
   }
 }
@@ -1757,6 +1783,25 @@ async function openCosmosViewFromPalette() {
   return true
 }
 
+async function openSecondBrainViewFromPalette() {
+  if (!filesystem.hasWorkspace.value) {
+    filesystem.errorMessage.value = 'Open a workspace first.'
+    return false
+  }
+
+  secondBrainTabOpen.value = true
+  if (workspace.sidebarMode.value !== 'second-brain') {
+    previousNonCosmosMode.value = workspace.sidebarMode.value
+    persistPreviousNonCosmosMode()
+    workspace.setSidebarMode('second-brain')
+    persistSidebarMode()
+  }
+  if (!allWorkspaceFiles.value.length) {
+    await loadAllFiles()
+  }
+  return true
+}
+
 /**
  * Opens Cosmos and selects the active note node when available.
  */
@@ -1818,6 +1863,7 @@ async function closeWorkspace() {
   semanticLinksLoading.value = false
   cosmos.clearState()
   cosmosTabOpen.value = false
+  secondBrainTabOpen.value = false
   filesystem.selectedCount.value = 0
   filesystem.clearWorkspacePath()
   try {
@@ -1966,7 +2012,7 @@ async function setActiveTabWithAutosave(path: string, options: NavigateOptions =
 }
 
 function exitCosmosForNoteNavigation() {
-  if (workspace.sidebarMode.value !== 'cosmos') return
+  if (workspace.sidebarMode.value !== 'cosmos' && workspace.sidebarMode.value !== 'second-brain') return
   const fallback = previousNonCosmosMode.value
   workspace.setSidebarMode(fallback)
   persistSidebarMode()
@@ -2359,6 +2405,12 @@ async function onTabClick(tab: TabViewItem) {
     }
     return
   }
+  if (tab.kind === 'second-brain') {
+    if (workspace.sidebarMode.value !== 'second-brain') {
+      setSidebarMode('second-brain')
+    }
+    return
+  }
   const opened = await setActiveTabWithAutosave(tab.path)
   if (!opened) return
 }
@@ -2398,9 +2450,24 @@ function closeCosmosTab() {
   }
 }
 
+function closeSecondBrainTab() {
+  if (!secondBrainTabOpen.value) return
+  secondBrainTabOpen.value = false
+  if (workspace.sidebarMode.value === 'second-brain') {
+    previousNonCosmosMode.value = 'explorer'
+    persistPreviousNonCosmosMode()
+    workspace.setSidebarMode('explorer')
+    persistSidebarMode()
+  }
+}
+
 function onTabClose(tab: TabViewItem) {
   if (tab.kind === 'cosmos') {
     closeCosmosTab()
+    return
+  }
+  if (tab.kind === 'second-brain') {
+    closeSecondBrainTab()
     return
   }
   workspace.closeTab(tab.path)
@@ -2472,6 +2539,18 @@ function setSidebarMode(mode: SidebarMode) {
     recordCosmosHistorySnapshot()
     if (!cosmos.graph.value.nodes.length) {
       void cosmos.refreshGraph()
+    }
+    return
+  }
+  if (mode === 'second-brain') {
+    if (current === 'second-brain') return
+    secondBrainTabOpen.value = true
+    previousNonCosmosMode.value = current
+    persistPreviousNonCosmosMode()
+    workspace.setSidebarMode('second-brain')
+    persistSidebarMode()
+    if (!allWorkspaceFiles.value.length) {
+      void loadAllFiles()
     }
     return
   }
@@ -3543,6 +3622,14 @@ function onWindowKeydown(event: KeyboardEvent) {
     persistSidebarMode()
     return
   }
+  if (isEscape && workspace.sidebarMode.value === 'second-brain') {
+    event.preventDefault()
+    event.stopPropagation()
+    const fallback = previousNonCosmosMode.value
+    workspace.setSidebarMode(fallback)
+    persistSidebarMode()
+    return
+  }
 
   if (quickOpenVisible.value) {
     if (event.key === 'ArrowDown') {
@@ -3642,6 +3729,10 @@ function onWindowKeydown(event: KeyboardEvent) {
       closeCosmosTab()
       return
     }
+    if (workspace.sidebarMode.value === 'second-brain') {
+      closeSecondBrainTab()
+      return
+    }
     workspace.closeCurrentTab()
     return
   }
@@ -3697,7 +3788,7 @@ watch(
   () => workspace.sidebarMode.value,
   (mode) => {
     persistSidebarMode()
-    if (mode !== 'cosmos') {
+    if (mode !== 'cosmos' && mode !== 'second-brain') {
       previousNonCosmosMode.value = mode
       persistPreviousNonCosmosMode()
     }
@@ -3932,6 +4023,16 @@ onBeforeUnmount(() => {
         >
           <ShareIcon class="activity-btn-icon" />
         </button>
+        <button
+          class="activity-btn"
+          :class="{ active: workspace.sidebarMode.value === 'second-brain' }"
+          type="button"
+          title="Second Brain"
+          aria-label="Second Brain"
+          @click="setSidebarMode('second-brain')"
+        >
+          <CpuChipIcon class="activity-btn-icon" />
+        </button>
       </aside>
 
       <aside
@@ -4040,6 +4141,9 @@ onBeforeUnmount(() => {
               @reset-view="onCosmosResetView"
             />
           </div>
+          <div v-else-if="workspace.sidebarMode.value === 'second-brain'" class="panel-fill">
+            <div class="placeholder">Second Brain est ouvert dans la zone centrale.</div>
+          </div>
 
           <div v-else class="placeholder">No panel selected</div>
         </div>
@@ -4067,6 +4171,7 @@ onBeforeUnmount(() => {
               >
                 <span class="tab-name">
                   <ShareIcon v-if="tab.kind === 'cosmos'" class="tab-cosmos-icon" aria-hidden="true" />
+                  <CpuChipIcon v-else-if="tab.kind === 'second-brain'" class="tab-cosmos-icon" aria-hidden="true" />
                   <span>{{ tab.title }}</span>
                 </span>
                 <span v-if="tab.saving" class="tab-state" title="Saving">~</span>
@@ -4303,8 +4408,23 @@ onBeforeUnmount(() => {
               @select-node="onCosmosSelectNode"
               @toggle-focus-mode="onCosmosToggleFocusModeFromGraph"
             />
+            <SecondBrainView
+              v-if="secondBrainTabOpen"
+              v-show="workspace.sidebarMode.value === 'second-brain'"
+              :workspace-path="filesystem.workingFolderPath.value"
+              :all-workspace-files="allWorkspaceFiles"
+              :open-file="openFile"
+              :save-file="saveFile"
+              :rename-file-from-title="renameFileFromTitle"
+              :load-link-targets="loadWikilinkTargets"
+              :load-link-headings="loadWikilinkHeadings"
+              :load-property-type-schema="loadPropertyTypeSchema"
+              :save-property-type-schema="savePropertyTypeSchema"
+              :open-link-target="openWikilinkTarget"
+              @open-note="void openTabWithAutosave($event)"
+            />
             <EditorView
-              v-show="workspace.sidebarMode.value !== 'cosmos'"
+              v-show="workspace.sidebarMode.value !== 'cosmos' && workspace.sidebarMode.value !== 'second-brain'"
               ref="editorRef"
               :path="activeFilePath"
               :openPaths="workspace.openTabs.value.map((tab) => tab.path)"
@@ -4509,7 +4629,7 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div v-if="quickOpenVisible" class="modal-overlay" @click.self="closeQuickOpen">
+    <div v-if="quickOpenVisible" class="modal-overlay" @click.self="() => closeQuickOpen()">
       <div
         class="modal quick-open"
         data-modal="quick-open"

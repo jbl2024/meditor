@@ -2,10 +2,13 @@
 //! and Cosmos graph payload generation.
 
 mod fs_ops;
+mod second_brain;
 mod semantic;
 mod workspace_watch;
 
 // Tauri command surface for workspace I/O, index/search, and graph data used by Cosmos view.
+#[cfg(windows)]
+use std::os::windows::fs::MetadataExt;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     fs,
@@ -16,8 +19,6 @@ use std::{
     },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
-#[cfg(windows)]
-use std::os::windows::fs::MetadataExt;
 
 use directories::UserDirs;
 use rusqlite::{params, params_from_iter, types::Value as SqlValue, Connection};
@@ -977,6 +978,45 @@ fn init_db() -> Result<()> {
     );
     CREATE INDEX IF NOT EXISTS idx_semantic_edges_source ON semantic_edges(source_path);
     CREATE INDEX IF NOT EXISTS idx_semantic_edges_target ON semantic_edges(target_path);
+
+    CREATE TABLE IF NOT EXISTS second_brain_sessions (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL DEFAULT '',
+      provider TEXT NOT NULL DEFAULT '',
+      model TEXT NOT NULL DEFAULT '',
+      created_at_ms INTEGER NOT NULL DEFAULT 0,
+      updated_at_ms INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_second_brain_sessions_updated ON second_brain_sessions(updated_at_ms DESC);
+
+    CREATE TABLE IF NOT EXISTS second_brain_context_items (
+      session_id TEXT NOT NULL,
+      path TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      token_estimate INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY(session_id, path)
+    );
+    CREATE INDEX IF NOT EXISTS idx_second_brain_context_session_order
+      ON second_brain_context_items(session_id, sort_order ASC);
+
+    CREATE TABLE IF NOT EXISTS second_brain_messages (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      role TEXT NOT NULL,
+      mode TEXT NOT NULL DEFAULT 'freestyle',
+      content_md TEXT NOT NULL DEFAULT '',
+      citations_json TEXT NOT NULL DEFAULT '[]',
+      attachments_json TEXT NOT NULL DEFAULT '[]',
+      created_at_ms INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_second_brain_messages_session_created
+      ON second_brain_messages(session_id, created_at_ms ASC);
+
+    CREATE TABLE IF NOT EXISTS second_brain_drafts (
+      session_id TEXT PRIMARY KEY,
+      content_md TEXT NOT NULL DEFAULT '',
+      updated_at_ms INTEGER NOT NULL DEFAULT 0
+    );
   "#,
   )?;
 
@@ -1173,7 +1213,10 @@ fn remove_markdown_file_from_index_sync(path: String) -> Result<()> {
     let source_key = normalize_note_key(&root, &root.join(&path_for_db))?;
     let conn = open_db()?;
     let tx = conn.unchecked_transaction()?;
-    tx.execute("DELETE FROM chunks WHERE path = ?1", params![path_for_db.clone()])?;
+    tx.execute(
+        "DELETE FROM chunks WHERE path = ?1",
+        params![path_for_db.clone()],
+    )?;
     tx.execute(
         "DELETE FROM note_links WHERE source_path = ?1 OR target_key = ?2",
         params![path_for_db.clone(), source_key],
@@ -1352,14 +1395,18 @@ fn refresh_semantic_edges_cache(conn: &Connection, root_canonical: &Path) -> Res
         ) {
             Ok(value) => value,
             Err(err) => {
-                log_index(&format!("semantic_edges:refresh_error stage=prepare err={err}"));
+                log_index(&format!(
+                    "semantic_edges:refresh_error stage=prepare err={err}"
+                ));
                 return Err(AppError::Sqlite(err));
             }
         };
         let mut rows = match stmt.query(params![payload, SEMANTIC_TOP_K_PER_NOTE + 1]) {
             Ok(value) => value,
             Err(err) => {
-                log_index(&format!("semantic_edges:refresh_error stage=query err={err}"));
+                log_index(&format!(
+                    "semantic_edges:refresh_error stage=query err={err}"
+                ));
                 return Err(AppError::Sqlite(err));
             }
         };
@@ -1639,7 +1686,10 @@ fn rebuild_workspace_index_sync() -> Result<RebuildIndexResult> {
     ));
 
     let markdown_files = list_markdown_files_via_find(&root_canonical)?;
-    log_index(&format!("rebuild:discovered_files count={}", markdown_files.len()));
+    log_index(&format!(
+        "rebuild:discovered_files count={}",
+        markdown_files.len()
+    ));
     let mut indexed_files = 0usize;
     let mut processed_files = 0usize;
     let mut canceled = false;
@@ -1943,9 +1993,15 @@ fn parse_search_query(raw: &str) -> (SearchMode, String, Vec<PropertyFilter>) {
     let trimmed = raw.trim();
     let lowered = trimmed.to_ascii_lowercase();
     let (mode, remainder) = if lowered.starts_with("semantic:") {
-        (SearchMode::Semantic, trimmed["semantic:".len()..].trim_start())
+        (
+            SearchMode::Semantic,
+            trimmed["semantic:".len()..].trim_start(),
+        )
     } else if lowered.starts_with("lexical:") {
-        (SearchMode::Lexical, trimmed["lexical:".len()..].trim_start())
+        (
+            SearchMode::Lexical,
+            trimmed["lexical:".len()..].trim_start(),
+        )
     } else if lowered.starts_with("hybrid:") {
         (SearchMode::Hybrid, trimmed["hybrid:".len()..].trim_start())
     } else {
@@ -2279,20 +2335,12 @@ fn fts_search_sync(query: String) -> Result<Vec<Hit>> {
     }
 
     if mode == SearchMode::Semantic {
-        if let Some(hits) = semantic_only_hits(
-            &conn,
-            &root_canonical,
-            &text_query,
-            property_paths.as_ref(),
-        )? {
+        if let Some(hits) =
+            semantic_only_hits(&conn, &root_canonical, &text_query, property_paths.as_ref())?
+        {
             return Ok(hits);
         }
-        return fallback_lexical_hits(
-            &conn,
-            &root_canonical,
-            &text_query,
-            property_paths.as_ref(),
-        );
+        return fallback_lexical_hits(&conn, &root_canonical, &text_query, property_paths.as_ref());
     }
 
     let mut ranked_rows = collect_lexical_ranked_rows(&conn, &text_query, property_paths.as_ref())?;
@@ -2574,7 +2622,17 @@ pub fn run() {
             update_wikilinks_for_rename,
             get_wikilink_graph,
             read_property_type_schema,
-            write_property_type_schema
+            write_property_type_schema,
+            second_brain::read_second_brain_config_status,
+            second_brain::list_second_brain_sessions,
+            second_brain::create_second_brain_session,
+            second_brain::load_second_brain_session,
+            second_brain::update_second_brain_context,
+            second_brain::send_second_brain_message,
+            second_brain::save_second_brain_draft,
+            second_brain::append_message_to_second_brain_draft,
+            second_brain::publish_second_brain_draft_to_new_note,
+            second_brain::publish_second_brain_draft_to_existing_note
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -2705,17 +2763,20 @@ mod tests {
 
     #[test]
     fn parse_search_query_detects_search_mode_prefixes() {
-        let (semantic_mode, semantic_text, semantic_filters) = parse_search_query("semantic: ai agents");
+        let (semantic_mode, semantic_text, semantic_filters) =
+            parse_search_query("semantic: ai agents");
         assert_eq!(semantic_mode, SearchMode::Semantic);
         assert_eq!(semantic_text, "ai agents");
         assert!(semantic_filters.is_empty());
 
-        let (lexical_mode, lexical_text, lexical_filters) = parse_search_query("Lexical: rust tauri");
+        let (lexical_mode, lexical_text, lexical_filters) =
+            parse_search_query("Lexical: rust tauri");
         assert_eq!(lexical_mode, SearchMode::Lexical);
         assert_eq!(lexical_text, "rust tauri");
         assert!(lexical_filters.is_empty());
 
-        let (hybrid_mode, hybrid_text, hybrid_filters) = parse_search_query("hybrid: graph has:tags");
+        let (hybrid_mode, hybrid_text, hybrid_filters) =
+            parse_search_query("hybrid: graph has:tags");
         assert_eq!(hybrid_mode, SearchMode::Hybrid);
         assert_eq!(hybrid_text, "graph");
         assert_eq!(hybrid_filters.len(), 1);

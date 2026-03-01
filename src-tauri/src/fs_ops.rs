@@ -1,10 +1,10 @@
+#[cfg(windows)]
+use std::os::windows::fs::MetadataExt;
 use std::{
     fs,
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
-#[cfg(windows)]
-use std::os::windows::fs::MetadataExt;
 
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use rfd::FileDialog;

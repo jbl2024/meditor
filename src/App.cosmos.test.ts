@@ -22,11 +22,11 @@ const hoisted = vi.hoisted(() => ({
         path: '/vault/opened-from-cosmos.md',
         label: 'opened-from-cosmos',
         degree: 1,
-        tags: [],
-        cluster: null
+        tags: [] as string[],
+        cluster: null as number | null
       }
     ],
-    edges: [],
+    edges: [] as Array<{ source: string; target: string; type: 'wikilink' | 'semantic'; score?: number }>,
     generated_at_ms: Date.now()
   }))
 }))
@@ -131,6 +131,15 @@ vi.mock('./components/cosmos/CosmosView.vue', () => ({
             'select-node'
           )
         ])
+    }
+  })
+}))
+
+vi.mock('./components/second-brain/SecondBrainView.vue', () => ({
+  default: defineComponent({
+    name: 'SecondBrainViewStub',
+    setup() {
+      return () => h('div', { 'data-second-brain-stub': 'true' }, 'second-brain')
     }
   })
 }))
@@ -505,10 +514,14 @@ describe('App cosmos integration', () => {
       nodes: Array<{ id: string; path: string; label: string; degree: number; tags: string[]; cluster: number | null }>
       edges: Array<{ source: string; target: string; type: 'wikilink' | 'semantic'; score?: number }>
       generated_at_ms: number
-    }) => void) | null = null
+    }) => void) | undefined
 
     hoisted.getWikilinkGraph.mockImplementationOnce(
-      () => new Promise((resolve) => {
+      () => new Promise<{
+        nodes: Array<{ id: string; path: string; label: string; degree: number; tags: string[]; cluster: number | null }>
+        edges: Array<{ source: string; target: string; type: 'wikilink' | 'semantic'; score?: number }>
+        generated_at_ms: number
+      }>((resolve) => {
         resolveGraphLoad = resolve
       })
     )
@@ -544,11 +557,11 @@ describe('App cosmos integration', () => {
           path: '/vault/opened-from-cosmos.md',
           label: 'opened-from-cosmos',
           degree: 1,
-          tags: [],
+          tags: [] as string[],
           cluster: null
         }
       ],
-      edges: [],
+      edges: [] as Array<{ source: string; target: string; type: 'wikilink' | 'semantic'; score?: number }>,
       generated_at_ms: Date.now()
     })
     await flushUi()
@@ -640,6 +653,21 @@ describe('App cosmos integration', () => {
     expect(mounted.root.querySelector('[data-cosmos-stub="true"]')).toBeFalsy()
     expect((mounted.root.textContent ?? '').toLowerCase()).toContain('explorer')
     expect((mounted.root.textContent ?? '').toLowerCase()).toContain('opened-from-cosmos.md')
+
+    mounted.app.unmount()
+  })
+
+  it('opens and closes second brain tab with activity button and Cmd/Ctrl+W', async () => {
+    const mounted = mountApp()
+    await flushUi()
+
+    mounted.root.querySelector<HTMLButtonElement>('button[aria-label="Second Brain"]')?.click()
+    await flushUi()
+    expect(mounted.root.querySelector('[data-second-brain-stub="true"]')).toBeTruthy()
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'w', metaKey: true, bubbles: true }))
+    await flushUi()
+    expect(mounted.root.querySelector('[data-second-brain-stub="true"]')).toBeFalsy()
 
     mounted.app.unmount()
   })

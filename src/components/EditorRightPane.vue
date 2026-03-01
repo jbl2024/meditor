@@ -37,14 +37,14 @@ const emit = defineEmits<{
 
 <template>
   <aside class="right-pane" :style="{ width: `${props.width}px` }">
-    <section class="pane-card">
+    <section class="pane-card pane-section">
       <h3 class="section-title">Outline</h3>
       <div v-if="!props.outline.length" class="empty-state">No headings</div>
       <button
         v-for="(heading, idx) in props.outline"
         :key="`${heading.text}-${idx}`"
         type="button"
-        class="pane-item"
+        class="pane-item outline-row"
         :style="{ paddingLeft: `${(heading.level - 1) * 12 + 8}px` }"
         @click="emit('outline-click', { index: idx, heading })"
       >
@@ -52,7 +52,7 @@ const emit = defineEmits<{
       </button>
     </section>
 
-    <section class="pane-card">
+    <section class="pane-card pane-section">
       <h3 class="section-title">Semantic Links</h3>
       <div v-if="props.semanticLinksLoading" class="empty-state">Loading...</div>
       <div v-else-if="!props.semanticLinks.length" class="empty-state">No semantic links</div>
@@ -71,7 +71,7 @@ const emit = defineEmits<{
       </button>
     </section>
 
-    <section class="pane-card">
+    <section class="pane-card pane-section">
       <h3 class="section-title">Backlinks</h3>
       <div v-if="props.backlinksLoading" class="empty-state">Loading...</div>
       <div v-else-if="!props.backlinks.length" class="empty-state">No backlinks</div>
@@ -86,7 +86,7 @@ const emit = defineEmits<{
       </button>
     </section>
 
-    <section class="pane-card">
+    <section class="pane-card pane-section">
       <h3 class="section-title">Metadata</h3>
       <div class="metadata-grid">
         <div v-for="row in props.metadataRows" :key="row.label" class="meta-row">
@@ -96,7 +96,7 @@ const emit = defineEmits<{
       </div>
     </section>
 
-    <section class="pane-card">
+    <section class="pane-card pane-section">
       <h3 class="section-title">Properties</h3>
       <div v-if="props.propertyParseErrorCount > 0" class="empty-state">
         {{ props.propertyParseErrorCount }} parse error{{ props.propertyParseErrorCount > 1 ? 's' : '' }}
@@ -139,6 +139,10 @@ const emit = defineEmits<{
   transition: box-shadow 160ms ease, background-color 160ms ease;
 }
 
+.pane-section {
+  position: relative;
+}
+
 .pane-card:hover {
   box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.3);
 }
@@ -178,6 +182,10 @@ const emit = defineEmits<{
   line-height: 1.4;
   color: #2d313a;
   transition: background-color 120ms ease, color 120ms ease;
+}
+
+.outline-row {
+  font-weight: 500;
 }
 
 .semantic-link-item {

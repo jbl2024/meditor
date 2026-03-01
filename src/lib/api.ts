@@ -51,6 +51,68 @@ export type IndexLogEntry = {
   message: string
 }
 
+export type SecondBrainConfigStatus = {
+  configured: boolean
+  provider: string | null
+  model: string | null
+  profile_id: string | null
+  supports_streaming: boolean
+  supports_image_input: boolean
+  supports_audio_input: boolean
+  error: string | null
+}
+
+export type SecondBrainAttachmentMeta = {
+  id: string
+  kind: string
+  mime: string
+  name: string
+  size_bytes: number
+}
+
+export type SecondBrainSessionSummary = {
+  session_id: string
+  title: string
+  created_at_ms: number
+  updated_at_ms: number
+  context_count: number
+}
+
+export type SecondBrainContextItem = {
+  path: string
+  token_estimate: number
+}
+
+export type SecondBrainMessage = {
+  id: string
+  role: 'user' | 'assistant'
+  mode: string
+  content_md: string
+  citations_json: string
+  attachments_json: string
+  created_at_ms: number
+}
+
+export type SecondBrainSessionPayload = {
+  session_id: string
+  title: string
+  provider: string
+  model: string
+  created_at_ms: number
+  updated_at_ms: number
+  context_items: SecondBrainContextItem[]
+  messages: SecondBrainMessage[]
+  draft_content: string
+}
+
+export type SecondBrainStreamEvent = {
+  session_id: string
+  message_id: string
+  chunk: string
+  done: boolean
+  error: string | null
+}
+
 export type WikilinkGraphNode = {
   id: string
   path: string
@@ -231,6 +293,84 @@ export async function listenWorkspaceFsChanged(
   handler: (payload: WorkspaceFsChangedPayload) => void
 ): Promise<UnlistenFn> {
   return await listen<WorkspaceFsChangedPayload>('workspace://fs-changed', (event) => {
+    handler(event.payload)
+  })
+}
+
+export async function readSecondBrainConfigStatus(): Promise<SecondBrainConfigStatus> {
+  return await invoke('read_second_brain_config_status')
+}
+
+export async function listSecondBrainSessions(limit = 80): Promise<SecondBrainSessionSummary[]> {
+  return await invoke('list_second_brain_sessions', { limit })
+}
+
+export async function createSecondBrainSession(payload: {
+  title?: string
+  context_paths: string[]
+}): Promise<{ session_id: string; created_at_ms: number }> {
+  return await invoke('create_second_brain_session', { payload })
+}
+
+export async function loadSecondBrainSession(sessionId: string): Promise<SecondBrainSessionPayload> {
+  return await invoke('load_second_brain_session', { sessionId })
+}
+
+export async function updateSecondBrainContext(payload: {
+  session_id: string
+  context_paths: string[]
+}): Promise<{ token_estimate: number }> {
+  return await invoke('update_second_brain_context', { payload })
+}
+
+export async function sendSecondBrainMessage(payload: {
+  session_id: string
+  mode: string
+  message: string
+  attachments?: SecondBrainAttachmentMeta[]
+}): Promise<{ user_message_id: string; assistant_message_id: string }> {
+  return await invoke('send_second_brain_message', { payload })
+}
+
+export async function saveSecondBrainDraft(payload: {
+  session_id: string
+  content_md: string
+}): Promise<void> {
+  await invoke('save_second_brain_draft', { payload })
+}
+
+export async function appendMessageToDraft(payload: {
+  session_id: string
+  message_id: string
+}): Promise<string> {
+  return await invoke('append_message_to_second_brain_draft', { payload })
+}
+
+export async function publishDraftToNewNote(payload: {
+  session_id: string
+  target_dir: string
+  file_name: string
+  sources: string[]
+}): Promise<{ path: string }> {
+  return await invoke('publish_second_brain_draft_to_new_note', { payload })
+}
+
+export async function publishDraftToExistingNote(payload: {
+  session_id: string
+  target_path: string
+}): Promise<void> {
+  await invoke('publish_second_brain_draft_to_existing_note', { payload })
+}
+
+export async function listenSecondBrainStream(
+  eventName:
+    | 'second-brain://assistant-start'
+    | 'second-brain://assistant-delta'
+    | 'second-brain://assistant-complete'
+    | 'second-brain://assistant-error',
+  handler: (payload: SecondBrainStreamEvent) => void
+): Promise<UnlistenFn> {
+  return await listen<SecondBrainStreamEvent>(eventName, (event) => {
     handler(event.payload)
   })
 }

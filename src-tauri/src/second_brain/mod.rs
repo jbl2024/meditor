@@ -1,0 +1,662 @@
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    sync::atomic::{AtomicU64, Ordering},
+};
+
+use rusqlite::params;
+use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, Emitter};
+
+use super::{
+    active_workspace_root, normalize_workspace_relative_path, now_ms, open_db,
+    reindex_markdown_file_sync, AppError, Result, INTERNAL_DIR_NAME,
+};
+
+pub mod config;
+pub mod draft;
+pub mod llm;
+pub mod modes;
+pub mod session_store;
+
+use config::{active_profile, validate_config, ConfigStatus, SecondBrainConfig};
+use draft::{read_draft, write_draft};
+use llm::run_llm;
+use modes::resolve_mode_prompt;
+use session_store::{
+    create_session, estimate_tokens, insert_message, list_sessions, load_session, upsert_context,
+    ContextItem, MessageRow,
+};
+
+const SESSION_PREFIX: &str = "sb";
+
+static ID_SEQ: AtomicU64 = AtomicU64::new(1);
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AttachmentMeta {
+    pub id: String,
+    pub kind: String,
+    pub mime: String,
+    pub name: String,
+    pub size_bytes: u64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateSessionPayload {
+    pub title: Option<String>,
+    pub context_paths: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CreateSessionResult {
+    pub session_id: String,
+    pub created_at_ms: u64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct UpdateContextPayload {
+    pub session_id: String,
+    pub context_paths: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct UpdateContextResult {
+    pub token_estimate: usize,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SendMessagePayload {
+    pub session_id: String,
+    pub mode: String,
+    pub message: String,
+    #[serde(default)]
+    pub attachments: Vec<AttachmentMeta>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SendMessageResult {
+    pub user_message_id: String,
+    pub assistant_message_id: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct StreamEvent {
+    pub session_id: String,
+    pub message_id: String,
+    pub chunk: String,
+    pub done: bool,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SaveDraftPayload {
+    pub session_id: String,
+    pub content_md: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct AppendMessageToDraftPayload {
+    pub session_id: String,
+    pub message_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct PublishDraftToNewNotePayload {
+    pub session_id: String,
+    pub target_dir: String,
+    pub file_name: String,
+    pub sources: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PublishDraftToNewNoteResult {
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct PublishDraftToExistingNotePayload {
+    pub session_id: String,
+    pub target_path: String,
+}
+
+fn conf_path() -> Result<PathBuf> {
+    let root = active_workspace_root()?;
+    Ok(root.join(INTERNAL_DIR_NAME).join("conf.json"))
+}
+
+fn load_config() -> Result<SecondBrainConfig> {
+    let path = conf_path()?;
+    if !path.exists() {
+        return Err(AppError::InvalidOperation(
+            "Second Brain configuration not found (.tomosona/conf.json).".to_string(),
+        ));
+    }
+    let raw = fs::read_to_string(path)?;
+    let parsed: SecondBrainConfig = serde_json::from_str(&raw).map_err(|_| {
+        AppError::InvalidOperation("Second Brain configuration is invalid JSON.".to_string())
+    })?;
+    validate_config(&parsed).map_err(|message| {
+        AppError::InvalidOperation(format!("Second Brain configuration error: {message}"))
+    })?;
+    Ok(parsed)
+}
+
+fn normalize_markdown_path(path: &str) -> Result<String> {
+    let root = active_workspace_root()?;
+    let candidate = PathBuf::from(path);
+    if !candidate.exists() || !candidate.is_file() {
+        return Err(AppError::InvalidPath);
+    }
+    let canonical = fs::canonicalize(candidate)?;
+    if !canonical.starts_with(&root) {
+        return Err(AppError::InvalidPath);
+    }
+    let ext_ok = canonical
+        .extension()
+        .and_then(|item| item.to_str())
+        .map(|ext| ext.eq_ignore_ascii_case("md") || ext.eq_ignore_ascii_case("markdown"))
+        .unwrap_or(false);
+    if !ext_ok {
+        return Err(AppError::InvalidOperation(
+            "Only markdown notes can be used in Second Brain context.".to_string(),
+        ));
+    }
+    normalize_workspace_relative_path(&root, &canonical)
+}
+
+fn next_id(prefix: &str) -> String {
+    let seq = ID_SEQ.fetch_add(1, Ordering::SeqCst);
+    format!("{prefix}-{}-{seq}", now_ms())
+}
+
+fn load_context_items(paths: &[String]) -> Result<Vec<ContextItem>> {
+    let root = active_workspace_root()?;
+    let mut out = Vec::new();
+    for path in paths {
+        let normalized = normalize_markdown_path(path)?;
+        let content = fs::read_to_string(root.join(&normalized))?;
+        out.push(ContextItem {
+            path: normalized,
+            token_estimate: estimate_tokens(&content),
+        });
+    }
+    Ok(out)
+}
+
+fn build_context_prompt(session_id: &str, context_items: &[ContextItem]) -> Result<String> {
+    let root = active_workspace_root()?;
+    let mut out = String::new();
+    out.push_str(&format!("Session: {session_id}\n\nContexte fourni:\n"));
+    for item in context_items {
+        let content = fs::read_to_string(root.join(&item.path))?;
+        out.push_str(&format!("\n--- SOURCE: {} ---\n{}\n", item.path, content));
+    }
+    Ok(out)
+}
+
+fn read_session_context(conn: &rusqlite::Connection, session_id: &str) -> Result<Vec<ContextItem>> {
+    let mut stmt = conn.prepare(
+        "SELECT path, token_estimate FROM second_brain_context_items WHERE session_id = ?1 ORDER BY sort_order ASC",
+    )?;
+    let rows = stmt.query_map(params![session_id], |row| {
+        Ok(ContextItem {
+            path: row.get::<_, String>(0)?,
+            token_estimate: row.get::<_, i64>(1)? as usize,
+        })
+    })?;
+
+    let mut items = Vec::new();
+    for row in rows {
+        items.push(row?);
+    }
+    Ok(items)
+}
+
+fn session_exists(conn: &rusqlite::Connection, session_id: &str) -> Result<bool> {
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM second_brain_sessions WHERE id = ?1",
+        params![session_id],
+        |row| row.get(0),
+    )?;
+    Ok(count > 0)
+}
+
+#[tauri::command]
+pub fn read_second_brain_config_status() -> Result<ConfigStatus> {
+    match load_config() {
+        Ok(config) => {
+            let active = active_profile(&config).ok_or_else(|| {
+                AppError::InvalidOperation("active profile is missing from config.".to_string())
+            })?;
+            Ok(ConfigStatus {
+                configured: true,
+                provider: Some(active.provider.clone()),
+                model: Some(active.model.clone()),
+                profile_id: Some(active.id.clone()),
+                supports_streaming: active.capabilities.streaming,
+                supports_image_input: active.capabilities.image_input,
+                supports_audio_input: active.capabilities.audio_input,
+                error: None,
+            })
+        }
+        Err(err) => Ok(ConfigStatus {
+            configured: false,
+            provider: None,
+            model: None,
+            profile_id: None,
+            supports_streaming: false,
+            supports_image_input: false,
+            supports_audio_input: false,
+            error: Some(err.to_string()),
+        }),
+    }
+}
+
+#[tauri::command]
+pub fn create_second_brain_session(payload: CreateSessionPayload) -> Result<CreateSessionResult> {
+    let config = load_config()?;
+    let active = active_profile(&config).ok_or_else(|| {
+        AppError::InvalidOperation("active profile is missing from config.".to_string())
+    })?;
+
+    let conn = open_db()?;
+    let session_id = next_id(SESSION_PREFIX);
+    let title = payload
+        .title
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("Second Brain Session")
+        .to_string();
+
+    let (created_at_ms, _updated_at_ms) =
+        create_session(&conn, &session_id, &title, &active.provider, &active.model)?;
+
+    let context_items = load_context_items(&payload.context_paths)?;
+    let _ = upsert_context(&conn, &session_id, &context_items)?;
+    write_draft(&session_id, "")?;
+
+    Ok(CreateSessionResult {
+        session_id,
+        created_at_ms,
+    })
+}
+
+#[tauri::command]
+pub fn list_second_brain_sessions(
+    limit: Option<usize>,
+) -> Result<Vec<session_store::SessionSummary>> {
+    let conn = open_db()?;
+    list_sessions(&conn, limit.unwrap_or(80).clamp(1, 250))
+}
+
+#[tauri::command]
+pub fn load_second_brain_session(session_id: String) -> Result<session_store::SessionPayload> {
+    let conn = open_db()?;
+    let draft_content = read_draft(&session_id)?;
+    load_session(&conn, &session_id, draft_content)
+}
+
+#[tauri::command]
+pub fn update_second_brain_context(payload: UpdateContextPayload) -> Result<UpdateContextResult> {
+    let conn = open_db()?;
+    if !session_exists(&conn, &payload.session_id)? {
+        return Err(AppError::InvalidOperation(
+            "Second Brain session not found.".to_string(),
+        ));
+    }
+    let context_items = load_context_items(&payload.context_paths)?;
+    let token_estimate = upsert_context(&conn, &payload.session_id, &context_items)?;
+    Ok(UpdateContextResult { token_estimate })
+}
+
+#[tauri::command]
+pub async fn send_second_brain_message(
+    app: AppHandle,
+    payload: SendMessagePayload,
+) -> Result<SendMessageResult> {
+    let config = load_config()?;
+    let active = active_profile(&config)
+        .ok_or_else(|| {
+            AppError::InvalidOperation("active profile is missing from config.".to_string())
+        })?
+        .clone();
+
+    if !active.capabilities.text {
+        return Err(AppError::InvalidOperation(
+            "The active profile does not support text generation.".to_string(),
+        ));
+    }
+
+    if payload.message.trim().is_empty() {
+        return Err(AppError::InvalidOperation(
+            "Message must not be empty.".to_string(),
+        ));
+    }
+
+    let conn = open_db()?;
+    if !session_exists(&conn, &payload.session_id)? {
+        return Err(AppError::InvalidOperation(
+            "Second Brain session not found.".to_string(),
+        ));
+    }
+
+    if (!payload.attachments.is_empty())
+        && (!active.capabilities.image_input && !active.capabilities.audio_input)
+    {
+        return Err(AppError::InvalidOperation(
+            "Attachments are not supported by the active profile.".to_string(),
+        ));
+    }
+
+    let user_message_id = next_id("sbm-user");
+    let assistant_message_id = next_id("sbm-assistant");
+    let ts = now_ms();
+
+    let user_message = MessageRow {
+        id: user_message_id.clone(),
+        role: "user".to_string(),
+        mode: payload.mode.clone(),
+        content_md: payload.message.clone(),
+        citations_json: "[]".to_string(),
+        attachments_json: serde_json::to_string(&payload.attachments)
+            .unwrap_or_else(|_| "[]".to_string()),
+        created_at_ms: ts,
+    };
+    insert_message(&conn, &user_message, &payload.session_id)?;
+
+    let context_items = read_session_context(&conn, &payload.session_id)?;
+    if context_items.is_empty() {
+        return Err(AppError::InvalidOperation(
+            "Second Brain context is empty. Add at least one note.".to_string(),
+        ));
+    }
+
+    let mode_prompt = resolve_mode_prompt(&payload.mode);
+    let context_prompt = build_context_prompt(&payload.session_id, &context_items)?;
+
+    let user_prompt = format!(
+        "{context_prompt}\n\nInstruction utilisateur:\n{}\n\nReponse attendue en markdown avec citations de sources.",
+        payload.message
+    );
+
+    let _ = app.emit(
+        "second-brain://assistant-start",
+        StreamEvent {
+            session_id: payload.session_id.clone(),
+            message_id: assistant_message_id.clone(),
+            chunk: String::new(),
+            done: false,
+            error: None,
+        },
+    );
+
+    let llm_result = run_llm(&active, &mode_prompt, &user_prompt).await;
+
+    let answer = match llm_result {
+        Ok(value) => value,
+        Err(err) => {
+            let _ = app.emit(
+                "second-brain://assistant-error",
+                StreamEvent {
+                    session_id: payload.session_id.clone(),
+                    message_id: assistant_message_id.clone(),
+                    chunk: String::new(),
+                    done: true,
+                    error: Some(err.clone()),
+                },
+            );
+            return Err(AppError::InvalidOperation(err));
+        }
+    };
+
+    for chunk in &answer.chunks {
+        let _ = app.emit(
+            "second-brain://assistant-delta",
+            StreamEvent {
+                session_id: payload.session_id.clone(),
+                message_id: assistant_message_id.clone(),
+                chunk: chunk.clone(),
+                done: false,
+                error: None,
+            },
+        );
+    }
+
+    let citations: Vec<String> = context_items
+        .iter()
+        .map(|item| item.path.clone())
+        .take(12)
+        .collect();
+
+    let assistant_message = MessageRow {
+        id: assistant_message_id.clone(),
+        role: "assistant".to_string(),
+        mode: payload.mode,
+        content_md: answer.full_text.clone(),
+        citations_json: serde_json::to_string(&citations).unwrap_or_else(|_| "[]".to_string()),
+        attachments_json: "[]".to_string(),
+        created_at_ms: now_ms(),
+    };
+    insert_message(&conn, &assistant_message, &payload.session_id)?;
+
+    let _ = app.emit(
+        "second-brain://assistant-complete",
+        StreamEvent {
+            session_id: payload.session_id,
+            message_id: assistant_message_id.clone(),
+            chunk: answer.full_text,
+            done: true,
+            error: None,
+        },
+    );
+
+    Ok(SendMessageResult {
+        user_message_id,
+        assistant_message_id,
+    })
+}
+
+#[tauri::command]
+pub fn save_second_brain_draft(payload: SaveDraftPayload) -> Result<()> {
+    let conn = open_db()?;
+    if !session_exists(&conn, &payload.session_id)? {
+        return Err(AppError::InvalidOperation(
+            "Second Brain session not found.".to_string(),
+        ));
+    }
+
+    write_draft(&payload.session_id, &payload.content_md)?;
+    conn.execute(
+        "INSERT INTO second_brain_drafts (session_id, content_md, updated_at_ms)
+         VALUES (?1, ?2, ?3)
+         ON CONFLICT(session_id) DO UPDATE SET content_md = excluded.content_md, updated_at_ms = excluded.updated_at_ms",
+        params![payload.session_id, payload.content_md, now_ms() as i64],
+    )?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn append_message_to_second_brain_draft(
+    payload: AppendMessageToDraftPayload,
+) -> Result<String> {
+    let conn = open_db()?;
+    if !session_exists(&conn, &payload.session_id)? {
+        return Err(AppError::InvalidOperation(
+            "Second Brain session not found.".to_string(),
+        ));
+    }
+
+    let message_content = conn
+        .query_row(
+            "SELECT content_md FROM second_brain_messages WHERE id = ?1 AND session_id = ?2",
+            params![payload.message_id, payload.session_id],
+            |row| row.get::<_, String>(0),
+        )
+        .map_err(|_| AppError::InvalidOperation("Message not found in session.".to_string()))?;
+
+    let mut draft_content = read_draft(&payload.session_id)?;
+    if !draft_content.trim().is_empty() {
+        draft_content.push_str("\n\n---\n\n");
+    }
+    draft_content.push_str(&message_content);
+    write_draft(&payload.session_id, &draft_content)?;
+
+    conn.execute(
+        "INSERT INTO second_brain_drafts (session_id, content_md, updated_at_ms)
+         VALUES (?1, ?2, ?3)
+         ON CONFLICT(session_id) DO UPDATE SET content_md = excluded.content_md, updated_at_ms = excluded.updated_at_ms",
+        params![payload.session_id, draft_content, now_ms() as i64],
+    )?;
+
+    Ok(read_draft(&payload.session_id)?)
+}
+
+fn sanitize_file_name(file_name: &str) -> String {
+    let mut out = file_name
+        .trim()
+        .replace(
+            |ch: char| matches!(ch, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'),
+            "-",
+        )
+        .trim()
+        .to_string();
+    if out.is_empty() {
+        out = "second-brain-note".to_string();
+    }
+    if !out.to_lowercase().ends_with(".md") {
+        out.push_str(".md");
+    }
+    out
+}
+
+fn ensure_within(root: &Path, path: &Path) -> Result<()> {
+    let canonical_root = fs::canonicalize(root)?;
+    let canonical_path = fs::canonicalize(path)?;
+    if !canonical_path.starts_with(&canonical_root) {
+        return Err(AppError::InvalidPath);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn publish_second_brain_draft_to_new_note(
+    payload: PublishDraftToNewNotePayload,
+) -> Result<PublishDraftToNewNoteResult> {
+    let conn = open_db()?;
+    if !session_exists(&conn, &payload.session_id)? {
+        return Err(AppError::InvalidOperation(
+            "Second Brain session not found.".to_string(),
+        ));
+    }
+
+    let root = active_workspace_root()?;
+    let target_dir = PathBuf::from(&payload.target_dir);
+    if !target_dir.exists() || !target_dir.is_dir() {
+        return Err(AppError::InvalidPath);
+    }
+    let target_dir_canonical = fs::canonicalize(target_dir)?;
+    if !target_dir_canonical.starts_with(&root) {
+        return Err(AppError::InvalidPath);
+    }
+
+    let file_name = sanitize_file_name(&payload.file_name);
+    let target_path = target_dir_canonical.join(file_name);
+    if target_path.exists() {
+        return Err(AppError::AlreadyExists);
+    }
+
+    let draft_content = read_draft(&payload.session_id)?;
+    let created = chrono_like_today();
+    let mut frontmatter = String::new();
+    frontmatter.push_str("---\n");
+    frontmatter.push_str(&format!("created: {created}\n"));
+    frontmatter.push_str("origin: ai\n");
+    frontmatter.push_str("sources:\n");
+    for source in &payload.sources {
+        frontmatter.push_str(&format!("  - [[{}]]\n", source.trim()));
+    }
+    frontmatter.push_str(&format!("session_id: {}\n", payload.session_id));
+    frontmatter.push_str("---\n\n");
+
+    fs::write(&target_path, format!("{frontmatter}{draft_content}\n"))?;
+    ensure_within(&root, &target_path)?;
+    reindex_markdown_file_sync(target_path.to_string_lossy().to_string())?;
+
+    Ok(PublishDraftToNewNoteResult {
+        path: target_path.to_string_lossy().to_string(),
+    })
+}
+
+#[tauri::command]
+pub fn publish_second_brain_draft_to_existing_note(
+    payload: PublishDraftToExistingNotePayload,
+) -> Result<()> {
+    let conn = open_db()?;
+    if !session_exists(&conn, &payload.session_id)? {
+        return Err(AppError::InvalidOperation(
+            "Second Brain session not found.".to_string(),
+        ));
+    }
+
+    let root = active_workspace_root()?;
+    let target_path = PathBuf::from(&payload.target_path);
+    if !target_path.exists() || !target_path.is_file() {
+        return Err(AppError::InvalidPath);
+    }
+    let canonical = fs::canonicalize(&target_path)?;
+    if !canonical.starts_with(&root) {
+        return Err(AppError::InvalidPath);
+    }
+
+    let existing = fs::read_to_string(&canonical)?;
+    let draft_content = read_draft(&payload.session_id)?;
+    let merged = if existing.trim().is_empty() {
+        draft_content
+    } else {
+        format!("{existing}\n\n---\n\n{draft_content}")
+    };
+    fs::write(&canonical, merged)?;
+    reindex_markdown_file_sync(canonical.to_string_lossy().to_string())?;
+
+    Ok(())
+}
+
+fn chrono_like_today() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let epoch = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs() as i64)
+        .unwrap_or(0);
+    let days = epoch / 86_400;
+    let z = days + 719468;
+    let era = if z >= 0 { z } else { z - 146096 } / 146097;
+    let doe = z - era * 146097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = mp + if mp < 10 { 3 } else { -9 };
+    let year = y + if m <= 2 { 1 } else { 0 };
+    format!("{:04}-{:02}-{:02}", year, m, d)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sanitizes_filename_and_adds_md() {
+        assert_eq!(sanitize_file_name("hello"), "hello.md");
+        assert_eq!(sanitize_file_name("a:b"), "a-b.md");
+    }
+
+    #[test]
+    fn today_format_has_iso_shape() {
+        let v = chrono_like_today();
+        assert_eq!(v.len(), 10);
+        assert_eq!(&v[4..5], "-");
+        assert_eq!(&v[7..8], "-");
+    }
+}

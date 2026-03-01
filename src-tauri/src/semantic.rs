@@ -135,7 +135,10 @@ pub fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>, String> {
             "model:init:start model={EMBEDDING_MODEL_NAME} attempt={attempt} note=first init may download model files"
         ));
         let cache_dir = model_cache_dir();
-        log_index(&format!("model:cache_dir path={}", cache_dir.to_string_lossy()));
+        log_index(&format!(
+            "model:cache_dir path={}",
+            cache_dir.to_string_lossy()
+        ));
         let options = InitOptions::new(EmbeddingModel::ModernBertEmbedLarge)
             .with_show_download_progress(false)
             .with_cache_dir(cache_dir);
@@ -311,7 +314,10 @@ pub fn try_ensure_vec_table(conn: &Connection, dim: usize) -> bool {
         |row| row.get::<_, String>(0),
     ) {
         let existing_dim = parse_vec_embedding_dim(&existing_sql);
-        if existing_dim != Some(dim) && conn.execute("DROP TABLE IF EXISTS note_embeddings_vec", []).is_err()
+        if existing_dim != Some(dim)
+            && conn
+                .execute("DROP TABLE IF EXISTS note_embeddings_vec", [])
+                .is_err()
         {
             return false;
         }
