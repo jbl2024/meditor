@@ -3435,6 +3435,16 @@ function setQuickOpenActiveIndex(index: number) {
   quickOpenActiveIndex.value = index
 }
 
+function scrollQuickOpenActiveItemIntoView() {
+  if (!quickOpenVisible.value) return
+  void nextTick(() => {
+    const modalList = document.querySelector<HTMLElement>('[data-modal="quick-open"] .modal-list')
+    if (!modalList) return
+    const activeItem = modalList.querySelector<HTMLElement>('.modal-item.active')
+    activeItem?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'auto' })
+  })
+}
+
 async function saveActiveTab() {
   await editorRef.value?.saveNow()
 }
@@ -3653,6 +3663,15 @@ watch(
 
 watch(quickOpenQuery, () => {
   quickOpenActiveIndex.value = 0
+})
+
+watch(quickOpenActiveIndex, () => {
+  scrollQuickOpenActiveItemIntoView()
+})
+
+watch(quickOpenVisible, (visible) => {
+  if (!visible) return
+  scrollQuickOpenActiveItemIntoView()
 })
 
 watch(cosmosCommandLoadingVisible, (visible) => {
