@@ -317,12 +317,28 @@ pub fn try_ensure_vec_table(conn: &Connection, dim: usize) -> bool {
 /// Upserts one note-level vector into vec table.
 pub fn try_upsert_note_vector(conn: &Connection, path: &str, vector: &[f32]) -> bool {
     let payload = vector_to_json(vector);
+    if conn
+        .execute(
+            "INSERT OR REPLACE INTO note_embeddings_vec(path, embedding) VALUES (?1, ?2)",
+            params![path, payload],
+        )
+        .is_ok()
+    {
+        return true;
+    }
+
+    // Fallback for vec-table builds that do not support REPLACE semantics.
     conn.execute(
-        "INSERT INTO note_embeddings_vec(path, embedding) VALUES (?1, ?2)
-         ON CONFLICT(path) DO UPDATE SET embedding=excluded.embedding",
-        params![path, payload],
+        "DELETE FROM note_embeddings_vec WHERE path = ?1",
+        params![path],
     )
     .is_ok()
+        && conn
+            .execute(
+                "INSERT INTO note_embeddings_vec(path, embedding) VALUES (?1, ?2)",
+                params![path, payload],
+            )
+            .is_ok()
 }
 
 /// Deletes one note-level vector from vec table.

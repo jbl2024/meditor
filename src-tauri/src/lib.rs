@@ -1039,7 +1039,17 @@ fn reindex_markdown_file_sync(path: String) -> Result<()> {
                     ],
                 )?;
                 if semantic::try_ensure_vec_table(&tx, note_vector.len()) {
-                    let _ = semantic::try_upsert_note_vector(&tx, &path_for_db, &note_vector);
+                    if !semantic::try_upsert_note_vector(&tx, &path_for_db, &note_vector) {
+                        log_index(&format!(
+                            "reindex:vec_upsert_failed path={path_for_db} dim={}",
+                            note_vector.len()
+                        ));
+                    }
+                } else {
+                    log_index(&format!(
+                        "reindex:vec_table_unavailable path={path_for_db} dim={}",
+                        note_vector.len()
+                    ));
                 }
             }
         } else {
@@ -1151,8 +1161,29 @@ fn build_semantic_edges(
 ) {
     let mut node_paths: Vec<String> = nodes_set.iter().cloned().collect();
     node_paths.sort_by_key(|item| item.to_lowercase());
+    log_index(&format!(
+        "semantic_edges:start nodes={} top_k={} threshold={}",
+        node_paths.len(),
+        SEMANTIC_TOP_K_PER_NOTE,
+        SEMANTIC_THRESHOLD
+    ));
+
+    let mut sources_total = 0usize;
+    let mut sources_with_vector = 0usize;
+    let mut sources_query_ok = 0usize;
+    let mut total_candidates = 0usize;
+    let mut total_added = 0usize;
+    let mut total_skipped_self = 0usize;
+    let mut total_skipped_outside_nodes = 0usize;
+    let mut total_skipped_below_threshold = 0usize;
+    let mut total_skipped_existing_edge = 0usize;
+    let mut total_row_decode_errors = 0usize;
+    let mut total_sources_missing_vector = 0usize;
+    let mut total_sources_invalid_vector_blob = 0usize;
 
     for source_path in node_paths {
+        sources_total += 1;
+
         let vector_blob = match conn.query_row(
             "SELECT vector, dim FROM note_embeddings WHERE path = ?1",
             params![source_path.clone()],
@@ -1160,11 +1191,16 @@ fn build_semantic_edges(
         ) {
             Ok((blob, dim)) => {
                 let Some(vector) = semantic::blob_to_vector(&blob, dim as usize) else {
+                    total_sources_invalid_vector_blob += 1;
                     continue;
                 };
+                sources_with_vector += 1;
                 vector
             }
-            Err(_) => continue,
+            Err(_) => {
+                total_sources_missing_vector += 1;
+                continue;
+            }
         };
 
         let mut added_for_source = 0i64;
@@ -1173,31 +1209,54 @@ fn build_semantic_edges(
             r#"
             SELECT path, distance
             FROM note_embeddings_vec
-            WHERE embedding MATCH ?1 AND k = ?2
+            WHERE embedding MATCH ?1
             ORDER BY distance ASC
+            LIMIT ?2
         "#,
         ) {
             Ok(value) => value,
-            Err(_) => return,
+            Err(err) => {
+                log_index(&format!(
+                    "semantic_edges:error stage=prepare_query path={} err={}",
+                    source_path, err
+                ));
+                return;
+            }
         };
         let mut rows = match stmt.query(params![payload, SEMANTIC_TOP_K_PER_NOTE + 1]) {
             Ok(value) => value,
-            Err(_) => return,
+            Err(err) => {
+                log_index(&format!(
+                    "semantic_edges:error stage=run_query path={} err={}",
+                    source_path, err
+                ));
+                return;
+            }
         };
+        sources_query_ok += 1;
 
         while let Ok(Some(row)) = rows.next() {
+            total_candidates += 1;
             let target_path: String = match row.get(0) {
                 Ok(value) => value,
-                Err(_) => continue,
+                Err(_) => {
+                    total_row_decode_errors += 1;
+                    continue;
+                }
             };
             let distance: f32 = match row.get(1) {
                 Ok(value) => value,
-                Err(_) => continue,
+                Err(_) => {
+                    total_row_decode_errors += 1;
+                    continue;
+                }
             };
             if target_path == source_path {
+                total_skipped_self += 1;
                 continue;
             }
             if !nodes_set.contains(&target_path) {
+                total_skipped_outside_nodes += 1;
                 continue;
             }
             // vec0 default distance is L2. Stored note vectors are normalized, so we
@@ -1205,11 +1264,14 @@ fn build_semantic_edges(
             // For unit vectors: cos = 1 - (||a-b||^2)/2.
             let score = (1.0 - ((distance * distance) * 0.5)).clamp(0.0, 1.0);
             if score < SEMANTIC_THRESHOLD {
+                total_skipped_below_threshold += 1;
                 continue;
             }
-            if !seen_edges.insert((source_path.clone(), target_path.clone())) {
+            if seen_edges.contains(&(source_path.clone(), target_path.clone())) {
+                total_skipped_existing_edge += 1;
                 continue;
             }
+            seen_edges.insert((source_path.clone(), target_path.clone()));
             edges.push(GraphEdgeDto {
                 source: source_path.clone(),
                 target: target_path.clone(),
@@ -1219,11 +1281,28 @@ fn build_semantic_edges(
             *degrees.entry(source_path.clone()).or_insert(0) += 1;
             *degrees.entry(target_path).or_insert(0) += 1;
             added_for_source += 1;
+            total_added += 1;
             if added_for_source >= SEMANTIC_TOP_K_PER_NOTE {
                 break;
             }
         }
     }
+
+    log_index(&format!(
+        "semantic_edges:done sources_total={} sources_with_vector={} sources_query_ok={} candidates={} added={} skip_self={} skip_outside={} skip_threshold={} skip_existing={} missing_vector_sources={} invalid_vector_sources={} decode_errors={}",
+        sources_total,
+        sources_with_vector,
+        sources_query_ok,
+        total_candidates,
+        total_added,
+        total_skipped_self,
+        total_skipped_outside_nodes,
+        total_skipped_below_threshold,
+        total_skipped_existing_edge,
+        total_sources_missing_vector,
+        total_sources_invalid_vector_blob,
+        total_row_decode_errors
+    ));
 }
 
 /// Builds a graph payload from indexed wikilinks and current markdown files.
