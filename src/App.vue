@@ -4121,7 +4121,6 @@ onBeforeUnmount(() => {
         <span class="status-dot" :class="indexStateClass"></span>
         <span>index: {{ indexStateLabel }}</span>
       </button>
-      <span class="status-item">embeddings: {{ filesystem.embeddingQueueState.value }}</span>
       <span class="status-item">workspace: {{ filesystem.workingFolderPath.value || 'none' }}</span>
     </footer>
 

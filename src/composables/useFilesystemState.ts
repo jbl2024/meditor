@@ -13,7 +13,6 @@ export function useFilesystemState() {
   const notification = ref<NotificationState | null>(null)
   const selectedCount = ref(0)
   const indexingState = ref<'indexing' | 'indexed' | 'out_of_sync'>('indexed')
-  const embeddingQueueState = ref<'idle' | 'queued' | 'running'>('idle')
   let notificationTimer: ReturnType<typeof setTimeout> | null = null
 
   const hasWorkspace = computed(() => Boolean(workingFolderPath.value))
@@ -92,7 +91,6 @@ export function useFilesystemState() {
     errorMessage,
     selectedCount,
     indexingState,
-    embeddingQueueState,
     hasWorkspace,
     setWorkspacePath,
     clearWorkspacePath,
