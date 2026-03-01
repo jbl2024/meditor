@@ -213,7 +213,7 @@ describe('App cosmos integration', () => {
 
     mounted.root.querySelector<HTMLButtonElement>('button[data-cosmos-open="true"]')?.click()
     await flushUi()
-    mounted.root.querySelector<HTMLButtonElement>('.cosmos-open-btn')?.click()
+    mounted.root.querySelector<HTMLButtonElement>('.cosmos-node-title-link')?.click()
     await flushUi()
 
     expect((mounted.root.textContent ?? '').toLowerCase()).toContain('explorer')

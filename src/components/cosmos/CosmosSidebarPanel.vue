@@ -110,7 +110,6 @@ function onFocusModeChange(event: Event) {
         <button type="button" class="cosmos-node-title-link" @click="emit('open-selected')">
           {{ selectedNode.label }}
         </button>
-        <p class="cosmos-node-path">{{ selectedNode.path }}</p>
         <p class="cosmos-node-meta">Degree: {{ selectedNode.degree }} · Cluster: {{ selectedNode.cluster }}</p>
         <p class="cosmos-node-meta">Visible links: {{ selectedLinkCount }}</p>
         <p v-if="previewLoading" class="cosmos-node-preview">Loading preview...</p>
