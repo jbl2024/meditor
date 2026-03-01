@@ -1,6 +1,7 @@
 mod fs_ops;
 mod workspace_watch;
 
+// Tauri command surface for workspace I/O, index/search, and graph data used by Cosmos view.
 use std::{
     collections::{HashMap, HashSet},
     fs,
@@ -279,6 +280,20 @@ fn normalize_workspace_relative_path(root: &Path, path: &Path) -> Result<String>
 
 fn workspace_absolute_path(root: &Path, stored_path: &str) -> String {
     root.join(stored_path).to_string_lossy().to_string()
+}
+
+/// Derives a display label from a workspace-relative markdown path.
+fn note_label_from_workspace_path(path: &str) -> String {
+    Path::new(path)
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or(path)
+        .to_string()
+}
+
+/// Normalizes a stored workspace path into the note key format used by `note_links.target_key`.
+fn normalize_note_key_from_workspace_path(root: &Path, stored_path: &str) -> Option<String> {
+    normalize_note_key(root, &root.join(stored_path)).ok()
 }
 
 fn note_link_target(root: &Path, path: &Path) -> Result<String> {
@@ -912,6 +927,154 @@ struct RebuildIndexResult {
     indexed_files: usize,
 }
 
+#[derive(Serialize)]
+struct GraphNodeDto {
+    id: String,
+    path: String,
+    label: String,
+    degree: usize,
+    tags: Vec<String>,
+    cluster: Option<usize>,
+}
+
+#[derive(Serialize)]
+struct GraphEdgeDto {
+    source: String,
+    target: String,
+    #[serde(rename = "type")]
+    edge_type: String,
+}
+
+#[derive(Serialize)]
+struct WikilinkGraphDto {
+    nodes: Vec<GraphNodeDto>,
+    edges: Vec<GraphEdgeDto>,
+    generated_at_ms: u64,
+}
+
+/// Builds a graph payload from indexed wikilinks and current markdown files.
+///
+/// This function:
+/// - treats markdown files in the workspace as the authoritative node set,
+/// - resolves `note_links.target_key` via normalized note keys,
+/// - excludes unresolved links,
+/// - computes degree and tag metadata.
+fn build_wikilink_graph_from_index(
+    conn: &Connection,
+    root_canonical: &Path,
+    markdown_paths: &[String],
+) -> Result<WikilinkGraphDto> {
+    let mut nodes_set = HashSet::new();
+    for path in markdown_paths {
+        nodes_set.insert(path.clone());
+    }
+
+    let mut path_by_key: HashMap<String, String> = HashMap::new();
+    for path in markdown_paths {
+        if let Some(key) = normalize_note_key_from_workspace_path(root_canonical, path) {
+            let existing = path_by_key.get(&key).cloned();
+            if let Some(previous) = existing {
+                if path.to_lowercase() < previous.to_lowercase() {
+                    path_by_key.insert(key, path.clone());
+                }
+            } else {
+                path_by_key.insert(key, path.clone());
+            }
+        }
+    }
+
+    let mut tags_by_path: HashMap<String, Vec<String>> = HashMap::new();
+    let mut tag_stmt = conn.prepare(
+        r#"
+      SELECT path, value_text
+      FROM note_properties
+      WHERE key = 'tags' AND kind = 'list' AND value_text IS NOT NULL
+      ORDER BY path, value_text
+    "#,
+    )?;
+    let tag_rows = tag_stmt.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    })?;
+
+    for row in tag_rows {
+        let (path, value) = row?;
+        if !nodes_set.contains(&path) {
+            continue;
+        }
+        let entry = tags_by_path.entry(path).or_default();
+        if !entry.iter().any(|item| item.eq_ignore_ascii_case(&value)) {
+            entry.push(value);
+        }
+    }
+
+    let mut degrees: HashMap<String, usize> = HashMap::new();
+    let mut edges: Vec<GraphEdgeDto> = Vec::new();
+    let mut seen_edges: HashSet<(String, String)> = HashSet::new();
+
+    let mut edge_stmt = conn.prepare(
+        r#"
+      SELECT source_path, target_key
+      FROM note_links
+      ORDER BY source_path, target_key
+    "#,
+    )?;
+    let edge_rows = edge_stmt.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    })?;
+
+    for row in edge_rows {
+        let (source_path, target_key) = row?;
+        if !nodes_set.contains(&source_path) {
+            continue;
+        }
+        let Some(target_path) = path_by_key.get(&target_key).cloned() else {
+            continue;
+        };
+        if source_path == target_path {
+            continue;
+        }
+        if !seen_edges.insert((source_path.clone(), target_path.clone())) {
+            continue;
+        }
+
+        *degrees.entry(source_path.clone()).or_insert(0) += 1;
+        *degrees.entry(target_path.clone()).or_insert(0) += 1;
+
+        edges.push(GraphEdgeDto {
+            source: source_path,
+            target: target_path,
+            edge_type: "wikilink".to_string(),
+        });
+    }
+
+    let mut node_paths: Vec<String> = markdown_paths.to_vec();
+    node_paths.sort_by_key(|item| item.to_lowercase());
+    node_paths.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
+
+    let nodes = node_paths
+        .into_iter()
+        .map(|path| GraphNodeDto {
+            id: path.clone(),
+            label: note_label_from_workspace_path(&path),
+            degree: *degrees.get(&path).unwrap_or(&0),
+            tags: tags_by_path.remove(&path).unwrap_or_default(),
+            cluster: None,
+            path,
+        })
+        .collect();
+
+    let generated_at_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|value| value.as_millis() as u64)
+        .unwrap_or(0);
+
+    Ok(WikilinkGraphDto {
+        nodes,
+        edges,
+        generated_at_ms,
+    })
+}
+
 #[tauri::command]
 fn rebuild_workspace_index() -> Result<RebuildIndexResult> {
     let root_canonical = active_workspace_root()?;
@@ -941,6 +1104,32 @@ fn rebuild_workspace_index() -> Result<RebuildIndexResult> {
     }
 
     Ok(RebuildIndexResult { indexed_files })
+}
+
+/// Returns a workspace wikilink graph for the Cosmos view.
+///
+/// The graph is built from indexed wikilinks, while node existence is validated
+/// against markdown files currently present in the workspace.
+#[tauri::command]
+fn get_wikilink_graph() -> Result<WikilinkGraphDto> {
+    let root_canonical = active_workspace_root()?;
+    let conn = open_db()?;
+    let markdown_files = list_markdown_files_via_find(&root_canonical)?;
+    let mut markdown_paths = Vec::new();
+
+    for candidate in markdown_files {
+        let canonical_candidate = match fs::canonicalize(&candidate) {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        let relative = match normalize_workspace_relative_path(&root_canonical, &canonical_candidate) {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        markdown_paths.push(relative);
+    }
+
+    build_wikilink_graph_from_index(&conn, &root_canonical, &markdown_paths)
 }
 
 #[tauri::command]
@@ -1472,6 +1661,7 @@ pub fn run() {
             rebuild_workspace_index,
             backlinks_for_path,
             update_wikilinks_for_rename,
+            get_wikilink_graph,
             read_property_type_schema,
             write_property_type_schema
         ])
@@ -1482,10 +1672,21 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     use directories::UserDirs;
 
     use super::*;
+
+    fn create_temp_workspace(prefix: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|value| value.as_nanos())
+            .unwrap_or(0);
+        let dir = std::env::temp_dir().join(format!("{prefix}-{nonce}"));
+        fs::create_dir_all(&dir).expect("create temp workspace");
+        dir
+    }
 
     #[test]
     fn rewrite_wikilinks_replaces_matching_target() {
@@ -1618,5 +1819,67 @@ mod tests {
         assert_eq!(set, active);
 
         fs::remove_dir_all(&temp).expect("cleanup");
+    }
+
+    #[test]
+    fn get_wikilink_graph_builds_expected_nodes_edges_and_tags() {
+        let workspace = create_temp_workspace("meditor-graph-test");
+        let root = workspace.to_string_lossy().to_string();
+
+        fs::write(workspace.join("a.md"), "# A\n[[b]]").expect("write a");
+        fs::write(workspace.join("b.md"), "# B\n[[a]]").expect("write b");
+        fs::write(workspace.join("c.md"), "# C").expect("write c");
+
+        set_active_workspace(&root).expect("set workspace");
+        init_db().expect("init db");
+
+        let conn = open_db().expect("open db");
+        conn.execute(
+            "INSERT INTO note_links(source_path, target_key) VALUES (?1, ?2)",
+            params!["a.md", "b"],
+        )
+        .expect("insert edge a->b");
+        conn.execute(
+            "INSERT INTO note_links(source_path, target_key) VALUES (?1, ?2)",
+            params!["b.md", "a"],
+        )
+        .expect("insert edge b->a");
+        conn.execute(
+            "INSERT INTO note_links(source_path, target_key) VALUES (?1, ?2)",
+            params!["a.md", "missing/note"],
+        )
+        .expect("insert unresolved edge");
+        conn.execute(
+            "INSERT INTO note_properties(path, key, kind, value_text) VALUES (?1, 'tags', 'list', ?2)",
+            params!["a.md", "dev"],
+        )
+        .expect("insert tags");
+
+        let graph = get_wikilink_graph().expect("build graph");
+        let mut nodes = graph
+            .nodes
+            .iter()
+            .map(|node| (node.path.clone(), node.degree, node.tags.clone()))
+            .collect::<Vec<_>>();
+        nodes.sort_by_key(|(path, _, _)| path.to_lowercase());
+
+        assert_eq!(nodes.len(), 3);
+        assert_eq!(graph.edges.len(), 2);
+        assert!(graph
+            .edges
+            .iter()
+            .all(|edge| edge.edge_type.eq("wikilink")));
+        assert!(graph.generated_at_ms > 0);
+
+        assert_eq!(nodes[0].0, "a.md");
+        assert_eq!(nodes[0].1, 2);
+        assert_eq!(nodes[0].2, vec!["dev".to_string()]);
+        assert_eq!(nodes[1].0, "b.md");
+        assert_eq!(nodes[1].1, 2);
+        assert_eq!(nodes[2].0, "c.md");
+        assert_eq!(nodes[2].1, 0);
+
+        clear_active_workspace().expect("clear workspace");
+        fs::remove_dir_all(&workspace).expect("cleanup workspace");
     }
 }

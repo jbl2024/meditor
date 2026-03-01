@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
+  CircleStackIcon,
   ComputerDesktopIcon,
   CommandLineIcon,
   EllipsisHorizontalIcon,
@@ -15,6 +16,7 @@ import {
 } from '@heroicons/vue/24/outline'
 import EditorView from './components/EditorView.vue'
 import EditorRightPane from './components/EditorRightPane.vue'
+import CosmosView from './components/cosmos/CosmosView.vue'
 import ExplorerTree from './components/explorer/ExplorerTree.vue'
 import UiButton from './components/ui/UiButton.vue'
 import { useDocumentHistory } from './composables/useDocumentHistory'
@@ -23,6 +25,7 @@ import {
   clearWorkingFolder,
   createEntry,
   ftsSearch,
+  getWikilinkGraph,
   initDb,
   listMarkdownFiles,
   listChildren,
@@ -46,6 +49,7 @@ import {
 import { parseSearchSnippet } from './lib/searchSnippets'
 import { shouldBlockGlobalShortcutsFromTarget } from './lib/shortcutTargets'
 import { parseWikilinkTarget, type WikilinkAnchor } from './lib/wikilinks'
+import { buildCosmosGraph, type CosmosGraph } from './lib/graphIndex'
 import { useEditorState } from './composables/useEditorState'
 import { useFilesystemState } from './composables/useFilesystemState'
 import { useWorkspaceState, type SidebarMode } from './composables/useWorkspaceState'
@@ -97,6 +101,8 @@ type VirtualDoc = {
 const THEME_STORAGE_KEY = 'meditor.theme.preference'
 const WORKING_FOLDER_STORAGE_KEY = 'meditor.working-folder.path'
 const EDITOR_ZOOM_STORAGE_KEY = 'meditor:editor:zoom'
+const VIEW_MODE_STORAGE_KEY = 'meditor:view:active'
+const PREVIOUS_NON_COSMOS_VIEW_MODE_STORAGE_KEY = 'meditor:view:last-non-cosmos'
 
 const workspace = useWorkspaceState()
 const editorState = useEditorState()
@@ -146,6 +152,10 @@ const openDateInput = ref('')
 const openDateModalError = ref('')
 const shortcutsModalVisible = ref(false)
 const shortcutsFilterQuery = ref('')
+const previousNonCosmosMode = ref<SidebarMode>('explorer')
+const cosmosGraph = ref<CosmosGraph>({ nodes: [], edges: [], generated_at_ms: 0 })
+const cosmosLoading = ref(false)
+const cosmosError = ref('')
 const wikilinkRewriteQueue: Array<{
   fromPath: string
   toPath: string
@@ -352,6 +362,10 @@ const metadataRows = computed(() => {
     { label: 'Updated', value: formatTimestamp(activeFileMetadata.value?.updated_at_ms ?? null) }
   ]
 })
+const cosmosSummary = computed(() => ({
+  nodes: cosmosGraph.value.nodes.length,
+  edges: cosmosGraph.value.edges.length
+}))
 
 const mediaQuery = typeof window !== 'undefined'
   ? window.matchMedia('(prefers-color-scheme: dark)')
@@ -386,6 +400,25 @@ function loadThemePreference() {
   } else {
     themePreference.value = 'system'
   }
+}
+
+function loadSavedSidebarMode() {
+  const saved = window.sessionStorage.getItem(VIEW_MODE_STORAGE_KEY)
+  if (saved === 'explorer' || saved === 'search' || saved === 'cosmos') {
+    workspace.sidebarMode.value = saved
+  }
+  const savedPrevious = window.sessionStorage.getItem(PREVIOUS_NON_COSMOS_VIEW_MODE_STORAGE_KEY)
+  if (savedPrevious === 'explorer' || savedPrevious === 'search') {
+    previousNonCosmosMode.value = savedPrevious
+  }
+}
+
+function persistSidebarMode() {
+  window.sessionStorage.setItem(VIEW_MODE_STORAGE_KEY, workspace.sidebarMode.value)
+}
+
+function persistPreviousNonCosmosMode() {
+  window.sessionStorage.setItem(PREVIOUS_NON_COSMOS_VIEW_MODE_STORAGE_KEY, previousNonCosmosMode.value)
 }
 
 function toRelativePath(path: string): string {
@@ -454,9 +487,13 @@ function applyWorkspaceFsChanges(changes: WorkspaceFsChange[]) {
   const activePath = activeFilePath.value
   const activePathKey = activePath ? normalizePathKey(activePath) : ''
   let shouldRefreshActiveMetadata = false
+  let shouldRefreshCosmos = false
   for (const change of changes) {
     if (change.kind === 'removed' && change.path) {
       removeWorkspaceFilePath(change.path)
+      if (isMarkdownPath(change.path)) {
+        shouldRefreshCosmos = true
+      }
       if (activePathKey && normalizePathKey(change.path) === activePathKey) {
         activeFileMetadata.value = null
       }
@@ -465,10 +502,19 @@ function applyWorkspaceFsChanges(changes: WorkspaceFsChange[]) {
     if (change.kind === 'renamed') {
       if (change.old_path && change.new_path) {
         replaceWorkspaceFilePath(change.old_path, change.new_path)
+        if (isMarkdownPath(change.old_path) || isMarkdownPath(change.new_path)) {
+          shouldRefreshCosmos = true
+        }
       } else if (change.old_path) {
         removeWorkspaceFilePath(change.old_path)
+        if (isMarkdownPath(change.old_path)) {
+          shouldRefreshCosmos = true
+        }
       } else if (!change.is_dir && change.new_path) {
         upsertWorkspaceFilePath(change.new_path)
+        if (isMarkdownPath(change.new_path)) {
+          shouldRefreshCosmos = true
+        }
       }
       if (
         activePathKey &&
@@ -481,6 +527,9 @@ function applyWorkspaceFsChanges(changes: WorkspaceFsChange[]) {
     }
     if ((change.kind === 'created' || change.kind === 'modified') && !change.is_dir && change.path) {
       upsertWorkspaceFilePath(change.path)
+      if (isMarkdownPath(change.path)) {
+        shouldRefreshCosmos = true
+      }
       if (activePathKey && normalizePathKey(change.path) === activePathKey) {
         shouldRefreshActiveMetadata = true
       }
@@ -488,6 +537,9 @@ function applyWorkspaceFsChanges(changes: WorkspaceFsChange[]) {
   }
   if (shouldRefreshActiveMetadata && activePath) {
     void refreshActiveFileMetadata(activePath)
+  }
+  if (shouldRefreshCosmos && workspace.sidebarMode.value === 'cosmos') {
+    void refreshCosmosGraph()
   }
 }
 
@@ -828,6 +880,9 @@ async function closeWorkspace() {
   allWorkspaceFiles.value = []
   backlinks.value = []
   backlinksLoading.value = false
+  cosmosGraph.value = { nodes: [], edges: [], generated_at_ms: 0 }
+  cosmosError.value = ''
+  cosmosLoading.value = false
   filesystem.selectedCount.value = 0
   filesystem.clearWorkspacePath()
   try {
@@ -887,6 +942,9 @@ async function loadWorkingFolder(path: string) {
     searchHits.value = []
     allWorkspaceFiles.value = []
     window.localStorage.setItem(WORKING_FOLDER_STORAGE_KEY, canonical)
+    if (workspace.sidebarMode.value === 'cosmos') {
+      await refreshCosmosGraph()
+    }
 
     if (workspace.activeTabPath.value && !workspace.activeTabPath.value.startsWith(canonical)) {
       workspace.closeAllTabs()
@@ -1393,16 +1451,40 @@ async function onOutlineHeadingClick(payload: { index: number; heading: { level:
 }
 
 function setSidebarMode(mode: SidebarMode) {
-  if (workspace.sidebarMode.value === mode) {
-    workspace.toggleSidebar()
+  const current = workspace.sidebarMode.value
+  if (mode === 'cosmos') {
+    if (current === 'cosmos') {
+      const fallback = previousNonCosmosMode.value
+      workspace.setSidebarMode(fallback)
+      persistSidebarMode()
+      return
+    }
+    previousNonCosmosMode.value = current
+    persistPreviousNonCosmosMode()
+    workspace.setSidebarMode('cosmos')
+    persistSidebarMode()
+    void refreshCosmosGraph()
     return
   }
+
+  if (current === mode) {
+    workspace.toggleSidebar()
+    persistSidebarMode()
+    return
+  }
+
+  previousNonCosmosMode.value = mode
+  persistPreviousNonCosmosMode()
   workspace.setSidebarMode(mode)
+  persistSidebarMode()
 }
 
 function openSearchPanel() {
   closeOverflowMenu()
   workspace.setSidebarMode('search')
+  previousNonCosmosMode.value = 'search'
+  persistPreviousNonCosmosMode()
+  persistSidebarMode()
   nextTick(() => {
     document.querySelector<HTMLInputElement>('[data-search-input=\"true\"]')?.focus()
   })
@@ -1459,7 +1541,7 @@ async function openTodayNote() {
 }
 
 async function showExplorerForActiveFile(options: { focusTree?: boolean } = {}) {
-  workspace.setSidebarMode('explorer')
+  setSidebarMode('explorer')
   await nextTick()
   const activePath = workspace.activeTabPath.value
   if (!activePath) return
@@ -1571,6 +1653,16 @@ async function openWikilinkTarget(target: string) {
   return await revealAnchor()
 }
 
+async function onCosmosOpenNode(path: string) {
+  const opened = await openTabWithAutosave(path)
+  if (!opened) return
+  const fallback = previousNonCosmosMode.value
+  workspace.setSidebarMode(fallback)
+  persistSidebarMode()
+  await nextTick()
+  editorRef.value?.focusEditor()
+}
+
 async function loadWikilinkTargets(): Promise<string[]> {
   const root = filesystem.workingFolderPath.value
   if (!root) return []
@@ -1579,6 +1671,29 @@ async function loadWikilinkTargets(): Promise<string[]> {
   } catch (err) {
     filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not load wikilink targets.'
     return []
+  }
+}
+
+/**
+ * Loads and reshapes the indexed wikilink graph for Cosmos rendering.
+ */
+async function refreshCosmosGraph() {
+  if (!filesystem.workingFolderPath.value) {
+    cosmosGraph.value = { nodes: [], edges: [], generated_at_ms: 0 }
+    cosmosError.value = ''
+    return
+  }
+
+  cosmosLoading.value = true
+  cosmosError.value = ''
+  try {
+    const raw = await getWikilinkGraph()
+    cosmosGraph.value = buildCosmosGraph(raw)
+  } catch (err) {
+    cosmosGraph.value = { nodes: [], edges: [], generated_at_ms: 0 }
+    cosmosError.value = err instanceof Error ? err.message : 'Could not load graph.'
+  } finally {
+    cosmosLoading.value = false
   }
 }
 
@@ -1971,6 +2086,9 @@ async function rebuildIndexFromOverflow() {
     const result = await rebuildWorkspaceIndex()
     await loadAllFiles()
     await refreshBacklinks()
+    if (workspace.sidebarMode.value === 'cosmos') {
+      await refreshCosmosGraph()
+    }
     filesystem.notifySuccess(`Index rebuilt (${result.indexed_files} file${result.indexed_files === 1 ? '' : 's'}).`)
   } catch (err) {
     filesystem.notifyError(err instanceof Error ? err.message : 'Could not rebuild index.')
@@ -2198,6 +2316,14 @@ function onWindowKeydown(event: KeyboardEvent) {
     closeShortcutsModal()
     return
   }
+  if (isEscape && workspace.sidebarMode.value === 'cosmos') {
+    event.preventDefault()
+    event.stopPropagation()
+    const fallback = previousNonCosmosMode.value
+    workspace.setSidebarMode(fallback)
+    persistSidebarMode()
+    return
+  }
 
   if (quickOpenVisible.value) {
     if (event.key === 'ArrowDown') {
@@ -2344,6 +2470,19 @@ watch(themePreference, (next) => {
   applyTheme()
 })
 
+watch(
+  () => workspace.sidebarMode.value,
+  (mode) => {
+    persistSidebarMode()
+    if (mode !== 'cosmos') {
+      previousNonCosmosMode.value = mode
+      persistPreviousNonCosmosMode()
+      return
+    }
+    void refreshCosmosGraph()
+  }
+)
+
 watch(quickOpenQuery, () => {
   quickOpenActiveIndex.value = 0
 })
@@ -2454,6 +2593,7 @@ watch(
 
 onMounted(() => {
   loadThemePreference()
+  loadSavedSidebarMode()
   applyTheme()
   editorZoom.value = readStoredEditorZoom()
   mediaQuery?.addEventListener('change', onSystemThemeChanged)
@@ -2530,6 +2670,16 @@ onBeforeUnmount(() => {
         >
           <MagnifyingGlassIcon class="activity-btn-icon" />
         </button>
+        <button
+          class="activity-btn"
+          :class="{ active: workspace.sidebarMode.value === 'cosmos' }"
+          type="button"
+          title="Cosmos view"
+          aria-label="Cosmos view"
+          @click="setSidebarMode('cosmos')"
+        >
+          <CircleStackIcon class="activity-btn-icon" />
+        </button>
       </aside>
 
       <aside
@@ -2592,6 +2742,12 @@ onBeforeUnmount(() => {
                 </button>
               </section>
             </div>
+          </div>
+
+          <div v-else-if="workspace.sidebarMode.value === 'cosmos'" class="panel-fill cosmos-panel">
+            <p class="cosmos-panel-title">Cosmos</p>
+            <p class="cosmos-panel-meta">{{ cosmosSummary.nodes }} nodes · {{ cosmosSummary.edges }} edges</p>
+            <p class="cosmos-panel-help">Click a node to open it. Double-click to focus. Press Esc to return.</p>
           </div>
 
           <div v-else class="placeholder">No panel selected</div>
@@ -2840,7 +2996,15 @@ onBeforeUnmount(() => {
           ></div>
 
           <main class="center-area">
+            <CosmosView
+              v-if="workspace.sidebarMode.value === 'cosmos'"
+              :graph="cosmosGraph"
+              :loading="cosmosLoading"
+              :error="cosmosError"
+              @open-node="void onCosmosOpenNode($event)"
+            />
             <EditorView
+              v-else
               ref="editorRef"
               :path="activeFilePath"
               :openPaths="workspace.openTabs.value.map((tab) => tab.path)"
@@ -3677,9 +3841,45 @@ onBeforeUnmount(() => {
   gap: 8px;
 }
 
+.cosmos-panel {
+  padding: 8px 4px;
+}
+
+.cosmos-panel-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.cosmos-panel-meta {
+  margin: 6px 0 0;
+  color: #475569;
+  font-size: 12px;
+}
+
+.cosmos-panel-help {
+  margin: 10px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .search-controls {
   display: flex;
   gap: 6px;
+}
+
+.ide-root.dark .cosmos-panel-title {
+  color: #e2e8f0;
+}
+
+.ide-root.dark .cosmos-panel-meta {
+  color: #94a3b8;
+}
+
+.ide-root.dark .cosmos-panel-help {
+  color: #94a3b8;
 }
 
 .tool-input {

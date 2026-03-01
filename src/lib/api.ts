@@ -36,6 +36,27 @@ export type FileMetadata = {
   updated_at_ms: number | null
 }
 
+export type WikilinkGraphNode = {
+  id: string
+  path: string
+  label: string
+  degree: number
+  tags: string[]
+  cluster: number | null
+}
+
+export type WikilinkGraphEdge = {
+  source: string
+  target: string
+  type: 'wikilink'
+}
+
+export type WikilinkGraph = {
+  nodes: WikilinkGraphNode[]
+  edges: WikilinkGraphEdge[]
+  generated_at_ms: number
+}
+
 export async function selectWorkingFolder(): Promise<string | null> {
   return await invoke('select_working_folder')
 }
@@ -142,6 +163,11 @@ export async function ftsSearch(query: string): Promise<Array<{ path: string; sn
 
 export async function backlinksForPath(path: string): Promise<Array<{ path: string }>> {
   return await invoke('backlinks_for_path', { path })
+}
+
+/** Fetches the indexed wikilink graph payload used by Cosmos view. */
+export async function getWikilinkGraph(): Promise<WikilinkGraph> {
+  return await invoke('get_wikilink_graph')
 }
 
 export async function updateWikilinksForRename(
