@@ -69,7 +69,6 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  'open-node': [path: string]
   'select-node': [nodeId: string]
 }>()
 
@@ -82,7 +81,6 @@ let hoverThrottleTimer: ReturnType<typeof setTimeout> | null = null
 let labelRaf = 0
 let lastClickAt = 0
 let lastClickNodeId = ''
-let pendingOpenTimer: ReturnType<typeof setTimeout> | null = null
 let lastDragAt = 0
 let lastDraggedNodeId = ''
 const CLICK_AFTER_DRAG_GUARD_MS = 320
@@ -169,11 +167,6 @@ function onNodeClick(node: RenderNode) {
   emit('select-node', node.id)
 
   const now = Date.now()
-  if (pendingOpenTimer) {
-    clearTimeout(pendingOpenTimer)
-    pendingOpenTimer = null
-  }
-
   if (lastClickNodeId === node.id && now - lastClickAt <= DOUBLE_CLICK_MS) {
     focusNode(node)
     lastClickAt = 0
@@ -183,10 +176,6 @@ function onNodeClick(node: RenderNode) {
 
   lastClickAt = now
   lastClickNodeId = node.id
-  pendingOpenTimer = setTimeout(() => {
-    emit('open-node', node.path)
-    pendingOpenTimer = null
-  }, DOUBLE_CLICK_MS)
 }
 
 function shouldShowLabel(node: CosmosGraphNode): boolean {
@@ -367,10 +356,6 @@ function teardownGraph() {
   if (hoverThrottleTimer) {
     clearTimeout(hoverThrottleTimer)
     hoverThrottleTimer = null
-  }
-  if (pendingOpenTimer) {
-    clearTimeout(pendingOpenTimer)
-    pendingOpenTimer = null
   }
   if (labelRaf) {
     window.cancelAnimationFrame(labelRaf)

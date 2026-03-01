@@ -3,7 +3,6 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
-  CircleStackIcon,
   ComputerDesktopIcon,
   CommandLineIcon,
   EllipsisHorizontalIcon,
@@ -11,6 +10,7 @@ import {
   HomeIcon,
   MagnifyingGlassIcon,
   MoonIcon,
+  ShareIcon,
   SunIcon,
   XMarkIcon
 } from '@heroicons/vue/24/outline'
@@ -166,6 +166,9 @@ const cosmosQuery = ref('')
 const cosmosSelectedNodeId = ref('')
 const cosmosFocusMode = ref(false)
 const cosmosFocusDepth = ref(1)
+const cosmosPreview = ref('')
+const cosmosPreviewLoading = ref(false)
+const cosmosPreviewError = ref('')
 const wikilinkRewriteQueue: Array<{
   fromPath: string
   toPath: string
@@ -950,6 +953,9 @@ async function closeWorkspace() {
   cosmosSelectedNodeId.value = ''
   cosmosFocusMode.value = false
   cosmosFocusDepth.value = 1
+  cosmosPreview.value = ''
+  cosmosPreviewLoading.value = false
+  cosmosPreviewError.value = ''
   filesystem.selectedCount.value = 0
   filesystem.clearWorkspacePath()
   try {
@@ -1730,6 +1736,17 @@ async function onCosmosOpenNode(path: string) {
   editorRef.value?.focusEditor()
 }
 
+function buildCosmosPreview(markdown: string): string {
+  return markdown
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .slice(0, 8)
+    .join('\n')
+    .slice(0, 600)
+}
+
 function onCosmosResetView() {
   cosmosRef.value?.resetView()
 }
@@ -1754,6 +1771,34 @@ function onCosmosExpandNeighborhood() {
   if (!cosmosSelectedNodeId.value) return
   cosmosFocusMode.value = true
   cosmosFocusDepth.value = Math.min(8, cosmosFocusDepth.value + 1)
+}
+
+async function loadCosmosSelectedPreview() {
+  const node = cosmosSelectedNode.value
+  if (!node?.path) {
+    cosmosPreview.value = ''
+    cosmosPreviewError.value = ''
+    cosmosPreviewLoading.value = false
+    return
+  }
+
+  cosmosPreviewLoading.value = true
+  cosmosPreviewError.value = ''
+  try {
+    const markdown = await readTextFile(node.path)
+    cosmosPreview.value = buildCosmosPreview(markdown)
+  } catch (err) {
+    cosmosPreview.value = ''
+    cosmosPreviewError.value = err instanceof Error ? err.message : 'Could not load preview.'
+  } finally {
+    cosmosPreviewLoading.value = false
+  }
+}
+
+async function onCosmosOpenSelectedNode() {
+  const node = cosmosSelectedNode.value
+  if (!node) return
+  await onCosmosOpenNode(node.path)
 }
 
 async function loadWikilinkTargets(): Promise<string[]> {
@@ -2596,6 +2641,13 @@ watch(
   }
 )
 
+watch(
+  () => cosmosSelectedNodeId.value,
+  () => {
+    void loadCosmosSelectedPreview()
+  }
+)
+
 watch(quickOpenQuery, () => {
   quickOpenActiveIndex.value = 0
 })
@@ -2791,7 +2843,7 @@ onBeforeUnmount(() => {
           aria-label="Cosmos view"
           @click="setSidebarMode('cosmos')"
         >
-          <CircleStackIcon class="activity-btn-icon" />
+          <ShareIcon class="activity-btn-icon" />
         </button>
       </aside>
 
@@ -2897,6 +2949,16 @@ onBeforeUnmount(() => {
               <p class="cosmos-node-path">{{ toRelativePath(cosmosSelectedNode.path) }}</p>
               <p class="cosmos-node-meta">Degree: {{ cosmosSelectedNode.degree }} · Cluster: {{ cosmosSelectedNode.cluster }}</p>
               <p class="cosmos-node-meta">Visible links: {{ cosmosSelectedLinkCount }}</p>
+              <button
+                type="button"
+                class="cosmos-open-btn"
+                @click="void onCosmosOpenSelectedNode()"
+              >
+                Open note
+              </button>
+              <p v-if="cosmosPreviewLoading" class="cosmos-node-preview">Loading preview...</p>
+              <p v-else-if="cosmosPreviewError" class="cosmos-node-preview cosmos-node-preview-error">{{ cosmosPreviewError }}</p>
+              <pre v-else class="cosmos-node-preview">{{ cosmosPreview || 'No preview content.' }}</pre>
             </div>
             <button
               type="button"
@@ -3162,7 +3224,6 @@ onBeforeUnmount(() => {
               :error="cosmosError"
               :selected-node-id="cosmosSelectedNodeId"
               @select-node="onCosmosSelectNode"
-              @open-node="void onCosmosOpenNode($event)"
             />
             <EditorView
               v-else
@@ -4093,6 +4154,31 @@ onBeforeUnmount(() => {
   color: #334155;
 }
 
+.cosmos-open-btn {
+  margin-top: 8px;
+  border: 1px solid #3b82f6;
+  color: #1d4ed8;
+  background: #eff6ff;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 10px;
+}
+
+.cosmos-node-preview {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #0f172a;
+  max-height: 160px;
+  overflow: auto;
+}
+
+.cosmos-node-preview-error {
+  color: #b91c1c;
+}
+
 .cosmos-reset-btn {
   margin-top: 10px;
   border: 1px solid #cbd5e1;
@@ -4166,6 +4252,20 @@ onBeforeUnmount(() => {
 .ide-root.dark .cosmos-node-path,
 .ide-root.dark .cosmos-node-meta {
   color: #e2e8f0;
+}
+
+.ide-root.dark .cosmos-open-btn {
+  border-color: #60a5fa;
+  color: #bfdbfe;
+  background: #1e3a8a;
+}
+
+.ide-root.dark .cosmos-node-preview {
+  color: #e2e8f0;
+}
+
+.ide-root.dark .cosmos-node-preview-error {
+  color: #fecaca;
 }
 
 .tool-input {

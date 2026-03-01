@@ -2,7 +2,20 @@ import { createApp, defineComponent, h, nextTick } from 'vue'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const hoisted = vi.hoisted(() => ({
-  getWikilinkGraph: vi.fn(async () => ({ nodes: [], edges: [], generated_at_ms: Date.now() }))
+  getWikilinkGraph: vi.fn(async () => ({
+    nodes: [
+      {
+        id: '/vault/opened-from-cosmos.md',
+        path: '/vault/opened-from-cosmos.md',
+        label: 'opened-from-cosmos',
+        degree: 1,
+        tags: [],
+        cluster: null
+      }
+    ],
+    edges: [],
+    generated_at_ms: Date.now()
+  }))
 }))
 
 vi.mock('./lib/api', () => ({
@@ -79,7 +92,7 @@ vi.mock('./components/explorer/ExplorerTree.vue', () => ({
 vi.mock('./components/cosmos/CosmosView.vue', () => ({
   default: defineComponent({
     name: 'CosmosViewStub',
-    emits: ['open-node'],
+    emits: ['select-node'],
     setup(_, { emit }) {
       return () =>
         h('div', { 'data-cosmos-stub': 'true' }, [
@@ -88,9 +101,9 @@ vi.mock('./components/cosmos/CosmosView.vue', () => ({
             {
               type: 'button',
               'data-cosmos-open': 'true',
-              onClick: () => emit('open-node', '/vault/opened-from-cosmos.md')
+              onClick: () => emit('select-node', '/vault/opened-from-cosmos.md')
             },
-            'open-node'
+            'select-node'
           )
         ])
     }
@@ -188,14 +201,19 @@ describe('App cosmos integration', () => {
     mounted.app.unmount()
   })
 
-  it('opens node target and returns to editor when cosmos emits open-node', async () => {
+  it('opens selected node only via explicit panel button', async () => {
+    window.localStorage.setItem('meditor.working-folder.path', '/vault')
     const mounted = mountApp()
+    await flushUi()
     await flushUi()
 
     mounted.root.querySelector<HTMLButtonElement>('button[aria-label="Cosmos view"]')?.click()
     await flushUi()
+    await flushUi()
 
     mounted.root.querySelector<HTMLButtonElement>('button[data-cosmos-open="true"]')?.click()
+    await flushUi()
+    mounted.root.querySelector<HTMLButtonElement>('.cosmos-open-btn')?.click()
     await flushUi()
 
     expect((mounted.root.textContent ?? '').toLowerCase()).toContain('explorer')

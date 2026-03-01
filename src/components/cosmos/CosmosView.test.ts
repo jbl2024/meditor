@@ -81,10 +81,10 @@ describe('CosmosView', () => {
     mockState.data = { nodes: [], links: [] }
   })
 
-  it('emits open-node when clicking a node', async () => {
+  it('emits select-node when clicking a node', async () => {
     const root = document.createElement('div')
     document.body.appendChild(root)
-    const opened = ref('')
+    const selected = ref('')
     const graph: CosmosGraph = {
       nodes: [
         {
@@ -110,8 +110,9 @@ describe('CosmosView', () => {
             graph,
             loading: false,
             error: '',
-            onOpenNode: (path: string) => {
-              opened.value = path
+            selectedNodeId: '',
+            onSelectNode: (nodeId: string) => {
+              selected.value = nodeId
             }
           })
       }
@@ -120,10 +121,12 @@ describe('CosmosView', () => {
     const app = createApp(Harness)
     app.mount(root)
     await flushUi()
+    await new Promise<void>((resolve) => setTimeout(resolve, 20))
+    expect(mockState.onNodeClick).toBeTypeOf('function')
+    mockState.onNodeClick?.({ id: 'a.md', path: '/vault/a.md', label: 'a', x: 1, y: 1, z: 1 })
+    await flushUi()
 
-    await new Promise<void>((resolve) => setTimeout(resolve, 320))
-
-    expect(opened.value).toBe('/vault/a.md')
+    expect(selected.value).toBe('a.md')
 
     app.unmount()
   })
