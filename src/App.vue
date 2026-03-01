@@ -344,19 +344,6 @@ const indexModelStatusLabel = computed(() => {
   if (status.model_state === 'not_initialized') return 'not initialized'
   return status.model_state
 })
-const indexDebugCommandSemantic = `(async () => {
-  const invoke = window.__TAURI_INTERNALS__?.invoke
-  if (!invoke) throw new Error('__TAURI_INTERNALS__.invoke not available')
-  const g = await invoke('get_wikilink_graph')
-  const semantic = g.edges.filter((e) => e.type === 'semantic')
-  console.log('nodes:', g.nodes.length, 'edges:', g.edges.length, 'semantic:', semantic.length)
-  console.table(semantic.slice(0, 20).map((e) => ({ source: e.source, target: e.target, score: e.score })))
-})().catch(console.error)`
-const indexDebugCommandRuntime = `(async () => {
-  const invoke = window.__TAURI_INTERNALS__?.invoke
-  if (!invoke) throw new Error('__TAURI_INTERNALS__.invoke not available')
-  console.log(await invoke('read_index_runtime_status'))
-})().catch(console.error)`
 const indexLogRows = computed(() =>
   indexLogEntries.value
     .slice()
@@ -774,43 +761,6 @@ async function refreshIndexRuntimeStatus() {
 
 async function refreshIndexModalData() {
   await Promise.all([refreshIndexRuntimeStatus(), refreshIndexLogs()])
-}
-
-async function copyTextToClipboard(text: string): Promise<boolean> {
-  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-    try {
-      await navigator.clipboard.writeText(text)
-      return true
-    } catch {
-      // Fallback below.
-    }
-  }
-  if (typeof document === 'undefined') return false
-  const area = document.createElement('textarea')
-  area.value = text
-  area.setAttribute('readonly', 'true')
-  area.style.position = 'fixed'
-  area.style.opacity = '0'
-  document.body.appendChild(area)
-  area.select()
-  let ok = false
-  try {
-    ok = document.execCommand('copy')
-  } catch {
-    ok = false
-  }
-  document.body.removeChild(area)
-  return ok
-}
-
-async function copyIndexDebugCommand(kind: 'semantic' | 'runtime') {
-  const text = kind === 'semantic' ? indexDebugCommandSemantic : indexDebugCommandRuntime
-  const ok = await copyTextToClipboard(text)
-  if (ok) {
-    filesystem.notifySuccess('Debug command copied to clipboard.')
-  } else {
-    filesystem.notifyError('Could not copy debug command.')
-  }
 }
 
 async function stopCurrentIndexOperation() {
@@ -3992,25 +3942,6 @@ onBeforeUnmount(() => {
                 </div>
               </div>
             </div>
-            <div class="index-debug-panel">
-              <p class="index-log-title">Debug Commands</p>
-              <div class="index-debug-grid">
-                <div class="index-debug-card">
-                  <div class="index-debug-row">
-                    <p class="index-debug-label">Semantic edge count</p>
-                    <UiButton size="sm" variant="ghost" @click="void copyIndexDebugCommand('semantic')">Copy</UiButton>
-                  </div>
-                  <pre class="index-debug-code">{{ indexDebugCommandSemantic }}</pre>
-                </div>
-                <div class="index-debug-card">
-                  <div class="index-debug-row">
-                    <p class="index-debug-label">Runtime status</p>
-                    <UiButton size="sm" variant="ghost" @click="void copyIndexDebugCommand('runtime')">Copy</UiButton>
-                  </div>
-                  <pre class="index-debug-code">{{ indexDebugCommandRuntime }}</pre>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
         <div class="confirm-actions">
@@ -5117,7 +5048,9 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  height: 320px;
   padding-right: 4px;
+  overflow: auto;
 }
 
 .index-log-row {
@@ -5166,73 +5099,13 @@ onBeforeUnmount(() => {
   color: #e2e8f0;
 }
 
-.index-debug-panel {
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 8px;
-  background: #ffffff;
-}
-
-.ide-root.dark .index-debug-panel {
-  border-color: #3e4451;
-  background: #282c34;
-}
-
-.index-debug-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.index-debug-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.index-debug-card {
-  min-width: 0;
-}
-
-.index-debug-label {
-  margin: 0;
-  font-size: 11px;
-  color: #475569;
-  font-weight: 600;
-}
-
-.index-debug-code {
-  margin: 6px 0 8px;
-  border-radius: 6px;
-  border: 1px solid #e2e8f0;
-  background: #f8fafc;
-  padding: 8px;
-  font-size: 11px;
-  line-height: 1.4;
-  max-height: 120px;
-  overflow: auto;
-  white-space: pre;
-}
-
 @media (max-width: 980px) {
   .index-status-modal {
     width: min(760px, calc(100vw - 20px));
   }
-
-  .index-debug-grid {
-    grid-template-columns: 1fr;
+  .index-log-list {
+    height: 230px;
   }
-}
-
-.ide-root.dark .index-debug-label {
-  color: #cbd5e1;
-}
-
-.ide-root.dark .index-debug-code {
-  border-color: #334155;
-  background: #111827;
-  color: #dbeafe;
 }
 
 .toast {
