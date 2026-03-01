@@ -1,14 +1,14 @@
 # AGENTS.md
 
-This file defines repository-wide agent behavior for `/Users/jbl2024/jbl42/meditor`.
+This file defines repository-wide agent behavior for `meditor`.
 
 ## Scope
 - Applies to the entire repository unless a deeper `AGENTS.md` overrides specific rules.
 
 ## Project Context
 - Desktop app stack: `Tauri 2` + `Rust` backend + `Vue 3` frontend.
-- Frontend is in `/Users/jbl2024/jbl42/meditor/src`.
-- Tauri/Rust code is in `/Users/jbl2024/jbl42/meditor/src-tauri`.
+- Frontend is in `src`.
+- Tauri/Rust code is in `src-tauri`.
 
 ## Core Rules
 - Keep changes minimal, targeted, and compatible with current behavior unless a behavior change is requested.
@@ -43,12 +43,12 @@ This file defines repository-wide agent behavior for `/Users/jbl2024/jbl42/medit
 
 ## Verification
 - Run relevant checks after meaningful changes when feasible.
-- Backend changes: run `cargo check` in `/Users/jbl2024/jbl42/meditor/src-tauri`.
+- Backend changes: run `cargo check` in `src-tauri`.
 - Frontend changes: run relevant build/test command for the Vite/Vue app.
 - If checks are not run, state that clearly.
 
 ## Changelog Workflow
-- Keep `/Users/jbl2024/jbl42/meditor/CHANGELOG.md` updated for every release.
+- Keep `CHANGELOG.md` updated for every release.
 - Use Semantic Versioning for release versions: `MAJOR.MINOR.PATCH` (for example `0.9.10`).
 - Add release entries using this exact heading format: `## [<version>] - YYYY-MM-DD`.
 - Keep an `## [Unreleased]` section at the top with these subsections:
