@@ -124,6 +124,9 @@ type CosmosHistorySnapshot = {
   focusMode: boolean
   focusDepth: number
 }
+type SecondBrainHistorySnapshot = {
+  surface: 'chat' | 'sessions'
+}
 type IndexRunKind = 'idle' | 'background' | 'rebuild' | 'rename'
 type IndexRunPhase = 'idle' | 'indexing_files' | 'refreshing_views' | 'done' | 'error'
 type IndexLogFilter = 'all' | 'errors' | 'slow'
@@ -1597,7 +1600,41 @@ function cosmosHistoryLabel(snapshot: CosmosHistorySnapshot): string {
 
 function historyTargetLabel(entry: DocumentHistoryEntry): string {
   if (entry.kind === 'cosmos') return entry.label
+  if (entry.kind === 'second-brain') return entry.label || 'Second Brain'
   return toRelativePath(entry.path)
+}
+
+function readSecondBrainHistorySnapshot(payload: unknown): SecondBrainHistorySnapshot | null {
+  if (!payload || typeof payload !== 'object') return null
+  const value = payload as Partial<SecondBrainHistorySnapshot>
+  if (value.surface !== 'chat' && value.surface !== 'sessions') return null
+  return { surface: value.surface }
+}
+
+function currentSecondBrainHistorySnapshot(): SecondBrainHistorySnapshot {
+  return {
+    surface: secondBrainSurface.value
+  }
+}
+
+function secondBrainSnapshotStateKey(snapshot: SecondBrainHistorySnapshot): string {
+  return snapshot.surface
+}
+
+function secondBrainHistoryLabel(snapshot: SecondBrainHistorySnapshot): string {
+  return snapshot.surface === 'sessions' ? 'Second Brain: Sessions' : 'Second Brain'
+}
+
+function recordSecondBrainHistorySnapshot() {
+  if (isApplyingHistoryNavigation || workspace.sidebarMode.value !== 'second-brain') return
+  const snapshot = currentSecondBrainHistorySnapshot()
+  documentHistory.recordEntry({
+    kind: 'second-brain',
+    path: SECOND_BRAIN_TAB_PATH,
+    label: secondBrainHistoryLabel(snapshot),
+    stateKey: secondBrainSnapshotStateKey(snapshot),
+    payload: snapshot
+  })
 }
 
 function recordCosmosHistorySnapshot() {
@@ -1653,6 +1690,25 @@ async function openHistoryEntry(entry: DocumentHistoryEntry): Promise<boolean> {
     const snapshot = readCosmosHistorySnapshot(entry.payload)
     if (!snapshot) return false
     return await applyCosmosHistorySnapshot(snapshot)
+  }
+  if (entry.kind === 'second-brain') {
+    const snapshot = readSecondBrainHistorySnapshot(entry.payload)
+    if (!snapshot) return false
+    secondBrainTabOpen.value = true
+    if (snapshot.surface === 'sessions') {
+      secondBrainSessionsTabOpen.value = true
+    }
+    secondBrainSurface.value = snapshot.surface
+    if (workspace.sidebarMode.value !== 'second-brain') {
+      previousNonCosmosMode.value = workspace.sidebarMode.value
+      persistPreviousNonCosmosMode()
+      workspace.setSidebarMode('second-brain')
+      persistSidebarMode()
+    }
+    if (!allWorkspaceFiles.value.length) {
+      await loadAllFiles()
+    }
+    return true
   }
 
   const opened = await openTabWithAutosave(entry.path, { recordHistory: false })
@@ -1845,6 +1901,7 @@ async function openSecondBrainViewFromPalette() {
     workspace.setSidebarMode('second-brain')
     persistSidebarMode()
   }
+  recordSecondBrainHistorySnapshot()
   if (!allWorkspaceFiles.value.length) {
     await loadAllFiles()
   }
@@ -1864,6 +1921,7 @@ async function openSecondBrainSessionsFromPalette() {
     workspace.setSidebarMode('second-brain')
     persistSidebarMode()
   }
+  recordSecondBrainHistorySnapshot()
   return true
 }
 
@@ -1880,6 +1938,7 @@ function openSecondBrainSessionFromHistory(sessionId: string) {
     workspace.setSidebarMode('second-brain')
     persistSidebarMode()
   }
+  recordSecondBrainHistorySnapshot()
 }
 
 function onSecondBrainSidebarToggleContext(path: string) {
@@ -2614,6 +2673,7 @@ async function onTabClick(tab: TabViewItem) {
     }
     secondBrainSurface.value = 'chat'
     secondBrainTabOpen.value = true
+    recordSecondBrainHistorySnapshot()
     return
   }
   if (tab.kind === 'second-brain-sessions') {
@@ -2622,6 +2682,7 @@ async function onTabClick(tab: TabViewItem) {
     }
     secondBrainSessionsTabOpen.value = true
     secondBrainSurface.value = 'sessions'
+    recordSecondBrainHistorySnapshot()
     return
   }
   const opened = await setActiveTabWithAutosave(tab.path)
@@ -2784,6 +2845,7 @@ function setSidebarMode(mode: SidebarMode) {
     persistPreviousNonCosmosMode()
     workspace.setSidebarMode('second-brain')
     persistSidebarMode()
+    recordSecondBrainHistorySnapshot()
     if (!allWorkspaceFiles.value.length) {
       void loadAllFiles()
     }
