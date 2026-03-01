@@ -5337,7 +5337,7 @@ onBeforeUnmount(() => {
   background: #2c313a;
 }
 
-.confirm-modal {
+.confirm-modal:not(.index-status-modal) {
   width: min(560px, calc(100vw - 32px));
 }
 
