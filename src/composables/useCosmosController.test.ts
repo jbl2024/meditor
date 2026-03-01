@@ -21,6 +21,16 @@ async function flush() {
   await nextTick()
 }
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
 describe('useCosmosController', () => {
   it('keeps query untouched when selecting/focusing nodes', async () => {
     const scope = effectScope()
@@ -195,9 +205,43 @@ describe('useCosmosController', () => {
 
       await ctrl.refreshGraph()
       ctrl.query.value = 'x'
-      await flush()
+      await new Promise<void>((resolve) => setTimeout(resolve, 320))
       await flush()
       expect(ctrl.queryMatches.value.map((item) => item.id)).toEqual(['b', 'a'])
+    })
+    scope.stop()
+  })
+
+  it('ignores stale refresh errors when a newer refresh succeeds', async () => {
+    const first = deferred<WikilinkGraph>()
+    const second = deferred<WikilinkGraph>()
+    let calls = 0
+    const getWikilinkGraph = vi.fn(async () => {
+      calls += 1
+      return calls === 1 ? first.promise : second.promise
+    })
+
+    const scope = effectScope()
+    await scope.run(async () => {
+      const ctrl = useCosmosController({
+        workingFolderPath: ref('/vault'),
+        activeTabPath: ref('/vault/a.md'),
+        getWikilinkGraph,
+        reindexMarkdownFile: vi.fn(async () => {}),
+        readTextFile: vi.fn(async () => '# A'),
+        ftsSearch: vi.fn(async () => [])
+      })
+
+      const early = ctrl.refreshGraph()
+      const latest = ctrl.refreshGraph()
+
+      second.resolve(rawGraph)
+      await latest
+      first.reject(new Error('Database operation failed.'))
+      await early.catch(() => {})
+
+      expect(ctrl.error.value).toBe('')
+      expect(ctrl.graph.value.nodes.length).toBe(rawGraph.nodes.length)
     })
     scope.stop()
   })

@@ -78,6 +78,7 @@ export function useCosmosController(deps: CosmosDeps) {
 
   let previewRequestToken = 0
   let queryRequestToken = 0
+  let graphRequestToken = 0
 
   const summary = computed<GraphSummary>(() => ({
     nodes: graph.value.nodes.length,
@@ -242,7 +243,9 @@ export function useCosmosController(deps: CosmosDeps) {
   }
 
   async function refreshGraph() {
+    const requestToken = ++graphRequestToken
     if (!deps.workingFolderPath.value) {
+      if (requestToken !== graphRequestToken) return
       graph.value = { nodes: [], edges: [], generated_at_ms: 0 }
       error.value = ''
       semanticPathOrder.value = []
@@ -277,7 +280,9 @@ export function useCosmosController(deps: CosmosDeps) {
         throw lastError ?? new Error('Could not load graph.')
       }
       const shape = deps.buildCosmosGraph ?? defaultBuildCosmosGraph
+      if (requestToken !== graphRequestToken) return
       graph.value = shape(raw)
+      error.value = ''
 
       if (!graph.value.nodes.some((node) => node.id === selectedNodeId.value)) {
         selectedNodeId.value = ''
@@ -285,10 +290,12 @@ export function useCosmosController(deps: CosmosDeps) {
       }
       await refreshSemanticMatches()
     } catch (err) {
+      if (requestToken !== graphRequestToken) return
       graph.value = { nodes: [], edges: [], generated_at_ms: 0 }
       error.value = normalizeGraphLoadError(err)
       console.error('[cosmos] graph refresh failed', err)
     } finally {
+      if (requestToken !== graphRequestToken) return
       loading.value = false
     }
   }
