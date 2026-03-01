@@ -31,6 +31,11 @@ export type WorkspaceFsChangedPayload = {
   ts_ms: number
 }
 
+export type FileMetadata = {
+  created_at_ms: number | null
+  updated_at_ms: number | null
+}
+
 export async function selectWorkingFolder(): Promise<string | null> {
   return await invoke('select_working_folder')
 }
@@ -57,6 +62,10 @@ export async function pathExists(path: string): Promise<boolean> {
 
 export async function readTextFile(path: string): Promise<string> {
   return await invoke('read_text_file', { path })
+}
+
+export async function readFileMetadata(path: string): Promise<FileMetadata> {
+  return await invoke('read_file_metadata', { path })
 }
 
 export async function writeTextFile(path: string, content: string): Promise<void> {

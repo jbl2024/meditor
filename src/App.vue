@@ -27,6 +27,7 @@ import {
   listMarkdownFiles,
   listChildren,
   pathExists,
+  readFileMetadata,
   readTextFile,
   rebuildWorkspaceIndex,
   renameEntry,
@@ -35,6 +36,7 @@ import {
   revealInFileManager,
   setWorkingFolder,
   selectWorkingFolder,
+  type FileMetadata,
   type WorkspaceFsChange,
   listenWorkspaceFsChanged,
   updateWikilinksForRename,
@@ -126,6 +128,7 @@ const backHistoryButtonRef = ref<HTMLElement | null>(null)
 const forwardHistoryButtonRef = ref<HTMLElement | null>(null)
 const backlinks = ref<string[]>([])
 const backlinksLoading = ref(false)
+const activeFileMetadata = ref<FileMetadata | null>(null)
 const propertiesPreview = ref<PropertyPreviewRow[]>([])
 const propertyParseErrorCount = ref(0)
 const virtualDocs = ref<Record<string, VirtualDoc>>({})
@@ -149,6 +152,7 @@ const wikilinkRewriteQueue: Array<{
   resolve: (approved: boolean) => void
 }> = []
 let wikilinkRewriteResolver: ((approved: boolean) => void) | null = null
+let activeFileMetadataRequestToken = 0
 const historyMenuOpen = ref<'back' | 'forward' | null>(null)
 const historyMenuStyle = ref<Record<string, string>>({})
 let historyMenuTimer: ReturnType<typeof setTimeout> | null = null
@@ -343,7 +347,9 @@ const metadataRows = computed(() => {
   return [
     { label: 'Path', value: toRelativePath(activeFilePath.value) },
     { label: 'State', value: state },
-    { label: 'Workspace', value: toRelativePath(filesystem.workingFolderPath.value) || filesystem.workingFolderPath.value }
+    { label: 'Workspace', value: toRelativePath(filesystem.workingFolderPath.value) || filesystem.workingFolderPath.value },
+    { label: 'Created', value: formatTimestamp(activeFileMetadata.value?.created_at_ms ?? null) },
+    { label: 'Updated', value: formatTimestamp(activeFileMetadata.value?.updated_at_ms ?? null) }
   ]
 })
 
@@ -445,9 +451,15 @@ function replaceWorkspaceFilePath(oldPath: string, newPath: string) {
 
 function applyWorkspaceFsChanges(changes: WorkspaceFsChange[]) {
   if (!changes.length) return
+  const activePath = activeFilePath.value
+  const activePathKey = activePath ? normalizePathKey(activePath) : ''
+  let shouldRefreshActiveMetadata = false
   for (const change of changes) {
     if (change.kind === 'removed' && change.path) {
       removeWorkspaceFilePath(change.path)
+      if (activePathKey && normalizePathKey(change.path) === activePathKey) {
+        activeFileMetadata.value = null
+      }
       continue
     }
     if (change.kind === 'renamed') {
@@ -458,11 +470,24 @@ function applyWorkspaceFsChanges(changes: WorkspaceFsChange[]) {
       } else if (!change.is_dir && change.new_path) {
         upsertWorkspaceFilePath(change.new_path)
       }
+      if (
+        activePathKey &&
+        ((change.old_path && normalizePathKey(change.old_path) === activePathKey) ||
+          (change.new_path && normalizePathKey(change.new_path) === activePathKey))
+      ) {
+        shouldRefreshActiveMetadata = true
+      }
       continue
     }
     if ((change.kind === 'created' || change.kind === 'modified') && !change.is_dir && change.path) {
       upsertWorkspaceFilePath(change.path)
+      if (activePathKey && normalizePathKey(change.path) === activePathKey) {
+        shouldRefreshActiveMetadata = true
+      }
     }
+  }
+  if (shouldRefreshActiveMetadata && activePath) {
+    void refreshActiveFileMetadata(activePath)
   }
 }
 
@@ -478,6 +503,36 @@ function isValidCalendarDate(year: number, month: number, day: number): boolean 
 
 function formatIsoDate(date: Date): string {
   return `${date.getFullYear()}-${normalizeDatePart(date.getMonth() + 1)}-${normalizeDatePart(date.getDate())}`
+}
+
+function formatTimestamp(value: number | null): string {
+  if (!Number.isFinite(value) || value == null || value < 0) {
+    return '-'
+  }
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return '-'
+  }
+  return `${date.getFullYear()}-${normalizeDatePart(date.getMonth() + 1)}-${normalizeDatePart(date.getDate())} ${normalizeDatePart(date.getHours())}:${normalizeDatePart(date.getMinutes())}:${normalizeDatePart(date.getSeconds())}`
+}
+
+async function refreshActiveFileMetadata(path: string | null = activeFilePath.value) {
+  const targetPath = path?.trim() || ''
+  const requestToken = ++activeFileMetadataRequestToken
+  if (!targetPath) {
+    activeFileMetadata.value = null
+    return
+  }
+  try {
+    const next = await readFileMetadata(targetPath)
+    if (requestToken === activeFileMetadataRequestToken && activeFilePath.value === targetPath) {
+      activeFileMetadata.value = next
+    }
+  } catch {
+    if (requestToken === activeFileMetadataRequestToken && activeFilePath.value === targetPath) {
+      activeFileMetadata.value = null
+    }
+  }
 }
 
 function isIsoDate(input: string): boolean {
@@ -1173,6 +1228,7 @@ async function saveFile(path: string, txt: string, options: SaveFileOptions): Pr
 
   await ensureParentFolders(path)
   await writeTextFile(path, txt)
+  await refreshActiveFileMetadata(path)
 
   if (virtual) {
     const nextVirtual = { ...virtualDocs.value }
@@ -2344,7 +2400,16 @@ watch(
     allWorkspaceFiles.value = []
     backlinks.value = []
     virtualDocs.value = {}
+    activeFileMetadata.value = null
   }
+)
+
+watch(
+  () => workspace.activeTabPath.value,
+  (path) => {
+    void refreshActiveFileMetadata(path)
+  },
+  { immediate: true }
 )
 
 watch(

@@ -28,6 +28,12 @@ pub struct TreeNode {
     pub has_children: bool,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct FileMetadata {
+    pub created_at_ms: Option<i64>,
+    pub updated_at_ms: Option<i64>,
+}
+
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ConflictStrategy {
@@ -468,6 +474,26 @@ pub fn read_text_file(path: String) -> Result<String> {
     let pb = normalize_existing_path(&path)?;
     ensure_within_root(&root, &pb)?;
     Ok(fs::read_to_string(pb)?)
+}
+
+fn system_time_to_unix_ms(value: SystemTime) -> Option<i64> {
+    value
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .and_then(|duration| i64::try_from(duration.as_millis()).ok())
+}
+
+#[tauri::command]
+pub fn read_file_metadata(path: String) -> Result<FileMetadata> {
+    let root = active_workspace_root()?;
+    let pb = normalize_existing_path(&path)?;
+    ensure_within_root(&root, &pb)?;
+    let metadata = fs::metadata(pb)?;
+
+    Ok(FileMetadata {
+        created_at_ms: metadata.created().ok().and_then(system_time_to_unix_ms),
+        updated_at_ms: metadata.modified().ok().and_then(system_time_to_unix_ms),
+    })
 }
 
 #[tauri::command]

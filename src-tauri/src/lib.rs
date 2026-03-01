@@ -17,7 +17,7 @@ use thiserror::Error;
 use fs_ops::{
     clear_working_folder, copy_entry, create_entry, duplicate_entry, list_children,
     list_markdown_files, move_entry, open_external_url, open_path_external, path_exists,
-    read_text_file, rename_entry, reveal_in_file_manager, select_working_folder,
+    read_file_metadata, read_text_file, rename_entry, reveal_in_file_manager, select_working_folder,
     set_working_folder, trash_entry, write_text_file,
 };
 
@@ -1455,6 +1455,7 @@ pub fn run() {
             list_markdown_files,
             path_exists,
             read_text_file,
+            read_file_metadata,
             write_text_file,
             create_entry,
             rename_entry,
