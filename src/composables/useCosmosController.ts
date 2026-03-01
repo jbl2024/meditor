@@ -145,44 +145,10 @@ export function useCosmosController(deps: CosmosDeps) {
 
   const visibleGraph = computed<CosmosGraph>(() => {
     const edgesForView = visibleEdges.value
-
-    if (!focusMode.value || !selectedNodeId.value) {
-      return {
-        generated_at_ms: graph.value.generated_at_ms,
-        nodes: graph.value.nodes,
-        edges: edgesForView
-      }
-    }
-
-    const adjacency = new Map<string, Set<string>>()
-    for (const node of graph.value.nodes) {
-      adjacency.set(node.id, new Set<string>())
-    }
-    for (const edge of edgesForView) {
-      adjacency.get(edge.source)?.add(edge.target)
-      adjacency.get(edge.target)?.add(edge.source)
-    }
-
-    const visible = new Set<string>([selectedNodeId.value])
-    let frontier = new Set<string>([selectedNodeId.value])
-    for (let depth = 0; depth < Math.max(1, focusDepth.value); depth += 1) {
-      const next = new Set<string>()
-      for (const nodeId of frontier) {
-        for (const neighbor of adjacency.get(nodeId) ?? []) {
-          if (!visible.has(neighbor)) {
-            visible.add(neighbor)
-            next.add(neighbor)
-          }
-        }
-      }
-      if (!next.size) break
-      frontier = next
-    }
-
     return {
       generated_at_ms: graph.value.generated_at_ms,
-      nodes: graph.value.nodes.filter((node) => visible.has(node.id)),
-      edges: edgesForView.filter((edge) => visible.has(edge.source) && visible.has(edge.target))
+      nodes: graph.value.nodes,
+      edges: edgesForView
     }
   })
 

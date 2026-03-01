@@ -1,16 +1,24 @@
 <script setup lang="ts">
 /**
- * 3D Cosmos graph renderer for wikilink exploration.
+ * 2D Cosmos graph renderer for wikilink exploration.
  *
  * Responsibilities:
- * - render the graph with `3d-force-graph`,
+ * - render graph with `force-graph`,
  * - apply hover/focus highlighting,
  * - surface node selection via emits.
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { CosmosGraph, CosmosGraphNode } from '../../lib/graphIndex'
 
-type RenderNode = CosmosGraphNode & { x?: number; y?: number; z?: number; fx?: number; fy?: number; fz?: number }
+type RenderNode = CosmosGraphNode & {
+  x?: number
+  y?: number
+  vx?: number
+  vy?: number
+  fx?: number
+  fy?: number
+}
+
 type RenderEdge = {
   source: string | RenderNode
   target: string | RenderNode
@@ -23,84 +31,92 @@ type ForceGraphInstance = {
     (): { nodes: RenderNode[]; links: RenderEdge[] }
     (data: { nodes: RenderNode[]; links: RenderEdge[] }): ForceGraphInstance
   }
-  backgroundColor: (value: string) => ForceGraphInstance
+  backgroundColor: (value?: string) => string | ForceGraphInstance
   nodeLabel: (value: (node: RenderNode) => string) => ForceGraphInstance
   nodeRelSize: (value: number) => ForceGraphInstance
   nodeVal: (value: number | string | ((node: RenderNode) => number)) => ForceGraphInstance
   nodeColor: (value: (node: RenderNode) => string) => ForceGraphInstance
-  nodeOpacity: (value: number) => ForceGraphInstance
+  nodeCanvasObject: (value: (node: RenderNode, ctx: CanvasRenderingContext2D, globalScale: number) => void) => ForceGraphInstance
+  nodeCanvasObjectMode: (value: string | ((node: RenderNode) => string)) => ForceGraphInstance
+  nodePointerAreaPaint: (value: (node: RenderNode, color: string, ctx: CanvasRenderingContext2D) => void) => ForceGraphInstance
   linkColor: (value: (edge: RenderEdge) => string) => ForceGraphInstance
   linkVisibility: (value: boolean | ((edge: RenderEdge) => boolean)) => ForceGraphInstance
   linkWidth: (value: (edge: RenderEdge) => number) => ForceGraphInstance
-  linkOpacity: (value: (edge: RenderEdge) => number) => ForceGraphInstance
-  linkDirectionalArrowLength: (value: number | ((edge: RenderEdge) => number)) => ForceGraphInstance
-  linkDirectionalArrowColor: (value: string | ((edge: RenderEdge) => string)) => ForceGraphInstance
-  linkDirectionalArrowRelPos: (value: number | ((edge: RenderEdge) => number)) => ForceGraphInstance
-  showNavInfo: (value: boolean) => ForceGraphInstance
-  enableNavigationControls: (value: boolean) => ForceGraphInstance
+  linkLineDash: (value: (edge: RenderEdge) => number[] | null) => ForceGraphInstance
   enableNodeDrag: (value: boolean) => ForceGraphInstance
+  enableZoomInteraction: (value: boolean | ((event: MouseEvent) => boolean)) => ForceGraphInstance
+  enablePanInteraction: (value: boolean | ((event: MouseEvent) => boolean)) => ForceGraphInstance
   cooldownTicks: (value: number) => ForceGraphInstance
   cooldownTime: (value: number) => ForceGraphInstance
   d3VelocityDecay: (value: number) => ForceGraphInstance
+  d3Force: {
+    (forceName: string): unknown
+    (forceName: string, forceFn: unknown): ForceGraphInstance
+  }
+  d3ReheatSimulation: () => ForceGraphInstance
   onNodeHover: (handler: (node: RenderNode | null) => void) => ForceGraphInstance
   onNodeClick: (handler: (node: RenderNode, event?: MouseEvent) => void) => ForceGraphInstance
   onNodeDrag: (handler: (node: RenderNode) => void) => ForceGraphInstance
   onNodeDragEnd: (handler: (node: RenderNode) => void) => ForceGraphInstance
   onEngineStop: (handler: () => void) => ForceGraphInstance
-  cameraPosition: (
-    position: { x?: number; y?: number; z?: number },
-    lookAt?: { x?: number; y?: number; z?: number },
-    ms?: number
-  ) => ForceGraphInstance
   width: (value: number) => ForceGraphInstance
   height: (value: number) => ForceGraphInstance
+  centerAt: (x?: number, y?: number, ms?: number) => ForceGraphInstance
+  zoom: {
+    (): number
+    (value: number, ms?: number): ForceGraphInstance
+  }
   zoomToFit: (ms?: number, px?: number, filter?: (node: RenderNode) => boolean) => ForceGraphInstance
-  graph2ScreenCoords: (x: number, y: number, z: number) => { x: number; y: number }
-  controls: () => { enableDamping?: boolean; dampingFactor?: number }
   refresh?: () => ForceGraphInstance
   _destructor?: () => void
 }
 
-const FOLDER_COLORS = ['#4cc9f0', '#90be6d', '#f9c74f', '#f9844a', '#43aa8b', '#4895ef', '#84cc16', '#22d3ee', '#f97316', '#a3e635']
-const CLUSTER_FALLBACK_COLORS = ['#4cc9f0', '#90be6d', '#f9c74f', '#f9844a', '#577590', '#43aa8b', '#4895ef']
+const FOLDER_COLORS = ['#5fb3cc', '#86b969', '#d6be70', '#d59670', '#6bb49a', '#6e9ccc', '#9dc36a', '#62bbcb', '#d39a62', '#a7c770']
+const CLUSTER_FALLBACK_COLORS = ['#5fb3cc', '#86b969', '#d6be70', '#d59670', '#6f8fa8', '#6bb49a', '#6e9ccc']
 const HOVER_THROTTLE_MS = 24
 const DOUBLE_CLICK_MS = 260
 const AUTO_SHOW_LABEL_THRESHOLD = 24
+const CLICK_AFTER_DRAG_GUARD_MS = 320
+const MIN_LABEL_SCALE = 0.95
 
 const props = defineProps<{
   graph: CosmosGraph
   loading: boolean
   error?: string
   selectedNodeId?: string
+  focusMode?: boolean
+  focusDepth?: number
 }>()
 
 const emit = defineEmits<{
   'select-node': [nodeId: string]
+  'toggle-focus-mode': [value: boolean]
 }>()
 
 const rootEl = ref<HTMLDivElement | null>(null)
 const graphEl = ref<HTMLDivElement | null>(null)
 const graphInstance = ref<ForceGraphInstance | null>(null)
-const labels = ref<Array<{ id: string; text: string; x: number; y: number; color: string; emphasized: boolean }>>([])
 
 let hoverThrottleTimer: ReturnType<typeof setTimeout> | null = null
-let labelRaf = 0
 let lastClickAt = 0
 let lastClickNodeId = ''
 let lastDragAt = 0
 let lastDraggedNodeId = ''
-const CLICK_AFTER_DRAG_GUARD_MS = 320
 let hoveredNodeId = ''
 let selectedNodeId = ''
 let hoveredNeighborIds = new Set<string>()
 let highlightedEdgeKeys = new Set<string>()
+let focusNeighborIds = new Set<string>()
+let focusEdgeKeys = new Set<string>()
 let cachedEdges: Array<{ source: string; target: string; type: 'wikilink' | 'semantic'; score?: number | null }> = []
 let didInitialAutoFit = false
 let deferredFocusTimer: ReturnType<typeof setTimeout> | null = null
 let deferredFocusNodeId = ''
 let deferredFocusAttempts = 0
+let themeObserver: MutationObserver | null = null
 
 const hasRenderableGraph = computed(() => props.graph.nodes.length > 0)
+const resolvedFocusDepth = computed(() => Math.max(1, props.focusDepth ?? 1))
 
 function hashString(value: string): number {
   let hash = 0
@@ -110,14 +126,27 @@ function hashString(value: string): number {
   return Math.abs(hash)
 }
 
+function hexToRgba(hex: string, alpha: number): string {
+  const normalized = hex.replace('#', '')
+  const source = normalized.length === 3
+    ? normalized.split('').map((char) => `${char}${char}`).join('')
+    : normalized
+  const red = Number.parseInt(source.slice(0, 2), 16)
+  const green = Number.parseInt(source.slice(2, 4), 16)
+  const blue = Number.parseInt(source.slice(4, 6), 16)
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`
+}
+
+function isDarkTheme(): boolean {
+  const host = rootEl.value
+  if (!host) return false
+  return Boolean(host.closest('.ide-root.dark'))
+}
+
 function clusterFallbackColor(cluster: number): string {
   return CLUSTER_FALLBACK_COLORS[Math.abs(cluster) % CLUSTER_FALLBACK_COLORS.length]
 }
 
-/**
- * Folder-first color mapping.
- * Priority: folderKey palette > cluster fallback.
- */
 function nodeBaseColor(node: RenderNode): string {
   if (node.folderKey) {
     const slot = hashString(node.folderKey) % FOLDER_COLORS.length
@@ -130,48 +159,190 @@ function edgeKey(sourceId: string, targetId: string): string {
   return `${sourceId}=>${targetId}`
 }
 
-function shouldDimNode(nodeId: string): boolean {
+function edgeSourceId(edge: RenderEdge): string {
+  return typeof edge.source === 'string' ? edge.source : edge.source.id
+}
+
+function edgeTargetId(edge: RenderEdge): string {
+  return typeof edge.target === 'string' ? edge.target : edge.target.id
+}
+
+function isFocusEnabled(): boolean {
+  return Boolean(props.focusMode && selectedNodeId)
+}
+
+function isNodeInFocusNeighborhood(nodeId: string): boolean {
+  if (!isFocusEnabled()) return false
+  if (nodeId === selectedNodeId) return true
+  return focusNeighborIds.has(nodeId)
+}
+
+function isEdgeInFocusNeighborhood(edge: RenderEdge): boolean {
+  if (!isFocusEnabled()) return false
+  return focusEdgeKeys.has(edgeKey(edgeSourceId(edge), edgeTargetId(edge)))
+}
+
+function isNodeHovered(nodeId: string): boolean {
+  return hoveredNodeId === nodeId
+}
+
+function isNodeHoverNeighbor(nodeId: string): boolean {
+  return hoveredNeighborIds.has(nodeId)
+}
+
+function shouldShowLabel(node: RenderNode): boolean {
+  if (isFocusEnabled()) return isNodeInFocusNeighborhood(node.id)
+  if (props.graph.nodes.length <= AUTO_SHOW_LABEL_THRESHOLD) return true
+  if (node.showLabelByDefault) return true
   if (!hoveredNodeId) return false
-  if (nodeId === hoveredNodeId) return false
-  return !hoveredNeighborIds.has(nodeId)
+  return node.id === hoveredNodeId || hoveredNeighborIds.has(node.id)
 }
 
-function isEdgeHighlighted(link: RenderEdge): boolean {
-  const sourceId = typeof link.source === 'string' ? link.source : link.source.id
-  const targetId = typeof link.target === 'string' ? link.target : link.target.id
-  return highlightedEdgeKeys.has(edgeKey(sourceId, targetId))
+function nodeRadius(node: RenderNode): number {
+  return Math.max(3, 2 + Math.log2(node.degree + 1) * 2.1)
 }
 
-function linkArrowColor(link: RenderEdge): string {
-  if (link.type === 'semantic') return '#64748b'
-  if (isEdgeHighlighted(link)) return '#f8fafc'
-  return hoveredNodeId ? '#94a3b8' : '#475569'
+function nodeOpacity(node: RenderNode): number {
+  if (isFocusEnabled()) {
+    if (node.id === selectedNodeId) return 1
+    if (focusNeighborIds.has(node.id)) return 0.88
+    return 0.1
+  }
+
+  if (hoveredNodeId) {
+    if (node.id === hoveredNodeId) return 1
+    if (hoveredNeighborIds.has(node.id)) return 0.9
+    return 0.2
+  }
+
+  return Math.max(0.46, node.opacityHint)
 }
 
-function labelColor(nodeId: string): string {
-  if (selectedNodeId && nodeId === selectedNodeId) return '#111827'
-  if (hoveredNodeId && (nodeId === hoveredNodeId || hoveredNeighborIds.has(nodeId))) return '#111827'
-  return '#e2e8f0'
+function nodeStrokeColor(node: RenderNode): string {
+  if (node.id === selectedNodeId) return isDarkTheme() ? '#f2cc60' : '#b58900'
+  if (isNodeHovered(node.id)) return isDarkTheme() ? '#d7dce5' : '#334155'
+  if (isNodeInFocusNeighborhood(node.id)) return isDarkTheme() ? '#9fb3c8' : '#7a8ea3'
+  return isDarkTheme() ? 'rgba(0, 0, 0, 0.35)' : 'rgba(255, 255, 255, 0.7)'
 }
 
-function isLabelEmphasized(nodeId: string): boolean {
-  if (selectedNodeId && nodeId === selectedNodeId) return true
-  if (hoveredNodeId && (nodeId === hoveredNodeId || hoveredNeighborIds.has(nodeId))) return true
-  return false
+function linkOpacity(edge: RenderEdge): number {
+  const inFocus = isEdgeInFocusNeighborhood(edge)
+  const hovered = highlightedEdgeKeys.has(edgeKey(edgeSourceId(edge), edgeTargetId(edge)))
+
+  if (isFocusEnabled()) {
+    if (inFocus) {
+      if (edge.type === 'semantic') {
+        const score = Number.isFinite(edge.score) ? Number(edge.score) : 0.85
+        return Math.max(0.28, Math.min(0.7, score * 0.72))
+      }
+      return 0.72
+    }
+    return 0.1
+  }
+
+  if (edge.type === 'semantic') {
+    const score = Number.isFinite(edge.score) ? Number(edge.score) : 0.85
+    const semanticBase = Math.max(0.2, Math.min(0.6, score * 0.65))
+    if (hovered) return Math.min(0.75, semanticBase + 0.15)
+    if (hoveredNodeId) return Math.max(0.12, semanticBase - 0.12)
+    return semanticBase
+  }
+
+  if (hovered) return 0.74
+  if (hoveredNodeId) return 0.16
+  return 0.22
 }
 
-/**
- * Recomputes hover neighborhood and highlighted links.
- */
-function updateHoverState(node: RenderNode | null) {
+function linkColor(edge: RenderEdge): string {
+  const alpha = linkOpacity(edge)
+  if (edge.type === 'semantic') {
+    return isDarkTheme()
+      ? `rgba(104, 182, 152, ${alpha})`
+      : `rgba(73, 140, 118, ${alpha})`
+  }
+
+  return isDarkTheme()
+    ? `rgba(171, 178, 191, ${alpha})`
+    : `rgba(120, 130, 150, ${alpha})`
+}
+
+function linkWidth(edge: RenderEdge): number {
+  const inFocus = isEdgeInFocusNeighborhood(edge)
+  if (edge.type === 'semantic') {
+    const score = Number.isFinite(edge.score) ? Number(edge.score) : 0.85
+    const base = 0.8 + Math.max(0, score - 0.75) * 2
+    return inFocus ? Math.min(1.9, base + 0.35) : Math.min(1.6, base)
+  }
+  return inFocus ? 1.7 : 1.1
+}
+
+function linkDash(edge: RenderEdge): number[] | null {
+  if (edge.type !== 'semantic') return null
+  return isDarkTheme() ? [5, 4] : [4, 4]
+}
+
+function labelColor(node: RenderNode): string {
+  if (node.id === selectedNodeId) {
+    return isDarkTheme() ? '#f2cc60' : '#7a5700'
+  }
+  if (isNodeHovered(node.id) || isNodeHoverNeighbor(node.id) || isNodeInFocusNeighborhood(node.id)) {
+    return isDarkTheme() ? '#d7dce5' : '#1f2937'
+  }
+  return isDarkTheme() ? '#abb2bf' : '#4b5563'
+}
+
+function drawNode(node: RenderNode, ctx: CanvasRenderingContext2D, globalScale: number) {
+  const radius = nodeRadius(node)
+  const opacity = nodeOpacity(node)
+  const baseColor = nodeBaseColor(node)
+  const fillColor = hexToRgba(baseColor, opacity)
+
+  ctx.beginPath()
+  ctx.arc(node.x ?? 0, node.y ?? 0, radius, 0, 2 * Math.PI)
+  ctx.fillStyle = fillColor
+  ctx.fill()
+
+  const strokeWidth = node.id === selectedNodeId ? 1.8 : 1.2
+  ctx.lineWidth = strokeWidth
+  ctx.strokeStyle = nodeStrokeColor(node)
+  ctx.stroke()
+
+  const labelImportant = node.id === selectedNodeId || isNodeHovered(node.id) || isNodeHoverNeighbor(node.id) || isNodeInFocusNeighborhood(node.id)
+  if (!labelImportant && globalScale < MIN_LABEL_SCALE) return
+  if (!shouldShowLabel(node)) return
+
+  const fontSize = Math.max(10, 12 / globalScale)
+  const offset = radius + Math.max(5, 8 / globalScale)
+  const textX = (node.x ?? 0) + offset
+  const textY = (node.y ?? 0) + fontSize * 0.34
+
+  ctx.font = `${fontSize}px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'middle'
+  ctx.lineWidth = Math.max(2.5, 3.3 / globalScale)
+  ctx.strokeStyle = isDarkTheme() ? 'rgba(33, 37, 43, 0.9)' : 'rgba(255, 255, 255, 0.92)'
+  ctx.strokeText(node.displayLabel, textX, textY)
+  ctx.fillStyle = labelColor(node)
+  ctx.fillText(node.displayLabel, textX, textY)
+}
+
+function paintNodePointerArea(node: RenderNode, color: string, ctx: CanvasRenderingContext2D) {
+  const radius = nodeRadius(node) + 1.5
+  ctx.fillStyle = color
+  ctx.beginPath()
+  ctx.arc(node.x ?? 0, node.y ?? 0, radius, 0, 2 * Math.PI)
+  ctx.fill()
+}
+
+function rebuildHoverNeighborhood(node: RenderNode | null) {
   hoveredNodeId = node?.id ?? ''
   const nextNeighbors = new Set<string>()
   const nextEdges = new Set<string>()
 
   if (node) {
-    for (const link of cachedEdges) {
-      const sourceId = link.source
-      const targetId = link.target
+    for (const edge of cachedEdges) {
+      const sourceId = edge.source
+      const targetId = edge.target
       if (sourceId === node.id) {
         nextNeighbors.add(targetId)
         nextEdges.add(edgeKey(sourceId, targetId))
@@ -185,37 +356,69 @@ function updateHoverState(node: RenderNode | null) {
 
   hoveredNeighborIds = nextNeighbors
   highlightedEdgeKeys = nextEdges
+}
+
+function rebuildFocusNeighborhood() {
+  const selected = selectedNodeId
+  if (!selected || !props.focusMode) {
+    focusNeighborIds = new Set<string>()
+    focusEdgeKeys = new Set<string>()
+    return
+  }
+
+  const depth = resolvedFocusDepth.value
+  const adjacency = new Map<string, Set<string>>()
+  for (const node of props.graph.nodes) {
+    adjacency.set(node.id, new Set<string>())
+  }
+  for (const edge of cachedEdges) {
+    adjacency.get(edge.source)?.add(edge.target)
+    adjacency.get(edge.target)?.add(edge.source)
+  }
+
+  const seen = new Set<string>([selected])
+  const neighbors = new Set<string>()
+  let frontier = new Set<string>([selected])
+
+  for (let hop = 0; hop < depth; hop += 1) {
+    const next = new Set<string>()
+    for (const nodeId of frontier) {
+      for (const neighbor of adjacency.get(nodeId) ?? []) {
+        if (seen.has(neighbor)) continue
+        seen.add(neighbor)
+        neighbors.add(neighbor)
+        next.add(neighbor)
+      }
+    }
+    if (!next.size) break
+    frontier = next
+  }
+
+  const edgeKeys = new Set<string>()
+  for (const edge of cachedEdges) {
+    if (seen.has(edge.source) && seen.has(edge.target)) {
+      edgeKeys.add(edgeKey(edge.source, edge.target))
+    }
+  }
+
+  focusNeighborIds = neighbors
+  focusEdgeKeys = edgeKeys
+}
+
+function refreshGraphStyles() {
   graphInstance.value?.refresh?.()
 }
 
-/**
- * Centers the camera on a node for focused exploration.
- */
 function focusNode(node: RenderNode) {
   const graph = graphInstance.value
   if (!graph) return
+
   const x = node.x ?? 0
   const y = node.y ?? 0
-  const z = node.z ?? 0
-  const distance = 120
-  let dirX = x
-  let dirY = y
-  let dirZ = z
-  const length = Math.hypot(dirX, dirY, dirZ)
-  if (!Number.isFinite(length) || length < 1e-6) {
-    dirX = 0
-    dirY = 0
-    dirZ = 1
-  } else {
-    dirX /= length
-    dirY /= length
-    dirZ /= length
-  }
-  graph.cameraPosition(
-    { x: x + dirX * distance, y: y + dirY * distance, z: z + dirZ * distance },
-    { x, y, z },
-    700
-  )
+  const targetZoom = Math.max(1.45, Math.min(2.25, 1.55 + Math.log2(node.degree + 1) * 0.15))
+
+  graph.centerAt(x, y, 700)
+  graph.zoom(targetZoom, 700)
 }
 
 function clearDeferredFocus() {
@@ -228,7 +431,7 @@ function clearDeferredFocus() {
 }
 
 function hasReadyCoordinates(node: RenderNode): boolean {
-  return Number.isFinite(node.x) && Number.isFinite(node.y) && Number.isFinite(node.z)
+  return Number.isFinite(node.x) && Number.isFinite(node.y)
 }
 
 function runDeferredFocus() {
@@ -264,9 +467,6 @@ function runDeferredFocus() {
   }, 80)
 }
 
-/**
- * Handles node click with single-click select and double-click focus behavior.
- */
 function onNodeClick(node: RenderNode) {
   if (lastDraggedNodeId === node.id && Date.now() - lastDragAt < CLICK_AFTER_DRAG_GUARD_MS) {
     return
@@ -277,6 +477,7 @@ function onNodeClick(node: RenderNode) {
   const now = Date.now()
   if (lastClickNodeId === node.id && now - lastClickAt <= DOUBLE_CLICK_MS) {
     focusNode(node)
+    emit('toggle-focus-mode', !Boolean(props.focusMode))
     lastClickAt = 0
     lastClickNodeId = ''
     return
@@ -286,159 +487,67 @@ function onNodeClick(node: RenderNode) {
   lastClickNodeId = node.id
 }
 
-function shouldShowLabel(node: CosmosGraphNode): boolean {
-  if (props.graph.nodes.length <= AUTO_SHOW_LABEL_THRESHOLD) return true
-  if (node.showLabelByDefault) return true
-  if (!hoveredNodeId) return false
-  return node.id === hoveredNodeId || hoveredNeighborIds.has(node.id)
-}
-
-/**
- * Rebuilds screen-space label positions from current 3D node coordinates.
- */
-function updateLabelPositions() {
-  const graph = graphInstance.value
-  const host = rootEl.value
-  if (!graph || !host) {
-    labels.value = []
-    return
-  }
-
-  const { width, height } = host.getBoundingClientRect()
-  if (width <= 0 || height <= 0) {
-    labels.value = []
-    return
-  }
-
-  const nextLabels: Array<{ id: string; text: string; x: number; y: number; color: string; emphasized: boolean }> = []
-  const renderData = graph.graphData() as unknown as { nodes: RenderNode[] }
-
-  for (const node of renderData.nodes ?? []) {
-    if (!shouldShowLabel(node)) continue
-    if (!Number.isFinite(node.x) || !Number.isFinite(node.y) || !Number.isFinite(node.z)) continue
-    const point = graph.graph2ScreenCoords(node.x ?? 0, node.y ?? 0, node.z ?? 0)
-    if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) continue
-    if (point.x < 0 || point.y < 0 || point.x > width || point.y > height) continue
-
-    nextLabels.push({
-      id: node.id,
-      text: node.displayLabel,
-      x: point.x,
-      y: point.y,
-      color: labelColor(node.id),
-      emphasized: isLabelEmphasized(node.id)
-    })
-  }
-
-  labels.value = nextLabels
-}
-
-function scheduleLabelLoop() {
-  const tick = () => {
-    updateLabelPositions()
-    labelRaf = window.requestAnimationFrame(tick)
-  }
-  labelRaf = window.requestAnimationFrame(tick)
-}
-
-/**
- * Locks current node coordinates to keep a stable layout after the simulation cools down.
- */
 function lockNodePositions() {
   const graph = graphInstance.value
   if (!graph) return
   const renderData = graph.graphData()
   for (const node of renderData.nodes ?? []) {
-    if (!Number.isFinite(node.x) || !Number.isFinite(node.y) || !Number.isFinite(node.z)) continue
-    ;(node as RenderNode & { fx?: number; fy?: number; fz?: number }).fx = node.x
-    ;(node as RenderNode & { fx?: number; fy?: number; fz?: number }).fy = node.y
-    ;(node as RenderNode & { fx?: number; fy?: number; fz?: number }).fz = node.z
+    if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) continue
+    node.fx = node.x
+    node.fy = node.y
   }
 }
 
-/**
- * Initializes and styles the 3D force-graph instance.
- */
+function applyThemeBackground() {
+  const graph = graphInstance.value
+  if (!graph) return
+  const nextBackground = isDarkTheme() ? '#282c34' : '#ffffff'
+  graph.backgroundColor(nextBackground)
+  refreshGraphStyles()
+}
+
 async function initializeGraph() {
   const host = graphEl.value
   if (!host) return
 
-  const module = await import('3d-force-graph')
-  const ForceGraph3D = module.default as unknown as
-    | ((el?: HTMLElement, options?: Record<string, unknown>) => ForceGraphInstance | ((el: HTMLElement) => ForceGraphInstance))
-    | (new (el: HTMLElement, options?: Record<string, unknown>) => ForceGraphInstance)
+  const module = await import('force-graph')
+  const ForceGraph2D = module.default as unknown as
+    | ((el?: HTMLElement) => ForceGraphInstance | ((el: HTMLElement) => ForceGraphInstance))
+    | (new (el: HTMLElement) => ForceGraphInstance)
 
   let graph: ForceGraphInstance
   try {
-    graph = new (ForceGraph3D as new (el: HTMLElement, options?: Record<string, unknown>) => ForceGraphInstance)(
-      host,
-      { controlType: 'orbit' }
-    )
+    graph = new (ForceGraph2D as new (el: HTMLElement) => ForceGraphInstance)(host)
   } catch {
-    const maybeFactory = (ForceGraph3D as (el?: HTMLElement, options?: Record<string, unknown>) => ForceGraphInstance | ((el: HTMLElement) => ForceGraphInstance))
-    const maybeInstance = maybeFactory(host, { controlType: 'orbit' })
+    const factory = ForceGraph2D as (el?: HTMLElement) => ForceGraphInstance | ((el: HTMLElement) => ForceGraphInstance)
+    const maybeInstance = factory(host)
     graph = typeof maybeInstance === 'function' ? maybeInstance(host) : maybeInstance
   }
 
-  const controls = graph.controls()
-  if (controls) {
-    controls.enableDamping = true
-    controls.dampingFactor = 0.09
-  }
-
   graph
-    .backgroundColor('#020617')
-    .showNavInfo(true)
-    .enableNavigationControls(true)
-    .enableNodeDrag(false)
+    .enableNodeDrag(true)
+    .enableZoomInteraction(true)
+    .enablePanInteraction(true)
     .nodeLabel(() => '')
-    .nodeRelSize(3.3)
+    .nodeRelSize(3)
     .nodeVal((node) => Math.max(1, node.degree + 0.2))
-    .nodeOpacity(0.92)
-    .nodeColor((node) => {
-      if (selectedNodeId && node.id === selectedNodeId) return '#facc15'
-      if (hoveredNodeId && node.id === hoveredNodeId) return '#fef08a'
-      if (hoveredNodeId && hoveredNeighborIds.has(node.id)) return '#e2e8f0'
-      const base = nodeBaseColor(node)
-      return shouldDimNode(node.id) ? `${base}44` : base
-    })
+    .nodeColor((node) => hexToRgba(nodeBaseColor(node), nodeOpacity(node)))
+    .nodeCanvasObjectMode(() => 'replace')
+    .nodeCanvasObject(drawNode)
+    .nodePointerAreaPaint(paintNodePointerArea)
     .linkVisibility(() => true)
-    .linkColor((link) => {
-      if (link.type === 'semantic') {
-        if (isEdgeHighlighted(link)) return '#a7f3d0'
-        return hoveredNodeId ? '#064e3b' : '#065f46'
-      }
-      if (isEdgeHighlighted(link)) return '#f8fafc'
-      if (!hoveredNodeId) return '#64748b'
-      return '#334155'
-    })
-    .linkWidth((link) => {
-      if (link.type === 'semantic') {
-        const base = Number.isFinite(link.score) ? Math.max(0.45, (link.score ?? 0) * 1.1) : 0.55
-        return isEdgeHighlighted(link) ? base + 0.5 : base
-      }
-      return isEdgeHighlighted(link) ? 1.4 : 0.45
-    })
-    .linkOpacity((link) => {
-      if (link.type === 'semantic') {
-        return isEdgeHighlighted(link) ? 0.86 : hoveredNodeId ? 0.05 : 0.14
-      }
-      return isEdgeHighlighted(link) ? 0.96 : hoveredNodeId ? 0.08 : 0.22
-    })
-    .linkDirectionalArrowLength((link) => {
-      if (link.type === 'semantic') return 0
-      return isEdgeHighlighted(link) ? 3.4 : 2.6
-    })
-    .linkDirectionalArrowRelPos(0.9)
-    .linkDirectionalArrowColor((link) => linkArrowColor(link))
-    .cooldownTicks(140)
-    .cooldownTime(5500)
-    .d3VelocityDecay(0.35)
+    .linkColor(linkColor)
+    .linkLineDash(linkDash)
+    .linkWidth(linkWidth)
+    .cooldownTicks(200)
+    .cooldownTime(7500)
+    .d3VelocityDecay(0.24)
     .onNodeHover((node) => {
       if (hoverThrottleTimer) return
       hoverThrottleTimer = setTimeout(() => {
         hoverThrottleTimer = null
-        updateHoverState(node)
+        rebuildHoverNeighborhood(node)
+        refreshGraphStyles()
       }, HOVER_THROTTLE_MS)
     })
     .onNodeDrag((node) => {
@@ -452,35 +561,49 @@ async function initializeGraph() {
     .onNodeClick(onNodeClick)
     .onEngineStop(() => {
       lockNodePositions()
-      updateLabelPositions()
+      refreshGraphStyles()
     })
 
   graphInstance.value = graph
+  const chargeForce = graph.d3Force('charge') as { strength?: (value: number) => unknown } | undefined
+  chargeForce?.strength?.(-330)
+  const linkForce = graph.d3Force('link') as {
+    distance?: (value: number | ((edge: RenderEdge) => number)) => unknown
+    strength?: (value: number | ((edge: RenderEdge) => number)) => unknown
+  } | undefined
+  linkForce?.distance?.((edge: RenderEdge) => (edge.type === 'semantic' ? 120 : 88))
+  linkForce?.strength?.((edge: RenderEdge) => (edge.type === 'semantic' ? 0.16 : 0.42))
+  graph.d3ReheatSimulation()
+
+  applyThemeBackground()
   applyGraphData()
   resizeGraphToHost()
 }
 
-/**
- * Applies graph data to the renderer.
- */
 function applyGraphData() {
   const graph = graphInstance.value
   if (!graph) return
+
   cachedEdges = props.graph.edges.map((edge) => ({
     source: edge.source,
     target: edge.target,
     type: edge.type,
     score: edge.score ?? null
   }))
+
   graph.graphData({
     nodes: props.graph.nodes.map((node) => ({ ...node })),
     links: cachedEdges.map((edge) => ({ ...edge }))
   })
-  updateHoverState(null)
+
+  rebuildHoverNeighborhood(null)
+  rebuildFocusNeighborhood()
+  refreshGraphStyles()
+
   if (!didInitialAutoFit && props.graph.nodes.length > 0) {
     didInitialAutoFit = true
     window.requestAnimationFrame(() => {
-      graph.zoomToFit(350, 35)
+      graph.zoomToFit(420, 100)
     })
   }
 
@@ -498,47 +621,68 @@ function resizeGraphToHost() {
   graph.height(Math.max(1, Math.floor(rect.height)))
 }
 
+function setupThemeObserver() {
+  const host = rootEl.value
+  if (!host) return
+  const ideRoot = host.closest('.ide-root')
+  if (!ideRoot) return
+
+  themeObserver = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+        applyThemeBackground()
+        return
+      }
+    }
+  })
+
+  themeObserver.observe(ideRoot, {
+    attributes: true,
+    attributeFilter: ['class']
+  })
+}
+
 function teardownGraph() {
   if (hoverThrottleTimer) {
     clearTimeout(hoverThrottleTimer)
     hoverThrottleTimer = null
   }
-  if (labelRaf) {
-    window.cancelAnimationFrame(labelRaf)
-    labelRaf = 0
+  if (themeObserver) {
+    themeObserver.disconnect()
+    themeObserver = null
   }
+
   hoveredNodeId = ''
   hoveredNeighborIds = new Set<string>()
   highlightedEdgeKeys = new Set<string>()
+  focusNeighborIds = new Set<string>()
+  focusEdgeKeys = new Set<string>()
   cachedEdges = []
   didInitialAutoFit = false
   clearDeferredFocus()
+
   graphInstance.value?._destructor?.()
   graphInstance.value = null
 }
 
-/**
- * Resets camera framing to include the current visible graph.
- */
 function resetView() {
-  graphInstance.value?.zoomToFit(450, 40)
+  graphInstance.value?.zoomToFit(520, 110)
 }
 
-/**
- * Focuses camera on a node by id when available in current graph data.
- */
 function focusNodeById(nodeId: string): boolean {
   const graph = graphInstance.value
   if (!graph || !nodeId) return false
   const renderData = graph.graphData()
   const node = (renderData.nodes ?? []).find((candidate) => candidate.id === nodeId)
   if (!node) return false
+
   if (hasReadyCoordinates(node)) {
     focusNode(node)
     emit('select-node', node.id)
     clearDeferredFocus()
     return true
   }
+
   deferredFocusNodeId = nodeId
   deferredFocusAttempts = 0
   runDeferredFocus()
@@ -557,15 +701,31 @@ watch(
   () => props.selectedNodeId,
   (value) => {
     selectedNodeId = value ?? ''
-    graphInstance.value?.refresh?.()
+    rebuildFocusNeighborhood()
+    refreshGraphStyles()
   },
   { immediate: true }
 )
 
+watch(
+  () => props.focusMode,
+  () => {
+    rebuildFocusNeighborhood()
+    refreshGraphStyles()
+  }
+)
+
+watch(
+  () => props.focusDepth,
+  () => {
+    rebuildFocusNeighborhood()
+    refreshGraphStyles()
+  }
+)
+
 onMounted(() => {
-  void initializeGraph().then(() => {
-    scheduleLabelLoop()
-  })
+  void initializeGraph()
+  setupThemeObserver()
   window.addEventListener('resize', resizeGraphToHost)
 })
 
@@ -587,18 +747,6 @@ defineExpose({
     <div v-if="loading" class="cosmos-state">Loading graph...</div>
     <div v-else-if="error" class="cosmos-state cosmos-state-error">{{ error }}</div>
     <div v-else-if="!hasRenderableGraph" class="cosmos-state">No wikilink graph yet.</div>
-
-    <div class="cosmos-labels" aria-hidden="true">
-      <div
-        v-for="item in labels"
-        :key="item.id"
-        class="cosmos-label"
-        :class="{ 'cosmos-label-emphasized': item.emphasized }"
-        :style="{ transform: `translate(${item.x}px, ${item.y}px)`, color: item.color }"
-      >
-        {{ item.text }}
-      </div>
-    </div>
   </div>
 </template>
 
@@ -610,7 +758,7 @@ defineExpose({
   min-height: 320px;
   overflow: hidden;
   border-radius: 10px;
-  background: radial-gradient(circle at 30% 20%, #0f172a 0%, #020617 48%, #01020a 100%);
+  background: linear-gradient(165deg, #ffffff 0%, #f8fafc 100%);
 }
 
 .cosmos-canvas {
@@ -624,38 +772,32 @@ defineExpose({
   top: 14px;
   padding: 6px 10px;
   border-radius: 8px;
-  background: rgb(15 23 42 / 72%);
-  color: #cbd5e1;
+  background: rgb(255 255 255 / 86%);
+  color: #334155;
+  border: 1px solid rgb(203 213 225 / 85%);
   font-size: 12px;
   letter-spacing: 0.02em;
 }
 
 .cosmos-state-error {
-  background: rgb(127 29 29 / 72%);
+  background: rgb(254 242 242 / 92%);
+  color: #b91c1c;
+  border-color: rgb(254 202 202 / 90%);
+}
+
+:global(.ide-root.dark) .cosmos-root {
+  background: linear-gradient(165deg, #282c34 0%, #21252b 100%);
+}
+
+:global(.ide-root.dark) .cosmos-state {
+  background: rgb(40 44 52 / 88%);
+  border-color: rgb(62 68 81 / 94%);
+  color: #abb2bf;
+}
+
+:global(.ide-root.dark) .cosmos-state-error {
+  background: rgb(69 45 52 / 92%);
+  border-color: rgb(122 76 88 / 95%);
   color: #fecaca;
-}
-
-.cosmos-labels {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-
-.cosmos-label {
-  position: absolute;
-  color: #e2e8f0;
-  font-size: 11px;
-  font-weight: 500;
-  text-shadow: 0 0 8px rgb(15 23 42 / 96%);
-  transform: translate(-50%, -130%);
-  white-space: nowrap;
-  opacity: 0.96;
-}
-
-.cosmos-label-emphasized {
-  background: rgb(255 255 255 / 78%);
-  border-radius: 6px;
-  padding: 1px 4px;
-  text-shadow: none;
 }
 </style>

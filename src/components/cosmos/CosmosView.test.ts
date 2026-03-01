@@ -11,24 +11,23 @@ type RenderNode = {
   folderKey?: string
   x?: number
   y?: number
-  z?: number
 }
 
 type MockState = {
   onNodeClick: ((node: RenderNode) => void) | null
   onNodeHover: ((node: RenderNode | null) => void) | null
-  arrowLengthCalls: Array<number | ((edge: unknown) => number)>
-  arrowRelPosCalls: Array<number | ((edge: unknown) => number)>
-  arrowColorCalls: Array<string | ((edge: unknown) => string)>
+  linkDashCalls: Array<(edge: unknown) => number[] | null>
+  centerAtCalls: Array<{ x?: number; y?: number; ms?: number }>
+  zoomCalls: Array<{ value: number; ms?: number }>
   data: { nodes: RenderNode[]; links: Array<{ source: string; target: string; type: 'wikilink' | 'semantic'; score?: number | null }> }
 }
 
 const mockState: MockState = {
   onNodeClick: null,
   onNodeHover: null,
-  arrowLengthCalls: [],
-  arrowRelPosCalls: [],
-  arrowColorCalls: [],
+  linkDashCalls: [],
+  centerAtCalls: [],
+  zoomCalls: [],
   data: { nodes: [], links: [] }
 }
 
@@ -44,54 +43,65 @@ const mockGraph = {
   nodeLabel: () => mockGraph,
   nodeRelSize: () => mockGraph,
   nodeVal: () => mockGraph,
-  nodeOpacity: () => mockGraph,
   nodeColor: () => mockGraph,
+  nodeCanvasObject: () => mockGraph,
+  nodeCanvasObjectMode: () => mockGraph,
+  nodePointerAreaPaint: () => mockGraph,
   linkVisibility: () => mockGraph,
   linkColor: () => mockGraph,
   linkWidth: () => mockGraph,
-  linkOpacity: () => mockGraph,
-  linkDirectionalArrowLength(value: number | ((edge: unknown) => number)) {
-    mockState.arrowLengthCalls.push(value)
+  linkLineDash(value: (edge: unknown) => number[] | null) {
+    mockState.linkDashCalls.push(value)
     return mockGraph
   },
-  linkDirectionalArrowColor(value: string | ((edge: unknown) => string)) {
-    mockState.arrowColorCalls.push(value)
-    return mockGraph
-  },
-  linkDirectionalArrowRelPos(value: number | ((edge: unknown) => number)) {
-    mockState.arrowRelPosCalls.push(value)
-    return mockGraph
-  },
-  showNavInfo: () => mockGraph,
-  enableNavigationControls: () => mockGraph,
+  linkDirectionalParticles: () => mockGraph,
+  linkDirectionalParticleSpeed: () => mockGraph,
+  linkDirectionalParticleWidth: () => mockGraph,
+  linkDirectionalParticleColor: () => mockGraph,
   enableNodeDrag: () => mockGraph,
+  enableZoomInteraction: () => mockGraph,
+  enablePanInteraction: () => mockGraph,
   cooldownTicks: () => mockGraph,
-  d3VelocityDecay: () => mockGraph,
   cooldownTime: () => mockGraph,
+  d3VelocityDecay: () => mockGraph,
+  d3Force: () => ({
+    strength: () => mockGraph,
+    distance: () => mockGraph
+  }),
+  d3ReheatSimulation: () => mockGraph,
   onNodeHover(handler: (node: RenderNode | null) => void) {
     mockState.onNodeHover = handler
     return mockGraph
   },
   onNodeClick(handler: (node: RenderNode) => void) {
     mockState.onNodeClick = handler
-    handler({ id: 'a.md', path: '/vault/a.md', label: 'a', x: 1, y: 1, z: 1 })
     return mockGraph
   },
   onNodeDrag: () => mockGraph,
   onNodeDragEnd: () => mockGraph,
   onEngineStop: () => mockGraph,
-  cameraPosition: () => mockGraph,
   width: () => mockGraph,
   height: () => mockGraph,
+  centerAt(x?: number, y?: number, ms?: number) {
+    mockState.centerAtCalls.push({ x, y, ms })
+    return mockGraph
+  },
+  zoom(value?: number, ms?: number) {
+    if (typeof value === 'number') {
+      mockState.zoomCalls.push({ value, ms })
+      return mockGraph
+    }
+    return 1
+  },
   zoomToFit: () => mockGraph,
-  graph2ScreenCoords: () => ({ x: 10, y: 10 }),
-  controls: () => ({}),
   refresh: () => mockGraph,
   _destructor: () => {}
 }
 
-vi.mock('3d-force-graph', () => ({
-  default: () => mockGraph
+vi.mock('force-graph', () => ({
+  default: function ForceGraphMock() {
+    return mockGraph
+  }
 }))
 
 async function flushUi() {
@@ -105,16 +115,18 @@ describe('CosmosView', () => {
     document.body.innerHTML = ''
     mockState.onNodeClick = null
     mockState.onNodeHover = null
-    mockState.arrowLengthCalls = []
-    mockState.arrowRelPosCalls = []
-    mockState.arrowColorCalls = []
+    mockState.linkDashCalls = []
+    mockState.centerAtCalls = []
+    mockState.zoomCalls = []
     mockState.data = { nodes: [], links: [] }
   })
 
-  it('emits select-node when clicking a node', async () => {
+  it('emits select-node on click and configures dashed semantic links', async () => {
     const root = document.createElement('div')
     document.body.appendChild(root)
     const selected = ref('')
+    const focusModeToggle = ref<boolean | null>(null)
+
     const graph: CosmosGraph = {
       nodes: [
         {
@@ -124,7 +136,7 @@ describe('CosmosView', () => {
           displayLabel: 'a',
           folderKey: 'vault',
           fullLabel: 'a',
-          degree: 1,
+          degree: 2,
           tags: [],
           cluster: 0,
           importance: 1,
@@ -132,7 +144,7 @@ describe('CosmosView', () => {
           showLabelByDefault: true
         }
       ],
-      edges: [],
+      edges: [{ source: 'a.md', target: 'b.md', type: 'semantic', score: 0.9 }],
       generated_at_ms: 1
     }
 
@@ -144,8 +156,13 @@ describe('CosmosView', () => {
             loading: false,
             error: '',
             selectedNodeId: '',
+            focusMode: false,
+            focusDepth: 1,
             onSelectNode: (nodeId: string) => {
               selected.value = nodeId
+            },
+            onToggleFocusMode: (value: boolean) => {
+              focusModeToggle.value = value
             }
           })
       }
@@ -155,18 +172,20 @@ describe('CosmosView', () => {
     app.mount(root)
     await flushUi()
     await new Promise<void>((resolve) => setTimeout(resolve, 20))
+
     expect(mockState.onNodeClick).toBeTypeOf('function')
-    mockState.onNodeClick?.({ id: 'a.md', path: '/vault/a.md', label: 'a', x: 1, y: 1, z: 1 })
+    expect(mockState.linkDashCalls.length).toBeGreaterThan(0)
+
+    const dashResolver = mockState.linkDashCalls[mockState.linkDashCalls.length - 1]
+    expect(dashResolver({ source: 'a.md', target: 'b.md', type: 'semantic', score: 0.9 })).toEqual([4, 4])
+    expect(dashResolver({ source: 'a.md', target: 'b.md', type: 'wikilink' })).toBeNull()
+
+    mockState.onNodeClick?.({ id: 'a.md', path: '/vault/a.md', label: 'a', x: 1, y: 1 })
+    mockState.onNodeClick?.({ id: 'a.md', path: '/vault/a.md', label: 'a', x: 1, y: 1 })
     await flushUi()
 
     expect(selected.value).toBe('a.md')
-    expect(mockState.arrowLengthCalls.length).toBeGreaterThan(0)
-    expect(mockState.arrowRelPosCalls.length).toBeGreaterThan(0)
-    expect(mockState.arrowColorCalls.length).toBeGreaterThan(0)
-    const arrowLengthResolver = mockState.arrowLengthCalls[mockState.arrowLengthCalls.length - 1]
-    if (typeof arrowLengthResolver === 'function') {
-      expect(arrowLengthResolver({ source: 'a.md', target: 'b.md', type: 'semantic', score: 0.9 })).toBe(0)
-    }
+    expect(focusModeToggle.value).toBe(true)
     expect(mockState.data.nodes[0]?.displayLabel).toBe('a')
 
     app.unmount()

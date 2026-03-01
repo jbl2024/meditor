@@ -2612,7 +2612,15 @@ function onCosmosQueryUpdate(value: string) {
 
 function onCosmosToggleFocusMode(value: boolean) {
   cosmos.focusMode.value = value
+  const selected = cosmos.selectedNode.value
+  if (selected) {
+    cosmosRef.value?.focusNodeById(selected.id)
+  }
   recordCosmosHistorySnapshot()
+}
+
+function onCosmosToggleFocusModeFromGraph(value: boolean) {
+  onCosmosToggleFocusMode(value)
 }
 
 function onCosmosToggleSemanticEdges(value: boolean) {
@@ -4066,7 +4074,10 @@ onBeforeUnmount(() => {
               :loading="cosmos.loading.value"
               :error="cosmos.error.value"
               :selected-node-id="cosmos.selectedNodeId.value"
+              :focus-mode="cosmos.focusMode.value"
+              :focus-depth="cosmos.focusDepth.value"
               @select-node="onCosmosSelectNode"
+              @toggle-focus-mode="onCosmosToggleFocusModeFromGraph"
             />
             <EditorView
               v-else

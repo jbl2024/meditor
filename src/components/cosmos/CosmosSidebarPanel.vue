@@ -75,7 +75,7 @@ function onClearQuery() {
     <div class="cosmos-panel-controls">
       <p class="cosmos-panel-title">Cosmos</p>
       <p class="cosmos-panel-meta">{{ summary.nodes }} nodes · {{ summary.edges }} edges</p>
-      <p class="cosmos-panel-help">Click a node to select it. Double-click to focus. Press Esc to return.</p>
+      <p class="cosmos-panel-help">Click a node to select it. Double-click to focus. Drag to pan, scroll to zoom, Esc to return.</p>
       <div class="cosmos-search-wrap">
         <input
           ref="searchInputEl"

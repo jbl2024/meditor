@@ -32,7 +32,7 @@
     "@tiptap/starter-kit": "^3.20.0",
     "@tiptap/suggestion": "^3.20.0",
     "@tiptap/vue-3": "^3.20.0",
-    "3d-force-graph": "^1.79.1",
+    "force-graph": "^1.51.1",
     "lowlight": "^3.3.0",
     "mermaid": "^11.12.3",
     "vue": "^3.5.13"
