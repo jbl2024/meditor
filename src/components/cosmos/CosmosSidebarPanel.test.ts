@@ -140,7 +140,9 @@ describe('CosmosSidebarPanel', () => {
     await flushUi()
 
     root.querySelector<HTMLButtonElement>('.cosmos-node-title-link')?.click()
-    root.querySelectorAll<HTMLButtonElement>('.cosmos-reset-btn')[1]?.click()
+    const resetBtn = Array.from(root.querySelectorAll<HTMLButtonElement>('.cosmos-reset-btn'))
+      .find((button) => (button.textContent ?? '').includes('Reset view'))
+    resetBtn?.click()
     root.querySelector<HTMLButtonElement>('.cosmos-match-item')?.click()
     root.querySelectorAll<HTMLButtonElement>('.cosmos-links-item')[0]?.click()
     root.querySelector<HTMLInputElement>('.cosmos-toggle input')?.click()
