@@ -1864,6 +1864,12 @@ async function onCosmosOpenNode(path: string) {
   workspace.setSidebarMode(fallback)
   persistSidebarMode()
   await nextTick()
+  if (fallback === 'explorer') {
+    const revealPathInView = explorerRef.value?.revealPathInView
+    if (typeof revealPathInView === 'function') {
+      await revealPathInView(targetPath, { behavior: 'auto' })
+    }
+  }
   editorRef.value?.focusEditor()
 }
 

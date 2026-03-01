@@ -919,6 +919,7 @@ async function initializeExplorer() {
 
 async function revealPath(path: string) {
   if (!path || !props.folderPath) return
+  await loadChildren(props.folderPath)
   const ancestors = getAncestorDirs(path)
   for (const dir of ancestors) {
     if (!expandedPaths.value.has(dir)) {
@@ -927,7 +928,9 @@ async function revealPath(path: string) {
     }
   }
   persistExpandedState()
+  selectionManager.selectSingle(path)
   focusedPath.value = path
+  emit('select', selectionManager.selectedPaths.value)
 }
 
 async function revealPathInView(path: string, options: RevealPathOptions = {}) {
