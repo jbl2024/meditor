@@ -672,11 +672,44 @@ watch(
 .sb-btn.secondary { background: #f8fafc; }
 .sb-center { padding: 10px; gap: 8px; }
 .sb-context-summary { border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px; background: #fff; }
-.cards { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.card { display: flex; align-items: center; gap: 8px; border: 1px solid #dbeafe; background: #f8fbff; border-radius: 8px; padding: 4px 6px; }
-.card .meta { cursor: pointer; }
-.card strong { display: block; font-size: 12px; }
-.card span { display: block; color: #64748b; font-size: 11px; }
+.cards {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  margin-top: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 2px;
+}
+.card {
+  flex: 0 0 auto;
+  width: 240px;
+  min-width: 240px;
+  max-width: 240px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #dbeafe;
+  background: #f8fbff;
+  border-radius: 8px;
+  padding: 4px 6px;
+}
+.card .meta { min-width: 0; flex: 1; cursor: pointer; }
+.card strong {
+  display: block;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.card span {
+  display: block;
+  color: #64748b;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .card .x { border: 0; background: transparent; font-size: 16px; line-height: 1; color: #64748b; }
 .sb-thread { flex: 1; min-height: 0; overflow: auto; border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
 .msg { border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; }
