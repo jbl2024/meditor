@@ -941,9 +941,8 @@ fn init_db() -> Result<()> {
   "#,
   )?;
 
-    // sqlite-vec may be unavailable on some environments (or not bundled yet).
-    // We keep lexical indexing operational even when this table cannot be created.
-    let _ = semantic::try_ensure_vec_table(&conn, 1024);
+    // sqlite-vec table is created lazily during reindex once actual embedding
+    // dimension is known for the active model.
 
     Ok(())
 }

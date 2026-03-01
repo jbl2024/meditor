@@ -18,7 +18,7 @@ use rusqlite::{ffi::sqlite3_auto_extension, params, Connection};
 use serde::Serialize;
 use sqlite_vec::sqlite3_vec_init;
 
-const EMBEDDING_MODEL_NAME: &str = "BAAI/bge-m3";
+const EMBEDDING_MODEL_NAME: &str = "lightonai/modernbert-embed-large";
 #[derive(Default)]
 struct SemanticState {
     model: Option<TextEmbedding>,
@@ -136,7 +136,7 @@ pub fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>, String> {
         ));
         let cache_dir = model_cache_dir();
         log_index(&format!("model:cache_dir path={}", cache_dir.to_string_lossy()));
-        let options = InitOptions::new(EmbeddingModel::BGEM3)
+        let options = InitOptions::new(EmbeddingModel::ModernBertEmbedLarge)
             .with_show_download_progress(false)
             .with_cache_dir(cache_dir);
         let init_result = TextEmbedding::try_new(options);
@@ -305,6 +305,21 @@ pub fn vector_to_json(vector: &[f32]) -> String {
 
 /// Ensures the note-level vec virtual table exists when sqlite-vec is available.
 pub fn try_ensure_vec_table(conn: &Connection, dim: usize) -> bool {
+    if let Ok(existing_sql) = conn.query_row(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='note_embeddings_vec'",
+        [],
+        |row| row.get::<_, String>(0),
+    ) {
+        let existing_dim = parse_vec_embedding_dim(&existing_sql);
+        if existing_dim != Some(dim) && conn.execute("DROP TABLE IF EXISTS note_embeddings_vec", []).is_err()
+        {
+            return false;
+        }
+        if existing_dim == Some(dim) {
+            return true;
+        }
+    }
+
     conn.execute(
         &format!(
             "CREATE VIRTUAL TABLE IF NOT EXISTS note_embeddings_vec USING vec0(path TEXT PRIMARY KEY, embedding FLOAT[{dim}])"
@@ -312,6 +327,14 @@ pub fn try_ensure_vec_table(conn: &Connection, dim: usize) -> bool {
         [],
     )
     .is_ok()
+}
+
+fn parse_vec_embedding_dim(create_sql: &str) -> Option<usize> {
+    let normalized = create_sql.to_ascii_lowercase();
+    let marker = "float[";
+    let start = normalized.find(marker)? + marker.len();
+    let end = start + normalized[start..].find(']')?;
+    normalized[start..end].trim().parse::<usize>().ok()
 }
 
 /// Upserts one note-level vector into vec table.
