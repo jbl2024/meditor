@@ -621,6 +621,10 @@ function handleRowClick(event: MouseEvent, node: TreeNode) {
   }
 
   if (!node.is_dir && node.is_markdown && !event.shiftKey && !isToggle) {
+    if (rowActionMode.value === 'context-toggle') {
+      emit('toggle-context', node.path)
+      return
+    }
     emit('open', node.path)
   }
 }
@@ -655,11 +659,6 @@ function onRowAction(payload: { event: MouseEvent; node: TreeNode }) {
   }
 
   openContextMenu(payload.event, payload.node.path)
-}
-
-function onContextToggle(node: TreeNode) {
-  if (!node.is_markdown) return
-  emit('toggle-context', node.path)
 }
 
 function onNodeContextMenu(payload: { event: MouseEvent; node: TreeNode }) {
@@ -1145,14 +1144,12 @@ onBeforeUnmount(() => {
           :cut-pending="Boolean(clipboard?.mode === 'cut' && clipboard.paths.includes(row.path))"
           :editing="editingPath === row.path"
           :rename-value="editingValue"
-          :show-context-toggle="rowActionMode === 'context-toggle'"
           :context-active="contextPathSet.has(row.path)"
           @toggle="toggleExpand"
           @click="handleRowClick"
           @doubleclick="handleDoubleClick"
           @contextmenu="onNodeContextMenu"
           @rowaction="onRowAction"
-          @contexttoggle="onContextToggle"
           @rename-update="editingValue = $event"
           @rename-confirm="confirmRename"
           @rename-cancel="cancelRename"

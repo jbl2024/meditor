@@ -13,7 +13,6 @@ const props = defineProps<{
   cutPending: boolean
   editing: boolean
   renameValue: string
-  showContextToggle?: boolean
   contextActive?: boolean
 }>()
 
@@ -26,7 +25,6 @@ const emit = defineEmits<{
   renameUpdate: [value: string]
   renameConfirm: []
   renameCancel: []
-  contexttoggle: [node: TreeNode]
 }>()
 
 function iconForNode(node: TreeNode) {
@@ -78,7 +76,10 @@ function iconForNode(node: TreeNode) {
       <span
         v-else
         class="block truncate"
-        :class="node.is_dir ? 'font-medium text-[#2d313a] dark:text-[#d7dce5]' : 'font-normal'"
+        :class="[
+          node.is_dir ? 'font-medium text-[#2d313a] dark:text-[#d7dce5]' : 'font-normal',
+          !node.is_dir && node.is_markdown && contextActive ? 'font-semibold text-[#111827] dark:text-[#e5e9f0]' : ''
+        ]"
         :title="node.path"
       >
         {{ node.name }}
@@ -86,16 +87,6 @@ function iconForNode(node: TreeNode) {
     </div>
 
     <button
-      v-if="showContextToggle && node.is_markdown"
-      type="button"
-      class="rounded-md px-1.5 text-sm leading-none text-[#4b5563] opacity-0 transition hover:bg-[#e8ebf2] hover:text-[#111827] hover:opacity-100 focus-visible:opacity-100 group-hover:opacity-100 dark:text-[#9aa3b2] dark:hover:bg-[#343b47] dark:hover:text-[#d7dce5]"
-      :title="contextActive ? 'Remove from context' : 'Add to context'"
-      @click.stop="emit('contexttoggle', node)"
-    >
-      {{ contextActive ? '−' : '+' }}
-    </button>
-    <button
-      v-else
       type="button"
       class="rounded-md px-1.5 text-sm leading-none text-[#4b5563] opacity-0 transition hover:bg-[#e8ebf2] hover:text-[#111827] hover:opacity-100 focus-visible:opacity-100 group-hover:opacity-100 dark:text-[#9aa3b2] dark:hover:bg-[#343b47] dark:hover:text-[#d7dce5]"
       title="Actions"

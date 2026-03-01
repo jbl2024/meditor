@@ -28,8 +28,6 @@ const emit = defineEmits<{
   'context-changed': [paths: string[]]
 }>()
 
-const TOKEN_LIMIT = 120000
-
 const configError = ref('')
 const loading = ref(false)
 const sessionId = ref('')
@@ -65,14 +63,10 @@ const contextCards = computed(() =>
     return {
       path,
       name,
-      parent,
-      tokens: contextTokenEstimate.value[path] ?? 0
+      parent
     }
   })
 )
-
-const totalTokens = computed(() => contextCards.value.reduce((sum, item) => sum + item.tokens, 0))
-const tokenProgress = computed(() => Math.min(100, Math.round((totalTokens.value / TOKEN_LIMIT) * 100)))
 
 function isInContext(path: string): boolean {
   return contextPaths.value.includes(path)
@@ -99,10 +93,9 @@ async function syncContextWithBackend() {
   if (!sessionId.value) return
   try {
     await replaceSessionContext(sessionId.value, contextPaths.value)
-    const avg = contextPaths.value.length ? Math.max(1, Math.round(totalTokens.value / contextPaths.value.length)) : 0
     const next: Record<string, number> = {}
     for (const path of contextPaths.value) {
-      next[path] = contextTokenEstimate.value[path] ?? avg
+      next[path] = contextTokenEstimate.value[path] ?? 0
     }
     contextTokenEstimate.value = next
   } catch (err) {
@@ -425,13 +418,7 @@ watch(
       </header>
 
       <section class="sb-context-summary">
-        <div class="row">
-          <strong>Context</strong>
-          <span>{{ totalTokens }} / {{ TOKEN_LIMIT }} tokens</span>
-        </div>
-        <div class="progress">
-          <div class="fill" :style="{ width: `${tokenProgress}%` }"></div>
-        </div>
+        <div class="row"><strong>Context</strong></div>
         <div class="cards">
           <article v-for="card in contextCards" :key="card.path" class="card">
             <div class="meta" @click="openContextNote(card.path)">
@@ -441,10 +428,6 @@ watch(
             <button type="button" class="x" @click="removeContextPath(card.path)">×</button>
           </article>
         </div>
-        <details class="sb-v2-hint">
-          <summary>Voir les notes proches (V2)</summary>
-          <p>Suggestions semantiques a venir.</p>
-        </details>
       </section>
 
       <section class="sb-thread">
@@ -557,15 +540,12 @@ watch(
 .sb-center { padding: 10px; gap: 8px; }
 .sb-context-summary { border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px; background: #fff; }
 .sb-context-summary .row { display: flex; justify-content: space-between; font-size: 12px; }
-.progress { margin-top: 6px; height: 7px; background: #e2e8f0; border-radius: 999px; overflow: hidden; }
-.fill { height: 100%; background: linear-gradient(90deg, #2563eb, #38bdf8); }
 .cards { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .card { display: flex; align-items: center; gap: 8px; border: 1px solid #dbeafe; background: #f8fbff; border-radius: 8px; padding: 4px 6px; }
 .card .meta { cursor: pointer; }
 .card strong { display: block; font-size: 12px; }
 .card span { display: block; color: #64748b; font-size: 11px; }
 .card .x { border: 0; background: transparent; font-size: 16px; line-height: 1; color: #64748b; }
-.sb-v2-hint { margin-top: 6px; font-size: 12px; color: #64748b; }
 .sb-thread { flex: 1; min-height: 0; overflow: auto; border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
 .msg { border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; }
 .msg.user { background: #f8fafc; }
@@ -664,10 +644,8 @@ watch(
   opacity: 0.35;
 }
 :global(.ide-root.dark) .card span,
-:global(.ide-root.dark) .sb-v2-hint,
 :global(.ide-root.dark) .hint { color: #94a3b8; }
 :global(.ide-root.dark) .sb-error { color: #e06c75; }
-:global(.ide-root.dark) .fill { background: linear-gradient(90deg, #61afef, #56b6c2); }
 :global(.ide-root.dark) .sb-loader {
   border-color: #475569;
   border-top-color: #61afef;
