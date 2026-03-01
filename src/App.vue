@@ -334,7 +334,7 @@ const indexStepRows = computed(() => {
     }
   ]
 })
-const indexActionLabel = computed(() => (indexRunning.value ? 'Stop' : 'Index'))
+const indexActionLabel = computed(() => (indexRunning.value ? 'Stop' : 'Rebuild index'))
 const indexModelStatusLabel = computed(() => {
   const status = indexRuntimeStatus.value
   if (!status) return 'unknown'
@@ -344,6 +344,19 @@ const indexModelStatusLabel = computed(() => {
   if (status.model_state === 'not_initialized') return 'not initialized'
   return status.model_state
 })
+const indexDebugCommandSemantic = `(async () => {
+  const invoke = window.__TAURI_INTERNALS__?.invoke
+  if (!invoke) throw new Error('__TAURI_INTERNALS__.invoke not available')
+  const g = await invoke('get_wikilink_graph')
+  const semantic = g.edges.filter((e) => e.type === 'semantic')
+  console.log('nodes:', g.nodes.length, 'edges:', g.edges.length, 'semantic:', semantic.length)
+  console.table(semantic.slice(0, 20).map((e) => ({ source: e.source, target: e.target, score: e.score })))
+})().catch(console.error)`
+const indexDebugCommandRuntime = `(async () => {
+  const invoke = window.__TAURI_INTERNALS__?.invoke
+  if (!invoke) throw new Error('__TAURI_INTERNALS__.invoke not available')
+  console.log(await invoke('read_index_runtime_status'))
+})().catch(console.error)`
 const indexLogRows = computed(() =>
   indexLogEntries.value
     .slice()
@@ -761,6 +774,43 @@ async function refreshIndexRuntimeStatus() {
 
 async function refreshIndexModalData() {
   await Promise.all([refreshIndexRuntimeStatus(), refreshIndexLogs()])
+}
+
+async function copyTextToClipboard(text: string): Promise<boolean> {
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text)
+      return true
+    } catch {
+      // Fallback below.
+    }
+  }
+  if (typeof document === 'undefined') return false
+  const area = document.createElement('textarea')
+  area.value = text
+  area.setAttribute('readonly', 'true')
+  area.style.position = 'fixed'
+  area.style.opacity = '0'
+  document.body.appendChild(area)
+  area.select()
+  let ok = false
+  try {
+    ok = document.execCommand('copy')
+  } catch {
+    ok = false
+  }
+  document.body.removeChild(area)
+  return ok
+}
+
+async function copyIndexDebugCommand(kind: 'semantic' | 'runtime') {
+  const text = kind === 'semantic' ? indexDebugCommandSemantic : indexDebugCommandRuntime
+  const ok = await copyTextToClipboard(text)
+  if (ok) {
+    filesystem.notifySuccess('Debug command copied to clipboard.')
+  } else {
+    filesystem.notifyError('Could not copy debug command.')
+  }
 }
 
 async function stopCurrentIndexOperation() {
@@ -3893,48 +3943,70 @@ onBeforeUnmount(() => {
         tabindex="-1"
       >
         <h3 id="index-status-title" class="confirm-title">Index Status</h3>
-        <p class="confirm-text">Current state: <strong>{{ indexStateLabel }}</strong></p>
-        <p class="confirm-text">Progress: {{ indexProgressLabel }}</p>
-        <p class="confirm-text">
-          Embedding model: <strong>{{ indexRuntimeStatus?.model_name || 'n/a' }}</strong>
-          ({{ indexModelStatusLabel }})
-        </p>
-        <p v-if="indexRuntimeStatus?.model_last_duration_ms != null" class="confirm-text">
-          Last model init: {{ indexRuntimeStatus.model_last_duration_ms }} ms
-          <span v-if="indexRuntimeStatus.model_last_finished_at_ms">
-            at {{ formatTimestamp(indexRuntimeStatus.model_last_finished_at_ms) }}
-          </span>
-        </p>
-        <p v-if="indexRuntimeStatus?.model_last_error" class="confirm-text">
-          Last model error: {{ indexRuntimeStatus.model_last_error }}
-        </p>
-        <p class="confirm-text">Note: first model initialization may download weights and take longer.</p>
-        <p v-if="indexRunCurrentPath" class="confirm-text">Current file: {{ toRelativePath(indexRunCurrentPath) }}</p>
-        <div class="index-steps">
-          <div v-for="step in indexStepRows" :key="step.title" class="index-step">
-            <span class="index-step-dot" :class="`index-step-${step.state}`"></span>
-            <div class="index-step-copy">
-              <p class="index-step-title">{{ step.title }}</p>
-              <p v-if="step.detail" class="index-step-detail">{{ step.detail }}</p>
+        <div class="index-status-body">
+          <p class="confirm-text">Current state: <strong>{{ indexStateLabel }}</strong></p>
+          <p class="confirm-text">Progress: {{ indexProgressLabel }}</p>
+          <p class="confirm-text">
+            Embedding model: <strong>{{ indexRuntimeStatus?.model_name || 'n/a' }}</strong>
+            ({{ indexModelStatusLabel }})
+          </p>
+          <p v-if="indexRuntimeStatus?.model_last_duration_ms != null" class="confirm-text">
+            Last model init: {{ indexRuntimeStatus.model_last_duration_ms }} ms
+            <span v-if="indexRuntimeStatus.model_last_finished_at_ms">
+              at {{ formatTimestamp(indexRuntimeStatus.model_last_finished_at_ms) }}
+            </span>
+          </p>
+          <p v-if="indexRuntimeStatus?.model_last_error" class="confirm-text">
+            Last model error: {{ indexRuntimeStatus.model_last_error }}
+          </p>
+          <p class="confirm-text">Note: first model initialization may download weights and take longer.</p>
+          <p v-if="indexRunCurrentPath" class="confirm-text">Current file: {{ toRelativePath(indexRunCurrentPath) }}</p>
+          <div class="index-status-sections">
+            <div class="index-steps">
+              <div v-for="step in indexStepRows" :key="step.title" class="index-step">
+                <span class="index-step-dot" :class="`index-step-${step.state}`"></span>
+                <div class="index-step-copy">
+                  <p class="index-step-title">{{ step.title }}</p>
+                  <p v-if="step.detail" class="index-step-detail">{{ step.detail }}</p>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-        <div class="index-log-panel">
-          <p class="index-log-title">Recent indexing activity</p>
-          <div v-if="!indexLogRows.length" class="index-log-empty">No index activity yet.</div>
-          <div v-else class="index-log-list">
-            <div v-for="(item, idx) in indexLogRows" :key="`${item.time}-${item.title}-${idx}`" class="index-log-row">
-              <span class="index-log-time">{{ item.time }}</span>
-              <div class="index-log-copy">
-                <p class="index-log-main">{{ item.title }}</p>
-                <p v-if="item.detail" class="index-log-detail">{{ item.detail }}</p>
+            <div class="index-log-panel">
+              <p class="index-log-title">Recent indexing activity</p>
+              <div v-if="!indexLogRows.length" class="index-log-empty">No index activity yet.</div>
+              <div v-else class="index-log-list">
+                <div v-for="(item, idx) in indexLogRows" :key="`${item.time}-${item.title}-${idx}`" class="index-log-row">
+                  <span class="index-log-time">{{ item.time }}</span>
+                  <div class="index-log-copy">
+                    <p class="index-log-main">{{ item.title }}</p>
+                    <p v-if="item.detail" class="index-log-detail">{{ item.detail }}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="index-debug-panel">
+              <p class="index-log-title">Debug Commands</p>
+              <div class="index-debug-grid">
+                <div class="index-debug-card">
+                  <div class="index-debug-row">
+                    <p class="index-debug-label">Semantic edge count</p>
+                    <UiButton size="sm" variant="ghost" @click="void copyIndexDebugCommand('semantic')">Copy</UiButton>
+                  </div>
+                  <pre class="index-debug-code">{{ indexDebugCommandSemantic }}</pre>
+                </div>
+                <div class="index-debug-card">
+                  <div class="index-debug-row">
+                    <p class="index-debug-label">Runtime status</p>
+                    <UiButton size="sm" variant="ghost" @click="void copyIndexDebugCommand('runtime')">Copy</UiButton>
+                  </div>
+                  <pre class="index-debug-code">{{ indexDebugCommandRuntime }}</pre>
+                </div>
               </div>
             </div>
           </div>
         </div>
         <div class="confirm-actions">
           <UiButton size="sm" :disabled="indexStatusBusy" @click="onIndexPrimaryAction">{{ indexActionLabel }}</UiButton>
-          <UiButton size="sm" variant="ghost" :disabled="indexStatusBusy" @click="void refreshIndexModalData()">Refresh</UiButton>
           <UiButton size="sm" @click="closeIndexStatusModal">Close</UiButton>
         </div>
       </div>
@@ -4919,15 +4991,28 @@ onBeforeUnmount(() => {
 }
 
 .index-status-modal {
-  width: min(560px, calc(100vw - 40px));
+  width: min(860px, calc(100vw - 40px));
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+}
+
+.index-status-body {
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.index-status-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .index-steps {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 28vh;
-  overflow: auto;
   padding: 4px 0 2px;
 }
 
@@ -4992,7 +5077,6 @@ onBeforeUnmount(() => {
 }
 
 .index-log-panel {
-  margin-top: 8px;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   padding: 8px;
@@ -5025,8 +5109,6 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-height: 22vh;
-  overflow: auto;
   padding-right: 4px;
 }
 
@@ -5074,6 +5156,75 @@ onBeforeUnmount(() => {
 
 .ide-root.dark .index-log-main {
   color: #e2e8f0;
+}
+
+.index-debug-panel {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 8px;
+  background: #ffffff;
+}
+
+.ide-root.dark .index-debug-panel {
+  border-color: #3e4451;
+  background: #282c34;
+}
+
+.index-debug-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.index-debug-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.index-debug-card {
+  min-width: 0;
+}
+
+.index-debug-label {
+  margin: 0;
+  font-size: 11px;
+  color: #475569;
+  font-weight: 600;
+}
+
+.index-debug-code {
+  margin: 6px 0 8px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  padding: 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  max-height: 120px;
+  overflow: auto;
+  white-space: pre;
+}
+
+@media (max-width: 980px) {
+  .index-status-modal {
+    width: min(760px, calc(100vw - 20px));
+  }
+
+  .index-debug-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ide-root.dark .index-debug-label {
+  color: #cbd5e1;
+}
+
+.ide-root.dark .index-debug-code {
+  border-color: #334155;
+  background: #111827;
+  color: #dbeafe;
 }
 
 .toast {

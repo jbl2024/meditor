@@ -1200,7 +1200,10 @@ fn build_semantic_edges(
             if !nodes_set.contains(&target_path) {
                 continue;
             }
-            let score = (1.0 - distance).clamp(0.0, 1.0);
+            // vec0 default distance is L2. Stored note vectors are normalized, so we
+            // convert L2 distance back to cosine similarity for thresholding.
+            // For unit vectors: cos = 1 - (||a-b||^2)/2.
+            let score = (1.0 - ((distance * distance) * 0.5)).clamp(0.0, 1.0);
             if score < SEMANTIC_THRESHOLD {
                 continue;
             }
