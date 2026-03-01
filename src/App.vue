@@ -20,7 +20,7 @@ import CosmosSidebarPanel from './components/cosmos/CosmosSidebarPanel.vue'
 import CosmosView from './components/cosmos/CosmosView.vue'
 import ExplorerTree from './components/explorer/ExplorerTree.vue'
 import UiButton from './components/ui/UiButton.vue'
-import { useDocumentHistory } from './composables/useDocumentHistory'
+import { type DocumentHistoryEntry, useDocumentHistory } from './composables/useDocumentHistory'
 import {
   backlinksForPath,
   clearWorkingFolder,
@@ -105,6 +105,13 @@ type VirtualDoc = {
   titleLine: string
 }
 
+type CosmosHistorySnapshot = {
+  query: string
+  selectedNodeId: string
+  focusMode: boolean
+  focusDepth: number
+}
+
 const THEME_STORAGE_KEY = 'meditor.theme.preference'
 const WORKING_FOLDER_STORAGE_KEY = 'meditor.working-folder.path'
 const EDITOR_ZOOM_STORAGE_KEY = 'meditor:editor:zoom'
@@ -172,6 +179,8 @@ const historyMenuOpen = ref<'back' | 'forward' | null>(null)
 const historyMenuStyle = ref<Record<string, string>>({})
 let historyMenuTimer: ReturnType<typeof setTimeout> | null = null
 let historyLongPressTarget: 'back' | 'forward' | null = null
+let cosmosHistoryDebounceTimer: ReturnType<typeof setTimeout> | null = null
+let isApplyingHistoryNavigation = false
 let unlistenWorkspaceFsChanged: (() => void) | null = null
 let modalFocusReturnTarget: HTMLElement | null = null
 
@@ -759,6 +768,115 @@ function closeHistoryMenu() {
   historyMenuStyle.value = {}
 }
 
+function readCosmosHistorySnapshot(payload: unknown): CosmosHistorySnapshot | null {
+  if (!payload || typeof payload !== 'object') return null
+  const value = payload as Partial<CosmosHistorySnapshot>
+  if (
+    typeof value.query !== 'string' ||
+    typeof value.selectedNodeId !== 'string' ||
+    typeof value.focusMode !== 'boolean' ||
+    typeof value.focusDepth !== 'number'
+  ) {
+    return null
+  }
+  return {
+    query: value.query,
+    selectedNodeId: value.selectedNodeId,
+    focusMode: value.focusMode,
+    focusDepth: Math.max(1, Math.min(8, Math.round(value.focusDepth)))
+  }
+}
+
+function currentCosmosHistorySnapshot(): CosmosHistorySnapshot {
+  return {
+    query: cosmos.query.value.trim(),
+    selectedNodeId: cosmos.selectedNodeId.value,
+    focusMode: cosmos.focusMode.value,
+    focusDepth: cosmos.focusDepth.value
+  }
+}
+
+function cosmosSnapshotStateKey(snapshot: CosmosHistorySnapshot): string {
+  return JSON.stringify(snapshot)
+}
+
+function cosmosHistoryLabel(snapshot: CosmosHistorySnapshot): string {
+  if (snapshot.query) return `Cosmos: ${snapshot.query}`
+  if (snapshot.selectedNodeId) {
+    const node = cosmos.graph.value.nodes.find((item) => item.id === snapshot.selectedNodeId)
+    if (node) return `Cosmos: ${node.displayLabel || node.label}`
+  }
+  return 'Cosmos'
+}
+
+function historyTargetLabel(entry: DocumentHistoryEntry): string {
+  if (entry.kind === 'cosmos') return entry.label
+  return toRelativePath(entry.path)
+}
+
+function recordCosmosHistorySnapshot() {
+  if (isApplyingHistoryNavigation || workspace.sidebarMode.value !== 'cosmos') return
+  const snapshot = currentCosmosHistorySnapshot()
+  documentHistory.recordEntry({
+    kind: 'cosmos',
+    path: 'cosmos',
+    label: cosmosHistoryLabel(snapshot),
+    stateKey: cosmosSnapshotStateKey(snapshot),
+    payload: snapshot
+  })
+}
+
+function scheduleCosmosHistorySnapshot() {
+  if (cosmosHistoryDebounceTimer) {
+    clearTimeout(cosmosHistoryDebounceTimer)
+    cosmosHistoryDebounceTimer = null
+  }
+  cosmosHistoryDebounceTimer = setTimeout(() => {
+    recordCosmosHistorySnapshot()
+  }, 260)
+}
+
+async function applyCosmosHistorySnapshot(snapshot: CosmosHistorySnapshot): Promise<boolean> {
+  if (!filesystem.hasWorkspace.value) return false
+
+  if (workspace.sidebarMode.value !== 'cosmos') {
+    previousNonCosmosMode.value = workspace.sidebarMode.value
+    persistPreviousNonCosmosMode()
+    workspace.setSidebarMode('cosmos')
+    persistSidebarMode()
+  }
+
+  if (!cosmos.graph.value.nodes.length) {
+    await cosmos.refreshGraph()
+  }
+
+  cosmos.query.value = snapshot.query
+  cosmos.focusMode.value = snapshot.focusMode
+  cosmos.focusDepth.value = snapshot.focusDepth
+  cosmos.selectedNodeId.value = snapshot.selectedNodeId
+
+  await nextTick()
+  const focusNodeById = cosmosRef.value?.focusNodeById
+  if (snapshot.selectedNodeId && typeof focusNodeById === 'function') {
+    focusNodeById(snapshot.selectedNodeId)
+  }
+  return true
+}
+
+async function openHistoryEntry(entry: DocumentHistoryEntry): Promise<boolean> {
+  if (entry.kind === 'cosmos') {
+    const snapshot = readCosmosHistorySnapshot(entry.payload)
+    if (!snapshot) return false
+    return await applyCosmosHistorySnapshot(snapshot)
+  }
+
+  const opened = await openTabWithAutosave(entry.path, { recordHistory: false })
+  if (!opened) return false
+  await nextTick()
+  editorRef.value?.focusEditor()
+  return true
+}
+
 function historyMenuItemCount(side: 'back' | 'forward'): number {
   const count = side === 'back'
     ? documentHistory.backTargets.value.length
@@ -844,16 +962,21 @@ function onHistoryButtonClick(side: 'back' | 'forward') {
 function onHistoryTargetClick(targetIndex: number) {
   closeHistoryMenu()
   const previousIndex = documentHistory.currentIndex.value
-  const targetPath = documentHistory.jumpTo(targetIndex)
-  if (!targetPath) return
-  void openTabWithAutosave(targetPath, { recordHistory: false }).then(async (opened) => {
+  const targetEntry = documentHistory.jumpToEntry(targetIndex)
+  if (!targetEntry) return
+  void (async () => {
+    isApplyingHistoryNavigation = true
+    let opened = false
+    try {
+      opened = await openHistoryEntry(targetEntry)
+    } finally {
+      isApplyingHistoryNavigation = false
+    }
     if (opened) {
-      await nextTick()
-      editorRef.value?.focusEditor()
       return
     }
-    documentHistory.jumpTo(previousIndex)
-  })
+    documentHistory.jumpToEntry(previousIndex)
+  })()
 }
 
 function onWindowResize() {
@@ -1029,28 +1152,36 @@ async function setActiveTabWithAutosave(path: string, options: NavigateOptions =
 }
 
 async function goBackInHistory() {
-  const target = documentHistory.goBack()
+  const target = documentHistory.goBackEntry()
   if (!target) return false
-  const opened = await openTabWithAutosave(target, { recordHistory: false })
+  isApplyingHistoryNavigation = true
+  let opened = false
+  try {
+    opened = await openHistoryEntry(target)
+  } finally {
+    isApplyingHistoryNavigation = false
+  }
   if (opened) {
-    await nextTick()
-    editorRef.value?.focusEditor()
     return true
   }
-  documentHistory.goForward()
+  documentHistory.goForwardEntry()
   return false
 }
 
 async function goForwardInHistory() {
-  const target = documentHistory.goForward()
+  const target = documentHistory.goForwardEntry()
   if (!target) return false
-  const opened = await openTabWithAutosave(target, { recordHistory: false })
+  isApplyingHistoryNavigation = true
+  let opened = false
+  try {
+    opened = await openHistoryEntry(target)
+  } finally {
+    isApplyingHistoryNavigation = false
+  }
   if (opened) {
-    await nextTick()
-    editorRef.value?.focusEditor()
     return true
   }
-  documentHistory.goBack()
+  documentHistory.goBackEntry()
   return false
 }
 
@@ -1478,6 +1609,7 @@ function setSidebarMode(mode: SidebarMode) {
     persistPreviousNonCosmosMode()
     workspace.setSidebarMode('cosmos')
     persistSidebarMode()
+    recordCosmosHistorySnapshot()
     void cosmos.refreshGraph()
     return
   }
@@ -1665,6 +1797,7 @@ async function openWikilinkTarget(target: string) {
 }
 
 async function onCosmosOpenNode(path: string) {
+  recordCosmosHistorySnapshot()
   const root = filesystem.workingFolderPath.value
   const targetPath = root && !path.startsWith('/') && !/^[A-Za-z]:[\\/]/.test(path)
     ? `${root}/${path}`
@@ -1682,28 +1815,43 @@ function onCosmosResetView() {
   cosmosRef.value?.resetView()
 }
 
+function onCosmosQueryUpdate(value: string) {
+  cosmos.query.value = value
+  scheduleCosmosHistorySnapshot()
+}
+
+function onCosmosToggleFocusMode(value: boolean) {
+  cosmos.focusMode.value = value
+  recordCosmosHistorySnapshot()
+}
+
 function onCosmosSelectNode(nodeId: string) {
   cosmos.selectNode(nodeId)
+  recordCosmosHistorySnapshot()
 }
 
 function onCosmosSearchEnter() {
   const nodeId = cosmos.searchEnter()
   if (!nodeId) return
   cosmosRef.value?.focusNodeById(nodeId)
+  recordCosmosHistorySnapshot()
 }
 
 function onCosmosMatchClick(nodeId: string) {
   cosmos.focusMatch(nodeId)
   cosmosRef.value?.focusNodeById(nodeId)
+  recordCosmosHistorySnapshot()
 }
 
 function onCosmosExpandNeighborhood() {
   cosmos.expandNeighborhood()
+  recordCosmosHistorySnapshot()
 }
 
 function onCosmosJumpToRelatedNode(nodeId: string) {
   cosmos.jumpToRelated(nodeId)
   cosmosRef.value?.focusNodeById(nodeId)
+  recordCosmosHistorySnapshot()
 }
 
 async function onCosmosOpenSelectedNode() {
@@ -2667,6 +2815,10 @@ onBeforeUnmount(() => {
     clearTimeout(searchDebounceTimer)
     searchDebounceTimer = null
   }
+  if (cosmosHistoryDebounceTimer) {
+    clearTimeout(cosmosHistoryDebounceTimer)
+    cosmosHistoryDebounceTimer = null
+  }
   if (historyMenuTimer) {
     clearTimeout(historyMenuTimer)
     historyMenuTimer = null
@@ -2797,10 +2949,10 @@ onBeforeUnmount(() => {
               :outgoing-nodes="cosmos.outgoingNodes.value"
               :incoming-nodes="cosmos.incomingNodes.value"
               :loading="cosmos.loading.value"
-              @update:query="cosmos.query.value = $event"
+              @update:query="onCosmosQueryUpdate"
               @search-enter="onCosmosSearchEnter"
               @select-match="onCosmosMatchClick"
-              @toggle-focus-mode="cosmos.focusMode.value = $event"
+              @toggle-focus-mode="onCosmosToggleFocusMode"
               @expand-neighborhood="onCosmosExpandNeighborhood"
               @jump-related="onCosmosJumpToRelatedNode"
               @open-selected="void onCosmosOpenSelectedNode()"
@@ -2865,12 +3017,12 @@ onBeforeUnmount(() => {
                 <div v-if="historyMenuOpen === 'back'" class="history-menu" :style="historyMenuStyle">
                   <button
                     v-for="target in documentHistory.backTargets.value.slice(0, 14)"
-                    :key="`back-${target.index}-${target.path}`"
+                    :key="`back-${target.index}-${target.entry.stateKey}`"
                     type="button"
                     class="history-menu-item"
                     @click="onHistoryTargetClick(target.index)"
                   >
-                    {{ toRelativePath(target.path) }}
+                    {{ historyTargetLabel(target.entry) }}
                   </button>
                   <div v-if="!documentHistory.backTargets.value.length" class="history-menu-empty">No back history</div>
                 </div>
@@ -2905,12 +3057,12 @@ onBeforeUnmount(() => {
                 <div v-if="historyMenuOpen === 'forward'" class="history-menu history-menu-forward" :style="historyMenuStyle">
                   <button
                     v-for="target in documentHistory.forwardTargets.value.slice(0, 14)"
-                    :key="`forward-${target.index}-${target.path}`"
+                    :key="`forward-${target.index}-${target.entry.stateKey}`"
                     type="button"
                     class="history-menu-item"
                     @click="onHistoryTargetClick(target.index)"
                   >
-                    {{ toRelativePath(target.path) }}
+                    {{ historyTargetLabel(target.entry) }}
                   </button>
                   <div v-if="!documentHistory.forwardTargets.value.length" class="history-menu-empty">No forward history</div>
                 </div>

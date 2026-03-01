@@ -152,20 +152,40 @@ function onFocusModeChange(event: Event) {
 
 <style scoped>
 .cosmos-sidebar-panel {
+  --cosmos-panel-bg: #f2f4f8;
+  --cosmos-card-bg: #e2e8f0;
+  --cosmos-text-primary: #0f172a;
+  --cosmos-text-secondary: #475569;
+  --cosmos-text-muted: #64748b;
+  --cosmos-border: #cbd5e1;
+  --cosmos-input-bg: #ffffff;
+  --cosmos-input-text: #0f172a;
+  --cosmos-button-bg: #ffffff;
+  --cosmos-button-hover: #f8fafc;
+  --cosmos-link-accent: #1d4ed8;
+  --cosmos-chip-bg: #cbd5e1;
+  --cosmos-preview-bg: rgb(255 255 255 / 48%);
+  --cosmos-error: #b91c1c;
+
   height: 100%;
   min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
   overflow: auto;
+  background: var(--cosmos-panel-bg);
+  color: var(--cosmos-text-primary);
 }
 
 .cosmos-panel-controls {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  background: #f2f4f8;
+  background: var(--cosmos-panel-bg);
   padding: 8px 4px 4px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 
 .cosmos-panel-content {
@@ -179,18 +199,18 @@ function onFocusModeChange(event: Event) {
   margin: 0;
   font-size: 13px;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--cosmos-text-primary);
 }
 
 .cosmos-panel-meta {
   margin: 0;
-  color: #475569;
+  color: var(--cosmos-text-secondary);
   font-size: 12px;
 }
 
 .cosmos-panel-help {
   margin: 0;
-  color: #64748b;
+  color: var(--cosmos-text-muted);
   font-size: 12px;
   line-height: 1.4;
 }
@@ -198,12 +218,16 @@ function onFocusModeChange(event: Event) {
 .cosmos-search-input {
   width: 100%;
   height: 30px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--cosmos-border);
   border-radius: 8px;
   padding: 0 8px;
   font-size: 12px;
-  background: #fff;
-  color: #0f172a;
+  background: var(--cosmos-input-bg);
+  color: var(--cosmos-input-text);
+}
+
+.cosmos-search-input::placeholder {
+  color: var(--cosmos-text-muted);
 }
 
 .cosmos-match-list {
@@ -217,18 +241,22 @@ function onFocusModeChange(event: Event) {
 
 .cosmos-match-item {
   border: 0;
-  background: #e2e8f0;
-  color: #0f172a;
+  background: var(--cosmos-card-bg);
+  color: var(--cosmos-text-primary);
   border-radius: 6px;
   padding: 4px 6px;
   text-align: left;
   font-size: 11px;
 }
 
+.cosmos-match-item:hover {
+  filter: brightness(0.98);
+}
+
 .cosmos-match-empty {
   margin: 0;
   font-size: 11px;
-  color: #64748b;
+  color: var(--cosmos-text-muted);
 }
 
 .cosmos-toggle {
@@ -236,19 +264,19 @@ function onFocusModeChange(event: Event) {
   gap: 6px;
   align-items: center;
   font-size: 12px;
-  color: #334155;
+  color: var(--cosmos-text-secondary);
 }
 
 .cosmos-focus-depth {
   margin: 0;
   font-size: 11px;
-  color: #64748b;
+  color: var(--cosmos-text-muted);
 }
 
 .cosmos-reset-btn {
-  border: 1px solid #cbd5e1;
-  background: #ffffff;
-  color: #1e293b;
+  border: 1px solid var(--cosmos-border);
+  background: var(--cosmos-button-bg);
+  color: var(--cosmos-text-primary);
   border-radius: 8px;
   font-size: 12px;
   font-weight: 600;
@@ -256,7 +284,7 @@ function onFocusModeChange(event: Event) {
 }
 
 .cosmos-reset-btn:hover:not(:disabled) {
-  background: #f8fafc;
+  background: var(--cosmos-button-hover);
 }
 
 .cosmos-reset-btn:disabled {
@@ -266,7 +294,7 @@ function onFocusModeChange(event: Event) {
 .cosmos-node-stats {
   padding: 8px;
   border-radius: 8px;
-  background: #e2e8f0;
+  background: var(--cosmos-card-bg);
   display: flex;
   flex-direction: column;
 }
@@ -275,7 +303,7 @@ function onFocusModeChange(event: Event) {
   margin: 0;
   font-size: 12px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--cosmos-text-primary);
 }
 
 .cosmos-node-title-link {
@@ -285,7 +313,7 @@ function onFocusModeChange(event: Event) {
   padding: 0;
   font-size: 12px;
   font-weight: 700;
-  color: #1d4ed8;
+  color: var(--cosmos-link-accent);
   text-align: left;
   text-decoration: underline;
   text-underline-offset: 2px;
@@ -296,7 +324,7 @@ function onFocusModeChange(event: Event) {
 .cosmos-node-meta {
   margin: 4px 0 0;
   font-size: 11px;
-  color: #334155;
+  color: var(--cosmos-text-secondary);
 }
 
 .cosmos-node-preview {
@@ -304,31 +332,31 @@ function onFocusModeChange(event: Event) {
   white-space: pre-wrap;
   font-size: 11px;
   line-height: 1.35;
-  color: #0f172a;
+  color: var(--cosmos-text-primary);
   min-height: calc(10 * 1.35em + 20px);
   max-height: calc(10 * 1.35em + 20px);
   overflow: auto;
   flex: 0 0 auto;
-  background: rgb(255 255 255 / 48%);
+  background: var(--cosmos-preview-bg);
   border-radius: 6px;
   padding: 10px;
 }
 
 .cosmos-node-preview-error {
-  color: #b91c1c;
+  color: var(--cosmos-error);
 }
 
 .cosmos-links-card {
   padding: 8px;
   border-radius: 8px;
-  background: #e2e8f0;
+  background: var(--cosmos-card-bg);
 }
 
 .cosmos-links-title {
   margin: 0 0 6px;
   font-size: 11px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--cosmos-text-primary);
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
@@ -336,7 +364,7 @@ function onFocusModeChange(event: Event) {
 .cosmos-links-empty {
   margin: 0 0 8px;
   font-size: 11px;
-  color: #475569;
+  color: var(--cosmos-text-secondary);
 }
 
 .cosmos-links-list {
@@ -353,73 +381,30 @@ function onFocusModeChange(event: Event) {
   border-radius: 6px;
   text-align: left;
   font-size: 11px;
-  color: #1e293b;
-  background: #cbd5e1;
+  color: var(--cosmos-text-primary);
+  background: var(--cosmos-chip-bg);
   padding: 4px 6px;
 }
 
-:global(.ide-root.dark) .cosmos-panel-controls {
-  background: #21252b;
+:global(.ide-root.dark) .cosmos-sidebar-panel {
+  --cosmos-panel-bg: #1b2029;
+  --cosmos-card-bg: #2b3240;
+  --cosmos-text-primary: #e5edf7;
+  --cosmos-text-secondary: #c1cedd;
+  --cosmos-text-muted: #91a0b4;
+  --cosmos-border: #3b4759;
+  --cosmos-input-bg: #161b23;
+  --cosmos-input-text: #e5edf7;
+  --cosmos-button-bg: #161b23;
+  --cosmos-button-hover: #222a36;
+  --cosmos-link-accent: #7ab2ff;
+  --cosmos-chip-bg: #39475b;
+  --cosmos-preview-bg: rgb(15 23 42 / 55%);
+  --cosmos-error: #fecaca;
 }
 
-:global(.ide-root.dark) .cosmos-panel-title,
-:global(.ide-root.dark) .cosmos-node-title,
-:global(.ide-root.dark) .cosmos-node-title-link,
-:global(.ide-root.dark) .cosmos-node-path,
-:global(.ide-root.dark) .cosmos-node-meta,
-:global(.ide-root.dark) .cosmos-links-title,
-:global(.ide-root.dark) .cosmos-links-empty {
-  color: #e2e8f0;
-}
-
-:global(.ide-root.dark) .cosmos-panel-meta,
-:global(.ide-root.dark) .cosmos-panel-help,
-:global(.ide-root.dark) .cosmos-focus-depth,
-:global(.ide-root.dark) .cosmos-match-empty {
-  color: #94a3b8;
-}
-
-:global(.ide-root.dark) .cosmos-search-input {
-  border-color: #475569;
-  background: #1e293b;
-  color: #e2e8f0;
-}
-
-:global(.ide-root.dark) .cosmos-match-item {
-  background: #334155;
-  color: #e2e8f0;
-}
-
-:global(.ide-root.dark) .cosmos-toggle {
-  color: #cbd5e1;
-}
-
-:global(.ide-root.dark) .cosmos-node-stats,
-:global(.ide-root.dark) .cosmos-links-card {
-  background: #334155;
-}
-
-:global(.ide-root.dark) .cosmos-node-preview {
-  color: #e2e8f0;
-  background: rgb(15 23 42 / 45%);
-}
-
-:global(.ide-root.dark) .cosmos-node-preview-error {
-  color: #fecaca;
-}
-
-:global(.ide-root.dark) .cosmos-links-item {
-  color: #e2e8f0;
-  background: #475569;
-}
-
-:global(.ide-root.dark) .cosmos-reset-btn {
-  border-color: #475569;
-  background: #1e293b;
-  color: #e2e8f0;
-}
-
-:global(.ide-root.dark) .cosmos-reset-btn:hover:not(:disabled) {
-  background: #334155;
+:global(.ide-root.dark) .cosmos-match-item:hover,
+:global(.ide-root.dark) .cosmos-links-item:hover {
+  filter: brightness(1.08);
 }
 </style>

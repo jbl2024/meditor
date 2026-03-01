@@ -255,4 +255,44 @@ describe('App cosmos integration', () => {
 
     mounted.app.unmount()
   })
+
+  it('restores cosmos state via back after opening a note from cosmos', async () => {
+    window.localStorage.setItem('meditor.working-folder.path', '/vault')
+    const mounted = mountApp()
+    await flushUi()
+    await flushUi()
+
+    mounted.root.querySelector<HTMLButtonElement>('button[aria-label="Cosmos view"]')?.click()
+    await flushUi()
+    await flushUi()
+
+    const input = mounted.root.querySelector<HTMLInputElement>('.cosmos-search-input')
+    expect(input).toBeTruthy()
+    if (!input) {
+      mounted.app.unmount()
+      return
+    }
+
+    input.value = 'opened'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushUi()
+    await new Promise<void>((resolve) => setTimeout(resolve, 320))
+    await flushUi()
+
+    mounted.root.querySelector<HTMLButtonElement>('button[data-cosmos-open="true"]')?.click()
+    await flushUi()
+    mounted.root.querySelector<HTMLButtonElement>('.cosmos-node-title-link')?.click()
+    await flushUi()
+
+    expect((mounted.root.textContent ?? '').toLowerCase()).toContain('opened-from-cosmos.md')
+
+    mounted.root.querySelector<HTMLButtonElement>('button[aria-label^="Back"]')?.click()
+    await flushUi()
+    await flushUi()
+
+    expect(mounted.root.querySelector('[data-cosmos-stub="true"]')).toBeTruthy()
+    expect(mounted.root.querySelector<HTMLInputElement>('.cosmos-search-input')?.value).toBe('opened')
+
+    mounted.app.unmount()
+  })
 })

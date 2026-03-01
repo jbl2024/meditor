@@ -1,7 +1,16 @@
 import { computed, ref } from 'vue'
 
+export type DocumentHistoryEntry = {
+  kind: 'note' | 'cosmos'
+  path: string
+  label: string
+  stateKey: string
+  payload?: unknown
+}
+
 type HistoryTarget = {
   path: string
+  entry: DocumentHistoryEntry
   index: number
 }
 
@@ -21,12 +30,16 @@ type HistoryTarget = {
  *   history remains a single linear timeline.
  */
 export function useDocumentHistory() {
-  const entries = ref<string[]>([])
+  const entries = ref<DocumentHistoryEntry[]>([])
   const index = ref(-1)
 
+  const currentEntry = computed<DocumentHistoryEntry | null>(() => {
+    if (index.value < 0 || index.value >= entries.value.length) return null
+    return entries.value[index.value] ?? null
+  })
+
   const currentPath = computed(() => {
-    if (index.value < 0 || index.value >= entries.value.length) return ''
-    return entries.value[index.value]
+    return currentEntry.value?.path ?? ''
   })
 
   const canGoBack = computed(() => index.value > 0)
@@ -34,14 +47,18 @@ export function useDocumentHistory() {
   const backTargets = computed<HistoryTarget[]>(() => {
     const out: HistoryTarget[] = []
     for (let idx = index.value - 1; idx >= 0; idx -= 1) {
-      out.push({ index: idx, path: entries.value[idx] })
+      const entry = entries.value[idx]
+      if (!entry) continue
+      out.push({ index: idx, path: entry.path, entry })
     }
     return out
   })
   const forwardTargets = computed<HistoryTarget[]>(() => {
     const out: HistoryTarget[] = []
     for (let idx = index.value + 1; idx < entries.value.length; idx += 1) {
-      out.push({ index: idx, path: entries.value[idx] })
+      const entry = entries.value[idx]
+      if (!entry) continue
+      out.push({ index: idx, path: entry.path, entry })
     }
     return out
   })
@@ -63,13 +80,34 @@ export function useDocumentHistory() {
   function record(path: string) {
     const target = path.trim()
     if (!target) return
-    if (target === currentPath.value) return
+    recordEntry({
+      kind: 'note',
+      path: target,
+      label: target,
+      stateKey: target
+    })
+  }
+
+  /**
+   * Appends a typed entry to history and makes it current.
+   */
+  function recordEntry(entry: DocumentHistoryEntry) {
+    if (!entry.path.trim() || !entry.stateKey.trim()) return
+    const current = currentEntry.value
+    if (
+      current &&
+      current.kind === entry.kind &&
+      current.path === entry.path &&
+      current.stateKey === entry.stateKey
+    ) {
+      return
+    }
 
     const next = index.value >= 0
       ? entries.value.slice(0, index.value + 1)
       : []
 
-    next.push(target)
+    next.push(entry)
     entries.value = next
     index.value = next.length - 1
   }
@@ -79,9 +117,18 @@ export function useDocumentHistory() {
    * @returns The new current path, or empty string if no previous entry exists.
    */
   function goBack(): string {
-    if (!canGoBack.value) return ''
+    const entry = goBackEntry()
+    return entry?.path ?? ''
+  }
+
+  /**
+   * Moves to the previous history entry.
+   * @returns The new current entry, or null if no previous entry exists.
+   */
+  function goBackEntry(): DocumentHistoryEntry | null {
+    if (!canGoBack.value) return null
     index.value -= 1
-    return entries.value[index.value] ?? ''
+    return entries.value[index.value] ?? null
   }
 
   /**
@@ -89,9 +136,18 @@ export function useDocumentHistory() {
    * @returns The new current path, or empty string if no next entry exists.
    */
   function goForward(): string {
-    if (!canGoForward.value) return ''
+    const entry = goForwardEntry()
+    return entry?.path ?? ''
+  }
+
+  /**
+   * Moves to the next history entry.
+   * @returns The new current entry, or null if no next entry exists.
+   */
+  function goForwardEntry(): DocumentHistoryEntry | null {
+    if (!canGoForward.value) return null
     index.value += 1
-    return entries.value[index.value] ?? ''
+    return entries.value[index.value] ?? null
   }
 
   /**
@@ -99,9 +155,18 @@ export function useDocumentHistory() {
    * @returns The selected path, or empty string if index is out of range.
    */
   function jumpTo(targetIndex: number): string {
-    if (targetIndex < 0 || targetIndex >= entries.value.length) return ''
+    const entry = jumpToEntry(targetIndex)
+    return entry?.path ?? ''
+  }
+
+  /**
+   * Jumps to an absolute history index.
+   * @returns The selected entry, or null if index is out of range.
+   */
+  function jumpToEntry(targetIndex: number): DocumentHistoryEntry | null {
+    if (targetIndex < 0 || targetIndex >= entries.value.length) return null
     index.value = targetIndex
-    return entries.value[index.value] ?? ''
+    return entries.value[index.value] ?? null
   }
 
   /**
@@ -113,10 +178,15 @@ export function useDocumentHistory() {
     if (!fromPath || !toPath || fromPath === toPath) return
 
     let changed = false
-    const next = entries.value.map((path) => {
-      if (path !== fromPath) return path
+    const next = entries.value.map((entry) => {
+      if (entry.kind !== 'note' || entry.path !== fromPath) return entry
       changed = true
-      return toPath
+      return {
+        ...entry,
+        path: toPath,
+        stateKey: toPath,
+        label: entry.label === fromPath ? toPath : entry.label
+      }
     })
 
     if (changed) {
@@ -126,6 +196,7 @@ export function useDocumentHistory() {
 
   return {
     currentPath,
+    currentEntry,
     currentIndex: index,
     canGoBack,
     canGoForward,
@@ -133,9 +204,13 @@ export function useDocumentHistory() {
     forwardTargets,
     reset,
     record,
+    recordEntry,
     goBack,
+    goBackEntry,
     goForward,
+    goForwardEntry,
     jumpTo,
+    jumpToEntry,
     replacePath
   }
 }
