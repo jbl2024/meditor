@@ -12,6 +12,8 @@ import {
   runDeliberation,
   subscribeSecondBrainStream
 } from '../../lib/secondBrainApi'
+import { sanitizeHtmlForPreview } from '../../lib/htmlSanitizer'
+import { inlineTextToHtml } from '../../lib/markdownBlocks'
 import type { SecondBrainMessage, SecondBrainSessionSummary } from '../../lib/api'
 
 const props = defineProps<{
@@ -225,6 +227,138 @@ function displayMessage(message: SecondBrainMessage): string {
   return message.content_md
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function renderAssistantMarkdown(message: SecondBrainMessage): string {
+  const source = displayMessage(message).replace(/\r\n?/g, '\n')
+  const lines = source.split('\n')
+  const htmlParts: string[] = []
+  let paragraph: string[] = []
+  let listItems: string[] = []
+  let listKind: 'ul' | 'ol' | null = null
+  let blockquote: string[] = []
+  let inCode = false
+  let codeLang = ''
+  let codeLines: string[] = []
+
+  const flushParagraph = () => {
+    if (!paragraph.length) return
+    htmlParts.push(`<p>${inlineTextToHtml(paragraph.join(' '))}</p>`)
+    paragraph = []
+  }
+
+  const flushList = () => {
+    if (!listKind || !listItems.length) return
+    htmlParts.push(`<${listKind}>${listItems.join('')}</${listKind}>`)
+    listKind = null
+    listItems = []
+  }
+
+  const flushBlockquote = () => {
+    if (!blockquote.length) return
+    htmlParts.push(`<blockquote><p>${inlineTextToHtml(blockquote.join('<br>'))}</p></blockquote>`)
+    blockquote = []
+  }
+
+  const flushCode = () => {
+    if (!inCode) return
+    const langClass = codeLang ? ` class="language-${escapeHtml(codeLang)}"` : ''
+    htmlParts.push(`<pre><code${langClass}>${escapeHtml(codeLines.join('\n'))}</code></pre>`)
+    inCode = false
+    codeLang = ''
+    codeLines = []
+  }
+
+  for (const line of lines) {
+    const fence = line.match(/^```([A-Za-z0-9_-]*)\s*$/)
+    if (fence) {
+      if (inCode) {
+        flushCode()
+      } else {
+        flushParagraph()
+        flushList()
+        flushBlockquote()
+        inCode = true
+        codeLang = fence[1] ?? ''
+      }
+      continue
+    }
+
+    if (inCode) {
+      codeLines.push(line)
+      continue
+    }
+
+    if (!line.trim()) {
+      flushParagraph()
+      flushList()
+      flushBlockquote()
+      continue
+    }
+
+    const heading = line.match(/^(#{1,6})\s+(.+)$/)
+    if (heading) {
+      flushParagraph()
+      flushList()
+      flushBlockquote()
+      const level = heading[1].length
+      htmlParts.push(`<h${level}>${inlineTextToHtml(heading[2])}</h${level}>`)
+      continue
+    }
+
+    const quote = line.match(/^>\s?(.*)$/)
+    if (quote) {
+      flushParagraph()
+      flushList()
+      blockquote.push(quote[1] ?? '')
+      continue
+    }
+
+    const unordered = line.match(/^\s*[-*+]\s+(.+)$/)
+    if (unordered) {
+      flushParagraph()
+      flushBlockquote()
+      if (listKind !== 'ul') {
+        flushList()
+        listKind = 'ul'
+      }
+      listItems.push(`<li>${inlineTextToHtml(unordered[1])}</li>`)
+      continue
+    }
+
+    const ordered = line.match(/^\s*\d+\.\s+(.+)$/)
+    if (ordered) {
+      flushParagraph()
+      flushBlockquote()
+      if (listKind !== 'ol') {
+        flushList()
+        listKind = 'ol'
+      }
+      listItems.push(`<li>${inlineTextToHtml(ordered[1])}</li>`)
+      continue
+    }
+
+    flushList()
+    flushBlockquote()
+    paragraph.push(line.trim())
+  }
+
+  flushParagraph()
+  flushList()
+  flushBlockquote()
+  flushCode()
+
+  const html = htmlParts.join('')
+  return sanitizeHtmlForPreview(html || `<p>${inlineTextToHtml(source)}</p>`)
+}
+
 async function onSendMessage() {
   if (!sessionId.value || !inputMessage.value.trim()) return
   sending.value = true
@@ -418,7 +552,6 @@ watch(
       </header>
 
       <section class="sb-context-summary">
-        <div class="row"><strong>Context</strong></div>
         <div class="cards">
           <article v-for="card in contextCards" :key="card.path" class="card">
             <div class="meta" @click="openContextNote(card.path)">
@@ -449,7 +582,8 @@ watch(
               <ClipboardDocumentIcon class="h-4 w-4" />
             </button>
           </header>
-          <pre>{{ displayMessage(message) }}</pre>
+          <div v-if="message.role === 'assistant'" class="assistant-markdown" v-html="renderAssistantMarkdown(message)"></div>
+          <pre v-else>{{ displayMessage(message) }}</pre>
         </article>
       </section>
 
@@ -515,8 +649,7 @@ watch(
 .sb-right-head,
 .sb-center-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .sb-right-head h3,
-.sb-center-head h2,
-.row { margin: 0; }
+.sb-center-head h2 { margin: 0; }
 .sb-input,
 .sb-textarea,
 .sb-btn {
@@ -539,7 +672,6 @@ watch(
 .sb-btn.secondary { background: #f8fafc; }
 .sb-center { padding: 10px; gap: 8px; }
 .sb-context-summary { border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px; background: #fff; }
-.sb-context-summary .row { display: flex; justify-content: space-between; font-size: 12px; }
 .cards { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .card { display: flex; align-items: center; gap: 8px; border: 1px solid #dbeafe; background: #f8fbff; border-radius: 8px; padding: 4px 6px; }
 .card .meta { cursor: pointer; }
@@ -552,6 +684,43 @@ watch(
 .msg.assistant { background: #eff6ff; }
 .msg header { display: flex; justify-content: space-between; gap: 8px; }
 .msg pre { white-space: pre-wrap; margin: 8px 0 0; font-size: 12px; }
+.assistant-markdown { margin-top: 8px; font-size: 12px; line-height: 1.5; }
+.assistant-markdown :deep(p) { margin: 0 0 8px; }
+.assistant-markdown :deep(p:last-child) { margin-bottom: 0; }
+.assistant-markdown :deep(h1),
+.assistant-markdown :deep(h2),
+.assistant-markdown :deep(h3),
+.assistant-markdown :deep(h4),
+.assistant-markdown :deep(h5),
+.assistant-markdown :deep(h6) { margin: 10px 0 6px; line-height: 1.3; font-weight: 700; }
+.assistant-markdown :deep(ul),
+.assistant-markdown :deep(ol) { margin: 6px 0 8px 18px; padding: 0; }
+.assistant-markdown :deep(blockquote) {
+  margin: 6px 0 8px;
+  border-left: 3px solid #cbd5e1;
+  padding: 2px 0 2px 10px;
+  color: #475569;
+}
+.assistant-markdown :deep(code) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  background: #e2e8f0;
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+.assistant-markdown :deep(pre) {
+  margin: 8px 0;
+  background: #e2e8f0;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 8px;
+  overflow: auto;
+}
+.assistant-markdown :deep(pre code) {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+}
+.assistant-markdown :deep(a) { color: #2563eb; text-decoration: underline; }
 .insert { border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; font-size: 11px; padding: 3px 8px; }
 .sb-input-row { display: flex; flex-direction: column; gap: 6px; }
 .sb-composer { position: relative; width: 100%; }
@@ -640,6 +809,16 @@ watch(
 }
 :global(.ide-root.dark) .msg.assistant { background: #2c313c; }
 :global(.ide-root.dark) .msg.user { background: #21252b; }
+:global(.ide-root.dark) .assistant-markdown :deep(blockquote) {
+  border-left-color: #4b5563;
+  color: #9ca3af;
+}
+:global(.ide-root.dark) .assistant-markdown :deep(code),
+:global(.ide-root.dark) .assistant-markdown :deep(pre) {
+  background: #2f3540;
+  border-color: #3e4451;
+}
+:global(.ide-root.dark) .assistant-markdown :deep(a) { color: #61afef; }
 :global(.ide-root.dark) .send-icon-btn:disabled {
   opacity: 0.35;
 }
