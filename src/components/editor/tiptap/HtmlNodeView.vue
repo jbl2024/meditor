@@ -292,10 +292,14 @@ function onEditorKeydown(event: KeyboardEvent) {
   background: transparent;
   caret-color: rgb(37 99 235);
   color: transparent;
+  bottom: 0;
   left: 0;
   position: absolute;
-  resize: vertical;
+  resize: none;
+  right: 0;
   top: 0;
+  width: 100%;
+  height: 100%;
 }
 
 .meditor-html-textarea::selection {
