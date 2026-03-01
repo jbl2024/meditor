@@ -4952,7 +4952,7 @@ onBeforeUnmount(() => {
 }
 
 .index-status-modal {
-  width: min(860px, calc(100vw - 40px));
+  width: min(980px, calc(100vw - 32px));
   max-height: calc(100vh - 48px);
   display: flex;
   flex-direction: column;
@@ -5070,14 +5070,14 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  height: 320px;
+  height: 240px;
   padding-right: 4px;
   overflow: auto;
 }
 
 .index-log-row {
   display: grid;
-  grid-template-columns: 68px 1fr;
+  grid-template-columns: 118px 1fr;
   gap: 8px;
   align-items: start;
 }
@@ -5086,6 +5086,7 @@ onBeforeUnmount(() => {
   font-size: 10px;
   line-height: 1.2;
   color: #64748b;
+  white-space: nowrap;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
 }
 
@@ -5126,7 +5127,10 @@ onBeforeUnmount(() => {
     width: min(760px, calc(100vw - 20px));
   }
   .index-log-list {
-    height: 230px;
+    height: 200px;
+  }
+  .index-log-row {
+    grid-template-columns: 104px 1fr;
   }
 }
 
