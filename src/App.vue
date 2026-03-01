@@ -200,6 +200,14 @@ const newFolderModalError = ref('')
 const openDateModalVisible = ref(false)
 const openDateInput = ref('')
 const openDateModalError = ref('')
+const secondBrainInitModalVisible = ref(false)
+const secondBrainInitProvider = ref<'openai' | 'anthropic' | 'custom'>('openai')
+const secondBrainInitApiKey = ref('')
+const secondBrainInitModel = ref('gpt-4.1')
+const secondBrainInitBaseUrl = ref('')
+const secondBrainInitCustomProvider = ref('openai_compatible')
+const secondBrainInitLabel = ref('OpenAI Remote')
+const secondBrainInitModalError = ref('')
 const shortcutsModalVisible = ref(false)
 const indexStatusModalVisible = ref(false)
 const cosmosCommandLoadingVisible = ref(false)
@@ -516,19 +524,20 @@ const paletteActionPriority: Record<string, number> = {
   'open-specific-date': 4,
   'open-cosmos-view': 5,
   'open-second-brain-view': 6,
-  'open-note-in-cosmos': 7,
-  'reveal-in-explorer': 8,
-  'show-shortcuts': 9,
-  'create-new-file': 10,
-  'close-other-tabs': 11,
-  'close-all-tabs': 12,
-  'zoom-in': 13,
-  'zoom-out': 14,
-  'zoom-reset': 15,
-  'theme-light': 16,
-  'theme-dark': 17,
-  'theme-system': 18,
-  'close-workspace': 19
+  'second-brain-init': 7,
+  'open-note-in-cosmos': 8,
+  'reveal-in-explorer': 9,
+  'show-shortcuts': 10,
+  'create-new-file': 11,
+  'close-other-tabs': 12,
+  'close-all-tabs': 13,
+  'zoom-in': 14,
+  'zoom-out': 15,
+  'zoom-reset': 16,
+  'theme-light': 17,
+  'theme-dark': 18,
+  'theme-system': 19,
+  'close-workspace': 20
 }
 
 const paletteActions = computed<PaletteAction[]>(() => [
@@ -543,6 +552,12 @@ const paletteActions = computed<PaletteAction[]>(() => [
     id: 'open-second-brain-view',
     label: 'Open Second Brain View',
     run: () => openSecondBrainViewFromPalette(),
+    closeBeforeRun: true
+  },
+  {
+    id: 'second-brain-init',
+    label: 'Second Brain: Init',
+    run: () => openSecondBrainInitFromPalette(),
     closeBeforeRun: true
   },
   {
@@ -1799,6 +1814,129 @@ async function openSecondBrainViewFromPalette() {
   if (!allWorkspaceFiles.value.length) {
     await loadAllFiles()
   }
+  return true
+}
+
+function applySecondBrainInitPreset(provider: 'openai' | 'anthropic' | 'custom') {
+  secondBrainInitProvider.value = provider
+  secondBrainInitModalError.value = ''
+  if (provider === 'openai') {
+    secondBrainInitLabel.value = 'OpenAI Remote'
+    secondBrainInitCustomProvider.value = 'openai'
+    secondBrainInitModel.value = 'gpt-4.1'
+    secondBrainInitBaseUrl.value = ''
+    return
+  }
+  if (provider === 'anthropic') {
+    secondBrainInitLabel.value = 'Anthropic Claude'
+    secondBrainInitCustomProvider.value = 'anthropic'
+    secondBrainInitModel.value = 'claude-3-7-sonnet-latest'
+    secondBrainInitBaseUrl.value = ''
+    return
+  }
+  secondBrainInitLabel.value = 'Local OpenAI Compatible'
+  secondBrainInitCustomProvider.value = 'openai_compatible'
+  secondBrainInitModel.value = 'gpt-oss-20b'
+  secondBrainInitBaseUrl.value = 'http://localhost:11434/v1'
+}
+
+function closeSecondBrainInitModal() {
+  secondBrainInitModalVisible.value = false
+  secondBrainInitModalError.value = ''
+  void nextTick(() => {
+    restoreFocusAfterModalClose()
+  })
+}
+
+async function openSecondBrainInitModal() {
+  modalFocusReturnTarget = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  secondBrainInitApiKey.value = ''
+  applySecondBrainInitPreset('openai')
+  secondBrainInitModalVisible.value = true
+  await nextTick()
+  document.querySelector<HTMLInputElement>('[data-second-brain-init-apikey="true"]')?.focus()
+}
+
+function buildSecondBrainConfJson(): string {
+  const provider = secondBrainInitProvider.value === 'openai'
+    ? 'openai'
+    : secondBrainInitProvider.value === 'anthropic'
+      ? 'anthropic'
+      : secondBrainInitCustomProvider.value.trim()
+
+  const profileId = secondBrainInitProvider.value === 'custom' ? 'custom-profile' : `${provider}-profile`
+  const capabilities = {
+    text: true,
+    image_input: secondBrainInitProvider.value !== 'custom',
+    audio_input: false,
+    tool_calling: true,
+    streaming: true
+  }
+
+  const profile: Record<string, unknown> = {
+    id: profileId,
+    label: secondBrainInitLabel.value.trim(),
+    provider,
+    api_key: secondBrainInitApiKey.value.trim(),
+    model: secondBrainInitModel.value.trim(),
+    capabilities,
+    default_mode: 'freestyle'
+  }
+  if (secondBrainInitBaseUrl.value.trim()) {
+    profile.base_url = secondBrainInitBaseUrl.value.trim()
+  }
+
+  return JSON.stringify({
+    active_profile: profileId,
+    profiles: [profile]
+  }, null, 2)
+}
+
+async function submitSecondBrainInitModal() {
+  const root = filesystem.workingFolderPath.value
+  if (!root) {
+    secondBrainInitModalError.value = 'Working folder is not set.'
+    return false
+  }
+  if (!secondBrainInitApiKey.value.trim()) {
+    secondBrainInitModalError.value = 'API key is required.'
+    return false
+  }
+  if (!secondBrainInitModel.value.trim()) {
+    secondBrainInitModalError.value = 'Model is required.'
+    return false
+  }
+  if (!secondBrainInitLabel.value.trim()) {
+    secondBrainInitModalError.value = 'Profile label is required.'
+    return false
+  }
+  if (secondBrainInitProvider.value === 'custom' && !secondBrainInitCustomProvider.value.trim()) {
+    secondBrainInitModalError.value = 'Custom provider is required.'
+    return false
+  }
+
+  try {
+    const internalDir = `${root}/.tomosona`
+    if (!(await pathExists(internalDir))) {
+      await createEntry(root, '.tomosona', 'folder', 'fail')
+    }
+    const confPath = `${internalDir}/conf.json`
+    await writeTextFile(confPath, `${buildSecondBrainConfJson()}\n`)
+    filesystem.notifySuccess('Second Brain config initialized.')
+    closeSecondBrainInitModal()
+    return true
+  } catch (err) {
+    secondBrainInitModalError.value = err instanceof Error ? err.message : 'Could not initialize config.'
+    return false
+  }
+}
+
+async function openSecondBrainInitFromPalette() {
+  if (!filesystem.hasWorkspace.value) {
+    filesystem.errorMessage.value = 'Open a workspace first.'
+    return false
+  }
+  await openSecondBrainInitModal()
   return true
 }
 
@@ -3081,6 +3219,7 @@ async function runQuickOpenAction(id: string) {
         !newFileModalVisible.value &&
         !newFolderModalVisible.value &&
         !openDateModalVisible.value &&
+        !secondBrainInitModalVisible.value &&
         !shortcutsModalVisible.value &&
         !cosmosCommandLoadingVisible.value
       ) {
@@ -3436,11 +3575,30 @@ function onOpenDateInputKeydown(event: KeyboardEvent) {
   }
 }
 
+function onSecondBrainInitInputKeydown(event: KeyboardEvent) {
+  if (event.metaKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+    event.stopPropagation()
+    return
+  }
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    event.stopPropagation()
+    closeSecondBrainInitModal()
+    return
+  }
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    event.stopPropagation()
+    void submitSecondBrainInitModal()
+  }
+}
+
 function activeModalSelector(): string | null {
   if (wikilinkRewritePrompt.value) return '[data-modal="wikilink-rewrite"]'
   if (cosmosCommandLoadingVisible.value) return '[data-modal="cosmos-command-loading"]'
   if (indexStatusModalVisible.value) return '[data-modal="index-status"]'
   if (shortcutsModalVisible.value) return '[data-modal="shortcuts"]'
+  if (secondBrainInitModalVisible.value) return '[data-modal="second-brain-init"]'
   if (openDateModalVisible.value) return '[data-modal="open-date"]'
   if (newFolderModalVisible.value) return '[data-modal="new-folder"]'
   if (newFileModalVisible.value) return '[data-modal="new-file"]'
@@ -3456,6 +3614,7 @@ function hasBlockingModalOpen(): boolean {
     newFileModalVisible.value ||
     newFolderModalVisible.value ||
     openDateModalVisible.value ||
+    secondBrainInitModalVisible.value ||
     shortcutsModalVisible.value ||
     wikilinkRewritePrompt.value
   )
@@ -3596,6 +3755,12 @@ function onWindowKeydown(event: KeyboardEvent) {
     event.preventDefault()
     event.stopPropagation()
     closeOpenDateModal()
+    return
+  }
+  if (isEscape && secondBrainInitModalVisible.value) {
+    event.preventDefault()
+    event.stopPropagation()
+    closeSecondBrainInitModal()
     return
   }
   if (isEscape && shortcutsModalVisible.value) {
@@ -4775,6 +4940,89 @@ onBeforeUnmount(() => {
         <div class="confirm-actions">
           <UiButton size="sm" variant="ghost" @click="closeOpenDateModal">Cancel</UiButton>
           <UiButton size="sm" @click="submitOpenDateFromModal">Open</UiButton>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="secondBrainInitModalVisible" class="modal-overlay" @click.self="closeSecondBrainInitModal">
+      <div
+        class="modal confirm-modal second-brain-init-modal"
+        data-modal="second-brain-init"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="second-brain-init-title"
+        aria-describedby="second-brain-init-description"
+        tabindex="-1"
+      >
+        <h3 id="second-brain-init-title" class="confirm-title">Second Brain: Init</h3>
+        <p id="second-brain-init-description" class="confirm-text">
+          Create <code>.tomosona/conf.json</code> for a provider profile.
+        </p>
+
+        <label class="modal-field-label" for="second-brain-provider">Provider preset</label>
+        <select
+          id="second-brain-provider"
+          class="tool-input"
+          :value="secondBrainInitProvider"
+          @change="applySecondBrainInitPreset(($event.target as HTMLSelectElement).value as 'openai' | 'anthropic' | 'custom')"
+        >
+          <option value="openai">OpenAI</option>
+          <option value="anthropic">Anthropic Claude</option>
+          <option value="custom">Custom</option>
+        </select>
+
+        <label class="modal-field-label" for="second-brain-label">Profile label</label>
+        <input
+          id="second-brain-label"
+          v-model="secondBrainInitLabel"
+          class="tool-input"
+          placeholder="Profile label"
+          @keydown="onSecondBrainInitInputKeydown"
+        />
+
+        <label v-if="secondBrainInitProvider === 'custom'" class="modal-field-label" for="second-brain-custom-provider">Custom provider</label>
+        <input
+          v-if="secondBrainInitProvider === 'custom'"
+          id="second-brain-custom-provider"
+          v-model="secondBrainInitCustomProvider"
+          class="tool-input"
+          placeholder="openai_compatible"
+          @keydown="onSecondBrainInitInputKeydown"
+        />
+
+        <label class="modal-field-label" for="second-brain-model">Model</label>
+        <input
+          id="second-brain-model"
+          v-model="secondBrainInitModel"
+          class="tool-input"
+          placeholder="Model name"
+          @keydown="onSecondBrainInitInputKeydown"
+        />
+
+        <label class="modal-field-label" for="second-brain-base-url">Base URL (optional)</label>
+        <input
+          id="second-brain-base-url"
+          v-model="secondBrainInitBaseUrl"
+          class="tool-input"
+          placeholder="https://... or http://localhost:11434/v1"
+          @keydown="onSecondBrainInitInputKeydown"
+        />
+
+        <label class="modal-field-label" for="second-brain-apikey">API key</label>
+        <input
+          id="second-brain-apikey"
+          v-model="secondBrainInitApiKey"
+          data-second-brain-init-apikey="true"
+          class="tool-input"
+          type="password"
+          placeholder="api key"
+          @keydown="onSecondBrainInitInputKeydown"
+        />
+
+        <p v-if="secondBrainInitModalError" class="modal-input-error">{{ secondBrainInitModalError }}</p>
+        <div class="confirm-actions">
+          <UiButton size="sm" variant="ghost" @click="closeSecondBrainInitModal">Cancel</UiButton>
+          <UiButton size="sm" @click="submitSecondBrainInitModal">Generate conf.json</UiButton>
         </div>
       </div>
     </div>
@@ -6426,6 +6674,10 @@ onBeforeUnmount(() => {
   width: min(460px, calc(100vw - 32px));
 }
 
+.second-brain-init-modal {
+  width: min(640px, calc(100vw - 32px));
+}
+
 .cosmos-command-loading-track {
   margin-top: 6px;
   height: 8px;
@@ -6488,7 +6740,18 @@ onBeforeUnmount(() => {
   color: #475569;
 }
 
+.modal-field-label {
+  display: block;
+  margin: 8px 0 4px;
+  font-size: 12px;
+  color: #475569;
+}
+
 .ide-root.dark .confirm-text {
+  color: #94a3b8;
+}
+
+.ide-root.dark .modal-field-label {
   color: #94a3b8;
 }
 
