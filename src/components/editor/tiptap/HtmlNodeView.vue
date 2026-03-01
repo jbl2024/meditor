@@ -232,6 +232,10 @@ function onEditorKeydown(event: KeyboardEvent) {
   display: flex;
   justify-content: space-between;
   margin-bottom: 0.35rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+  visibility: hidden;
 }
 
 .meditor-html-title {
@@ -259,9 +263,10 @@ function onEditorKeydown(event: KeyboardEvent) {
 }
 
 .meditor-html-preview {
-  border: 1px solid rgb(203 213 225);
+  border: 1px solid transparent;
   border-radius: 0.7rem;
   padding: 1rem 1.05rem;
+  transition: border-color 120ms ease, background-color 120ms ease;
 }
 
 .meditor-html-source-shell {
@@ -337,6 +342,26 @@ function onEditorKeydown(event: KeyboardEvent) {
 .dark .meditor-html-preview,
 .dark .meditor-html-source,
 .dark .meditor-html-textarea {
+  border-color: rgb(71 85 105);
+}
+
+.meditor-html-node:hover .meditor-html-header,
+.meditor-html-node:focus-within .meditor-html-header,
+.meditor-html-node.is-editing .meditor-html-header {
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
+}
+
+.meditor-html-node:hover .meditor-html-preview,
+.meditor-html-node:focus-within .meditor-html-preview,
+.meditor-html-node.is-editing .meditor-html-preview {
+  border-color: rgb(203 213 225);
+}
+
+.dark .meditor-html-node:hover .meditor-html-preview,
+.dark .meditor-html-node:focus-within .meditor-html-preview,
+.dark .meditor-html-node.is-editing .meditor-html-preview {
   border-color: rgb(71 85 105);
 }
 
