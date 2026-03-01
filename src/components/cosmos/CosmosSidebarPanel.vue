@@ -7,7 +7,7 @@
  */
 import { ref } from 'vue'
 import type { CosmosGraphNode } from '../../lib/graphIndex'
-import { XMarkIcon } from '@heroicons/vue/24/outline'
+import { XMarkIcon, MapPinIcon } from '@heroicons/vue/24/outline'
 
 type GraphSummary = {
   nodes: number
@@ -149,8 +149,8 @@ function onClearQuery() {
           <button type="button" class="cosmos-node-title-link" @click="emit('open-selected')">
             {{ selectedNode.displayLabel || selectedNode.label }}
           </button>
-          <button type="button" class="cosmos-locate-btn" @click="emit('locate-selected')">
-            Locate
+          <button type="button" class="cosmos-locate-btn" title="Locate selected node" aria-label="Locate selected node" @click="emit('locate-selected')">
+            <MapPinIcon />
           </button>
         </div>
         <p class="cosmos-node-meta">Degree: {{ selectedNode.degree }} · Cluster: {{ selectedNode.cluster }}</p>
@@ -416,14 +416,22 @@ function onClearQuery() {
   background: var(--cosmos-button-bg);
   color: var(--cosmos-text-secondary);
   border-radius: 999px;
-  padding: 3px 10px;
-  font-size: 11px;
-  line-height: 1.2;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
 }
 
 .cosmos-locate-btn:hover {
   background: var(--cosmos-button-hover);
   color: var(--cosmos-text-primary);
+}
+
+.cosmos-locate-btn :deep(svg) {
+  width: 14px;
+  height: 14px;
 }
 
 .cosmos-node-path,
