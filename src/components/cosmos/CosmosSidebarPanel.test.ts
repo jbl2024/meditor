@@ -239,4 +239,59 @@ describe('CosmosSidebarPanel', () => {
 
     app.unmount()
   })
+
+  it('applies search mode prefixes from chips', async () => {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+    const query = ref('concept map')
+
+    const Harness = defineComponent({
+      setup() {
+        return () =>
+          h(CosmosSidebarPanel, {
+            summary: { nodes: 2, edges: 1 },
+            query: query.value,
+            matches: [],
+            focusMode: false,
+            focusDepth: 1,
+            showSemanticEdges: true,
+            selectedNode: null,
+            selectedLinkCount: 0,
+            preview: '',
+            previewLoading: false,
+            previewError: '',
+            outgoingNodes: [],
+            incomingNodes: [],
+            loading: false,
+            'onUpdate:query': (value: string) => {
+              query.value = value
+            }
+          })
+      }
+    })
+
+    const app = createApp(Harness)
+    app.mount(root)
+    await flushUi()
+
+    const semanticChip = Array.from(root.querySelectorAll<HTMLButtonElement>('.cosmos-search-mode-chip'))
+      .find((button) => button.textContent?.includes('Semantic'))
+    semanticChip?.click()
+    await flushUi()
+    expect(query.value).toBe('semantic: concept map')
+
+    const lexicalChip = Array.from(root.querySelectorAll<HTMLButtonElement>('.cosmos-search-mode-chip'))
+      .find((button) => button.textContent?.includes('Lexical'))
+    lexicalChip?.click()
+    await flushUi()
+    expect(query.value).toBe('lexical: concept map')
+
+    const hybridChip = Array.from(root.querySelectorAll<HTMLButtonElement>('.cosmos-search-mode-chip'))
+      .find((button) => button.textContent?.includes('Hybrid'))
+    hybridChip?.click()
+    await flushUi()
+    expect(query.value).toBe('concept map')
+
+    app.unmount()
+  })
 })

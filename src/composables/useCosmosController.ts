@@ -127,9 +127,11 @@ export function useCosmosController(deps: CosmosDeps) {
     if (semanticPathOrder.value.length) {
       const byPath = new Map(graph.value.nodes.map((node) => [node.path.toLowerCase(), node]))
       const ordered: CosmosGraphNode[] = []
+      const seenNodeIds = new Set<string>()
       for (const path of semanticPathOrder.value) {
         const node = byPath.get(path)
-        if (node) {
+        if (node && !seenNodeIds.has(node.id)) {
+          seenNodeIds.add(node.id)
           ordered.push(node)
         }
       }

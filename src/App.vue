@@ -55,6 +55,7 @@ import {
   writeTextFile
 } from './lib/api'
 import { parseSearchSnippet } from './lib/searchSnippets'
+import { applySearchMode, detectSearchMode, type SearchMode } from './lib/searchMode'
 import { shouldBlockGlobalShortcutsFromTarget } from './lib/shortcutTargets'
 import { parseWikilinkTarget, type WikilinkAnchor } from './lib/wikilinks'
 import { buildCosmosGraph } from './lib/graphIndex'
@@ -163,6 +164,7 @@ let searchRequestToken = 0
 const quickOpenVisible = ref(false)
 const quickOpenQuery = ref('')
 const quickOpenActiveIndex = ref(0)
+const searchInputRef = ref<HTMLInputElement | null>(null)
 const leftPaneWidth = ref(290)
 const rightPaneWidth = ref(300)
 const allWorkspaceFiles = ref<string[]>([])
@@ -431,6 +433,13 @@ const groupedSearchResults = computed(() => {
   }
   return groups
 })
+const globalSearchMode = computed<SearchMode>(() => detectSearchMode(searchQuery.value))
+const showSearchScore = computed(() => globalSearchMode.value === 'semantic')
+const searchModeOptions: Array<{ mode: SearchMode; label: string }> = [
+  { mode: 'hybrid', label: 'Hybrid' },
+  { mode: 'semantic', label: 'Semantic' },
+  { mode: 'lexical', label: 'Lexical' }
+]
 
 type QuickOpenResult =
   | { kind: 'file'; path: string; label: string }
@@ -755,6 +764,11 @@ function formatDurationMs(value: number | null): string {
   }
   if (remainderSeconds > 0) return `${minutes} min ${remainderSeconds} s`
   return `${minutes} min`
+}
+
+function formatSearchScore(value: number): string {
+  if (!Number.isFinite(value)) return '--'
+  return value.toFixed(3)
 }
 
 function splitRelativePath(path: string): { directory: string; fileName: string } {
@@ -2200,6 +2214,17 @@ async function runGlobalSearch() {
       searchLoading.value = false
     }
   }
+}
+
+function onGlobalSearchModeSelect(mode: SearchMode) {
+  const next = applySearchMode(searchQuery.value, mode)
+  searchQuery.value = next.value
+  void nextTick(() => {
+    const input = searchInputRef.value
+    if (!input) return
+    input.focus()
+    input.setSelectionRange(next.caret, next.caret)
+  })
 }
 
 async function onSearchResultOpen(hit: SearchHit) {
@@ -3751,6 +3776,7 @@ onBeforeUnmount(() => {
           <div v-else-if="workspace.sidebarMode.value === 'search'" class="panel-fill search-panel">
             <div class="search-controls">
               <input
+                ref="searchInputRef"
                 v-model="searchQuery"
                 data-search-input="true"
                 :disabled="!filesystem.hasWorkspace.value"
@@ -3759,6 +3785,20 @@ onBeforeUnmount(() => {
                 @keydown.enter.prevent="runGlobalSearch"
               />
             </div>
+            <div class="search-mode-controls">
+              <button
+                v-for="option in searchModeOptions"
+                :key="option.mode"
+                type="button"
+                class="search-mode-chip"
+                :class="{ active: globalSearchMode === option.mode }"
+                :disabled="!filesystem.hasWorkspace.value"
+                @click="onGlobalSearchModeSelect(option.mode)"
+              >
+                {{ option.label }}
+              </button>
+            </div>
+            <p class="search-mode-hint">Astuce: <code>semantic:</code> concept | <code>lexical:</code> terme exact</p>
 
             <div class="results-list">
               <div v-if="hasSearched && !searchLoading && !searchHits.length" class="placeholder">No results</div>
@@ -3771,6 +3811,7 @@ onBeforeUnmount(() => {
                   class="result-item"
                   @click="onSearchResultOpen(item)"
                 >
+                  <p v-if="showSearchScore" class="result-score">score: {{ formatSearchScore(item.score) }}</p>
                   <div class="result-snippet">
                     <template v-for="(part, idx) in parseSearchSnippet(item.snippet)" :key="`${idx}-${part.text}`">
                       <strong v-if="part.highlighted">{{ part.text }}</strong>
@@ -5054,6 +5095,44 @@ onBeforeUnmount(() => {
   gap: 6px;
 }
 
+.search-mode-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.search-mode-chip {
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #475569;
+  padding: 2px 9px;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.search-mode-chip.active {
+  border-color: #2563eb;
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
+.search-mode-chip:disabled {
+  opacity: 0.5;
+}
+
+.search-mode-hint {
+  margin: -2px 0 0;
+  font-size: 10px;
+  color: #64748b;
+}
+
+.search-mode-hint code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: inherit;
+}
+
 .tool-input {
   width: 100%;
   height: 30px;
@@ -5069,6 +5148,22 @@ onBeforeUnmount(() => {
   border-color: #3e4451;
   background: #282c34;
   color: #abb2bf;
+}
+
+.ide-root.dark .search-mode-chip {
+  border-color: #475569;
+  color: #cbd5e1;
+  background: #1e293b;
+}
+
+.ide-root.dark .search-mode-chip.active {
+  border-color: #60a5fa;
+  color: #bfdbfe;
+  background: #1e3a8a;
+}
+
+.ide-root.dark .search-mode-hint {
+  color: #94a3b8;
 }
 
 .results-list {
@@ -5098,10 +5193,21 @@ onBeforeUnmount(() => {
   font-size: 12px;
 }
 
+.result-score {
+  margin: 0 0 4px;
+  font-size: 10px;
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+}
+
 .ide-root.dark .result-item {
   border-color: #3e4451;
   background: #21252b;
   color: #abb2bf;
+}
+
+.ide-root.dark .result-score {
+  color: #94a3b8;
 }
 
 .result-snippet :deep(strong) {

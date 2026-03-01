@@ -212,6 +212,31 @@ describe('useCosmosController', () => {
     scope.stop()
   })
 
+  it('deduplicates semantic search order results by node', async () => {
+    const scope = effectScope()
+    await scope.run(async () => {
+      const ctrl = useCosmosController({
+        workingFolderPath: ref('/vault'),
+        activeTabPath: ref('/vault/a.md'),
+        getWikilinkGraph: vi.fn(async () => rawGraph),
+        reindexMarkdownFile: vi.fn(async () => {}),
+        readTextFile: vi.fn(async () => '# A'),
+        ftsSearch: vi.fn(async () => [
+          { path: '/vault/a.md', snippet: 'A-1', score: 3 },
+          { path: '/vault/a.md', snippet: 'A-2', score: 2 },
+          { path: '/vault/b.md', snippet: 'B', score: 1 }
+        ])
+      })
+
+      await ctrl.refreshGraph()
+      ctrl.query.value = 'ia'
+      await new Promise<void>((resolve) => setTimeout(resolve, 320))
+      await flush()
+      expect(ctrl.queryMatches.value.map((item) => item.id)).toEqual(['a', 'b'])
+    })
+    scope.stop()
+  })
+
   it('ignores stale refresh errors when a newer refresh succeeds', async () => {
     const first = deferred<WikilinkGraph>()
     const second = deferred<WikilinkGraph>()

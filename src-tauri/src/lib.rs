@@ -16,6 +16,8 @@ use std::{
     },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
+#[cfg(windows)]
+use std::os::windows::fs::MetadataExt;
 
 use directories::UserDirs;
 use rusqlite::{params, params_from_iter, types::Value as SqlValue, Connection};
@@ -44,6 +46,8 @@ const SEMANTIC_TOP_K_PER_NOTE: i64 = 3;
 const SEMANTIC_THRESHOLD: f32 = 0.62;
 const INDEX_LOG_CAPACITY: usize = 400;
 static INDEX_CANCEL_REQUESTED: AtomicBool = AtomicBool::new(false);
+#[cfg(windows)]
+const FILE_ATTRIBUTE_HIDDEN: u32 = 0x2;
 
 #[derive(Clone, Serialize)]
 struct IndexLogEntry {
@@ -335,6 +339,41 @@ fn normalize_workspace_relative_path(root: &Path, path: &Path) -> Result<String>
 
 fn workspace_absolute_path(root: &Path, stored_path: &str) -> String {
     root.join(stored_path).to_string_lossy().to_string()
+}
+
+fn is_hidden_dir_name(name: &str) -> bool {
+    name.starts_with('.') && name != "." && name != ".."
+}
+
+#[cfg(windows)]
+fn is_windows_hidden(path: &Path) -> bool {
+    fs::metadata(path)
+        .map(|metadata| metadata.file_attributes() & FILE_ATTRIBUTE_HIDDEN != 0)
+        .unwrap_or(false)
+}
+
+#[cfg(not(windows))]
+fn is_windows_hidden(_path: &Path) -> bool {
+    false
+}
+
+fn has_hidden_dir_component(root: &Path, path: &Path) -> bool {
+    let relative = path.strip_prefix(root).unwrap_or(path);
+    let mut current = root.to_path_buf();
+    for component in relative.components() {
+        let std::path::Component::Normal(part) = component else {
+            continue;
+        };
+        let name = part.to_string_lossy();
+        current.push(part);
+        if !current.is_dir() {
+            continue;
+        }
+        if is_hidden_dir_name(&name) || is_windows_hidden(&current) {
+            return true;
+        }
+    }
+    false
 }
 
 /// Derives a display label from a workspace-relative markdown path.
@@ -958,6 +997,13 @@ fn reindex_markdown_file_sync_inner(path: String, refresh_semantic_cache: bool) 
     ensure_within_root(&root, &file_path)?;
 
     let normalized_path = fs::canonicalize(&file_path)?;
+    if has_hidden_dir_component(&root, &normalized_path) {
+        log_index(&format!(
+            "reindex:skip_hidden path={}",
+            normalized_path.to_string_lossy()
+        ));
+        return Ok(());
+    }
     let markdown = fs::read_to_string(&normalized_path)?;
     let content_for_indexing = strip_yaml_frontmatter(&markdown);
     let chunks = chunk_markdown(content_for_indexing);
@@ -1785,6 +1831,13 @@ enum PropertyFilter {
     LteDate { key: String, value: String },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SearchMode {
+    Hybrid,
+    Semantic,
+    Lexical,
+}
+
 fn is_property_key_token(input: &str) -> bool {
     let trimmed = input.trim();
     if trimmed.is_empty() {
@@ -1886,11 +1939,23 @@ fn parse_property_filter_token(token: &str) -> Option<PropertyFilter> {
     None
 }
 
-fn split_search_query(raw: &str) -> (String, Vec<PropertyFilter>) {
+fn parse_search_query(raw: &str) -> (SearchMode, String, Vec<PropertyFilter>) {
+    let trimmed = raw.trim();
+    let lowered = trimmed.to_ascii_lowercase();
+    let (mode, remainder) = if lowered.starts_with("semantic:") {
+        (SearchMode::Semantic, trimmed["semantic:".len()..].trim_start())
+    } else if lowered.starts_with("lexical:") {
+        (SearchMode::Lexical, trimmed["lexical:".len()..].trim_start())
+    } else if lowered.starts_with("hybrid:") {
+        (SearchMode::Hybrid, trimmed["hybrid:".len()..].trim_start())
+    } else {
+        (SearchMode::Hybrid, trimmed)
+    };
+
     let mut text_terms: Vec<String> = Vec::new();
     let mut filters: Vec<PropertyFilter> = Vec::new();
 
-    for token in raw.split_whitespace() {
+    for token in remainder.split_whitespace() {
         if let Some(filter) = parse_property_filter_token(token) {
             filters.push(filter);
         } else {
@@ -1898,7 +1963,7 @@ fn split_search_query(raw: &str) -> (String, Vec<PropertyFilter>) {
         }
     }
 
-    (text_terms.join(" "), filters)
+    (mode, text_terms.join(" "), filters)
 }
 
 fn path_set_for_property_filter(
@@ -1986,6 +2051,200 @@ fn paths_matching_property_filters(
     Ok(acc.unwrap_or_default())
 }
 
+fn collect_lexical_ranked_rows(
+    conn: &Connection,
+    text_query: &str,
+    property_paths: Option<&HashSet<String>>,
+) -> Result<Vec<RankedSearchRow>> {
+    let mut stmt = conn.prepare(
+        r#"
+    SELECT chunks.id,
+           chunks.path,
+           snippet(chunks_fts, 2, '<b>', '</b>', '...', 12) AS snip,
+           bm25(chunks_fts) AS score
+    FROM chunks_fts
+    JOIN chunks ON chunks_fts.rowid = chunks.id
+    WHERE chunks_fts MATCH ?1
+    ORDER BY score
+    LIMIT ?2;
+  "#,
+    )?;
+
+    let mut rows = stmt.query(params![text_query, SEARCH_CANDIDATE_LIMIT])?;
+    let mut ranked_rows: Vec<RankedSearchRow> = Vec::new();
+    while let Some(row) = rows.next()? {
+        let path = row.get::<_, String>(1)?;
+        if let Some(paths) = property_paths {
+            if !paths.contains(&path) {
+                continue;
+            }
+        }
+        ranked_rows.push(RankedSearchRow {
+            chunk_id: row.get::<_, i64>(0)?,
+            path,
+            snippet: row.get::<_, String>(2)?,
+            lexical_score: row.get::<_, f64>(3)?,
+        });
+    }
+
+    Ok(ranked_rows)
+}
+
+/// Builds a conservative FTS prefix query (`term* AND other*`) used as
+/// a hybrid fallback when strict lexical matching yields no candidates.
+fn build_prefix_fts_query(text_query: &str) -> Option<String> {
+    let terms: Vec<String> = text_query
+        .split_whitespace()
+        .filter_map(|token| {
+            let cleaned: String = token
+                .trim_matches(|ch: char| !ch.is_alphanumeric() && ch != '_' && ch != '-')
+                .chars()
+                .filter(|ch| ch.is_alphanumeric() || *ch == '_' || *ch == '-')
+                .collect();
+            if cleaned.is_empty() {
+                None
+            } else {
+                Some(format!("{cleaned}*"))
+            }
+        })
+        .collect();
+    if terms.is_empty() {
+        None
+    } else {
+        Some(terms.join(" AND "))
+    }
+}
+
+fn fallback_lexical_hits(
+    conn: &Connection,
+    root_canonical: &Path,
+    text_query: &str,
+    property_paths: Option<&HashSet<String>>,
+) -> Result<Vec<Hit>> {
+    let ranked_rows = collect_lexical_ranked_rows(conn, text_query, property_paths)?;
+    if ranked_rows.is_empty() {
+        return Ok(vec![]);
+    }
+    let lexical_relevance: Vec<f64> = ranked_rows.iter().map(|item| -item.lexical_score).collect();
+    let lexical_norm = min_max_normalize(&lexical_relevance);
+
+    let mut scored: Vec<(usize, f64)> = ranked_rows
+        .iter()
+        .enumerate()
+        .map(|(index, _)| (index, lexical_norm[index]))
+        .collect();
+    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    let mut out = Vec::new();
+    for (index, score) in scored.into_iter().take(SEARCH_RESULT_LIMIT) {
+        let row = &ranked_rows[index];
+        out.push(Hit {
+            path: workspace_absolute_path(root_canonical, &row.path),
+            snippet: row.snippet.clone(),
+            score,
+        });
+    }
+    Ok(out)
+}
+
+fn semantic_snippet_preview(text: &str) -> String {
+    let compact = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if compact.is_empty() {
+        return "semantic match".to_string();
+    }
+    let mut preview = compact.chars().take(220).collect::<String>();
+    if compact.chars().count() > 220 {
+        preview.push_str("...");
+    }
+    preview
+}
+
+fn load_semantic_snippet(conn: &Connection, path: &str) -> Result<String> {
+    let row = conn.query_row(
+        "SELECT text FROM chunks WHERE path = ?1 ORDER BY id ASC LIMIT 1",
+        params![path],
+        |row| row.get::<_, String>(0),
+    );
+    match row {
+        Ok(text) => Ok(semantic_snippet_preview(&text)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok("semantic match".to_string()),
+        Err(err) => Err(AppError::Sqlite(err)),
+    }
+}
+
+fn semantic_only_hits(
+    conn: &Connection,
+    root_canonical: &Path,
+    text_query: &str,
+    property_paths: Option<&HashSet<String>>,
+) -> Result<Option<Vec<Hit>>> {
+    let query_vec = semantic::embed_texts(&[text_query.to_string()])
+        .ok()
+        .and_then(|mut items| items.pop());
+    let Some(mut query_vector) = query_vec else {
+        log_index("search:semantic:fallback reason=embed_query_failed");
+        return Ok(None);
+    };
+    semantic::normalize_in_place(&mut query_vector);
+    let payload = semantic::vector_to_json(&query_vector);
+
+    let mut stmt = match conn.prepare(
+        r#"
+        SELECT path, distance
+        FROM note_embeddings_vec
+        WHERE embedding MATCH ?1
+        ORDER BY distance ASC
+        LIMIT ?2
+      "#,
+    ) {
+        Ok(value) => value,
+        Err(err) => {
+            log_index(&format!(
+                "search:semantic:fallback reason=prepare_failed err={err}"
+            ));
+            return Ok(None);
+        }
+    };
+
+    let mut rows = match stmt.query(params![payload, SEARCH_CANDIDATE_LIMIT]) {
+        Ok(value) => value,
+        Err(err) => {
+            log_index(&format!(
+                "search:semantic:fallback reason=query_failed err={err}"
+            ));
+            return Ok(None);
+        }
+    };
+
+    let mut scored: Vec<(String, f64)> = Vec::new();
+    while let Some(row) = rows.next()? {
+        let path: String = row.get(0)?;
+        if let Some(paths) = property_paths {
+            if !paths.contains(&path) {
+                continue;
+            }
+        }
+        let distance: f32 = row.get(1)?;
+        let score = (1.0 - ((distance * distance) as f64 * 0.5)).clamp(0.0, 1.0);
+        if score < f64::from(SEMANTIC_THRESHOLD) {
+            continue;
+        }
+        scored.push((path, score));
+    }
+
+    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    let mut out = Vec::new();
+    for (path, score) in scored.into_iter().take(SEARCH_RESULT_LIMIT) {
+        let snippet = load_semantic_snippet(conn, &path)?;
+        out.push(Hit {
+            path: workspace_absolute_path(root_canonical, &path),
+            snippet,
+            score,
+        });
+    }
+    Ok(Some(out))
+}
+
 fn fts_search_sync(query: String) -> Result<Vec<Hit>> {
     let conn = open_db()?;
     let root_canonical = active_workspace_root()?;
@@ -1994,7 +2253,7 @@ fn fts_search_sync(query: String) -> Result<Vec<Hit>> {
         return Ok(vec![]);
     }
 
-    let (text_query, property_filters) = split_search_query(q);
+    let (mode, text_query, property_filters) = parse_search_query(q);
     let property_paths = if property_filters.is_empty() {
         None
     } else {
@@ -2019,37 +2278,32 @@ fn fts_search_sync(query: String) -> Result<Vec<Hit>> {
         return Ok(out);
     }
 
-    let mut stmt = conn.prepare(
-        r#"
-    SELECT chunks.id,
-           chunks.path,
-           snippet(chunks_fts, 2, '<b>', '</b>', '...', 12) AS snip,
-           bm25(chunks_fts) AS score
-    FROM chunks_fts
-    JOIN chunks ON chunks_fts.rowid = chunks.id
-    WHERE chunks_fts MATCH ?1
-    ORDER BY score
-    LIMIT ?2;
-  "#,
-    )?;
-
-    let mut rows = stmt.query(params![text_query, SEARCH_CANDIDATE_LIMIT])?;
-    let mut ranked_rows: Vec<RankedSearchRow> = Vec::new();
-    while let Some(row) = rows.next()? {
-        let path = row.get::<_, String>(1)?;
-        if let Some(paths) = property_paths.as_ref() {
-            if !paths.contains(&path) {
-                continue;
-            }
+    if mode == SearchMode::Semantic {
+        if let Some(hits) = semantic_only_hits(
+            &conn,
+            &root_canonical,
+            &text_query,
+            property_paths.as_ref(),
+        )? {
+            return Ok(hits);
         }
-        ranked_rows.push(RankedSearchRow {
-            chunk_id: row.get::<_, i64>(0)?,
-            path,
-            snippet: row.get::<_, String>(2)?,
-            lexical_score: row.get::<_, f64>(3)?,
-        });
+        return fallback_lexical_hits(
+            &conn,
+            &root_canonical,
+            &text_query,
+            property_paths.as_ref(),
+        );
     }
 
+    let mut ranked_rows = collect_lexical_ranked_rows(&conn, &text_query, property_paths.as_ref())?;
+    if ranked_rows.is_empty() && mode == SearchMode::Hybrid {
+        if let Some(prefix_query) = build_prefix_fts_query(&text_query) {
+            if prefix_query != text_query {
+                ranked_rows =
+                    collect_lexical_ranked_rows(&conn, &prefix_query, property_paths.as_ref())?;
+            }
+        }
+    }
     if ranked_rows.is_empty() {
         return Ok(vec![]);
     }
@@ -2057,55 +2311,64 @@ fn fts_search_sync(query: String) -> Result<Vec<Hit>> {
     let lexical_relevance: Vec<f64> = ranked_rows.iter().map(|item| -item.lexical_score).collect();
     let lexical_norm = min_max_normalize(&lexical_relevance);
 
-    let mut semantic_norm = vec![0.0f64; ranked_rows.len()];
-    let query_vec = semantic::embed_texts(&[text_query.clone()])
-        .ok()
-        .and_then(|mut items| {
-            let first = items.pop()?;
-            Some(first)
-        });
+    let mut scored: Vec<(usize, f64)> = if mode == SearchMode::Lexical {
+        ranked_rows
+            .iter()
+            .enumerate()
+            .map(|(index, _)| (index, lexical_norm[index]))
+            .collect()
+    } else {
+        let mut semantic_norm = vec![0.0f64; ranked_rows.len()];
+        let query_vec = semantic::embed_texts(&[text_query.clone()])
+            .ok()
+            .and_then(|mut items| {
+                let first = items.pop()?;
+                Some(first)
+            });
 
-    if let Some(mut query_vector) = query_vec {
-        semantic::normalize_in_place(&mut query_vector);
-        let mut semantic_scores = vec![0.0f64; ranked_rows.len()];
-        for (index, row) in ranked_rows.iter().enumerate() {
-            let embedding = conn.query_row(
-                "SELECT vector, dim FROM embeddings WHERE chunk_id = ?1",
-                params![row.chunk_id],
-                |db_row| Ok((db_row.get::<_, Vec<u8>>(0)?, db_row.get::<_, i64>(1)?)),
-            );
-            let Ok((blob, dim)) = embedding else {
-                continue;
-            };
-            let Some(vector) = semantic::blob_to_vector(&blob, dim as usize) else {
-                continue;
-            };
-            let Some(score) = semantic::cosine_similarity(&query_vector, &vector) else {
-                continue;
-            };
-            semantic_scores[index] = score as f64;
+        if let Some(mut query_vector) = query_vec {
+            semantic::normalize_in_place(&mut query_vector);
+            let mut semantic_scores = vec![0.0f64; ranked_rows.len()];
+            for (index, row) in ranked_rows.iter().enumerate() {
+                let embedding = conn.query_row(
+                    "SELECT vector, dim FROM embeddings WHERE chunk_id = ?1",
+                    params![row.chunk_id],
+                    |db_row| Ok((db_row.get::<_, Vec<u8>>(0)?, db_row.get::<_, i64>(1)?)),
+                );
+                let Ok((blob, dim)) = embedding else {
+                    continue;
+                };
+                let Some(vector) = semantic::blob_to_vector(&blob, dim as usize) else {
+                    continue;
+                };
+                let Some(score) = semantic::cosine_similarity(&query_vector, &vector) else {
+                    continue;
+                };
+                semantic_scores[index] = score as f64;
+            }
+            semantic_norm = min_max_normalize(&semantic_scores);
         }
-        semantic_norm = min_max_normalize(&semantic_scores);
-    }
 
-    let mut scored: Vec<(usize, f64)> = ranked_rows
-        .iter()
-        .enumerate()
-        .map(|(index, _)| {
-            let hybrid = lexical_norm[index] * HYBRID_LEXICAL_WEIGHT
-                + semantic_norm[index] * HYBRID_SEMANTIC_WEIGHT;
-            (index, hybrid)
-        })
-        .collect();
+        ranked_rows
+            .iter()
+            .enumerate()
+            .map(|(index, _)| {
+                let hybrid = lexical_norm[index] * HYBRID_LEXICAL_WEIGHT
+                    + semantic_norm[index] * HYBRID_SEMANTIC_WEIGHT;
+                (index, hybrid)
+            })
+            .collect()
+    };
+
     scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
     let mut out = Vec::new();
-    for (index, hybrid_score) in scored.into_iter().take(SEARCH_RESULT_LIMIT) {
+    for (index, score) in scored.into_iter().take(SEARCH_RESULT_LIMIT) {
         let row = &ranked_rows[index];
         out.push(Hit {
             path: workspace_absolute_path(&root_canonical, &row.path),
             snippet: row.snippet.clone(),
-            score: hybrid_score,
+            score,
         });
     }
     Ok(out)
@@ -2129,17 +2392,21 @@ struct WikilinkRewriteResult {
 }
 
 fn list_markdown_files_via_find(root: &Path) -> Result<Vec<PathBuf>> {
-    fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
+    fn walk(root: &Path, dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
         for entry in fs::read_dir(dir)? {
             let entry = entry?;
             let path = entry.path();
             let name = entry.file_name().to_string_lossy().to_string();
 
             if path.is_dir() {
-                if name == INTERNAL_DIR_NAME || name == TRASH_DIR_NAME {
+                if name == INTERNAL_DIR_NAME
+                    || name == TRASH_DIR_NAME
+                    || is_hidden_dir_name(&name)
+                    || is_windows_hidden(&path)
+                {
                     continue;
                 }
-                walk(&path, out)?;
+                walk(root, &path, out)?;
                 continue;
             }
 
@@ -2155,7 +2422,9 @@ fn list_markdown_files_via_find(root: &Path) -> Result<Vec<PathBuf>> {
                 continue;
             };
 
-            if ext.eq_ignore_ascii_case("md") || ext.eq_ignore_ascii_case("markdown") {
+            if (ext.eq_ignore_ascii_case("md") || ext.eq_ignore_ascii_case("markdown"))
+                && !has_hidden_dir_component(root, &path)
+            {
                 out.push(path);
             }
         }
@@ -2163,7 +2432,7 @@ fn list_markdown_files_via_find(root: &Path) -> Result<Vec<PathBuf>> {
     }
 
     let mut files = Vec::new();
-    walk(root, &mut files)?;
+    walk(root, root, &mut files)?;
     Ok(files)
 }
 
@@ -2426,11 +2695,81 @@ mod tests {
     }
 
     #[test]
-    fn split_search_query_extracts_property_filters() {
-        let (text, filters) =
-            split_search_query("roadmap tags:dev deadline>=2026-01-01 has:archive");
+    fn parse_search_query_extracts_property_filters() {
+        let (mode, text, filters) =
+            parse_search_query("roadmap tags:dev deadline>=2026-01-01 has:archive");
+        assert_eq!(mode, SearchMode::Hybrid);
         assert_eq!(text, "roadmap");
         assert_eq!(filters.len(), 3);
+    }
+
+    #[test]
+    fn parse_search_query_detects_search_mode_prefixes() {
+        let (semantic_mode, semantic_text, semantic_filters) = parse_search_query("semantic: ai agents");
+        assert_eq!(semantic_mode, SearchMode::Semantic);
+        assert_eq!(semantic_text, "ai agents");
+        assert!(semantic_filters.is_empty());
+
+        let (lexical_mode, lexical_text, lexical_filters) = parse_search_query("Lexical: rust tauri");
+        assert_eq!(lexical_mode, SearchMode::Lexical);
+        assert_eq!(lexical_text, "rust tauri");
+        assert!(lexical_filters.is_empty());
+
+        let (hybrid_mode, hybrid_text, hybrid_filters) = parse_search_query("hybrid: graph has:tags");
+        assert_eq!(hybrid_mode, SearchMode::Hybrid);
+        assert_eq!(hybrid_text, "graph");
+        assert_eq!(hybrid_filters.len(), 1);
+    }
+
+    #[test]
+    fn parse_search_query_accepts_empty_text_after_prefix() {
+        let (mode, text, filters) = parse_search_query("semantic:   ");
+        assert_eq!(mode, SearchMode::Semantic);
+        assert!(text.is_empty());
+        assert!(filters.is_empty());
+    }
+
+    #[test]
+    fn build_prefix_fts_query_converts_tokens_to_prefix_terms() {
+        let query = build_prefix_fts_query("matter most");
+        assert_eq!(query.as_deref(), Some("matter* AND most*"));
+    }
+
+    #[test]
+    fn build_prefix_fts_query_ignores_punctuation_only_tokens() {
+        let query = build_prefix_fts_query("  !!!  ");
+        assert!(query.is_none());
+    }
+
+    #[test]
+    fn semantic_snippet_preview_compacts_whitespace_and_truncates() {
+        let preview = semantic_snippet_preview("line one\n\nline\t two");
+        assert_eq!(preview, "line one line two");
+
+        let long = "a".repeat(260);
+        let truncated = semantic_snippet_preview(&long);
+        assert!(truncated.ends_with("..."));
+        assert!(truncated.len() <= 223);
+    }
+
+    #[test]
+    fn list_markdown_files_via_find_skips_hidden_directories() {
+        let workspace = create_temp_workspace("tomosona-hidden-scan-test");
+        fs::create_dir_all(workspace.join(".hidden")).expect("create hidden dir");
+        fs::create_dir_all(workspace.join("visible")).expect("create visible dir");
+        fs::write(workspace.join(".hidden/secret.md"), "# secret").expect("write secret");
+        fs::write(workspace.join("visible/public.md"), "# public").expect("write public");
+
+        let files = list_markdown_files_via_find(&workspace).expect("list markdown files");
+        let names = files
+            .iter()
+            .filter_map(|path| path.strip_prefix(&workspace).ok())
+            .map(|path| path.to_string_lossy().replace('\\', "/"))
+            .collect::<Vec<_>>();
+        assert!(names.iter().any(|path| path == "visible/public.md"));
+        assert!(!names.iter().any(|path| path.contains(".hidden/secret.md")));
+
+        fs::remove_dir_all(workspace).expect("cleanup");
     }
 
     #[test]

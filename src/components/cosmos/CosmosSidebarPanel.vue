@@ -5,9 +5,10 @@
  * The component owns panel layout/scroll behavior while remaining stateless
  * regarding graph business logic.
  */
-import { ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import type { CosmosGraphNode } from '../../lib/graphIndex'
 import { XMarkIcon, MapPinIcon } from '@heroicons/vue/24/outline'
+import { applySearchMode, detectSearchMode, type SearchMode } from '../../lib/searchMode'
 
 type GraphSummary = {
   nodes: number
@@ -45,6 +46,12 @@ const emit = defineEmits<{
 }>()
 
 const searchInputEl = ref<HTMLInputElement | null>(null)
+const activeSearchMode = computed<SearchMode>(() => detectSearchMode(props.query))
+const searchModeOptions: Array<{ mode: SearchMode; label: string }> = [
+  { mode: 'hybrid', label: 'Hybrid' },
+  { mode: 'semantic', label: 'Semantic' },
+  { mode: 'lexical', label: 'Lexical' }
+]
 
 /** Emits query updates without mutating parent-owned state directly. */
 function onQueryInput(event: Event) {
@@ -67,6 +74,17 @@ function onSemanticEdgesChange(event: Event) {
 function onClearQuery() {
   emit('update:query', '')
   searchInputEl.value?.focus()
+}
+
+function onSearchModeSelect(mode: SearchMode) {
+  const next = applySearchMode(props.query, mode)
+  emit('update:query', next.value)
+  void nextTick(() => {
+    const input = searchInputEl.value
+    if (!input) return
+    input.focus()
+    input.setSelectionRange(next.caret, next.caret)
+  })
 }
 </script>
 
@@ -101,6 +119,19 @@ function onClearQuery() {
           <XMarkIcon />
         </button>
       </div>
+      <div class="cosmos-search-modes">
+        <button
+          v-for="option in searchModeOptions"
+          :key="option.mode"
+          type="button"
+          class="cosmos-search-mode-chip"
+          :class="{ active: activeSearchMode === option.mode }"
+          @click="onSearchModeSelect(option.mode)"
+        >
+          {{ option.label }}
+        </button>
+      </div>
+      <p class="cosmos-search-hint">Astuce: <code>semantic:</code> concept | <code>lexical:</code> terme exact</p>
       <div v-if="query.trim()" class="cosmos-match-list">
         <button
           v-for="match in matches"
@@ -312,6 +343,40 @@ function onClearQuery() {
 
 .cosmos-search-input::placeholder {
   color: var(--cosmos-text-muted);
+}
+
+.cosmos-search-modes {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.cosmos-search-mode-chip {
+  border: 1px solid var(--cosmos-border);
+  border-radius: 999px;
+  background: var(--cosmos-input-bg);
+  color: var(--cosmos-text-secondary);
+  padding: 2px 8px;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.cosmos-search-mode-chip.active {
+  border-color: var(--cosmos-link-accent);
+  color: var(--cosmos-link-accent);
+  background: rgb(37 99 235 / 16%);
+}
+
+.cosmos-search-hint {
+  margin: -2px 0 0;
+  color: var(--cosmos-text-muted);
+  font-size: 10px;
+}
+
+.cosmos-search-hint code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: inherit;
 }
 
 .cosmos-match-list {

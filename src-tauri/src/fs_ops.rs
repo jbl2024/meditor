@@ -3,6 +3,8 @@ use std::{
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
+#[cfg(windows)]
+use std::os::windows::fs::MetadataExt;
 
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use rfd::FileDialog;
@@ -18,6 +20,8 @@ const INTERNAL_DIR_NAME: &str = ".tomosona";
 const DB_FILE_NAME: &str = "tomosona.sqlite";
 const GITIGNORE_FILE_NAME: &str = ".gitignore";
 const TOMOSONA_IGNORE_FILE_NAME: &str = ".tomosonaignore";
+#[cfg(windows)]
+const FILE_ATTRIBUTE_HIDDEN: u32 = 0x2;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct TreeNode {
@@ -66,6 +70,21 @@ fn should_skip_file(path: &Path) -> bool {
 
 fn should_skip_dir_name(name: &str) -> bool {
     name == TRASH_DIR_NAME || name == INTERNAL_DIR_NAME
+}
+
+#[cfg(windows)]
+fn is_windows_hidden_dir(path: &Path) -> bool {
+    if !path.is_dir() {
+        return false;
+    }
+    fs::metadata(path)
+        .map(|metadata| metadata.file_attributes() & FILE_ATTRIBUTE_HIDDEN != 0)
+        .unwrap_or(false)
+}
+
+#[cfg(not(windows))]
+fn is_windows_hidden_dir(_path: &Path) -> bool {
+    false
 }
 
 fn build_ignore_matcher(root: &Path) -> Option<Gitignore> {
@@ -118,6 +137,9 @@ fn should_skip_dir(root: &Path, matcher: Option<&Gitignore>, path: &Path) -> boo
             return true;
         }
         if path.is_dir() && name.starts_with('.') && name != "." && name != ".." {
+            return true;
+        }
+        if is_windows_hidden_dir(path) {
             return true;
         }
     }
