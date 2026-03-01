@@ -1,3 +1,9 @@
+/**
+ * Cosmos controller state/computation layer.
+ *
+ * This module isolates graph-fetching, selection/focus behavior, and preview loading
+ * from `App.vue` so the view shell only wires events between panel and canvas.
+ */
 import { computed, ref, watch, type Ref } from 'vue'
 import type { WikilinkGraph } from '../lib/api'
 import { type CosmosGraph, type CosmosGraphNode, buildCosmosGraph as defaultBuildCosmosGraph } from '../lib/graphIndex'
@@ -102,6 +108,10 @@ export function useCosmosController(deps: CosmosDeps) {
       .slice(0, 12)
   })
 
+  /**
+   * Applies focus-mode filtering as a bounded neighborhood expansion
+   * around the selected node.
+   */
   const visibleGraph = computed<CosmosGraph>(() => {
     if (!focusMode.value || !selectedNodeId.value) {
       return graph.value
@@ -139,6 +149,9 @@ export function useCosmosController(deps: CosmosDeps) {
     }
   })
 
+  /**
+   * Refreshes the selected-node preview while discarding stale async results.
+   */
   async function loadSelectedPreview() {
     const node = selectedNode.value
     const requestToken = ++previewRequestToken
@@ -199,6 +212,9 @@ export function useCosmosController(deps: CosmosDeps) {
     }
   }
 
+  /**
+   * Sets the selected node while preserving the current search text.
+   */
   function selectNode(nodeId: string) {
     const searchSnapshot = query.value
     selectedNodeId.value = nodeId
@@ -207,6 +223,9 @@ export function useCosmosController(deps: CosmosDeps) {
     }
   }
 
+  /**
+   * Selects a node from search/related lists and returns its id for camera focus.
+   */
   function focusMatch(nodeId: string): string {
     const searchSnapshot = query.value
     selectedNodeId.value = nodeId
@@ -216,6 +235,9 @@ export function useCosmosController(deps: CosmosDeps) {
     return nodeId
   }
 
+  /**
+   * Selects the first current search result, if any.
+   */
   function searchEnter(): string | null {
     const first = queryMatches.value[0]
     if (!first) return null
@@ -223,22 +245,34 @@ export function useCosmosController(deps: CosmosDeps) {
     return first.id
   }
 
+  /**
+   * Enables focus mode and gradually expands visible neighborhood depth.
+   */
   function expandNeighborhood() {
     if (!selectedNodeId.value) return
     focusMode.value = true
     focusDepth.value = Math.min(8, focusDepth.value + 1)
   }
 
+  /**
+   * Alias for selecting a related node from outgoing/backlink lists.
+   */
   function jumpToRelated(nodeId: string): string {
     return focusMatch(nodeId)
   }
 
+  /**
+   * Returns the selected note path for explicit open action.
+   */
   function openSelected(): OpenSelectedResult {
     const node = selectedNode.value
     if (!node) return null
     return { path: node.path }
   }
 
+  /**
+   * Clears current selection/focus/preview while preserving graph payload.
+   */
   function resetSelection() {
     selectedNodeId.value = ''
     focusMode.value = false
@@ -248,6 +282,9 @@ export function useCosmosController(deps: CosmosDeps) {
     previewError.value = ''
   }
 
+  /**
+   * Clears the entire Cosmos controller state, including graph and query.
+   */
   function clearState() {
     graph.value = { nodes: [], edges: [], generated_at_ms: 0 }
     error.value = ''
