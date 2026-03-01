@@ -276,9 +276,9 @@ function onEditorKeydown(event: KeyboardEvent) {
   font-size: 0.82rem;
   line-height: 1.45;
   margin: 0;
-  min-height: 180px;
+  min-height: 120px;
   overflow: auto;
-  padding: 0.8rem 0.92rem;
+  padding: 0.56rem 0.62rem;
   white-space: pre;
   width: 100%;
 }
