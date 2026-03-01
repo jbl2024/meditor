@@ -5,7 +5,9 @@
  * The component owns panel layout/scroll behavior while remaining stateless
  * regarding graph business logic.
  */
+import { ref } from 'vue'
 import type { CosmosGraphNode } from '../../lib/graphIndex'
+import { XMarkIcon } from '@heroicons/vue/24/outline'
 
 type GraphSummary = {
   nodes: number
@@ -39,6 +41,8 @@ const emit = defineEmits<{
   'reset-view': []
 }>()
 
+const searchInputEl = ref<HTMLInputElement | null>(null)
+
 /** Emits query updates without mutating parent-owned state directly. */
 function onQueryInput(event: Event) {
   const target = event.target as HTMLInputElement | null
@@ -50,6 +54,12 @@ function onFocusModeChange(event: Event) {
   const target = event.target as HTMLInputElement | null
   emit('toggle-focus-mode', Boolean(target?.checked))
 }
+
+/** Clears the search query and keeps keyboard focus in the input. */
+function onClearQuery() {
+  emit('update:query', '')
+  searchInputEl.value?.focus()
+}
 </script>
 
 <template>
@@ -58,18 +68,31 @@ function onFocusModeChange(event: Event) {
       <p class="cosmos-panel-title">Cosmos</p>
       <p class="cosmos-panel-meta">{{ summary.nodes }} nodes · {{ summary.edges }} edges</p>
       <p class="cosmos-panel-help">Click a node to select it. Double-click to focus. Press Esc to return.</p>
-      <input
-        :value="query"
-        class="cosmos-search-input"
-        type="text"
-        placeholder="Search node path..."
-        autocomplete="new-password"
-        autocapitalize="off"
-        autocorrect="off"
-        spellcheck="false"
-        @input="onQueryInput"
-        @keydown.enter.prevent="emit('search-enter')"
-      >
+      <div class="cosmos-search-wrap">
+        <input
+          ref="searchInputEl"
+          :value="query"
+          class="cosmos-search-input"
+          type="text"
+          placeholder="Search node path..."
+          autocomplete="new-password"
+          autocapitalize="off"
+          autocorrect="off"
+          spellcheck="false"
+          @input="onQueryInput"
+          @keydown.enter.prevent="emit('search-enter')"
+        >
+        <button
+          v-if="query.trim()"
+          type="button"
+          class="cosmos-search-clear-btn"
+          aria-label="Clear search"
+          title="Clear search"
+          @click="onClearQuery"
+        >
+          <XMarkIcon />
+        </button>
+      </div>
       <div v-if="query.trim()" class="cosmos-match-list">
         <button
           v-for="match in matches"
@@ -233,6 +256,41 @@ function onFocusModeChange(event: Event) {
   font-size: 12px;
   background: var(--cosmos-input-bg);
   color: var(--cosmos-input-text);
+}
+
+.cosmos-search-wrap {
+  position: relative;
+}
+
+.cosmos-search-wrap .cosmos-search-input {
+  padding-right: 30px;
+}
+
+.cosmos-search-clear-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--cosmos-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.cosmos-search-clear-btn:hover {
+  background: rgb(148 163 184 / 14%);
+  color: var(--cosmos-text-secondary);
+}
+
+.cosmos-search-clear-btn :deep(svg) {
+  width: 12px;
+  height: 12px;
 }
 
 .cosmos-search-input::placeholder {
