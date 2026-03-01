@@ -200,6 +200,8 @@ const openDateInput = ref('')
 const openDateModalError = ref('')
 const shortcutsModalVisible = ref(false)
 const indexStatusModalVisible = ref(false)
+const cosmosCommandLoadingVisible = ref(false)
+const cosmosCommandLoadingLabel = ref('Loading graph...')
 const shortcutsFilterQuery = ref('')
 const previousNonCosmosMode = ref<SidebarMode>('explorer')
 const wikilinkRewriteQueue: Array<{
@@ -449,11 +451,25 @@ type PaletteAction = {
   id: string
   label: string
   run: () => boolean | Promise<boolean>
+  closeBeforeRun?: boolean
+  loadingLabel?: string
 }
 
 const paletteActions = computed<PaletteAction[]>(() => [
-  { id: 'open-cosmos-view', label: 'Open Cosmos View', run: () => openCosmosViewFromPalette() },
-  { id: 'open-note-in-cosmos', label: 'Open Note in Cosmos', run: () => openNoteInCosmosFromPalette() },
+  {
+    id: 'open-cosmos-view',
+    label: 'Open Cosmos View',
+    run: () => openCosmosViewFromPalette(),
+    closeBeforeRun: true,
+    loadingLabel: 'Loading graph...'
+  },
+  {
+    id: 'open-note-in-cosmos',
+    label: 'Open Note in Cosmos',
+    run: () => openNoteInCosmosFromPalette(),
+    closeBeforeRun: true,
+    loadingLabel: 'Loading graph and locating active note...'
+  },
   { id: 'open-workspace', label: 'Open Workspace', run: () => openWorkspaceFromPalette() },
   { id: 'close-workspace', label: 'Close Workspace', run: () => closeWorkspaceFromPalette() },
   { id: 'show-shortcuts', label: 'Show Keyboard Shortcuts', run: () => openShortcutsFromPalette() },
@@ -1468,10 +1484,8 @@ async function applyCosmosHistorySnapshot(snapshot: CosmosHistorySnapshot): Prom
   cosmos.focusDepth.value = snapshot.focusDepth
   cosmos.selectedNodeId.value = snapshot.selectedNodeId
 
-  await nextTick()
-  const focusNodeById = cosmosRef.value?.focusNodeById
-  if (snapshot.selectedNodeId && typeof focusNodeById === 'function') {
-    focusNodeById(snapshot.selectedNodeId)
+  if (snapshot.selectedNodeId) {
+    scheduleCosmosNodeFocus(snapshot.selectedNodeId)
   }
   return true
 }
@@ -1488,6 +1502,16 @@ async function openHistoryEntry(entry: DocumentHistoryEntry): Promise<boolean> {
   await nextTick()
   editorRef.value?.focusEditor()
   return true
+}
+
+function scheduleCosmosNodeFocus(nodeId: string, remainingAttempts = 12) {
+  if (!nodeId || remainingAttempts <= 0) return
+  const focusNodeById = cosmosRef.value?.focusNodeById
+  if (typeof focusNodeById === 'function' && focusNodeById(nodeId)) return
+
+  setTimeout(() => {
+    scheduleCosmosNodeFocus(nodeId, remainingAttempts - 1)
+  }, 80)
 }
 
 function historyMenuItemCount(side: 'back' | 'forward'): number {
@@ -1678,11 +1702,7 @@ async function openNoteInCosmosFromPalette() {
   }
 
   cosmos.selectNode(match.id)
-  await nextTick()
-  const focusNodeById = cosmosRef.value?.focusNodeById
-  if (typeof focusNodeById === 'function') {
-    focusNodeById(match.id)
-  }
+  scheduleCosmosNodeFocus(match.id)
   recordCosmosHistorySnapshot()
   return true
 }
@@ -2820,10 +2840,11 @@ async function openQuickOpen(initialQuery = '') {
   document.querySelector<HTMLInputElement>('[data-quick-open-input=\"true\"]')?.focus()
 }
 
-function closeQuickOpen() {
+function closeQuickOpen(restoreFocus = true) {
   quickOpenVisible.value = false
   quickOpenQuery.value = ''
   quickOpenActiveIndex.value = 0
+  if (!restoreFocus) return
   void nextTick(() => {
     restoreFocusAfterModalClose()
   })
@@ -2850,19 +2871,42 @@ function openCommandPalette() {
 async function runQuickOpenAction(id: string) {
   const action = quickOpenActionResults.value.find((item) => item.id === id)
   if (!action) return
-  const shouldClose = await action.run()
-  if (!shouldClose) return
-  closeQuickOpen()
-  nextTick(() => {
-    if (
-      !newFileModalVisible.value &&
-      !newFolderModalVisible.value &&
-      !openDateModalVisible.value &&
-      !shortcutsModalVisible.value
-    ) {
-      editorRef.value?.focusEditor()
+  const closesBeforeRun = Boolean(action.closeBeforeRun)
+  const hasLoadingModal = Boolean(action.loadingLabel)
+  if (closesBeforeRun && quickOpenVisible.value) {
+    closeQuickOpen(false)
+  }
+  if (hasLoadingModal) {
+    cosmosCommandLoadingLabel.value = action.loadingLabel ?? 'Loading graph...'
+    cosmosCommandLoadingVisible.value = true
+  }
+  try {
+    const shouldClose = await action.run()
+    if (!closesBeforeRun && shouldClose) {
+      closeQuickOpen()
     }
-  })
+    if (!shouldClose) return
+    nextTick(() => {
+      if (
+        !newFileModalVisible.value &&
+        !newFolderModalVisible.value &&
+        !openDateModalVisible.value &&
+        !shortcutsModalVisible.value &&
+        !cosmosCommandLoadingVisible.value
+      ) {
+        editorRef.value?.focusEditor()
+      }
+    })
+  } catch (err) {
+    filesystem.errorMessage.value = err instanceof Error ? err.message : 'Command failed.'
+    if (!closesBeforeRun) {
+      closeQuickOpen()
+    }
+  } finally {
+    if (hasLoadingModal) {
+      cosmosCommandLoadingVisible.value = false
+    }
+  }
 }
 
 async function createNewFileFromPalette() {
@@ -3204,6 +3248,7 @@ function onOpenDateInputKeydown(event: KeyboardEvent) {
 
 function activeModalSelector(): string | null {
   if (wikilinkRewritePrompt.value) return '[data-modal="wikilink-rewrite"]'
+  if (cosmosCommandLoadingVisible.value) return '[data-modal="cosmos-command-loading"]'
   if (indexStatusModalVisible.value) return '[data-modal="index-status"]'
   if (shortcutsModalVisible.value) return '[data-modal="shortcuts"]'
   if (openDateModalVisible.value) return '[data-modal="open-date"]'
@@ -3216,6 +3261,7 @@ function activeModalSelector(): string | null {
 function hasBlockingModalOpen(): boolean {
   return Boolean(
     quickOpenVisible.value ||
+    cosmosCommandLoadingVisible.value ||
     indexStatusModalVisible.value ||
     newFileModalVisible.value ||
     newFolderModalVisible.value ||
@@ -3362,6 +3408,11 @@ function onWindowKeydown(event: KeyboardEvent) {
     event.preventDefault()
     event.stopPropagation()
     closeIndexStatusModal()
+    return
+  }
+  if (isEscape && cosmosCommandLoadingVisible.value) {
+    event.preventDefault()
+    event.stopPropagation()
     return
   }
   if (isEscape && workspace.sidebarMode.value === 'cosmos') {
@@ -3533,6 +3584,13 @@ watch(
 
 watch(quickOpenQuery, () => {
   quickOpenActiveIndex.value = 0
+})
+
+watch(cosmosCommandLoadingVisible, (visible) => {
+  if (!visible) return
+  void nextTick(() => {
+    document.querySelector<HTMLElement>('[data-modal="cosmos-command-loading"]')?.focus()
+  })
 })
 
 watch(searchQuery, (next) => {
@@ -4362,6 +4420,24 @@ onBeforeUnmount(() => {
           <div v-else-if="!quickOpenIsActionMode && !quickOpenResults.length" class="placeholder">
             {{ quickOpenQuery.trim() ? 'No matching files' : 'Type to search files' }}
           </div>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="cosmosCommandLoadingVisible" class="modal-overlay">
+      <div
+        class="modal confirm-modal cosmos-command-loading-modal"
+        data-modal="cosmos-command-loading"
+        role="dialog"
+        aria-modal="true"
+        aria-live="polite"
+        aria-labelledby="cosmos-command-loading-title"
+        tabindex="-1"
+      >
+        <h3 id="cosmos-command-loading-title" class="confirm-title">Opening Cosmos</h3>
+        <p class="confirm-text">{{ cosmosCommandLoadingLabel }}</p>
+        <div class="cosmos-command-loading-track">
+          <div class="cosmos-command-loading-bar"></div>
         </div>
       </div>
     </div>
@@ -6079,6 +6155,43 @@ onBeforeUnmount(() => {
 
 .confirm-modal:not(.index-status-modal) {
   width: min(560px, calc(100vw - 32px));
+}
+
+.cosmos-command-loading-modal {
+  width: min(460px, calc(100vw - 32px));
+}
+
+.cosmos-command-loading-track {
+  margin-top: 6px;
+  height: 8px;
+  width: 100%;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #e2e8f0;
+}
+
+.ide-root.dark .cosmos-command-loading-track {
+  background: #3e4451;
+}
+
+.cosmos-command-loading-bar {
+  height: 100%;
+  width: 42%;
+  border-radius: 999px;
+  background-image: linear-gradient(90deg, #2563eb 0%, #3b82f6 50%, #2563eb 100%);
+  background-size: 200% 100%;
+  animation: cosmos-command-loading-slide 1.05s linear infinite;
+}
+
+@keyframes cosmos-command-loading-slide {
+  from {
+    transform: translateX(-120%);
+    background-position: 0% 0%;
+  }
+  to {
+    transform: translateX(260%);
+    background-position: 100% 0%;
+  }
 }
 
 .confirm-title {

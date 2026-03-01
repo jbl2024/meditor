@@ -340,6 +340,7 @@ describe('App cosmos integration', () => {
     await flushUi()
     await flushUi()
     expect(mounted.root.querySelector('[data-cosmos-stub="true"]')).toBeTruthy()
+    expect(mounted.root.querySelector('[data-quick-open-input="true"]')).toBeFalsy()
 
     // Back to note, then command: Open Note in Cosmos
     mounted.root.querySelector<HTMLButtonElement>('button[aria-label^="Back"]')?.click()
@@ -363,6 +364,67 @@ describe('App cosmos integration', () => {
 
     expect(mounted.root.querySelector('[data-cosmos-stub="true"]')).toBeTruthy()
     expect((mounted.root.textContent ?? '').toLowerCase()).toContain('opened-from-cosmos')
+    expect(mounted.root.querySelector('[data-quick-open-input="true"]')).toBeFalsy()
+
+    mounted.app.unmount()
+  })
+
+  it('closes command palette immediately and shows cosmos loading modal while action is running', async () => {
+    window.localStorage.setItem('tomosona.working-folder.path', '/vault')
+    let resolveGraphLoad: ((value: {
+      nodes: Array<{ id: string; path: string; label: string; degree: number; tags: string[]; cluster: number | null }>
+      edges: Array<{ source: string; target: string; type: 'wikilink' | 'semantic'; score?: number }>
+      generated_at_ms: number
+    }) => void) | null = null
+
+    hoisted.getWikilinkGraph.mockImplementationOnce(
+      () => new Promise((resolve) => {
+        resolveGraphLoad = resolve
+      })
+    )
+
+    const mounted = mountApp()
+    await flushUi()
+    await flushUi()
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'P', ctrlKey: true, shiftKey: true, bubbles: true }))
+    await flushUi()
+
+    const paletteInput = mounted.root.querySelector<HTMLInputElement>('[data-quick-open-input="true"]')
+    expect(paletteInput).toBeTruthy()
+    if (!paletteInput) {
+      mounted.app.unmount()
+      return
+    }
+
+    paletteInput.value = '>open cosmos view'
+    paletteInput.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushUi()
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    await flushUi()
+
+    expect(mounted.root.querySelector('[data-quick-open-input="true"]')).toBeFalsy()
+    expect(mounted.root.querySelector('[data-modal="cosmos-command-loading"]')).toBeTruthy()
+
+    expect(resolveGraphLoad).toBeTruthy()
+    resolveGraphLoad?.({
+      nodes: [
+        {
+          id: '/vault/opened-from-cosmos.md',
+          path: '/vault/opened-from-cosmos.md',
+          label: 'opened-from-cosmos',
+          degree: 1,
+          tags: [],
+          cluster: null
+        }
+      ],
+      edges: [],
+      generated_at_ms: Date.now()
+    })
+    await flushUi()
+    await flushUi()
+
+    expect(mounted.root.querySelector('[data-modal="cosmos-command-loading"]')).toBeFalsy()
 
     mounted.app.unmount()
   })
