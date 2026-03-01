@@ -223,7 +223,7 @@ function onEditorKeydown(event: KeyboardEvent) {
 
 <style scoped>
 .meditor-html-node {
-  margin: 0.5rem 0;
+  margin: 0.18rem 0;
 }
 
 .meditor-html-surface {
@@ -243,10 +243,10 @@ function onEditorKeydown(event: KeyboardEvent) {
   font-family: var(--font-mono);
   font-size: 0.72rem;
   line-height: 1;
-  padding: 0.24rem 0.42rem;
+  padding: 0.2rem 0.36rem;
   position: absolute;
-  right: 0.58rem;
-  top: 0.56rem;
+  right: 0.42rem;
+  top: 0.38rem;
   z-index: 2;
   opacity: 0;
   pointer-events: none;
@@ -261,7 +261,6 @@ function onEditorKeydown(event: KeyboardEvent) {
 .meditor-html-preview {
   border: 1px solid transparent;
   border-radius: 0.7rem;
-  padding: 2.45rem 1.05rem 1rem;
   transition: border-color 120ms ease, background-color 120ms ease;
 }
 
