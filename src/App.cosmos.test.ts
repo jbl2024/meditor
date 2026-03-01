@@ -366,4 +366,34 @@ describe('App cosmos integration', () => {
 
     mounted.app.unmount()
   })
+
+  it('exits cosmos when clicking a file tab', async () => {
+    window.localStorage.setItem('tomosona.working-folder.path', '/vault')
+    const mounted = mountApp()
+    await flushUi()
+    await flushUi()
+
+    // Open a note first so at least one tab exists.
+    mounted.root.querySelector<HTMLButtonElement>('button[aria-label="Cosmos view"]')?.click()
+    await flushUi()
+    await flushUi()
+    mounted.root.querySelector<HTMLButtonElement>('button[data-cosmos-open="true"]')?.click()
+    await flushUi()
+    mounted.root.querySelector<HTMLButtonElement>('.cosmos-node-title-link')?.click()
+    await flushUi()
+
+    // Return to cosmos, then click the file tab.
+    mounted.root.querySelector<HTMLButtonElement>('button[aria-label="Cosmos view"]')?.click()
+    await flushUi()
+    await flushUi()
+    expect(mounted.root.querySelector('[data-cosmos-stub="true"]')).toBeTruthy()
+
+    mounted.root.querySelector<HTMLElement>('.tab-item')?.click()
+    await flushUi()
+
+    expect(mounted.root.querySelector('[data-cosmos-stub="true"]')).toBeFalsy()
+    expect(mounted.root.querySelector('[data-editor-stub="true"]')).toBeTruthy()
+
+    mounted.app.unmount()
+  })
 })

@@ -1464,8 +1464,17 @@ async function openNoteInCosmosFromPalette() {
   if (!opened) return false
 
   const target = activePath.trim()
-  const match = cosmos.graph.value.nodes.find((node) => node.path === target || node.id === target)
+  const targetKey = normalizePathKey(target)
+  let match = cosmos.graph.value.nodes.find((node) => normalizePathKey(node.path) === targetKey || normalizePathKey(node.id) === targetKey)
   if (!match) {
+    await cosmos.refreshGraph()
+    match = cosmos.graph.value.nodes.find((node) => normalizePathKey(node.path) === targetKey || normalizePathKey(node.id) === targetKey)
+  }
+  if (!match) {
+    if (cosmos.error.value) {
+      filesystem.errorMessage.value = cosmos.error.value
+      return false
+    }
     filesystem.errorMessage.value = 'Active note is not available in the current graph index.'
     return true
   }
@@ -2012,6 +2021,11 @@ async function onSearchResultOpen(hit: SearchHit) {
 async function onTabClick(path: string) {
   const opened = await setActiveTabWithAutosave(path)
   if (!opened) return
+  if (workspace.sidebarMode.value === 'cosmos') {
+    const fallback = previousNonCosmosMode.value
+    workspace.setSidebarMode(fallback)
+    persistSidebarMode()
+  }
 }
 
 async function openNextTabWithAutosave() {

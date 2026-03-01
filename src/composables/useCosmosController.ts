@@ -257,7 +257,11 @@ export function useCosmosController(deps: CosmosDeps) {
     try {
       const active = deps.activeTabPath.value
       if (active && isMarkdownPath(active)) {
-        await deps.reindexMarkdownFile(active)
+        try {
+          await deps.reindexMarkdownFile(active)
+        } catch (err) {
+          console.warn('[cosmos] active note reindex failed; continuing with existing graph index', err)
+        }
       }
       let raw: WikilinkGraph | null = null
       let lastError: unknown = null

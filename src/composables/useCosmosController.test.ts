@@ -245,4 +245,25 @@ describe('useCosmosController', () => {
     })
     scope.stop()
   })
+
+  it('continues graph loading when active-note reindex fails', async () => {
+    const scope = effectScope()
+    await scope.run(async () => {
+      const ctrl = useCosmosController({
+        workingFolderPath: ref('/vault'),
+        activeTabPath: ref('/vault/a.md'),
+        getWikilinkGraph: vi.fn(async () => rawGraph),
+        reindexMarkdownFile: vi.fn(async () => {
+          throw new Error('database busy')
+        }),
+        readTextFile: vi.fn(async () => '# A'),
+        ftsSearch: vi.fn(async () => [])
+      })
+
+      await ctrl.refreshGraph()
+      expect(ctrl.error.value).toBe('')
+      expect(ctrl.graph.value.nodes.length).toBe(rawGraph.nodes.length)
+    })
+    scope.stop()
+  })
 })
