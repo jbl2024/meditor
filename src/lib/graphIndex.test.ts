@@ -9,8 +9,8 @@ import type { WikilinkGraph } from './api'
 function sampleGraph(): WikilinkGraph {
   return {
     nodes: [
-      { id: 'a.md', path: 'a.md', label: 'a', degree: 3, tags: ['dev'], cluster: null },
-      { id: 'b.md', path: 'b.md', label: 'b', degree: 2, tags: [], cluster: null },
+      { id: 'a.md', path: 'graph/a.md', label: 'graph/a', degree: 3, tags: ['dev'], cluster: null },
+      { id: 'b.md', path: 'journal/b.md', label: 'journal/b', degree: 2, tags: [], cluster: null },
       { id: 'c.md', path: 'c.md', label: 'c', degree: 1, tags: [], cluster: null },
       { id: 'd.md', path: 'd.md', label: 'd', degree: 0, tags: [], cluster: null }
     ],
@@ -42,12 +42,19 @@ describe('graphIndex', () => {
   it('builds cosmos graph with display hints', () => {
     const graph = buildCosmosGraph(sampleGraph())
     const a = graph.nodes.find((node) => node.id === 'a.md')
+    const b = graph.nodes.find((node) => node.id === 'b.md')
+    const c = graph.nodes.find((node) => node.id === 'c.md')
     const d = graph.nodes.find((node) => node.id === 'd.md')
 
     expect(graph.nodes).toHaveLength(4)
     expect(graph.edges).toHaveLength(2)
     expect(a?.cluster).toBe(0)
     expect(a?.showLabelByDefault).toBe(true)
+    expect(a?.displayLabel).toBe('a')
+    expect(a?.folderKey).toBe('graph')
+    expect(a?.fullLabel).toBe('graph/a')
+    expect(b?.folderKey).toBe('journal')
+    expect(c?.folderKey).toBe('root')
     expect((d?.opacityHint ?? 0) > 0).toBe(true)
   })
 })

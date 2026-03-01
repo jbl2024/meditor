@@ -108,7 +108,7 @@ function onFocusModeChange(event: Event) {
     <div class="cosmos-panel-content">
       <div v-if="selectedNode" class="cosmos-node-stats">
         <button type="button" class="cosmos-node-title-link" @click="emit('open-selected')">
-          {{ selectedNode.label }}
+          {{ selectedNode.displayLabel || selectedNode.label }}
         </button>
         <p class="cosmos-node-meta">Degree: {{ selectedNode.degree }} · Cluster: {{ selectedNode.cluster }}</p>
         <p class="cosmos-node-meta">Visible links: {{ selectedLinkCount }}</p>

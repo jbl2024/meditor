@@ -32,6 +32,9 @@ type ForceGraphInstance = {
   linkVisibility: (value: boolean | ((edge: RenderEdge) => boolean)) => ForceGraphInstance
   linkWidth: (value: (edge: RenderEdge) => number) => ForceGraphInstance
   linkOpacity: (value: (edge: RenderEdge) => number) => ForceGraphInstance
+  linkDirectionalArrowLength: (value: number | ((edge: RenderEdge) => number)) => ForceGraphInstance
+  linkDirectionalArrowColor: (value: string | ((edge: RenderEdge) => string)) => ForceGraphInstance
+  linkDirectionalArrowRelPos: (value: number | ((edge: RenderEdge) => number)) => ForceGraphInstance
   showNavInfo: (value: boolean) => ForceGraphInstance
   enableNavigationControls: (value: boolean) => ForceGraphInstance
   enableNodeDrag: (value: boolean) => ForceGraphInstance
@@ -57,7 +60,8 @@ type ForceGraphInstance = {
   _destructor?: () => void
 }
 
-const CLUSTER_COLORS = ['#4cc9f0', '#90be6d', '#f9c74f', '#f9844a', '#577590', '#43aa8b', '#4895ef']
+const FOLDER_COLORS = ['#4cc9f0', '#90be6d', '#f9c74f', '#f9844a', '#43aa8b', '#4895ef', '#84cc16', '#22d3ee', '#f97316', '#a3e635']
+const CLUSTER_FALLBACK_COLORS = ['#4cc9f0', '#90be6d', '#f9c74f', '#f9844a', '#577590', '#43aa8b', '#4895ef']
 const HOVER_THROTTLE_MS = 24
 const DOUBLE_CLICK_MS = 260
 
@@ -75,7 +79,7 @@ const emit = defineEmits<{
 const rootEl = ref<HTMLDivElement | null>(null)
 const graphEl = ref<HTMLDivElement | null>(null)
 const graphInstance = ref<ForceGraphInstance | null>(null)
-const labels = ref<Array<{ id: string; text: string; x: number; y: number }>>([])
+const labels = ref<Array<{ id: string; text: string; x: number; y: number; color: string }>>([])
 
 let hoverThrottleTimer: ReturnType<typeof setTimeout> | null = null
 let labelRaf = 0
@@ -93,8 +97,28 @@ let didInitialAutoFit = false
 
 const hasRenderableGraph = computed(() => props.graph.nodes.length > 0)
 
-function clusterColor(cluster: number): string {
-  return CLUSTER_COLORS[Math.abs(cluster) % CLUSTER_COLORS.length]
+function hashString(value: string): number {
+  let hash = 0
+  for (let index = 0; index < value.length; index += 1) {
+    hash = ((hash << 5) - hash + value.charCodeAt(index)) | 0
+  }
+  return Math.abs(hash)
+}
+
+function clusterFallbackColor(cluster: number): string {
+  return CLUSTER_FALLBACK_COLORS[Math.abs(cluster) % CLUSTER_FALLBACK_COLORS.length]
+}
+
+/**
+ * Folder-first color mapping.
+ * Priority: folderKey palette > cluster fallback.
+ */
+function nodeBaseColor(node: RenderNode): string {
+  if (node.folderKey) {
+    const slot = hashString(node.folderKey) % FOLDER_COLORS.length
+    return FOLDER_COLORS[slot]
+  }
+  return clusterFallbackColor(node.cluster)
 }
 
 function edgeKey(sourceId: string, targetId: string): string {
@@ -111,6 +135,17 @@ function isEdgeHighlighted(link: RenderEdge): boolean {
   const sourceId = typeof link.source === 'string' ? link.source : link.source.id
   const targetId = typeof link.target === 'string' ? link.target : link.target.id
   return highlightedEdgeKeys.has(edgeKey(sourceId, targetId))
+}
+
+function linkArrowColor(link: RenderEdge): string {
+  if (isEdgeHighlighted(link)) return '#f8fafc'
+  return hoveredNodeId ? '#94a3b8' : '#475569'
+}
+
+function labelColor(nodeId: string): string {
+  if (selectedNodeId && nodeId === selectedNodeId) return '#0f172a'
+  if (hoveredNodeId && (nodeId === hoveredNodeId || hoveredNeighborIds.has(nodeId))) return '#0f172a'
+  return '#e2e8f0'
 }
 
 /**
@@ -201,7 +236,7 @@ function updateLabelPositions() {
     return
   }
 
-  const nextLabels: Array<{ id: string; text: string; x: number; y: number }> = []
+  const nextLabels: Array<{ id: string; text: string; x: number; y: number; color: string }> = []
   const renderData = graph.graphData() as unknown as { nodes: RenderNode[] }
 
   for (const node of renderData.nodes ?? []) {
@@ -211,7 +246,13 @@ function updateLabelPositions() {
     if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) continue
     if (point.x < 0 || point.y < 0 || point.x > width || point.y > height) continue
 
-    nextLabels.push({ id: node.id, text: node.label, x: point.x, y: point.y })
+    nextLabels.push({
+      id: node.id,
+      text: node.displayLabel,
+      x: point.x,
+      y: point.y,
+      color: labelColor(node.id)
+    })
   }
 
   labels.value = nextLabels
@@ -283,7 +324,7 @@ async function initializeGraph() {
       if (selectedNodeId && node.id === selectedNodeId) return '#facc15'
       if (hoveredNodeId && node.id === hoveredNodeId) return '#fef08a'
       if (hoveredNodeId && hoveredNeighborIds.has(node.id)) return '#e2e8f0'
-      const base = clusterColor(node.cluster)
+      const base = nodeBaseColor(node)
       return shouldDimNode(node.id) ? `${base}44` : base
     })
     .linkVisibility(() => true)
@@ -292,8 +333,11 @@ async function initializeGraph() {
       if (!hoveredNodeId) return '#64748b'
       return '#334155'
     })
-    .linkWidth((link) => (isEdgeHighlighted(link) ? 1.8 : 0.65))
+    .linkWidth((link) => (isEdgeHighlighted(link) ? 1.4 : 0.45))
     .linkOpacity((link) => (isEdgeHighlighted(link) ? 0.96 : hoveredNodeId ? 0.08 : 0.22))
+    .linkDirectionalArrowLength((link) => (isEdgeHighlighted(link) ? 3.4 : 2.6))
+    .linkDirectionalArrowRelPos(0.9)
+    .linkDirectionalArrowColor((link) => linkArrowColor(link))
     .cooldownTicks(140)
     .cooldownTime(5500)
     .d3VelocityDecay(0.35)
@@ -439,7 +483,7 @@ defineExpose({
         v-for="item in labels"
         :key="item.id"
         class="cosmos-label"
-        :style="{ transform: `translate(${item.x}px, ${item.y}px)` }"
+        :style="{ transform: `translate(${item.x}px, ${item.y}px)`, color: item.color }"
       >
         {{ item.text }}
       </div>

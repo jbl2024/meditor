@@ -7,6 +7,9 @@ const nodeA: CosmosGraphNode = {
   id: 'a',
   path: 'graph/a.md',
   label: 'graph/a',
+  displayLabel: 'a',
+  folderKey: 'graph',
+  fullLabel: 'graph/a',
   degree: 2,
   tags: [],
   cluster: 0,
@@ -19,6 +22,9 @@ const nodeB: CosmosGraphNode = {
   id: 'b',
   path: 'graph/b.md',
   label: 'graph/b',
+  displayLabel: 'b',
+  folderKey: 'graph',
+  fullLabel: 'graph/b',
   degree: 1,
   tags: [],
   cluster: 0,
@@ -145,6 +151,40 @@ describe('CosmosSidebarPanel', () => {
     expect(events.selectMatch).toBe('a')
     expect(events.jumpRelated).toBe('b')
     expect(events.focusMode).toBe(true)
+
+    app.unmount()
+  })
+
+  it('renders selected title using displayLabel', async () => {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+
+    const Harness = defineComponent({
+      setup() {
+        return () =>
+          h(CosmosSidebarPanel, {
+            summary: { nodes: 2, edges: 1 },
+            query: '',
+            matches: [],
+            focusMode: false,
+            focusDepth: 1,
+            selectedNode: nodeA,
+            selectedLinkCount: 1,
+            preview: '',
+            previewLoading: false,
+            previewError: '',
+            outgoingNodes: [],
+            incomingNodes: [],
+            loading: false
+          })
+      }
+    })
+
+    const app = createApp(Harness)
+    app.mount(root)
+    await flushUi()
+
+    expect(root.querySelector('.cosmos-node-title-link')?.textContent).toContain('a')
 
     app.unmount()
   })

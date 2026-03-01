@@ -3,17 +3,32 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import CosmosView from './CosmosView.vue'
 import type { CosmosGraph } from '../../lib/graphIndex'
 
-type RenderNode = { id: string; path: string; label: string; x?: number; y?: number; z?: number }
+type RenderNode = {
+  id: string
+  path: string
+  label: string
+  displayLabel?: string
+  folderKey?: string
+  x?: number
+  y?: number
+  z?: number
+}
 
 type MockState = {
   onNodeClick: ((node: RenderNode) => void) | null
   onNodeHover: ((node: RenderNode | null) => void) | null
+  arrowLengthCalls: Array<number | ((edge: unknown) => number)>
+  arrowRelPosCalls: Array<number | ((edge: unknown) => number)>
+  arrowColorCalls: Array<string | ((edge: unknown) => string)>
   data: { nodes: RenderNode[]; links: Array<{ source: string; target: string; type: 'wikilink' }> }
 }
 
 const mockState: MockState = {
   onNodeClick: null,
   onNodeHover: null,
+  arrowLengthCalls: [],
+  arrowRelPosCalls: [],
+  arrowColorCalls: [],
   data: { nodes: [], links: [] }
 }
 
@@ -35,6 +50,18 @@ const mockGraph = {
   linkColor: () => mockGraph,
   linkWidth: () => mockGraph,
   linkOpacity: () => mockGraph,
+  linkDirectionalArrowLength(value: number | ((edge: unknown) => number)) {
+    mockState.arrowLengthCalls.push(value)
+    return mockGraph
+  },
+  linkDirectionalArrowColor(value: string | ((edge: unknown) => string)) {
+    mockState.arrowColorCalls.push(value)
+    return mockGraph
+  },
+  linkDirectionalArrowRelPos(value: number | ((edge: unknown) => number)) {
+    mockState.arrowRelPosCalls.push(value)
+    return mockGraph
+  },
   showNavInfo: () => mockGraph,
   enableNavigationControls: () => mockGraph,
   enableNodeDrag: () => mockGraph,
@@ -78,6 +105,9 @@ describe('CosmosView', () => {
     document.body.innerHTML = ''
     mockState.onNodeClick = null
     mockState.onNodeHover = null
+    mockState.arrowLengthCalls = []
+    mockState.arrowRelPosCalls = []
+    mockState.arrowColorCalls = []
     mockState.data = { nodes: [], links: [] }
   })
 
@@ -91,6 +121,9 @@ describe('CosmosView', () => {
           id: 'a.md',
           path: '/vault/a.md',
           label: 'a',
+          displayLabel: 'a',
+          folderKey: 'vault',
+          fullLabel: 'a',
           degree: 1,
           tags: [],
           cluster: 0,
@@ -127,6 +160,10 @@ describe('CosmosView', () => {
     await flushUi()
 
     expect(selected.value).toBe('a.md')
+    expect(mockState.arrowLengthCalls.length).toBeGreaterThan(0)
+    expect(mockState.arrowRelPosCalls.length).toBeGreaterThan(0)
+    expect(mockState.arrowColorCalls.length).toBeGreaterThan(0)
+    expect(mockState.data.nodes[0]?.displayLabel).toBe('a')
 
     app.unmount()
   })

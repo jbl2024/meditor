@@ -11,6 +11,9 @@ export type CosmosGraphNode = WikilinkGraphNode & {
   importance: number
   opacityHint: number
   showLabelByDefault: boolean
+  displayLabel: string
+  folderKey: string
+  fullLabel: string
 }
 
 export type CosmosGraph = {
@@ -26,6 +29,45 @@ export type HubSelectionOptions = {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
+}
+
+/**
+ * Computes user-facing label metadata from the indexed path/label fields.
+ *
+ * Examples:
+ * - label `graph/synapse` => displayLabel `synapse`, folderKey `graph`
+ * - path `journal/2026-03-01.md` => displayLabel `2026-03-01`, folderKey `journal`
+ * - root file `inbox.md` => folderKey `root`
+ */
+function deriveNodeLabelParts(node: Pick<WikilinkGraphNode, 'path' | 'label'>): {
+  displayLabel: string
+  folderKey: string
+  fullLabel: string
+} {
+  const normalizedPath = node.path.replace(/\\/g, '/')
+  const normalizedLabel = (node.label || '').replace(/\\/g, '/')
+  const fullLabel = normalizedLabel || normalizedPath.replace(/\.(md|markdown)$/i, '')
+
+  const labelSegments = fullLabel.split('/').filter((segment) => segment.length > 0)
+  const pathSegments = normalizedPath.split('/').filter((segment) => segment.length > 0)
+
+  const fallbackStem = (pathSegments[pathSegments.length - 1] ?? fullLabel ?? node.path)
+    .replace(/\.(md|markdown)$/i, '')
+  const displayLabel = labelSegments[labelSegments.length - 1] ?? fallbackStem
+
+  const firstLabelSegment = labelSegments[0]
+  const firstPathSegment = pathSegments[0]
+  const folderKey = firstLabelSegment && firstLabelSegment !== displayLabel
+    ? firstLabelSegment
+    : firstPathSegment && pathSegments.length > 1
+      ? firstPathSegment
+      : 'root'
+
+  return {
+    displayLabel,
+    folderKey,
+    fullLabel
+  }
 }
 
 /**
@@ -125,13 +167,17 @@ export function buildCosmosGraph(raw: WikilinkGraph): CosmosGraph {
     const cluster = clusters.get(node.id) ?? 0
     const importance = node.degree + (node.tags.length > 0 ? 0.25 : 0)
     const opacityHint = clamp(0.28 + Math.log10(node.degree + 1) * 0.55, 0.28, 1)
+    const labelParts = deriveNodeLabelParts(node)
 
     return {
       ...node,
       cluster,
       importance,
       opacityHint,
-      showLabelByDefault: hubs.has(node.id)
+      showLabelByDefault: hubs.has(node.id),
+      displayLabel: labelParts.displayLabel,
+      folderKey: labelParts.folderKey,
+      fullLabel: labelParts.fullLabel
     }
   })
 
