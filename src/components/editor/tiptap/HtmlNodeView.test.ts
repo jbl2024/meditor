@@ -52,6 +52,23 @@ describe('HtmlNodeView', () => {
     harness.app.unmount()
   })
 
+  it('renders wikilink tokens inside html preview as wikilink anchors', async () => {
+    const harness = mountHarness({
+      initialHtml: '<p>Go to [[docs/note#Section 2|S2]] and [[docs/alpha]]</p>'
+    })
+    await flush()
+
+    const anchors = Array.from(harness.root.querySelectorAll('.meditor-html-preview a.wikilink')) as HTMLAnchorElement[]
+    expect(anchors).toHaveLength(2)
+    expect(anchors[0].getAttribute('data-wikilink-target')).toBe('docs/note#Section 2')
+    expect(anchors[0].textContent).toBe('S2')
+    expect(anchors[0].getAttribute('href')).toBe('wikilink:docs%2Fnote%23Section%202')
+    expect(anchors[1].getAttribute('data-wikilink-target')).toBe('docs/alpha')
+    expect(anchors[1].textContent).toBe('docs/alpha')
+
+    harness.app.unmount()
+  })
+
   it('toggles source mode and updates html through textarea input', async () => {
     const harness = mountHarness()
     await flush()

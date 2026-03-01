@@ -3,6 +3,7 @@ import { computed, nextTick, ref } from 'vue'
 import { NodeViewWrapper } from '@tiptap/vue-3'
 import { common, createLowlight } from 'lowlight'
 import { sanitizeHtmlForPreview } from '../../../lib/htmlSanitizer'
+import { parseWikilinkTarget } from '../../../lib/wikilinks'
 
 const INDENT = '  '
 const lowlight = createLowlight(common)
@@ -26,7 +27,7 @@ const sourcePre = ref<HTMLElement | null>(null)
 const showSource = ref(false)
 
 const html = computed(() => String(props.node.attrs.html ?? ''))
-const sanitizedPreview = computed(() => sanitizeHtmlForPreview(html.value))
+const sanitizedPreview = computed(() => toPreviewHtml(html.value))
 const highlightedSource = computed(() => highlightHtmlSource(html.value))
 
 function escapeHtml(value: string): string {
@@ -62,6 +63,68 @@ function highlightHtmlSource(value: string): string {
   } catch {
     return escapeHtml(value)
   }
+}
+
+function toPreviewHtml(value: string): string {
+  const sanitized = sanitizeHtmlForPreview(value)
+  if (!sanitized || !sanitized.includes('[[')) return sanitized
+
+  const root = document.createElement('div')
+  root.innerHTML = sanitized
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  const textNodes: Text[] = []
+  while (walker.nextNode()) {
+    const node = walker.currentNode
+    if (node instanceof Text) textNodes.push(node)
+  }
+
+  const wikilinkRe = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g
+  textNodes.forEach((node) => {
+    const parent = node.parentElement
+    if (!parent) return
+    if (parent.closest('a,code,pre')) return
+
+    const source = node.nodeValue ?? ''
+    if (!source.includes('[[')) return
+    let hasReplacement = false
+    const fragment = document.createDocumentFragment()
+    let offset = 0
+    let match: RegExpExecArray | null
+    wikilinkRe.lastIndex = 0
+
+    while ((match = wikilinkRe.exec(source)) !== null) {
+      const full = match[0]
+      const start = match.index
+      const end = start + full.length
+      const rawTarget = (match[1] ?? '').trim()
+      const alias = (match[2] ?? '').trim()
+      if (start > offset) {
+        fragment.append(document.createTextNode(source.slice(offset, start)))
+      }
+      if (!rawTarget) {
+        fragment.append(document.createTextNode(full))
+      } else {
+        const parsed = parseWikilinkTarget(rawTarget)
+        const defaultLabel = parsed.anchor?.heading && !parsed.notePath ? parsed.anchor.heading : rawTarget
+        const anchor = document.createElement('a')
+        anchor.className = 'wikilink'
+        anchor.setAttribute('data-wikilink-target', rawTarget)
+        anchor.setAttribute('href', `wikilink:${encodeURIComponent(rawTarget)}`)
+        anchor.textContent = alias || defaultLabel
+        fragment.append(anchor)
+        hasReplacement = true
+      }
+      offset = end
+    }
+
+    if (!hasReplacement) return
+    if (offset < source.length) {
+      fragment.append(document.createTextNode(source.slice(offset)))
+    }
+    parent.replaceChild(fragment, node)
+  })
+
+  return root.innerHTML
 }
 
 function onInput(event: Event) {
