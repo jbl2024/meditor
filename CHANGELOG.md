@@ -18,6 +18,34 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.9.0] - 2026-03-01
+
+### Added
+- feat(second-brain): add session deletion with confirm modal and polish dark sessions panel UI (cf7f672)
+- feat(second-brain): redesign UI around target-note workflow with session tab and persisted linkage (e87460b)
+- feat(second-brain): add command palette init flow to generate .tomosona/conf.json for openai/anthropic/custom (ddfc17d)
+- feat(second-brain): add modular deliberation view with Tauri session backend, streaming events, and draft publishing workflow (d79147f)
+
+### Changed
+- style(second-brain): remove empty composer status row spacing (697cdc1)
+- style(second-brain): pin composer to bottom of center panel (f8274bb)
+- style(second-brain): switch context cards to horizontal scroll rail (7ca73fb)
+- style(second-brain): switch context cards to horizontal scroll rail (df4662a)
+- refactor(second-brain): simplify context UI and use explorer click-to-toggle with classic actions menu (74b2025)
+- refactor(second-brain): simplify context UI and use explorer click-to-toggle with classic actions menu (2953241)
+- refactor(second-brain): remove target-note workflow and replace right pane with session list (fc1b204)
+- refactor(second-brain): simplify chat composer, remove mode/export UI, and disable escape-close behavior (03c5a1d)
+- refactor(second-brain): drive target/context from sidebar explorer with +/- actions and resizable session-target panels (697c370)
+- docs(readme): add second brain conf.json examples for openai local/remote, groq, and anthropic (aa5ee41)
+- chore(build): add local preflight targets and build cleanup commands (32fe962)
+
+### Fixed
+- fix(navigation): avoid switching between cosmos and second-brain when opening notes (19c7042)
+- fix(second-brain): render assistant responses progressively from stream events (2e5a1a0)
+- fix(second-brain): load most recent session on first open instead of auto-creating new sessions (6e641c8)
+- fix(second-brain): store config globally in user home and update init flow to write ~/.tomosona/conf.json (ae0e5dc)
+- fix(frontend): resolve vue-tsc type errors in cosmos test and quick-open click handler (76258bc)
+
 ## [0.8.0] - 2026-03-01
 
 ### Added
