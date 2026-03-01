@@ -61,6 +61,7 @@
 }
 
 .editor-holder .ProseMirror p {
+  font-size: calc(1rem * var(--editor-zoom, 1));
   margin: 0.42rem 0;
 }
 
