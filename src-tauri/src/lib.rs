@@ -1866,8 +1866,7 @@ fn paths_matching_property_filters(
     Ok(acc.unwrap_or_default())
 }
 
-#[tauri::command]
-fn fts_search(query: String) -> Result<Vec<Hit>> {
+fn fts_search_sync(query: String) -> Result<Vec<Hit>> {
     let conn = open_db()?;
     let root_canonical = active_workspace_root()?;
     let q = query.trim();
@@ -1990,6 +1989,13 @@ fn fts_search(query: String) -> Result<Vec<Hit>> {
         });
     }
     Ok(out)
+}
+
+#[tauri::command]
+async fn fts_search(query: String) -> Result<Vec<Hit>> {
+    tauri::async_runtime::spawn_blocking(move || fts_search_sync(query))
+        .await
+        .map_err(|_| AppError::OperationFailed)?
 }
 
 #[derive(Serialize)]

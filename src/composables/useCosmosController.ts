@@ -74,6 +74,7 @@ export function useCosmosController(deps: CosmosDeps) {
   const previewLoading = ref(false)
   const previewError = ref('')
   const semanticPathOrder = ref<string[]>([])
+  let semanticSearchDebounceTimer: ReturnType<typeof setTimeout> | null = null
 
   let previewRequestToken = 0
   let queryRequestToken = 0
@@ -200,6 +201,17 @@ export function useCosmosController(deps: CosmosDeps) {
       if (requestToken !== queryRequestToken) return
       semanticPathOrder.value = []
     }
+  }
+
+  function scheduleRefreshSemanticMatches() {
+    if (semanticSearchDebounceTimer) {
+      clearTimeout(semanticSearchDebounceTimer)
+      semanticSearchDebounceTimer = null
+    }
+    semanticSearchDebounceTimer = setTimeout(() => {
+      semanticSearchDebounceTimer = null
+      void refreshSemanticMatches()
+    }, 260)
   }
 
   async function loadSelectedPreview() {
@@ -331,6 +343,10 @@ export function useCosmosController(deps: CosmosDeps) {
   }
 
   function clearState() {
+    if (semanticSearchDebounceTimer) {
+      clearTimeout(semanticSearchDebounceTimer)
+      semanticSearchDebounceTimer = null
+    }
     graph.value = { nodes: [], edges: [], generated_at_ms: 0 }
     error.value = ''
     loading.value = false
@@ -349,7 +365,7 @@ export function useCosmosController(deps: CosmosDeps) {
   watch(
     () => query.value,
     () => {
-      void refreshSemanticMatches()
+      scheduleRefreshSemanticMatches()
     }
   )
 
