@@ -130,7 +130,7 @@ function onSearchModeSelect(mode: SearchMode) {
           {{ option.label }}
         </button>
       </div>
-      <p class="cosmos-search-hint">Tip: <code>semantic:</code> concept | <code>lexical:</code> exact term</p>
+      <p class="cosmos-search-hint">Hint: <code>semantic:</code> concept | <code>lexical:</code> exact term</p>
       <div v-if="query.trim()" class="cosmos-match-list">
         <button
           v-for="match in matches"
