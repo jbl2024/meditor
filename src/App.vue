@@ -2427,7 +2427,9 @@ function setSidebarMode(mode: SidebarMode) {
     workspace.setSidebarMode('cosmos')
     persistSidebarMode()
     recordCosmosHistorySnapshot()
-    void cosmos.refreshGraph()
+    if (!cosmos.graph.value.nodes.length) {
+      void cosmos.refreshGraph()
+    }
     return
   }
 
@@ -3645,9 +3647,7 @@ watch(
     if (mode !== 'cosmos') {
       previousNonCosmosMode.value = mode
       persistPreviousNonCosmosMode()
-      return
     }
-    void cosmos.refreshGraph()
   }
 )
 

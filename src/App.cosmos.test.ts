@@ -463,6 +463,42 @@ describe('App cosmos integration', () => {
     mounted.app.unmount()
   })
 
+  it('does not refresh graph again when re-focusing an already loaded cosmos tab', async () => {
+    window.localStorage.setItem('tomosona.working-folder.path', '/vault')
+    const mounted = mountApp()
+    await flushUi()
+    await flushUi()
+
+    mounted.root.querySelector<HTMLButtonElement>('button[aria-label="Cosmos view"]')?.click()
+    await flushUi()
+    await flushUi()
+    expect(hoisted.getWikilinkGraph.mock.calls.length).toBeGreaterThan(0)
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'p', ctrlKey: true, bubbles: true }))
+    await flushUi()
+    const input = mounted.root.querySelector<HTMLInputElement>('[data-quick-open-input="true"]')
+    expect(input).toBeTruthy()
+    if (!input) {
+      mounted.app.unmount()
+      return
+    }
+    input.value = 'opened-from-cosmos'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushUi()
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    await flushUi()
+    await flushUi()
+
+    const callsBeforeRefocus = hoisted.getWikilinkGraph.mock.calls.length
+    mounted.root.querySelector<HTMLButtonElement>('button[aria-label="Cosmos view"]')?.click()
+    await flushUi()
+    await flushUi()
+
+    expect(hoisted.getWikilinkGraph.mock.calls.length).toBe(callsBeforeRefocus)
+
+    mounted.app.unmount()
+  })
+
   it('closes command palette immediately and shows cosmos loading modal while action is running', async () => {
     window.localStorage.setItem('tomosona.working-folder.path', '/vault')
     let resolveGraphLoad: ((value: {
