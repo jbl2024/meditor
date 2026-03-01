@@ -1,12 +1,12 @@
 [package]
-name = "meditor"
+name = "tomosona"
 version = "0.6.0"
 description = "Local-first markdown editor"
 authors = ["you"]
 edition = "2021"
 
 [lib]
-name = "meditor_lib"
+name = "tomosona_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

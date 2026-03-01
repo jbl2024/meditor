@@ -3,7 +3,7 @@
 
 set -e
 
-SVG="public/meditor.svg"
+SVG="public/tomosona.svg"
 BG="#e8e8e8"                # Le gris macOS (apparaîtra bien gris clair, pas noir)
 OUTPUT="icon_prepared.png"
 

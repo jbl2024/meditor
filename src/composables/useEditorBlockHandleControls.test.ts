@@ -90,7 +90,7 @@ describe('useEditorBlockHandleControls', () => {
   it('guards opening when drag handle root indicates active dragging', () => {
     const { controls, dragHandleUiState } = createHarness()
     const root = document.createElement('div')
-    root.className = 'meditor-drag-handle'
+    root.className = 'tomosona-drag-handle'
     root.setAttribute('data-dragging', 'true')
     const btn = document.createElement('button')
     root.appendChild(btn)

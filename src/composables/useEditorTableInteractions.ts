@@ -199,7 +199,7 @@ export function useEditorTableInteractions(options: UseEditorTableInteractionsOp
       bottom: inHorizontalBand ? Math.abs(y - rect.bottom) : Number.POSITIVE_INFINITY
     })
     const inToolbar = Boolean(options.floatingMenuEl.value?.contains(target))
-    const inControls = Boolean(target.closest('.meditor-table-control'))
+    const inControls = Boolean(target.closest('.tomosona-table-control'))
     const inTable = Boolean(target.closest('.ProseMirror table'))
     if (inControls || tableToolbarOpen.value) {
       options.visibility.tableAddTopVisible.value = true

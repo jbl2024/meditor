@@ -1,5 +1,5 @@
 .editor-holder {
-  --meditor-link-color: #2563eb;
+  --tomosona-link-color: #2563eb;
 }
 
 .editor-content-shell {
@@ -41,11 +41,11 @@
 }
 
 .dark .editor-holder {
-  --meditor-link-color: #60a5fa;
+  --tomosona-link-color: #60a5fa;
 }
 
 .editor-holder a.wikilink {
-  color: var(--meditor-link-color);
+  color: var(--tomosona-link-color);
   text-decoration: underline;
 }
 
@@ -279,36 +279,36 @@
   overflow: auto;
 }
 
-.editor-holder .meditor-code-node {
+.editor-holder .tomosona-code-node {
   margin: 0.5rem 0;
 }
 
-.editor-holder .meditor-html-node {
+.editor-holder .tomosona-html-node {
   margin: 0.5rem 0;
 }
 
-.editor-holder .meditor-html-preview > :first-child {
+.editor-holder .tomosona-html-preview > :first-child {
   margin-top: 0;
 }
 
-.editor-holder .meditor-html-preview > :last-child {
+.editor-holder .tomosona-html-preview > :last-child {
   margin-bottom: 0;
 }
 
-.editor-holder .meditor-code-node-actions {
+.editor-holder .tomosona-code-node-actions {
   display: flex;
   gap: 0.36rem;
   justify-content: flex-end;
   margin-bottom: 0.35rem;
 }
 
-.editor-holder .meditor-code-node pre.meditor-code-wrap-enabled {
+.editor-holder .tomosona-code-node pre.tomosona-code-wrap-enabled {
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-.editor-holder .meditor-code-copy-btn,
-.editor-holder .meditor-code-wrap-btn {
+.editor-holder .tomosona-code-copy-btn,
+.editor-holder .tomosona-code-wrap-btn {
   border: 1px solid rgb(203 213 225);
   border-radius: 0.4rem;
   background: white;
@@ -319,11 +319,11 @@
   cursor: pointer;
 }
 
-.editor-holder .meditor-drag-handle {
+.editor-holder .tomosona-drag-handle {
   z-index: 35;
 }
 
-.editor-holder .meditor-block-controls {
+.editor-holder .tomosona-block-controls {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
@@ -332,7 +332,7 @@
   line-height: 1;
 }
 
-.editor-holder .meditor-block-control-btn {
+.editor-holder .tomosona-block-control-btn {
   width: 1.7rem;
   height: 1.7rem;
   border: 1px solid rgb(203 213 225);
@@ -346,15 +346,15 @@
   justify-content: center;
 }
 
-.editor-holder .meditor-block-control-btn:hover {
+.editor-holder .tomosona-block-control-btn:hover {
   background: rgb(241 245 249);
 }
 
-.editor-holder .meditor-block-grip-btn {
+.editor-holder .tomosona-block-grip-btn {
   letter-spacing: -0.1rem;
 }
 
-.meditor-table-trigger {
+.tomosona-table-trigger {
   display: flex;
   align-items: center;
   gap: 0.28rem;
@@ -362,39 +362,39 @@
   transform: translateY(0);
 }
 
-.meditor-table-trigger.is-visible {
+.tomosona-table-trigger.is-visible {
   opacity: 0.92;
   pointer-events: auto;
   transform: translateY(0);
 }
 
-.meditor-table-edge {
+.tomosona-table-edge {
   display: flex;
   opacity: 0;
   pointer-events: none;
   transition: opacity 140ms ease;
 }
 
-.meditor-table-edge-top,
-.meditor-table-edge-bottom {
+.tomosona-table-edge-top,
+.tomosona-table-edge-bottom {
   align-items: center;
   justify-content: center;
   height: 20px;
 }
 
-.meditor-table-edge-left,
-.meditor-table-edge-right {
+.tomosona-table-edge-left,
+.tomosona-table-edge-right {
   align-items: center;
   justify-content: center;
   width: 20px;
 }
 
-.meditor-table-edge.is-visible {
+.tomosona-table-edge.is-visible {
   opacity: 1;
   pointer-events: auto;
 }
 
-.meditor-table-plus-btn {
+.tomosona-table-plus-btn {
   width: 100%;
   height: 100%;
   border: none;
@@ -411,16 +411,16 @@
   transition: opacity 120ms ease, background-color 120ms ease;
 }
 
-.meditor-table-edge.is-visible .meditor-table-plus-btn {
+.tomosona-table-edge.is-visible .tomosona-table-plus-btn {
   opacity: 0.92;
   pointer-events: auto;
 }
 
-.meditor-table-edge.is-visible .meditor-table-plus-btn:hover {
+.tomosona-table-edge.is-visible .tomosona-table-plus-btn:hover {
   background: rgb(248 250 252 / 0.7);
 }
 
-.meditor-table-trigger-btn {
+.tomosona-table-trigger-btn {
   width: 1.38rem;
   height: 1.38rem;
   border: 1px solid rgb(203 213 225);
@@ -435,45 +435,45 @@
   line-height: 1;
 }
 
-.meditor-table-trigger-btn:focus-visible {
+.tomosona-table-trigger-btn:focus-visible {
   outline: 2px solid rgb(96 165 250 / 0.55);
   outline-offset: 1px;
 }
 
-.meditor-table-trigger-btn:hover {
+.tomosona-table-trigger-btn:hover {
   background: rgb(248 250 252);
 }
 
-.dark .editor-holder .meditor-block-control-btn {
+.dark .editor-holder .tomosona-block-control-btn {
   border-color: rgb(71 85 105);
   background: rgb(15 23 42);
   color: rgb(203 213 225);
 }
 
-.dark .editor-holder .meditor-block-control-btn:hover {
+.dark .editor-holder .tomosona-block-control-btn:hover {
   background: rgb(30 41 59);
 }
 
-.dark .meditor-table-trigger-btn {
+.dark .tomosona-table-trigger-btn {
   border-color: rgb(71 85 105);
   background: rgb(30 41 59 / 0.96);
   color: rgb(226 232 240);
   box-shadow: 0 0 0 1px rgb(15 23 42 / 0.35);
 }
 
-.dark .meditor-table-trigger-btn:hover {
+.dark .tomosona-table-trigger-btn:hover {
   background: rgb(30 41 59 / 0.92);
 }
 
-.dark .meditor-table-edge.is-visible .meditor-table-plus-btn {
+.dark .tomosona-table-edge.is-visible .tomosona-table-plus-btn {
   color: rgb(226 232 240);
 }
 
-.dark .meditor-table-edge.is-visible .meditor-table-plus-btn:hover {
+.dark .tomosona-table-edge.is-visible .tomosona-table-plus-btn:hover {
   background: rgb(30 41 59 / 0.55);
 }
 
-.dark .meditor-table-trigger-btn:focus-visible {
+.dark .tomosona-table-trigger-btn:focus-visible {
   outline: 2px solid rgb(147 197 253 / 0.65);
 }
 
@@ -531,6 +531,6 @@
   background: rgb(30 41 59 / 0.7);
 }
 
-.dark .editor-holder .meditor-html-preview {
+.dark .editor-holder .tomosona-html-preview {
   background: rgb(15 23 42 / 0.35);
 }

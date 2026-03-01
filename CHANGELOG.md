@@ -274,7 +274,7 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 ## [0.2.8] - 2026-02-23
 
 ### Added
-- feat(ignore): apply .gitignore and .meditorignore to watcher events and explorer listing (613a910)
+- feat(ignore): apply .gitignore and .tomosonaignore to watcher events and explorer listing (613a910)
 
 ### Changed
 - test(watcher): add exhaustive rust and vue watcher event planning test suites (0806c90)
@@ -453,7 +453,7 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 - refactor(toolbar): remove workspace open icon and add close icon to close-workspace action (434bf5f)
 
 ### Fixed
-- fix(tauri): store workspace sqlite in .meditor (b038695)
+- fix(tauri): store workspace sqlite in .tomosona (b038695)
 
 ## [0.1.1] - 2026-02-21
 

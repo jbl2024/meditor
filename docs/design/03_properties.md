@@ -6,7 +6,7 @@ Local-First Knowledge Environment
 
 ## 1. Purpose
 
-This document defines the properties system used by meditor.
+This document defines the properties system used by tomosona.
 
 Goals:
 
@@ -66,7 +66,7 @@ Frontend parses frontmatter into a normalized model with:
 
 Per-workspace file:
 
-- `<workspace>/.meditor/property-types.json`
+- `<workspace>/.tomosona/property-types.json`
 
 Stores sparse mapping:
 
@@ -134,7 +134,7 @@ Behavior:
 
 ### On open
 
-1. Load property schema from workspace `.meditor`.
+1. Load property schema from workspace `.tomosona`.
 2. Split markdown into frontmatter + body.
 3. Parse frontmatter into fields and parse errors.
 4. Resolve property UI types.
@@ -189,8 +189,8 @@ Tauri commands:
 
 Path and safety rules:
 
-- schema path is always under `<workspace>/.meditor`
-- `.meditor` directory is created as needed
+- schema path is always under `<workspace>/.tomosona`
+- `.tomosona` directory is created as needed
 - only supported types are accepted on write
 - invalid schema JSON is rejected with safe error
 
@@ -234,4 +234,4 @@ Compatibility constraints:
 
 ## 13. Summary
 
-The properties system keeps markdown frontmatter portable and Obsidian-compatible while providing a practical typed editing experience. UI types are persisted per workspace in `.meditor/property-types.json`, allowing consistent UX without contaminating note files.
+The properties system keeps markdown frontmatter portable and Obsidian-compatible while providing a practical typed editing experience. UI types are persisted per workspace in `.tomosona/property-types.json`, allowing consistent UX without contaminating note files.

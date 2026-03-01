@@ -26,7 +26,7 @@ export type UseEditorZoomOptions = {
  * - Zoom stays inside `[minZoom, maxZoom]`.
  */
 export function useEditorZoom(options: UseEditorZoomOptions = {}) {
-  const storageKey = options.storageKey ?? 'meditor:editor:zoom'
+  const storageKey = options.storageKey ?? 'tomosona:editor:zoom'
   const minZoom = options.minZoom ?? 0.8
   const maxZoom = options.maxZoom ?? 1.6
   const defaultZoom = options.defaultZoom ?? 1

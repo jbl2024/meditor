@@ -4,8 +4,8 @@ import { NodeViewContent, NodeViewWrapper } from '@tiptap/vue-3'
 import { common } from 'lowlight'
 import UiFilterableDropdown, { type FilterableDropdownItem } from '../../ui/UiFilterableDropdown.vue'
 
-const WRAP_STORAGE_KEY = 'meditor:editor:code-wrap'
-const WRAP_EVENT = 'meditor:code-wrap-changed'
+const WRAP_STORAGE_KEY = 'tomosona:editor:code-wrap'
+const WRAP_EVENT = 'tomosona:code-wrap-changed'
 
 const languages = Object.keys(common).sort()
 const LANGUAGE_ALIASES: Record<string, string[]> = {
@@ -94,7 +94,7 @@ async function copyCode() {
   await navigator.clipboard.writeText(value)
 }
 
-const preClass = computed(() => ({ 'meditor-code-wrap-enabled': wrapEnabled.value }))
+const preClass = computed(() => ({ 'tomosona-code-wrap-enabled': wrapEnabled.value }))
 
 onMounted(() => {
   syncWrapFromStorage()
@@ -107,10 +107,10 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <NodeViewWrapper class="meditor-code-node">
-    <div class="meditor-code-node-actions" contenteditable="false">
+  <NodeViewWrapper class="tomosona-code-node">
+    <div class="tomosona-code-node-actions" contenteditable="false">
       <UiFilterableDropdown
-        class="meditor-code-lang-select"
+        class="tomosona-code-lang-select"
         :items="languageItems"
         :model-value="showLangMenu"
         :query="languageQuery"
@@ -127,7 +127,7 @@ onBeforeUnmount(() => {
         <template #trigger="{ toggleMenu }">
           <button
             type="button"
-            class="meditor-code-lang-btn"
+            class="tomosona-code-lang-btn"
             @click.stop="toggleMenu"
             @mousedown.prevent
           >
@@ -135,14 +135,14 @@ onBeforeUnmount(() => {
           </button>
         </template>
         <template #item="{ item, active }">
-          <span :class="{ 'meditor-code-lang-active': active, 'meditor-code-lang-selected': currentLanguage === item.value }">
+          <span :class="{ 'tomosona-code-lang-active': active, 'tomosona-code-lang-selected': currentLanguage === item.value }">
             {{ item.label }}
           </span>
         </template>
       </UiFilterableDropdown>
       <button
         type="button"
-        class="meditor-code-wrap-btn"
+        class="tomosona-code-wrap-btn"
         @mousedown.prevent
         @click="setWrapEnabled(!wrapEnabled)"
       >
@@ -150,7 +150,7 @@ onBeforeUnmount(() => {
       </button>
       <button
         type="button"
-        class="meditor-code-copy-btn"
+        class="tomosona-code-copy-btn"
         @mousedown.prevent
         @click="void copyCode()"
       >
@@ -163,82 +163,82 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.meditor-code-node pre,
-.meditor-code-node code {
+.tomosona-code-node pre,
+.tomosona-code-node code {
   font-family: var(--font-mono);
 }
 
-.meditor-code-node code.hljs {
+.tomosona-code-node code.hljs {
   color: #0f172a;
 }
 
-.meditor-code-node code :deep(.hljs-comment),
-.meditor-code-node code :deep(.hljs-quote) {
+.tomosona-code-node code :deep(.hljs-comment),
+.tomosona-code-node code :deep(.hljs-quote) {
   color: #64748b;
 }
 
-.meditor-code-node code :deep(.hljs-keyword),
-.meditor-code-node code :deep(.hljs-selector-tag),
-.meditor-code-node code :deep(.hljs-literal),
-.meditor-code-node code :deep(.hljs-title) {
+.tomosona-code-node code :deep(.hljs-keyword),
+.tomosona-code-node code :deep(.hljs-selector-tag),
+.tomosona-code-node code :deep(.hljs-literal),
+.tomosona-code-node code :deep(.hljs-title) {
   color: #7c3aed;
 }
 
-.meditor-code-node code :deep(.hljs-string),
-.meditor-code-node code :deep(.hljs-attr) {
+.tomosona-code-node code :deep(.hljs-string),
+.tomosona-code-node code :deep(.hljs-attr) {
   color: #0f766e;
 }
 
-.meditor-code-node code :deep(.hljs-number),
-.meditor-code-node code :deep(.hljs-built_in),
-.meditor-code-node code :deep(.hljs-variable) {
+.tomosona-code-node code :deep(.hljs-number),
+.tomosona-code-node code :deep(.hljs-built_in),
+.tomosona-code-node code :deep(.hljs-variable) {
   color: #b45309;
 }
 
-.meditor-code-node code :deep(.hljs-function),
-.meditor-code-node code :deep(.hljs-class),
-.meditor-code-node code :deep(.hljs-type) {
+.tomosona-code-node code :deep(.hljs-function),
+.tomosona-code-node code :deep(.hljs-class),
+.tomosona-code-node code :deep(.hljs-type) {
   color: #1d4ed8;
 }
 
-.dark .meditor-code-node code.hljs {
+.dark .tomosona-code-node code.hljs {
   color: #e2e8f0;
 }
 
-.dark .meditor-code-node code :deep(.hljs-comment),
-.dark .meditor-code-node code :deep(.hljs-quote) {
+.dark .tomosona-code-node code :deep(.hljs-comment),
+.dark .tomosona-code-node code :deep(.hljs-quote) {
   color: #94a3b8;
 }
 
-.dark .meditor-code-node code :deep(.hljs-keyword),
-.dark .meditor-code-node code :deep(.hljs-selector-tag),
-.dark .meditor-code-node code :deep(.hljs-literal),
-.dark .meditor-code-node code :deep(.hljs-title) {
+.dark .tomosona-code-node code :deep(.hljs-keyword),
+.dark .tomosona-code-node code :deep(.hljs-selector-tag),
+.dark .tomosona-code-node code :deep(.hljs-literal),
+.dark .tomosona-code-node code :deep(.hljs-title) {
   color: #c084fc;
 }
 
-.dark .meditor-code-node code :deep(.hljs-string),
-.dark .meditor-code-node code :deep(.hljs-attr) {
+.dark .tomosona-code-node code :deep(.hljs-string),
+.dark .tomosona-code-node code :deep(.hljs-attr) {
   color: #34d399;
 }
 
-.dark .meditor-code-node code :deep(.hljs-number),
-.dark .meditor-code-node code :deep(.hljs-built_in),
-.dark .meditor-code-node code :deep(.hljs-variable) {
+.dark .tomosona-code-node code :deep(.hljs-number),
+.dark .tomosona-code-node code :deep(.hljs-built_in),
+.dark .tomosona-code-node code :deep(.hljs-variable) {
   color: #f59e0b;
 }
 
-.dark .meditor-code-node code :deep(.hljs-function),
-.dark .meditor-code-node code :deep(.hljs-class),
-.dark .meditor-code-node code :deep(.hljs-type) {
+.dark .tomosona-code-node code :deep(.hljs-function),
+.dark .tomosona-code-node code :deep(.hljs-class),
+.dark .tomosona-code-node code :deep(.hljs-type) {
   color: #60a5fa;
 }
 
-.meditor-code-lang-select {
+.tomosona-code-lang-select {
   position: relative;
 }
 
-.meditor-code-lang-btn {
+.tomosona-code-lang-btn {
   background: transparent;
   border: 1px solid var(--color-border);
   border-radius: 4px;
@@ -248,11 +248,11 @@ onBeforeUnmount(() => {
   padding: 4px 8px;
 }
 
-.meditor-code-lang-btn:hover {
+.tomosona-code-lang-btn:hover {
   background: var(--color-bg-hover);
 }
 
-.meditor-code-lang-select :deep(.ui-filterable-dropdown-menu) {
+.tomosona-code-lang-select :deep(.ui-filterable-dropdown-menu) {
   min-width: 220px;
   max-width: 280px;
   position: absolute;
@@ -261,15 +261,15 @@ onBeforeUnmount(() => {
   z-index: 40;
 }
 
-.meditor-code-lang-select :deep(.ui-filterable-dropdown-option) {
+.tomosona-code-lang-select :deep(.ui-filterable-dropdown-option) {
   font-size: 12px;
 }
 
-.meditor-code-lang-active {
+.tomosona-code-lang-active {
   font-weight: 600;
 }
 
-.meditor-code-lang-selected {
+.tomosona-code-lang-selected {
   text-decoration: underline;
 }
 </style>

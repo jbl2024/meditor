@@ -56,15 +56,15 @@ describe('CalloutNodeView', () => {
     const harness = mountHarness({ initialKind: 'NOTE' })
     await flush()
 
-    const titleIcon = harness.root.querySelector('.meditor-callout-title .meditor-callout-icon-svg')
+    const titleIcon = harness.root.querySelector('.tomosona-callout-title .tomosona-callout-icon-svg')
     expect(titleIcon).toBeTruthy()
 
-    const trigger = harness.root.querySelector('.meditor-callout-title-trigger') as HTMLButtonElement
+    const trigger = harness.root.querySelector('.tomosona-callout-title-trigger') as HTMLButtonElement
     trigger.click()
     await flush()
 
     const options = Array.from(harness.root.querySelectorAll('.ui-filterable-dropdown-option')) as HTMLButtonElement[]
-    expect(options[0]?.querySelector('.meditor-callout-kind-option-icon')).toBeTruthy()
+    expect(options[0]?.querySelector('.tomosona-callout-kind-option-icon')).toBeTruthy()
     const warningOption = options.find((option) => option.textContent?.includes('Warning'))
     expect(warningOption).toBeTruthy()
     warningOption?.click()
@@ -81,7 +81,7 @@ describe('CalloutNodeView', () => {
     const harness = mountHarness({ initialMessage: 'Before' })
     await flush()
 
-    const textarea = harness.root.querySelector('.meditor-callout-message') as HTMLTextAreaElement
+    const textarea = harness.root.querySelector('.tomosona-callout-message') as HTMLTextAreaElement
     textarea.value = 'After update'
     textarea.dispatchEvent(new Event('input', { bubbles: true }))
     await flush()
@@ -96,8 +96,8 @@ describe('CalloutNodeView', () => {
     const harness = mountHarness({ editable: false, initialKind: 'TIP' })
     await flush()
 
-    expect(harness.root.querySelector('.meditor-callout-title-trigger')).toBeNull()
-    const textarea = harness.root.querySelector('.meditor-callout-message') as HTMLTextAreaElement
+    expect(harness.root.querySelector('.tomosona-callout-title-trigger')).toBeNull()
+    const textarea = harness.root.querySelector('.tomosona-callout-message') as HTMLTextAreaElement
     expect(textarea.readOnly).toBe(true)
 
     harness.app.unmount()

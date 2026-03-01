@@ -215,7 +215,7 @@ html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-empty,
 
   .editor-holder {
     --editor-zoom: 1;
-    --meditor-editor-font-size: calc(1rem * var(--editor-zoom));
+    --tomosona-editor-font-size: calc(1rem * var(--editor-zoom));
   }
 
   .editor-holder .ce-paragraph,
@@ -223,8 +223,8 @@ html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-empty,
   .editor-holder .cdx-list__item,
   .editor-holder .cdx-list__item-content,
   .editor-holder .cdx-quote,
-  .editor-holder .meditor-callout-message {
-    font-size: var(--meditor-editor-font-size);
+  .editor-holder .tomosona-callout-message {
+    font-size: var(--tomosona-editor-font-size);
   }
 
   .editor-holder .ce-paragraph {
@@ -245,7 +245,7 @@ html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-empty,
     --spacing-s: 4px;
     --spacing-xs: 0px;
     --line-height: 1.45em;
-    --meditor-list-marker-gap: 0.32rem;
+    --tomosona-list-marker-gap: 0.32rem;
     gap: 4px !important;
     padding-top: 0 !important;
     padding-bottom: 0 !important;
@@ -255,8 +255,8 @@ html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-empty,
     margin: 0;
     padding: 0;
     line-height: var(--line-height);
-    grid-template-columns: var(--meditor-list-marker-col) minmax(0, 1fr);
-    column-gap: var(--meditor-list-marker-gap);
+    grid-template-columns: var(--tomosona-list-marker-col) minmax(0, 1fr);
+    column-gap: var(--tomosona-list-marker-gap);
     align-items: start;
   }
 
@@ -266,7 +266,7 @@ html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-empty,
   }
 
   .editor-holder .cdx-list__item::before {
-    width: var(--meditor-list-marker-col);
+    width: var(--tomosona-list-marker-col);
     justify-self: end;
     text-align: right;
   }
@@ -348,13 +348,13 @@ html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-empty,
     line-height: 1.65;
   }
 
-  .editor-holder .meditor-quote {
+  .editor-holder .tomosona-quote {
     margin: 0.4rem 0;
     padding-left: 0.95rem;
     border-left: 4px solid #7ba9d6;
   }
 
-  .editor-holder .meditor-quote-preview {
+  .editor-holder .tomosona-quote-preview {
     border-radius: 0.35rem;
     background: #f8fafc;
     color: #374151;
@@ -362,38 +362,38 @@ html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-empty,
     cursor: text;
   }
 
-  .editor-holder .meditor-quote-preview-content {
+  .editor-holder .tomosona-quote-preview-content {
     min-height: 1.4rem;
   }
 
-  .editor-holder .meditor-quote-paragraph {
+  .editor-holder .tomosona-quote-paragraph {
     margin: 0;
     font-size: calc(1.01rem * var(--editor-zoom));
     line-height: 1.65;
   }
 
-  .editor-holder .meditor-quote-paragraph + .meditor-quote-paragraph {
+  .editor-holder .tomosona-quote-paragraph + .tomosona-quote-paragraph {
     margin-top: 0.68rem;
   }
 
-  .editor-holder .meditor-quote-list {
+  .editor-holder .tomosona-quote-list {
     margin: 0.45rem 0 0.15rem 1.38rem;
     padding: 0;
     font-size: calc(1.01rem * var(--editor-zoom));
     line-height: 1.65;
   }
 
-  .editor-holder .meditor-quote-list li + li {
+  .editor-holder .tomosona-quote-list li + li {
     margin-top: 0.16rem;
   }
 
-  .editor-holder .meditor-quote-nested {
+  .editor-holder .tomosona-quote-nested {
     margin: 0.62rem 0 0.25rem 0.92rem;
     padding-left: 0.85rem;
     border-left: 4px solid #7ba9d6;
   }
 
-  .editor-holder .meditor-quote-source {
+  .editor-holder .tomosona-quote-source {
     width: 100%;
     min-height: 94px;
     border: 0;
@@ -411,11 +411,11 @@ html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-empty,
     outline: none;
   }
 
-  .editor-holder .meditor-quote.is-editing .meditor-quote-preview {
+  .editor-holder .tomosona-quote.is-editing .tomosona-quote-preview {
     display: none;
   }
 
-  .editor-holder .meditor-quote:not(.is-editing) .meditor-quote-source {
+  .editor-holder .tomosona-quote:not(.is-editing) .tomosona-quote-source {
     display: none;
   }
 
@@ -471,7 +471,7 @@ html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-empty,
     resize: none !important;
   }
 
-  .editor-holder .ce-code.meditor-code-wrap-enabled .ce-code__textarea {
+  .editor-holder .ce-code.tomosona-code-wrap-enabled .ce-code__textarea {
     white-space: pre-wrap !important;
     overflow-x: hidden !important;
     word-break: break-word;
@@ -496,7 +496,7 @@ html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-empty,
     background: transparent;
   }
 
-  .editor-holder .meditor-code-copy-btn {
+  .editor-holder .tomosona-code-copy-btn {
     position: absolute;
     top: 0.35rem;
     right: 0.5rem;
@@ -516,7 +516,7 @@ html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-empty,
     transition: opacity 120ms ease, transform 120ms ease;
   }
 
-  .editor-holder .meditor-code-wrap-btn {
+  .editor-holder .tomosona-code-wrap-btn {
     position: absolute;
     top: 0.35rem;
     right: 2.45rem;
@@ -536,60 +536,60 @@ html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-empty,
     transition: opacity 120ms ease, transform 120ms ease;
   }
 
-  .editor-holder .meditor-code-wrap-btn svg {
+  .editor-holder .tomosona-code-wrap-btn svg {
     width: 0.92rem;
     height: 0.92rem;
     fill: none;
     stroke: currentColor;
   }
 
-  .editor-holder .meditor-code-wrap-btn .icon-wrap-off {
+  .editor-holder .tomosona-code-wrap-btn .icon-wrap-off {
     display: none;
   }
 
-  .editor-holder .meditor-code-wrap-btn.is-active {
+  .editor-holder .tomosona-code-wrap-btn.is-active {
     border-color: #93c5fd;
     background: #eff6ff;
     color: #1d4ed8;
   }
 
-  .editor-holder .meditor-code-wrap-btn.is-active .icon-wrap-on {
+  .editor-holder .tomosona-code-wrap-btn.is-active .icon-wrap-on {
     display: inline-flex;
   }
 
-  .editor-holder .meditor-code-wrap-btn.is-active .icon-wrap-off {
+  .editor-holder .tomosona-code-wrap-btn.is-active .icon-wrap-off {
     display: none;
   }
 
-  .editor-holder .meditor-code-wrap-btn:not(.is-active) .icon-wrap-on {
+  .editor-holder .tomosona-code-wrap-btn:not(.is-active) .icon-wrap-on {
     display: none;
   }
 
-  .editor-holder .meditor-code-wrap-btn:not(.is-active) .icon-wrap-off {
+  .editor-holder .tomosona-code-wrap-btn:not(.is-active) .icon-wrap-off {
     display: inline-flex;
   }
 
-  .editor-holder .ce-code:hover .meditor-code-copy-btn,
-  .editor-holder .ce-code:focus-within .meditor-code-copy-btn,
-  .editor-holder .ce-code:hover .meditor-code-wrap-btn,
-  .editor-holder .ce-code:focus-within .meditor-code-wrap-btn {
+  .editor-holder .ce-code:hover .tomosona-code-copy-btn,
+  .editor-holder .ce-code:focus-within .tomosona-code-copy-btn,
+  .editor-holder .ce-code:hover .tomosona-code-wrap-btn,
+  .editor-holder .ce-code:focus-within .tomosona-code-wrap-btn {
     opacity: 1;
     pointer-events: auto;
     transform: translateY(0);
   }
 
-  .editor-holder .meditor-code-copy-btn svg {
+  .editor-holder .tomosona-code-copy-btn svg {
     width: 0.92rem;
     height: 0.92rem;
     fill: none;
     stroke: currentColor;
   }
 
-  .editor-holder .meditor-code-copy-btn .icon-check {
+  .editor-holder .tomosona-code-copy-btn .icon-check {
     display: none;
   }
 
-  .editor-holder .meditor-code-copy-btn .copy-toast {
+  .editor-holder .tomosona-code-copy-btn .copy-toast {
     position: absolute;
     right: 2.1rem;
     top: 50%;
@@ -604,21 +604,21 @@ html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-empty,
     pointer-events: none;
   }
 
-  .editor-holder .meditor-code-copy-btn.is-copied {
+  .editor-holder .tomosona-code-copy-btn.is-copied {
     border-color: #86efac;
     color: #166534;
     background: #f0fdf4;
   }
 
-  .editor-holder .meditor-code-copy-btn.is-copied .icon-copy {
+  .editor-holder .tomosona-code-copy-btn.is-copied .icon-copy {
     display: none;
   }
 
-  .editor-holder .meditor-code-copy-btn.is-copied .icon-check {
+  .editor-holder .tomosona-code-copy-btn.is-copied .icon-check {
     display: inline;
   }
 
-  .editor-holder .meditor-code-copy-btn.is-copied .copy-toast {
+  .editor-holder .tomosona-code-copy-btn.is-copied .copy-toast {
     opacity: 1;
   }
 
@@ -660,21 +660,21 @@ html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-empty,
     color: #abb2bf;
   }
 
-  html.dark .editor-holder .meditor-quote {
+  html.dark .editor-holder .tomosona-quote {
     border-left-color: #5c6370;
   }
 
-  html.dark .editor-holder .meditor-quote-preview {
+  html.dark .editor-holder .tomosona-quote-preview {
     background: #21252b;
     color: #abb2bf;
   }
 
-  html.dark .editor-holder .meditor-quote-source {
+  html.dark .editor-holder .tomosona-quote-source {
     background: #21252b;
     color: #abb2bf;
   }
 
-  html.dark .editor-holder .meditor-quote-nested {
+  html.dark .editor-holder .tomosona-quote-nested {
     border-left-color: #5c6370;
   }
 
@@ -695,31 +695,31 @@ html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-empty,
     background: #4b5263;
   }
 
-  html.dark .editor-holder .meditor-code-copy-btn {
+  html.dark .editor-holder .tomosona-code-copy-btn {
     border-color: #4b5263;
     background: #2c313a;
     color: #abb2bf;
   }
 
-  html.dark .editor-holder .meditor-code-wrap-btn {
+  html.dark .editor-holder .tomosona-code-wrap-btn {
     border-color: #4b5263;
     background: #2c313a;
     color: #abb2bf;
   }
 
-  html.dark .editor-holder .meditor-code-wrap-btn.is-active {
+  html.dark .editor-holder .tomosona-code-wrap-btn.is-active {
     border-color: #56b6c2;
     background: #1e3a3f;
     color: #56b6c2;
   }
 
-  html.dark .editor-holder .meditor-code-copy-btn.is-copied {
+  html.dark .editor-holder .tomosona-code-copy-btn.is-copied {
     border-color: #98c379;
     background: #1e3a22;
     color: #98c379;
   }
 
-  html.dark .editor-holder .meditor-code-copy-btn .copy-toast {
+  html.dark .editor-holder .tomosona-code-copy-btn .copy-toast {
     background: #181c22;
     color: #dbeafe;
   }
@@ -771,7 +771,7 @@ html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-empty,
     color: #7ec5ff;
   }
 
-  .editor-holder .meditor-callout {
+  .editor-holder .tomosona-callout {
     border-radius: 0.75rem;
     padding: 0.95rem 1rem 1rem;
     margin: 0.2rem 0;
@@ -779,14 +779,14 @@ html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-empty,
     background: #d9e0ec;
   }
 
-  .editor-holder .meditor-callout-header {
+  .editor-holder .tomosona-callout-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
   }
 
-  .editor-holder .meditor-callout-title {
+  .editor-holder .tomosona-callout-title {
     display: inline-flex;
     align-items: center;
     gap: 0.45rem;
@@ -795,7 +795,7 @@ html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-empty,
     line-height: 1.2;
   }
 
-  .editor-holder .meditor-callout-icon {
+  .editor-holder .tomosona-callout-icon {
     width: 1.2rem;
     height: 1.2rem;
     display: inline-flex;
@@ -804,12 +804,12 @@ html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-empty,
     line-height: 1;
   }
 
-  .editor-holder .meditor-callout-icon svg {
+  .editor-holder .tomosona-callout-icon svg {
     width: 1.1rem;
     height: 1.1rem;
   }
 
-  .editor-holder .meditor-callout-kind {
+  .editor-holder .tomosona-callout-kind {
     border: 1px solid #c2ccda;
     border-radius: 0.5rem;
     background: #eef2f8;
@@ -825,29 +825,29 @@ html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-empty,
     transition: opacity 120ms ease, transform 120ms ease;
   }
 
-  .editor-holder .meditor-callout-kind-select {
+  .editor-holder .tomosona-callout-kind-select {
     position: relative;
     display: inline-flex;
     align-items: center;
     justify-content: flex-end;
   }
 
-  .editor-holder .meditor-callout:hover .meditor-callout-kind,
-  .editor-holder .meditor-callout:focus-within .meditor-callout-kind {
+  .editor-holder .tomosona-callout:hover .tomosona-callout-kind,
+  .editor-holder .tomosona-callout:focus-within .tomosona-callout-kind {
     opacity: 1;
     pointer-events: auto;
     transform: translateY(0);
   }
 
   @media (hover: none) {
-    .editor-holder .meditor-callout .meditor-callout-kind {
+    .editor-holder .tomosona-callout .tomosona-callout-kind {
       opacity: 1;
       pointer-events: auto;
       transform: translateY(0);
     }
   }
 
-  .editor-holder .meditor-callout-message {
+  .editor-holder .tomosona-callout-message {
     margin-top: 0.75rem;
     min-height: 1.5rem;
     line-height: 1.65;
@@ -856,179 +856,179 @@ html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-empty,
     outline: none;
   }
 
-  .editor-holder .meditor-callout-message[data-placeholder]:empty::before {
+  .editor-holder .tomosona-callout-message[data-placeholder]:empty::before {
     content: attr(data-placeholder);
     color: #64748b;
   }
 
-  .editor-holder .meditor-callout[data-callout-kind='note'],
-  .editor-holder .meditor-callout[data-callout-kind='info'],
-  .editor-holder .meditor-callout[data-callout-kind='abstract'] {
+  .editor-holder .tomosona-callout[data-callout-kind='note'],
+  .editor-holder .tomosona-callout[data-callout-kind='info'],
+  .editor-holder .tomosona-callout[data-callout-kind='abstract'] {
     background: #d9e0ec;
     border-color: #cad3e2;
   }
 
-  .editor-holder .meditor-callout[data-callout-kind='note'] .meditor-callout-title,
-  .editor-holder .meditor-callout[data-callout-kind='info'] .meditor-callout-title,
-  .editor-holder .meditor-callout[data-callout-kind='abstract'] .meditor-callout-title {
+  .editor-holder .tomosona-callout[data-callout-kind='note'] .tomosona-callout-title,
+  .editor-holder .tomosona-callout[data-callout-kind='info'] .tomosona-callout-title,
+  .editor-holder .tomosona-callout[data-callout-kind='abstract'] .tomosona-callout-title {
     color: #1f6ac4;
   }
 
-  .editor-holder .meditor-callout[data-callout-kind='tip'],
-  .editor-holder .meditor-callout[data-callout-kind='success'] {
+  .editor-holder .tomosona-callout[data-callout-kind='tip'],
+  .editor-holder .tomosona-callout[data-callout-kind='success'] {
     background: #dce9dd;
     border-color: #c9dbcb;
   }
 
-  .editor-holder .meditor-callout[data-callout-kind='tip'] .meditor-callout-title,
-  .editor-holder .meditor-callout[data-callout-kind='success'] .meditor-callout-title {
+  .editor-holder .tomosona-callout[data-callout-kind='tip'] .tomosona-callout-title,
+  .editor-holder .tomosona-callout[data-callout-kind='success'] .tomosona-callout-title {
     color: #1f7a3e;
   }
 
-  .editor-holder .meditor-callout[data-callout-kind='question'],
-  .editor-holder .meditor-callout[data-callout-kind='example'] {
+  .editor-holder .tomosona-callout[data-callout-kind='question'],
+  .editor-holder .tomosona-callout[data-callout-kind='example'] {
     background: #e4dff0;
     border-color: #d6cceb;
   }
 
-  .editor-holder .meditor-callout[data-callout-kind='question'] .meditor-callout-title,
-  .editor-holder .meditor-callout[data-callout-kind='example'] .meditor-callout-title {
+  .editor-holder .tomosona-callout[data-callout-kind='question'] .tomosona-callout-title,
+  .editor-holder .tomosona-callout[data-callout-kind='example'] .tomosona-callout-title {
     color: #6d28d9;
   }
 
-  .editor-holder .meditor-callout[data-callout-kind='warning'] {
+  .editor-holder .tomosona-callout[data-callout-kind='warning'] {
     background: #e9e0d8;
     border-color: #dccdbf;
   }
 
-  .editor-holder .meditor-callout[data-callout-kind='warning'] .meditor-callout-title {
+  .editor-holder .tomosona-callout[data-callout-kind='warning'] .tomosona-callout-title {
     color: #db6d08;
   }
 
-  .editor-holder .meditor-callout[data-callout-kind='error'] {
+  .editor-holder .tomosona-callout[data-callout-kind='error'] {
     background: #ecd8de;
     border-color: #e2c7d0;
   }
 
-  .editor-holder .meditor-callout[data-callout-kind='error'] .meditor-callout-title {
+  .editor-holder .tomosona-callout[data-callout-kind='error'] .tomosona-callout-title {
     color: #e11d48;
   }
 
-  .editor-holder .meditor-callout[data-callout-kind='failure'],
-  .editor-holder .meditor-callout[data-callout-kind='danger'],
-  .editor-holder .meditor-callout[data-callout-kind='bug'] {
+  .editor-holder .tomosona-callout[data-callout-kind='failure'],
+  .editor-holder .tomosona-callout[data-callout-kind='danger'],
+  .editor-holder .tomosona-callout[data-callout-kind='bug'] {
     background: #ecd8de;
     border-color: #e2c7d0;
   }
 
-  .editor-holder .meditor-callout[data-callout-kind='failure'] .meditor-callout-title,
-  .editor-holder .meditor-callout[data-callout-kind='danger'] .meditor-callout-title,
-  .editor-holder .meditor-callout[data-callout-kind='bug'] .meditor-callout-title {
+  .editor-holder .tomosona-callout[data-callout-kind='failure'] .tomosona-callout-title,
+  .editor-holder .tomosona-callout[data-callout-kind='danger'] .tomosona-callout-title,
+  .editor-holder .tomosona-callout[data-callout-kind='bug'] .tomosona-callout-title {
     color: #e11d48;
   }
 
-  .editor-holder .meditor-callout[data-callout-kind='quote'] {
+  .editor-holder .tomosona-callout[data-callout-kind='quote'] {
     background: #e7e3df;
     border-color: #d8d1ca;
   }
 
-  .editor-holder .meditor-callout[data-callout-kind='quote'] .meditor-callout-title {
+  .editor-holder .tomosona-callout[data-callout-kind='quote'] .tomosona-callout-title {
     color: #6b7280;
   }
 
-  html.dark .editor-holder .meditor-callout[data-callout-kind='note'],
-  html.dark .editor-holder .meditor-callout[data-callout-kind='info'],
-  html.dark .editor-holder .meditor-callout[data-callout-kind='abstract'] {
+  html.dark .editor-holder .tomosona-callout[data-callout-kind='note'],
+  html.dark .editor-holder .tomosona-callout[data-callout-kind='info'],
+  html.dark .editor-holder .tomosona-callout[data-callout-kind='abstract'] {
     background: #1e2a3a;
     border-color: #2c3e50;
   }
 
-  html.dark .editor-holder .meditor-callout[data-callout-kind='note'] .meditor-callout-title,
-  html.dark .editor-holder .meditor-callout[data-callout-kind='info'] .meditor-callout-title,
-  html.dark .editor-holder .meditor-callout[data-callout-kind='abstract'] .meditor-callout-title {
+  html.dark .editor-holder .tomosona-callout[data-callout-kind='note'] .tomosona-callout-title,
+  html.dark .editor-holder .tomosona-callout[data-callout-kind='info'] .tomosona-callout-title,
+  html.dark .editor-holder .tomosona-callout[data-callout-kind='abstract'] .tomosona-callout-title {
     color: #61afef;
   }
 
-  html.dark .editor-holder .meditor-callout[data-callout-kind='tip'],
-  html.dark .editor-holder .meditor-callout[data-callout-kind='success'] {
+  html.dark .editor-holder .tomosona-callout[data-callout-kind='tip'],
+  html.dark .editor-holder .tomosona-callout[data-callout-kind='success'] {
     background: #1e2f23;
     border-color: #2c3e2e;
   }
 
-  html.dark .editor-holder .meditor-callout[data-callout-kind='tip'] .meditor-callout-title,
-  html.dark .editor-holder .meditor-callout[data-callout-kind='success'] .meditor-callout-title {
+  html.dark .editor-holder .tomosona-callout[data-callout-kind='tip'] .tomosona-callout-title,
+  html.dark .editor-holder .tomosona-callout[data-callout-kind='success'] .tomosona-callout-title {
     color: #98c379;
   }
 
-  html.dark .editor-holder .meditor-callout[data-callout-kind='question'],
-  html.dark .editor-holder .meditor-callout[data-callout-kind='example'] {
+  html.dark .editor-holder .tomosona-callout[data-callout-kind='question'],
+  html.dark .editor-holder .tomosona-callout[data-callout-kind='example'] {
     background: #2a1f3a;
     border-color: #3e2c50;
   }
 
-  html.dark .editor-holder .meditor-callout[data-callout-kind='question'] .meditor-callout-title,
-  html.dark .editor-holder .meditor-callout[data-callout-kind='example'] .meditor-callout-title {
+  html.dark .editor-holder .tomosona-callout[data-callout-kind='question'] .tomosona-callout-title,
+  html.dark .editor-holder .tomosona-callout[data-callout-kind='example'] .tomosona-callout-title {
     color: #c678dd;
   }
 
-  html.dark .editor-holder .meditor-callout[data-callout-kind='warning'] {
+  html.dark .editor-holder .tomosona-callout[data-callout-kind='warning'] {
     background: #2f2a1f;
     border-color: #3e3a2c;
   }
 
-  html.dark .editor-holder .meditor-callout[data-callout-kind='warning'] .meditor-callout-title {
+  html.dark .editor-holder .tomosona-callout[data-callout-kind='warning'] .tomosona-callout-title {
     color: #e5c07b;
   }
 
-  html.dark .editor-holder .meditor-callout[data-callout-kind='error'] {
+  html.dark .editor-holder .tomosona-callout[data-callout-kind='error'] {
     background: #2f1f23;
     border-color: #3e2c2e;
   }
 
-  html.dark .editor-holder .meditor-callout[data-callout-kind='error'] .meditor-callout-title {
+  html.dark .editor-holder .tomosona-callout[data-callout-kind='error'] .tomosona-callout-title {
     color: #e06c75;
   }
 
-  html.dark .editor-holder .meditor-callout[data-callout-kind='failure'],
-  html.dark .editor-holder .meditor-callout[data-callout-kind='danger'],
-  html.dark .editor-holder .meditor-callout[data-callout-kind='bug'] {
+  html.dark .editor-holder .tomosona-callout[data-callout-kind='failure'],
+  html.dark .editor-holder .tomosona-callout[data-callout-kind='danger'],
+  html.dark .editor-holder .tomosona-callout[data-callout-kind='bug'] {
     background: #2f1f23;
     border-color: #3e2c2e;
   }
 
-  html.dark .editor-holder .meditor-callout[data-callout-kind='failure'] .meditor-callout-title,
-  html.dark .editor-holder .meditor-callout[data-callout-kind='danger'] .meditor-callout-title,
-  html.dark .editor-holder .meditor-callout[data-callout-kind='bug'] .meditor-callout-title {
+  html.dark .editor-holder .tomosona-callout[data-callout-kind='failure'] .tomosona-callout-title,
+  html.dark .editor-holder .tomosona-callout[data-callout-kind='danger'] .tomosona-callout-title,
+  html.dark .editor-holder .tomosona-callout[data-callout-kind='bug'] .tomosona-callout-title {
     color: #e06c75;
   }
 
-  html.dark .editor-holder .meditor-callout[data-callout-kind='quote'] {
+  html.dark .editor-holder .tomosona-callout[data-callout-kind='quote'] {
     background: #21252b;
     border-color: #3e4451;
   }
 
-  html.dark .editor-holder .meditor-callout[data-callout-kind='quote'] .meditor-callout-title {
+  html.dark .editor-holder .tomosona-callout[data-callout-kind='quote'] .tomosona-callout-title {
     color: #abb2bf;
   }
 
-  html.dark .editor-holder .meditor-callout-kind {
+  html.dark .editor-holder .tomosona-callout-kind {
     background: #282c34;
     border-color: #3e4451;
     color: #abb2bf;
   }
 
-  html.dark .editor-holder .meditor-callout-message {
+  html.dark .editor-holder .tomosona-callout-message {
     color: #abb2bf;
   }
 
-  .editor-holder .meditor-mermaid {
+  .editor-holder .tomosona-mermaid {
     border: 1px solid #cbd5e1;
     border-radius: 0.8rem;
     background: #f8fafc;
     padding: 0.8rem 0.85rem;
   }
 
-  .editor-holder .meditor-mermaid-header {
+  .editor-holder .tomosona-mermaid-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -1036,7 +1036,7 @@ html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-empty,
     margin-bottom: 0.55rem;
   }
 
-  .editor-holder .meditor-mermaid-title {
+  .editor-holder .tomosona-mermaid-title {
     font-size: 0.78rem;
     letter-spacing: 0.05em;
     text-transform: uppercase;
@@ -1044,7 +1044,7 @@ html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-empty,
     font-weight: 700;
   }
 
-  .editor-holder .meditor-mermaid-template {
+  .editor-holder .tomosona-mermaid-template {
     border: 1px solid #cbd5e1;
     border-radius: 0.45rem;
     background: #ffffff;
@@ -1054,17 +1054,17 @@ html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-empty,
     padding: 0.24rem 0.42rem;
   }
 
-  .editor-holder .meditor-mermaid-template option {
+  .editor-holder .tomosona-mermaid-template option {
     background: #ffffff;
     color: #334155;
   }
 
-  .editor-holder .meditor-mermaid-body {
+  .editor-holder .tomosona-mermaid-body {
     display: grid;
     gap: 0.7rem;
   }
 
-  .editor-holder .meditor-mermaid-code {
+  .editor-holder .tomosona-mermaid-code {
     width: 100%;
     min-height: 120px;
     border: 1px solid #cbd5e1;
@@ -1079,12 +1079,12 @@ html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-empty,
     outline: none;
   }
 
-  .editor-holder .meditor-mermaid-code:focus {
+  .editor-holder .tomosona-mermaid-code:focus {
     border-color: #7aa5d3;
     box-shadow: 0 0 0 2px rgba(122, 165, 211, 0.2);
   }
 
-  .editor-holder .meditor-mermaid:not(.is-editing) .meditor-mermaid-code {
+  .editor-holder .tomosona-mermaid:not(.is-editing) .tomosona-mermaid-code {
     max-height: 0;
     min-height: 0;
     border-width: 0;
@@ -1095,7 +1095,7 @@ html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-empty,
     overflow: hidden;
   }
 
-  .editor-holder .meditor-mermaid-preview {
+  .editor-holder .tomosona-mermaid-preview {
     border: 1px solid #dbe5f0;
     border-radius: 0.65rem;
     background: #ffffff;
@@ -1104,16 +1104,16 @@ html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-empty,
     overflow: auto;
   }
 
-  .editor-holder .meditor-mermaid-preview svg {
+  .editor-holder .tomosona-mermaid-preview svg {
     max-width: 100%;
     height: auto;
   }
 
-  .editor-holder .meditor-mermaid:not(.is-editing) .meditor-mermaid-preview {
+  .editor-holder .tomosona-mermaid:not(.is-editing) .tomosona-mermaid-preview {
     cursor: pointer;
   }
 
-  .editor-holder .meditor-mermaid-error {
+  .editor-holder .tomosona-mermaid-error {
     border: 1px solid #f1cbd3;
     border-radius: 0.55rem;
     background: #fbeff2;
@@ -1124,48 +1124,48 @@ html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-empty,
     white-space: pre-wrap;
   }
 
-  .editor-holder .meditor-mermaid-body {
+  .editor-holder .tomosona-mermaid-body {
     position: relative;
   }
 
-  html.dark .editor-holder .meditor-mermaid {
+  html.dark .editor-holder .tomosona-mermaid {
     border-color: #3e4451;
     background: #21252b;
   }
 
-  html.dark .editor-holder .meditor-mermaid-title {
+  html.dark .editor-holder .tomosona-mermaid-title {
     color: #abb2bf;
   }
 
-  html.dark .editor-holder .meditor-mermaid-template {
+  html.dark .editor-holder .tomosona-mermaid-template {
     border-color: #4b5263;
     background: #282c34;
     color: #abb2bf;
     color-scheme: dark;
   }
 
-  html.dark .editor-holder .meditor-mermaid-template option {
+  html.dark .editor-holder .tomosona-mermaid-template option {
     background: #21252b;
     color: #abb2bf;
   }
 
-  html.dark .editor-holder .meditor-mermaid-code {
+  html.dark .editor-holder .tomosona-mermaid-code {
     border-color: #3e4451;
     background: #282c34;
     color: #abb2bf;
   }
 
-  html.dark .editor-holder .meditor-mermaid-code:focus {
+  html.dark .editor-holder .tomosona-mermaid-code:focus {
     border-color: #4a6f95;
     box-shadow: 0 0 0 2px rgba(74, 111, 149, 0.28);
   }
 
-  html.dark .editor-holder .meditor-mermaid-preview {
+  html.dark .editor-holder .tomosona-mermaid-preview {
     border-color: #3e4451;
     background: #282c34;
   }
 
-  html.dark .editor-holder .meditor-mermaid-error {
+  html.dark .editor-holder .tomosona-mermaid-error {
     border-color: #5b2b38;
     background: #321720;
     color: #e06c75;

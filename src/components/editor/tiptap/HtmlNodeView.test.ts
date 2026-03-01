@@ -45,7 +45,7 @@ describe('HtmlNodeView', () => {
   it('renders sanitized html preview', async () => {
     const harness = mountHarness({ initialHtml: '<div onclick="boom"><script>alert(1)</script>safe</div>' })
     await flush()
-    const preview = harness.root.querySelector('.meditor-html-preview') as HTMLDivElement
+    const preview = harness.root.querySelector('.tomosona-html-preview') as HTMLDivElement
     expect(preview.innerHTML).toContain('safe')
     expect(preview.innerHTML).not.toContain('onclick')
     expect(preview.innerHTML).not.toContain('script')
@@ -58,7 +58,7 @@ describe('HtmlNodeView', () => {
     })
     await flush()
 
-    const anchors = Array.from(harness.root.querySelectorAll('.meditor-html-preview a.wikilink')) as HTMLAnchorElement[]
+    const anchors = Array.from(harness.root.querySelectorAll('.tomosona-html-preview a.wikilink')) as HTMLAnchorElement[]
     expect(anchors).toHaveLength(2)
     expect(anchors[0].getAttribute('data-wikilink-target')).toBe('docs/note#Section 2')
     expect(anchors[0].textContent).toBe('S2')
@@ -73,11 +73,11 @@ describe('HtmlNodeView', () => {
     const harness = mountHarness()
     await flush()
 
-    const toggle = harness.root.querySelector('.meditor-html-toggle-btn') as HTMLButtonElement
+    const toggle = harness.root.querySelector('.tomosona-html-toggle-btn') as HTMLButtonElement
     toggle.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
     await flush()
 
-    const textarea = harness.root.querySelector('.meditor-html-textarea') as HTMLTextAreaElement
+    const textarea = harness.root.querySelector('.tomosona-html-textarea') as HTMLTextAreaElement
     textarea.value = '<section>Updated</section>'
     textarea.dispatchEvent(new Event('input', { bubbles: true }))
     await flush()
@@ -91,15 +91,15 @@ describe('HtmlNodeView', () => {
     const harness = mountHarness()
     await flush()
 
-    const wrapper = harness.root.querySelector('.meditor-html-node') as HTMLElement
-    const toggle = harness.root.querySelector('.meditor-html-toggle-btn') as HTMLButtonElement
+    const wrapper = harness.root.querySelector('.tomosona-html-node') as HTMLElement
+    const toggle = harness.root.querySelector('.tomosona-html-toggle-btn') as HTMLButtonElement
     expect(wrapper.classList.contains('is-editing')).toBe(false)
 
     toggle.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
     await flush()
     expect(wrapper.classList.contains('is-editing')).toBe(true)
 
-    const editorToggle = harness.root.querySelector('.meditor-html-toggle-btn') as HTMLButtonElement
+    const editorToggle = harness.root.querySelector('.tomosona-html-toggle-btn') as HTMLButtonElement
     editorToggle.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
     await flush()
     expect(wrapper.classList.contains('is-editing')).toBe(false)
@@ -111,17 +111,17 @@ describe('HtmlNodeView', () => {
     const harness = mountHarness({ initialHtml: '<div>\n  <span>x</span>\n</div>' })
     await flush()
 
-    const toggle = harness.root.querySelector('.meditor-html-toggle-btn') as HTMLButtonElement
+    const toggle = harness.root.querySelector('.tomosona-html-toggle-btn') as HTMLButtonElement
     toggle.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
     await flush()
 
-    const textarea = harness.root.querySelector('.meditor-html-textarea') as HTMLTextAreaElement
+    const textarea = harness.root.querySelector('.tomosona-html-textarea') as HTMLTextAreaElement
     textarea.setSelectionRange(0, 0)
     textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }))
     await flush()
     expect(harness.html.value.startsWith('  <div>')).toBe(true)
 
-    const latest = harness.root.querySelector('.meditor-html-textarea') as HTMLTextAreaElement
+    const latest = harness.root.querySelector('.tomosona-html-textarea') as HTMLTextAreaElement
     const insertPos = latest.value.indexOf('<span')
     latest.setSelectionRange(insertPos, insertPos)
     latest.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))

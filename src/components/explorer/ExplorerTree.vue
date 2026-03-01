@@ -164,13 +164,13 @@ function isConflictError(err: unknown): boolean {
 
 function persistExpandedState() {
   if (!props.folderPath) return
-  const key = `meditor.explorer.expanded.${props.folderPath}`
+  const key = `tomosona.explorer.expanded.${props.folderPath}`
   window.localStorage.setItem(key, JSON.stringify(Array.from(expandedPaths.value)))
 }
 
 function loadExpandedState() {
   if (!props.folderPath) return
-  const key = `meditor.explorer.expanded.${props.folderPath}`
+  const key = `tomosona.explorer.expanded.${props.folderPath}`
   const raw = window.localStorage.getItem(key)
   if (!raw) return
 

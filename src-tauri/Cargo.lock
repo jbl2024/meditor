@@ -2204,23 +2204,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2532096657941c2fea9c289d370a250971c689d4f143798ff67113ec042024a5"
 
 [[package]]
-name = "meditor"
-version = "0.6.0"
-dependencies = [
- "directories",
- "ignore",
- "notify",
- "open",
- "rfd",
- "rusqlite",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "thiserror 1.0.69",
-]
-
-[[package]]
 name = "memchr"
 version = "2.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4325,6 +4308,23 @@ name = "toml_writer"
 version = "1.0.6+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab16f14aed21ee8bfd8ec22513f7287cd4a91aa92e44edfe2c17ddd004e92607"
+
+[[package]]
+name = "tomosona"
+version = "0.6.0"
+dependencies = [
+ "directories",
+ "ignore",
+ "notify",
+ "open",
+ "rfd",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "thiserror 1.0.69",
+]
 
 [[package]]
 name = "tower"

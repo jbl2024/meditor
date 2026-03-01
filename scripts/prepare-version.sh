@@ -39,13 +39,13 @@ mv "$tmp_file" src-tauri/Cargo.toml
 
 tmp_file="$(mktemp)"
 awk -v v="$VERSION" '
-  BEGIN { in_pkg=0; is_meditor=0 }
-  /^\[\[package\]\]$/ { in_pkg=1; is_meditor=0 }
-  in_pkg && /^name = "meditor"$/ { is_meditor=1 }
-  in_pkg && is_meditor && /^version = "/ {
+  BEGIN { in_pkg=0; is_tomosona=0 }
+  /^\[\[package\]\]$/ { in_pkg=1; is_tomosona=0 }
+  in_pkg && /^name = "tomosona"$/ { is_tomosona=1 }
+  in_pkg && is_tomosona && /^version = "/ {
     $0 = "version = \"" v "\""
     in_pkg=0
-    is_meditor=0
+    is_tomosona=0
   }
   { print }
 ' src-tauri/Cargo.lock > "$tmp_file"

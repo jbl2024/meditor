@@ -65,7 +65,7 @@ const INITIAL_STATE: WikilinkPluginState = {
   requestId: 0
 }
 
-export const WIKILINK_STATE_KEY = new PluginKey<WikilinkPluginState>('meditor-wikilink-state')
+export const WIKILINK_STATE_KEY = new PluginKey<WikilinkPluginState>('tomosona-wikilink-state')
 
 export function getWikilinkPluginState(state: EditorState): WikilinkPluginState {
   return WIKILINK_STATE_KEY.getState(state) ?? INITIAL_STATE

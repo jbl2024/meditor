@@ -251,7 +251,7 @@ export function sanitizeExternalHref(raw: string): string | null {
   if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(value)) return null
 
   try {
-    const parsed = new URL(value, 'https://meditor.local')
+    const parsed = new URL(value, 'https://tomosona.local')
     const protocol = parsed.protocol.toLowerCase()
     if (protocol === 'http:' || protocol === 'https:' || protocol === 'mailto:') {
       if (!parsed.hostname && protocol !== 'mailto:') return null

@@ -38,11 +38,11 @@ type MermaidRuntimeState = {
 }
 
 function runtimeState(): MermaidRuntimeState {
-  const target = window as typeof window & { __meditorMermaidRuntime?: MermaidRuntimeState }
-  if (!target.__meditorMermaidRuntime) {
-    target.__meditorMermaidRuntime = { initialized: false, instanceSeq: 0 }
+  const target = window as typeof window & { __tomosonaMermaidRuntime?: MermaidRuntimeState }
+  if (!target.__tomosonaMermaidRuntime) {
+    target.__tomosonaMermaidRuntime = { initialized: false, instanceSeq: 0 }
   }
-  return target.__meditorMermaidRuntime
+  return target.__tomosonaMermaidRuntime
 }
 
 const instanceId = ++runtimeState().instanceSeq
@@ -68,7 +68,7 @@ async function renderPreview() {
   ensureMermaid()
   const renderToken = beginHeavyRender('mermaid-node-view')
   try {
-    const id = `meditor-mermaid-${instanceId}-${++renderCount}`
+    const id = `tomosona-mermaid-${instanceId}-${++renderCount}`
     const rendered = await mermaid.render(id, value)
     // Invariant: stale async render completions must not mutate DOM after a newer request won.
     if (requestId !== renderRequestId) return
@@ -229,14 +229,14 @@ function applyTabIndentation(textarea: HTMLTextAreaElement, unindent: boolean) {
 
 <template>
   <NodeViewWrapper
-    class="meditor-mermaid"
+    class="tomosona-mermaid"
     :class="{ 'is-editing': editor.isEditable && showCodeEditor }"
   >
-    <div class="meditor-mermaid-header" contenteditable="false">
-      <span class="meditor-mermaid-title">Mermaid</span>
-      <div class="meditor-mermaid-actions" v-if="editor.isEditable">
+    <div class="tomosona-mermaid-header" contenteditable="false">
+      <span class="tomosona-mermaid-title">Mermaid</span>
+      <div class="tomosona-mermaid-actions" v-if="editor.isEditable">
         <UiFilterableDropdown
-          class="meditor-mermaid-template-select"
+          class="tomosona-mermaid-template-select"
           :items="templateItems"
           :model-value="showTemplateMenu"
           :query="templateQuery"
@@ -253,7 +253,7 @@ function applyTabIndentation(textarea: HTMLTextAreaElement, unindent: boolean) {
           <template #trigger="{ toggleMenu }">
             <button
               type="button"
-              class="meditor-mermaid-template-btn"
+              class="tomosona-mermaid-template-btn"
               @click.stop="toggleMenu"
               @mousedown.prevent
             >
@@ -261,14 +261,14 @@ function applyTabIndentation(textarea: HTMLTextAreaElement, unindent: boolean) {
             </button>
           </template>
           <template #item="{ item, active }">
-            <span :class="{ 'meditor-mermaid-template-active': active, 'meditor-mermaid-template-selected': item.value === currentTemplateId }">
+            <span :class="{ 'tomosona-mermaid-template-active': active, 'tomosona-mermaid-template-selected': item.value === currentTemplateId }">
               {{ item.label }}
             </span>
           </template>
         </UiFilterableDropdown>
         <button
           type="button"
-          class="meditor-mermaid-edit-btn"
+          class="tomosona-mermaid-edit-btn"
           @mousedown.stop.prevent="onEditorToggle($event)"
         >
           {{ showCodeEditor ? 'Done' : 'Edit' }}
@@ -276,11 +276,11 @@ function applyTabIndentation(textarea: HTMLTextAreaElement, unindent: boolean) {
       </div>
     </div>
 
-    <div class="meditor-mermaid-body">
+    <div class="tomosona-mermaid-body">
       <textarea
         v-if="editor.isEditable && showCodeEditor"
         ref="textareaEl"
-        class="meditor-mermaid-code"
+        class="tomosona-mermaid-code"
         :value="code"
         spellcheck="false"
         @input="onInput"
@@ -288,27 +288,27 @@ function applyTabIndentation(textarea: HTMLTextAreaElement, unindent: boolean) {
       />
       <div
         ref="previewEl"
-        class="meditor-mermaid-preview"
+        class="tomosona-mermaid-preview"
         :class="{ 'is-editable': editor.isEditable }"
         contenteditable="false"
         @mousedown.stop.prevent="onPreviewPointerDown"
       ></div>
-      <div v-if="editor.isEditable && !showCodeEditor" class="meditor-mermaid-hint" contenteditable="false">
+      <div v-if="editor.isEditable && !showCodeEditor" class="tomosona-mermaid-hint" contenteditable="false">
         Click diagram to edit code
       </div>
       <textarea
         v-if="!editor.isEditable"
-        class="meditor-mermaid-code"
+        class="tomosona-mermaid-code"
         :value="code"
         readonly
       ></textarea>
-      <div v-if="error" class="meditor-mermaid-error" contenteditable="false">{{ error }}</div>
+      <div v-if="error" class="tomosona-mermaid-error" contenteditable="false">{{ error }}</div>
     </div>
   </NodeViewWrapper>
 </template>
 
 <style scoped>
-.meditor-mermaid-actions {
+.tomosona-mermaid-actions {
   align-items: center;
   display: flex;
   gap: 8px;
@@ -318,12 +318,12 @@ function applyTabIndentation(textarea: HTMLTextAreaElement, unindent: boolean) {
   visibility: hidden;
 }
 
-.meditor-mermaid-template-select {
+.tomosona-mermaid-template-select {
   position: relative;
 }
 
-.meditor-mermaid-template-btn,
-.meditor-mermaid-edit-btn {
+.tomosona-mermaid-template-btn,
+.tomosona-mermaid-edit-btn {
   background: transparent;
   border: 1px solid var(--color-border);
   border-radius: 4px;
@@ -333,12 +333,12 @@ function applyTabIndentation(textarea: HTMLTextAreaElement, unindent: boolean) {
   padding: 4px 8px;
 }
 
-.meditor-mermaid-template-btn:hover,
-.meditor-mermaid-edit-btn:hover {
+.tomosona-mermaid-template-btn:hover,
+.tomosona-mermaid-edit-btn:hover {
   background: var(--color-bg-hover);
 }
 
-.meditor-mermaid-template-select :deep(.ui-filterable-dropdown-menu) {
+.tomosona-mermaid-template-select :deep(.ui-filterable-dropdown-menu) {
   min-width: 220px;
   max-width: 280px;
   position: absolute;
@@ -347,58 +347,58 @@ function applyTabIndentation(textarea: HTMLTextAreaElement, unindent: boolean) {
   z-index: 40;
 }
 
-.dark .meditor-mermaid-template-select :deep(.ui-filterable-dropdown-menu) {
+.dark .tomosona-mermaid-template-select :deep(.ui-filterable-dropdown-menu) {
   background: rgb(15 23 42);
   border-color: rgb(71 85 105);
 }
 
-.dark .meditor-mermaid-template-select :deep(.ui-filterable-dropdown-filter) {
+.dark .tomosona-mermaid-template-select :deep(.ui-filterable-dropdown-filter) {
   border-bottom-color: rgb(71 85 105);
 }
 
-.dark .meditor-mermaid-template-select :deep(.ui-filterable-dropdown-filter-input) {
+.dark .tomosona-mermaid-template-select :deep(.ui-filterable-dropdown-filter-input) {
   background: rgb(15 23 42);
   border-color: rgb(71 85 105);
   color: rgb(226 232 240);
 }
 
-.dark .meditor-mermaid-template-select :deep(.ui-filterable-dropdown-filter-input::placeholder) {
+.dark .tomosona-mermaid-template-select :deep(.ui-filterable-dropdown-filter-input::placeholder) {
   color: rgb(148 163 184);
 }
 
-.dark .meditor-mermaid-template-select :deep(.ui-filterable-dropdown-option) {
+.dark .tomosona-mermaid-template-select :deep(.ui-filterable-dropdown-option) {
   color: rgb(226 232 240);
 }
 
-.dark .meditor-mermaid-template-select :deep(.ui-filterable-dropdown-option:hover),
-.dark .meditor-mermaid-template-select :deep(.ui-filterable-dropdown-option[data-active='true']) {
+.dark .tomosona-mermaid-template-select :deep(.ui-filterable-dropdown-option:hover),
+.dark .tomosona-mermaid-template-select :deep(.ui-filterable-dropdown-option[data-active='true']) {
   background: rgb(30 41 59);
 }
 
-.dark .meditor-mermaid-template-select :deep(.ui-filterable-dropdown-empty) {
+.dark .tomosona-mermaid-template-select :deep(.ui-filterable-dropdown-empty) {
   color: rgb(148 163 184);
 }
 
-.meditor-mermaid-template-active {
+.tomosona-mermaid-template-active {
   font-weight: 600;
 }
 
-.meditor-mermaid-template-selected {
+.tomosona-mermaid-template-selected {
   text-decoration: underline;
 }
 
-.meditor-mermaid-preview.is-editable {
+.tomosona-mermaid-preview.is-editable {
   cursor: text;
   user-select: none;
 }
 
-.meditor-mermaid-hint {
+.tomosona-mermaid-hint {
   color: #64748b;
   font-size: 12px;
   margin-top: 8px;
 }
 
-.meditor-mermaid-code {
+.tomosona-mermaid-code {
   font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.45;
@@ -407,15 +407,15 @@ function applyTabIndentation(textarea: HTMLTextAreaElement, unindent: boolean) {
   width: 100%;
 }
 
-.meditor-mermaid:hover .meditor-mermaid-actions,
-.meditor-mermaid:focus-within .meditor-mermaid-actions {
+.tomosona-mermaid:hover .tomosona-mermaid-actions,
+.tomosona-mermaid:focus-within .tomosona-mermaid-actions {
   opacity: 1;
   pointer-events: auto;
   visibility: visible;
 }
 
 @media (hover: none) {
-  .meditor-mermaid .meditor-mermaid-actions {
+  .tomosona-mermaid .tomosona-mermaid-actions {
     opacity: 1;
     pointer-events: auto;
     visibility: visible;

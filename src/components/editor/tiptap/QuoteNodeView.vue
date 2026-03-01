@@ -17,14 +17,14 @@ function onInput(event: Event) {
 </script>
 
 <template>
-  <NodeViewWrapper class="meditor-quote is-editing">
-    <div class="meditor-quote-preview">
-      <blockquote class="meditor-quote-preview-content">
-        <p class="meditor-quote-paragraph" v-for="(line, idx) in text.split('\n')" :key="idx">{{ line }}</p>
+  <NodeViewWrapper class="tomosona-quote is-editing">
+    <div class="tomosona-quote-preview">
+      <blockquote class="tomosona-quote-preview-content">
+        <p class="tomosona-quote-paragraph" v-for="(line, idx) in text.split('\n')" :key="idx">{{ line }}</p>
       </blockquote>
     </div>
     <textarea
-      class="meditor-quote-source"
+      class="tomosona-quote-source"
       :value="text"
       :readonly="!editor.isEditable"
       spellcheck="false"

@@ -17,7 +17,7 @@ describe('useEditorZoom', () => {
     const first = useEditorZoom()
     first.zoomBy(0.23)
 
-    expect(window.localStorage.getItem('meditor:editor:zoom')).toBe('1.23')
+    expect(window.localStorage.getItem('tomosona:editor:zoom')).toBe('1.23')
 
     const second = useEditorZoom()
     second.initFromStorage()
@@ -26,7 +26,7 @@ describe('useEditorZoom', () => {
   })
 
   it('keeps default zoom when saved value is invalid', () => {
-    window.localStorage.setItem('meditor:editor:zoom', 'not-a-number')
+    window.localStorage.setItem('tomosona:editor:zoom', 'not-a-number')
 
     const zoom = useEditorZoom()
     zoom.initFromStorage()
@@ -35,7 +35,7 @@ describe('useEditorZoom', () => {
   })
 
   it('rounds zoom to 2 decimals during load and updates', () => {
-    window.localStorage.setItem('meditor:editor:zoom', '1.236')
+    window.localStorage.setItem('tomosona:editor:zoom', '1.236')
 
     const zoom = useEditorZoom()
     zoom.initFromStorage()

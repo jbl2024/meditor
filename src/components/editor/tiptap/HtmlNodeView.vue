@@ -248,13 +248,13 @@ function onEditorKeydown(event: KeyboardEvent) {
 </script>
 
 <template>
-  <NodeViewWrapper class="meditor-html-node" :class="{ 'is-editing': editor.isEditable && showSource }">
-    <div class="meditor-html-surface">
-      <div class="meditor-html-body">
+  <NodeViewWrapper class="tomosona-html-node" :class="{ 'is-editing': editor.isEditable && showSource }">
+    <div class="tomosona-html-surface">
+      <div class="tomosona-html-body">
         <button
           v-if="editor.isEditable"
           type="button"
-          class="meditor-html-toggle-btn"
+          class="tomosona-html-toggle-btn"
           contenteditable="false"
           @mousedown.stop.prevent="onEditorToggle($event)"
         >
@@ -262,16 +262,16 @@ function onEditorKeydown(event: KeyboardEvent) {
         </button>
         <div
           v-if="!showSource"
-          class="meditor-html-preview"
+          class="tomosona-html-preview"
           contenteditable="false"
           v-html="sanitizedPreview"
         ></div>
 
-        <div v-else class="meditor-html-source-shell">
-          <pre ref="sourcePre" class="meditor-html-source" aria-hidden="true"><code class="hljs language-xml" v-html="highlightedSource"></code></pre>
+        <div v-else class="tomosona-html-source-shell">
+          <pre ref="sourcePre" class="tomosona-html-source" aria-hidden="true"><code class="hljs language-xml" v-html="highlightedSource"></code></pre>
           <textarea
             ref="sourceTextarea"
-            class="meditor-html-textarea"
+            class="tomosona-html-textarea"
             :value="html"
             spellcheck="false"
             @input="onInput"
@@ -285,19 +285,19 @@ function onEditorKeydown(event: KeyboardEvent) {
 </template>
 
 <style scoped>
-.meditor-html-node {
+.tomosona-html-node {
   margin: 0.18rem 0;
 }
 
-.meditor-html-surface {
+.tomosona-html-surface {
   position: relative;
 }
 
-.meditor-html-body {
+.tomosona-html-body {
   position: relative;
 }
 
-.meditor-html-toggle-btn {
+.tomosona-html-toggle-btn {
   border: 1px solid rgb(203 213 225);
   border-radius: 0.4rem;
   background: white;
@@ -317,22 +317,22 @@ function onEditorKeydown(event: KeyboardEvent) {
   visibility: hidden;
 }
 
-.meditor-html-toggle-btn:hover {
+.tomosona-html-toggle-btn:hover {
   background: rgb(248 250 252);
 }
 
-.meditor-html-preview {
+.tomosona-html-preview {
   border: 1px solid transparent;
   border-radius: 0.7rem;
   transition: border-color 120ms ease, background-color 120ms ease;
 }
 
-.meditor-html-source-shell {
+.tomosona-html-source-shell {
   position: relative;
 }
 
-.meditor-html-source,
-.meditor-html-textarea {
+.tomosona-html-source,
+.tomosona-html-textarea {
   border: 1px solid rgb(203 213 225);
   border-radius: 0.7rem;
   font-family: var(--font-mono);
@@ -346,12 +346,12 @@ function onEditorKeydown(event: KeyboardEvent) {
   width: 100%;
 }
 
-.meditor-html-source {
+.tomosona-html-source {
   color: rgb(15 23 42);
   pointer-events: none;
 }
 
-.meditor-html-textarea {
+.tomosona-html-textarea {
   background: transparent;
   caret-color: rgb(37 99 235);
   color: transparent;
@@ -365,81 +365,81 @@ function onEditorKeydown(event: KeyboardEvent) {
   height: 100%;
 }
 
-.meditor-html-textarea::selection {
+.tomosona-html-textarea::selection {
   background: rgb(59 130 246 / 0.24);
 }
 
-.meditor-html-source code.hljs {
+.tomosona-html-source code.hljs {
   color: #0f172a;
 }
 
-.meditor-html-source code :deep(.hljs-tag),
-.meditor-html-source code :deep(.hljs-name),
-.meditor-html-source code :deep(.hljs-selector-tag) {
+.tomosona-html-source code :deep(.hljs-tag),
+.tomosona-html-source code :deep(.hljs-name),
+.tomosona-html-source code :deep(.hljs-selector-tag) {
   color: #dc2626;
 }
 
-.meditor-html-source code :deep(.hljs-attr) {
+.tomosona-html-source code :deep(.hljs-attr) {
   color: #b45309;
 }
 
-.meditor-html-source code :deep(.hljs-string) {
+.tomosona-html-source code :deep(.hljs-string) {
   color: #0f766e;
 }
 
-.dark .meditor-html-toggle-btn {
+.dark .tomosona-html-toggle-btn {
   border-color: rgb(71 85 105);
   background: rgb(15 23 42);
   color: rgb(226 232 240);
 }
 
-.dark .meditor-html-toggle-btn:hover {
+.dark .tomosona-html-toggle-btn:hover {
   background: rgb(30 41 59);
 }
 
-.dark .meditor-html-preview,
-.dark .meditor-html-source,
-.dark .meditor-html-textarea {
+.dark .tomosona-html-preview,
+.dark .tomosona-html-source,
+.dark .tomosona-html-textarea {
   border-color: rgb(71 85 105);
 }
 
-.meditor-html-node:hover .meditor-html-toggle-btn,
-.meditor-html-node.is-editing .meditor-html-toggle-btn {
+.tomosona-html-node:hover .tomosona-html-toggle-btn,
+.tomosona-html-node.is-editing .tomosona-html-toggle-btn {
   opacity: 1;
   pointer-events: auto;
   visibility: visible;
 }
 
-.meditor-html-node:hover .meditor-html-preview,
-.meditor-html-node.is-editing .meditor-html-preview {
+.tomosona-html-node:hover .tomosona-html-preview,
+.tomosona-html-node.is-editing .tomosona-html-preview {
   border-color: rgb(203 213 225);
 }
 
-.dark .meditor-html-node:hover .meditor-html-preview,
-.dark .meditor-html-node.is-editing .meditor-html-preview {
+.dark .tomosona-html-node:hover .tomosona-html-preview,
+.dark .tomosona-html-node.is-editing .tomosona-html-preview {
   border-color: rgb(71 85 105);
 }
 
-.dark .meditor-html-source {
+.dark .tomosona-html-source {
   background: rgb(15 23 42);
   color: rgb(226 232 240);
 }
 
-.dark .meditor-html-source code.hljs {
+.dark .tomosona-html-source code.hljs {
   color: #e2e8f0;
 }
 
-.dark .meditor-html-source code :deep(.hljs-tag),
-.dark .meditor-html-source code :deep(.hljs-name),
-.dark .meditor-html-source code :deep(.hljs-selector-tag) {
+.dark .tomosona-html-source code :deep(.hljs-tag),
+.dark .tomosona-html-source code :deep(.hljs-name),
+.dark .tomosona-html-source code :deep(.hljs-selector-tag) {
   color: #fda4af;
 }
 
-.dark .meditor-html-source code :deep(.hljs-attr) {
+.dark .tomosona-html-source code :deep(.hljs-attr) {
   color: #fbbf24;
 }
 
-.dark .meditor-html-source code :deep(.hljs-string) {
+.dark .tomosona-html-source code :deep(.hljs-string) {
   color: #34d399;
 }
 </style>

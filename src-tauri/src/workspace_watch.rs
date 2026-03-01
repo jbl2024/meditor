@@ -15,11 +15,11 @@ use tauri::{AppHandle, Emitter};
 
 use crate::{AppError, Result};
 
-const INTERNAL_DIR_NAME: &str = ".meditor";
-const TRASH_DIR_NAME: &str = ".meditor-trash";
-const DB_FILE_NAME: &str = "meditor.sqlite";
+const INTERNAL_DIR_NAME: &str = ".tomosona";
+const TRASH_DIR_NAME: &str = ".tomosona-trash";
+const DB_FILE_NAME: &str = "tomosona.sqlite";
 const GITIGNORE_FILE_NAME: &str = ".gitignore";
-const MEDITOR_IGNORE_FILE_NAME: &str = ".meditorignore";
+const TOMOSONA_IGNORE_FILE_NAME: &str = ".tomosonaignore";
 const FS_EVENT_NAME: &str = "workspace://fs-changed";
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -93,7 +93,7 @@ fn path_parent(path: &str) -> Option<String> {
 }
 
 fn skip_file_name(file_name: &str) -> bool {
-    file_name == DB_FILE_NAME || file_name.starts_with("meditor.sqlite-")
+    file_name == DB_FILE_NAME || file_name.starts_with("tomosona.sqlite-")
 }
 
 fn should_skip_path(path: &Path) -> bool {
@@ -119,9 +119,9 @@ fn build_ignore_matcher(root: &Path) -> Option<Gitignore> {
         builder.add(gitignore);
     }
 
-    let meditor_ignore = root.join(MEDITOR_IGNORE_FILE_NAME);
-    if meditor_ignore.is_file() {
-        builder.add(meditor_ignore);
+    let tomosona_ignore = root.join(TOMOSONA_IGNORE_FILE_NAME);
+    if tomosona_ignore.is_file() {
+        builder.add(tomosona_ignore);
     }
 
     builder.build().ok()
@@ -490,7 +490,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .map(|value| value.as_nanos())
             .unwrap_or(0);
-        std::env::temp_dir().join(format!("meditor-watch-tests-{now}"))
+        std::env::temp_dir().join(format!("tomosona-watch-tests-{now}"))
     }
 
     fn mk_root() -> (PathBuf, String) {
@@ -517,10 +517,10 @@ mod tests {
 
     #[test]
     fn should_skip_path_skips_internal_dirs_and_db_files() {
-        assert!(should_skip_path(Path::new("/ws/.meditor/state.json")));
-        assert!(should_skip_path(Path::new("/ws/.meditor-trash/item.md")));
-        assert!(should_skip_path(Path::new("/ws/meditor.sqlite")));
-        assert!(should_skip_path(Path::new("/ws/meditor.sqlite-wal")));
+        assert!(should_skip_path(Path::new("/ws/.tomosona/state.json")));
+        assert!(should_skip_path(Path::new("/ws/.tomosona-trash/item.md")));
+        assert!(should_skip_path(Path::new("/ws/tomosona.sqlite")));
+        assert!(should_skip_path(Path::new("/ws/tomosona.sqlite-wal")));
         assert!(!should_skip_path(Path::new("/ws/notes/file.md")));
     }
 
@@ -543,9 +543,9 @@ mod tests {
     }
 
     #[test]
-    fn meditorignore_rules_filter_watcher_events() {
+    fn tomosonaignore_rules_filter_watcher_events() {
         let (root, root_norm) = mk_root();
-        fs::write(root.join(".meditorignore"), "private/**\n").expect("write meditorignore");
+        fs::write(root.join(".tomosonaignore"), "private/**\n").expect("write tomosonaignore");
         fs::create_dir_all(root.join("private")).expect("create private dir");
         let matcher = build_ignore_matcher(&root);
         let ignored = root.join("private/secret.md");
@@ -699,7 +699,7 @@ mod tests {
     #[test]
     fn rename_both_returns_empty_when_path_is_skipped() {
         let (root, root_norm) = mk_root();
-        let old_path = root.join(".meditor/old.md");
+        let old_path = root.join(".tomosona/old.md");
         let new_path = root.join("new.md");
         let changes = map_notify_event_to_changes(
             &root,

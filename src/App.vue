@@ -112,11 +112,11 @@ type CosmosHistorySnapshot = {
   focusDepth: number
 }
 
-const THEME_STORAGE_KEY = 'meditor.theme.preference'
-const WORKING_FOLDER_STORAGE_KEY = 'meditor.working-folder.path'
-const EDITOR_ZOOM_STORAGE_KEY = 'meditor:editor:zoom'
-const VIEW_MODE_STORAGE_KEY = 'meditor:view:active'
-const PREVIOUS_NON_COSMOS_VIEW_MODE_STORAGE_KEY = 'meditor:view:last-non-cosmos'
+const THEME_STORAGE_KEY = 'tomosona.theme.preference'
+const WORKING_FOLDER_STORAGE_KEY = 'tomosona.working-folder.path'
+const EDITOR_ZOOM_STORAGE_KEY = 'tomosona:editor:zoom'
+const VIEW_MODE_STORAGE_KEY = 'tomosona:view:active'
+const PREVIOUS_NON_COSMOS_VIEW_MODE_STORAGE_KEY = 'tomosona:view:last-non-cosmos'
 
 const workspace = useWorkspaceState()
 const editorState = useEditorState()

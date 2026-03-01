@@ -196,7 +196,7 @@ function iconFor(item: BlockMenuActionItem) {
     v-if="props.open"
     ref="rootEl"
     tabindex="-1"
-    class="meditor-block-menu z-40 w-64 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl outline-none dark:border-slate-700 dark:bg-slate-900"
+    class="tomosona-block-menu z-40 w-64 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl outline-none dark:border-slate-700 dark:bg-slate-900"
     @keydown="onMenuKeydown"
     @mouseleave="closeConvertMenu()"
   >

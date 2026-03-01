@@ -13,11 +13,11 @@ use crate::{
     Result,
 };
 
-const TRASH_DIR_NAME: &str = ".meditor-trash";
-const INTERNAL_DIR_NAME: &str = ".meditor";
-const DB_FILE_NAME: &str = "meditor.sqlite";
+const TRASH_DIR_NAME: &str = ".tomosona-trash";
+const INTERNAL_DIR_NAME: &str = ".tomosona";
+const DB_FILE_NAME: &str = "tomosona.sqlite";
 const GITIGNORE_FILE_NAME: &str = ".gitignore";
-const MEDITOR_IGNORE_FILE_NAME: &str = ".meditorignore";
+const TOMOSONA_IGNORE_FILE_NAME: &str = ".tomosonaignore";
 
 #[derive(Debug, Clone, Serialize)]
 pub struct TreeNode {
@@ -61,7 +61,7 @@ fn should_skip_file(path: &Path) -> bool {
         return false;
     };
 
-    file_name == DB_FILE_NAME || file_name.starts_with("meditor.sqlite-")
+    file_name == DB_FILE_NAME || file_name.starts_with("tomosona.sqlite-")
 }
 
 fn should_skip_dir_name(name: &str) -> bool {
@@ -76,9 +76,9 @@ fn build_ignore_matcher(root: &Path) -> Option<Gitignore> {
         builder.add(gitignore);
     }
 
-    let meditor_ignore = root.join(MEDITOR_IGNORE_FILE_NAME);
-    if meditor_ignore.is_file() {
-        builder.add(meditor_ignore);
+    let tomosona_ignore = root.join(TOMOSONA_IGNORE_FILE_NAME);
+    if tomosona_ignore.is_file() {
+        builder.add(tomosona_ignore);
     }
 
     builder.build().ok()
@@ -795,7 +795,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("clock")
             .as_nanos();
-        let dir = std::env::temp_dir().join(format!("meditor-fsops-test-{timestamp}"));
+        let dir = std::env::temp_dir().join(format!("tomosona-fsops-test-{timestamp}"));
         fs::create_dir_all(&dir).expect("create test dir");
         dir
     }
@@ -880,7 +880,7 @@ mod tests {
 
         let trashed = trash_entry(source.to_string_lossy().to_string()).expect("trash");
 
-        assert!(trashed.contains(".meditor-trash"));
+        assert!(trashed.contains(".tomosona-trash"));
         assert!(PathBuf::from(trashed).exists());
         assert!(!source.exists());
         fs::remove_dir_all(dir).expect("cleanup");
@@ -892,10 +892,10 @@ mod tests {
         activate_workspace(&dir);
         let root = dir.as_path();
         fs::write(root.join("doc.md"), "x").expect("write md");
-        fs::write(root.join("meditor.sqlite"), "legacy db").expect("write legacy db");
-        fs::create_dir_all(root.join(".meditor")).expect("internal dir");
-        fs::write(root.join(".meditor").join("meditor.sqlite"), "db").expect("write db");
-        fs::create_dir_all(root.join(".meditor-trash")).expect("trash dir");
+        fs::write(root.join("tomosona.sqlite"), "legacy db").expect("write legacy db");
+        fs::create_dir_all(root.join(".tomosona")).expect("internal dir");
+        fs::write(root.join(".tomosona").join("tomosona.sqlite"), "db").expect("write db");
+        fs::create_dir_all(root.join(".tomosona-trash")).expect("trash dir");
 
         let tree = list_children(root.to_string_lossy().to_string()).expect("list tree");
         assert_eq!(tree.len(), 1);
@@ -919,12 +919,12 @@ mod tests {
     }
 
     #[test]
-    fn list_tree_respects_gitignore_and_meditorignore() {
+    fn list_tree_respects_gitignore_and_tomosonaignore() {
         let dir = make_temp_dir();
         activate_workspace(&dir);
         let root = dir.as_path();
         fs::write(root.join(".gitignore"), "ignored.md\n").expect("write gitignore");
-        fs::write(root.join(".meditorignore"), "secret/\n").expect("write meditorignore");
+        fs::write(root.join(".tomosonaignore"), "secret/\n").expect("write tomosonaignore");
         fs::create_dir_all(root.join("secret")).expect("create secret dir");
         fs::write(root.join("visible.md"), "x").expect("write visible");
         fs::write(root.join("ignored.md"), "x").expect("write ignored");
@@ -936,7 +936,7 @@ mod tests {
             names,
             vec![
                 ".gitignore".to_string(),
-                ".meditorignore".to_string(),
+                ".tomosonaignore".to_string(),
                 "visible.md".to_string()
             ]
         );
@@ -953,8 +953,8 @@ mod tests {
         fs::write(root.join("a.md"), "x").expect("write a");
         fs::write(nested.join("b.markdown"), "x").expect("write b");
         fs::write(nested.join("c.txt"), "x").expect("write c");
-        fs::create_dir_all(root.join(".meditor")).expect("internal dir");
-        fs::write(root.join(".meditor").join("hidden.md"), "x").expect("write hidden");
+        fs::create_dir_all(root.join(".tomosona")).expect("internal dir");
+        fs::write(root.join(".tomosona").join("hidden.md"), "x").expect("write hidden");
 
         let files = list_markdown_files().expect("list markdown");
         assert_eq!(
@@ -973,7 +973,7 @@ mod tests {
         fs::create_dir_all(&nested).expect("mkdir");
         fs::create_dir_all(root.join("private")).expect("mkdir private");
         fs::write(root.join(".gitignore"), "docs/skip.md\n").expect("write gitignore");
-        fs::write(root.join(".meditorignore"), "private/**\n").expect("write meditorignore");
+        fs::write(root.join(".tomosonaignore"), "private/**\n").expect("write tomosonaignore");
         fs::write(root.join("a.md"), "x").expect("write a");
         fs::write(nested.join("ok.md"), "x").expect("write ok");
         fs::write(nested.join("skip.md"), "x").expect("write skip");

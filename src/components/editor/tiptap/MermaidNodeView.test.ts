@@ -74,7 +74,7 @@ describe('MermaidNodeView', () => {
       svg: `<svg data-render-id="${id}"><text>${source}</text></svg>`
     }))
     beginHeavyRender.mockImplementation(() => `token-${beginHeavyRender.mock.calls.length + 1}`)
-    ;(window as typeof window & { __meditorMermaidRuntime?: unknown }).__meditorMermaidRuntime = undefined
+    ;(window as typeof window & { __tomosonaMermaidRuntime?: unknown }).__tomosonaMermaidRuntime = undefined
   })
 
   afterEach(() => {
@@ -89,7 +89,7 @@ describe('MermaidNodeView', () => {
     expect(mermaidRender).toHaveBeenCalledTimes(1)
     expect(beginHeavyRender).toHaveBeenCalledTimes(1)
     expect(endHeavyRender).toHaveBeenCalledTimes(1)
-    expect(harness.root.querySelector('.meditor-mermaid-preview svg')).toBeTruthy()
+    expect(harness.root.querySelector('.tomosona-mermaid-preview svg')).toBeTruthy()
 
     harness.app.unmount()
   })
@@ -98,14 +98,14 @@ describe('MermaidNodeView', () => {
     const harness = mountHarness()
     await flush()
 
-    const preview = harness.root.querySelector('.meditor-mermaid-preview') as HTMLDivElement
+    const preview = harness.root.querySelector('.tomosona-mermaid-preview') as HTMLDivElement
     preview.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
     await flush()
 
-    const wrapper = harness.root.querySelector('.meditor-mermaid') as HTMLElement
+    const wrapper = harness.root.querySelector('.tomosona-mermaid') as HTMLElement
     expect(wrapper.classList.contains('is-editing')).toBe(true)
-    expect(harness.root.querySelector('.meditor-mermaid-code')).toBeTruthy()
-    expect(harness.root.querySelector('.meditor-mermaid-preview')).toBeTruthy()
+    expect(harness.root.querySelector('.tomosona-mermaid-code')).toBeTruthy()
+    expect(harness.root.querySelector('.tomosona-mermaid-preview')).toBeTruthy()
 
     harness.app.unmount()
   })
@@ -114,11 +114,11 @@ describe('MermaidNodeView', () => {
     const harness = mountHarness()
     await flush()
 
-    const preview = harness.root.querySelector('.meditor-mermaid-preview') as HTMLDivElement
+    const preview = harness.root.querySelector('.tomosona-mermaid-preview') as HTMLDivElement
     preview.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
     await flush()
 
-    const textarea = harness.root.querySelector('.meditor-mermaid-code') as HTMLTextAreaElement
+    const textarea = harness.root.querySelector('.tomosona-mermaid-code') as HTMLTextAreaElement
     textarea.value = 'sequenceDiagram\n  A->>B: Ping'
     textarea.dispatchEvent(new Event('input', { bubbles: true }))
     await flush()
@@ -133,11 +133,11 @@ describe('MermaidNodeView', () => {
     const harness = mountHarness({ initialCode: 'flowchart TD\nA --> B' })
     await flush()
 
-    const preview = harness.root.querySelector('.meditor-mermaid-preview') as HTMLDivElement
+    const preview = harness.root.querySelector('.tomosona-mermaid-preview') as HTMLDivElement
     preview.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
     await flush()
 
-    const textarea = harness.root.querySelector('.meditor-mermaid-code') as HTMLTextAreaElement
+    const textarea = harness.root.querySelector('.tomosona-mermaid-code') as HTMLTextAreaElement
     textarea.setSelectionRange(0, 0)
     textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }))
     await flush()
@@ -151,17 +151,17 @@ describe('MermaidNodeView', () => {
     const harness = mountHarness({ initialCode: 'A --> B\nB --> C' })
     await flush()
 
-    const preview = harness.root.querySelector('.meditor-mermaid-preview') as HTMLDivElement
+    const preview = harness.root.querySelector('.tomosona-mermaid-preview') as HTMLDivElement
     preview.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
     await flush()
 
-    const textarea = harness.root.querySelector('.meditor-mermaid-code') as HTMLTextAreaElement
+    const textarea = harness.root.querySelector('.tomosona-mermaid-code') as HTMLTextAreaElement
     textarea.setSelectionRange(0, textarea.value.length)
     textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }))
     await flush()
     expect(harness.code.value).toBe('  A --> B\n  B --> C')
 
-    const updated = harness.root.querySelector('.meditor-mermaid-code') as HTMLTextAreaElement
+    const updated = harness.root.querySelector('.tomosona-mermaid-code') as HTMLTextAreaElement
     updated.setSelectionRange(0, updated.value.length)
     updated.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }))
     await flush()
@@ -174,7 +174,7 @@ describe('MermaidNodeView', () => {
     const harness = mountHarness()
     await flush()
 
-    const trigger = harness.root.querySelector('.meditor-mermaid-template-btn') as HTMLButtonElement
+    const trigger = harness.root.querySelector('.tomosona-mermaid-template-btn') as HTMLButtonElement
     trigger.click()
     await flush()
 
@@ -198,7 +198,7 @@ describe('MermaidNodeView', () => {
     })
     await flush()
 
-    const trigger = harness.root.querySelector('.meditor-mermaid-template-btn') as HTMLButtonElement
+    const trigger = harness.root.querySelector('.tomosona-mermaid-template-btn') as HTMLButtonElement
     trigger.click()
     await flush()
 
@@ -230,7 +230,7 @@ describe('MermaidNodeView', () => {
     pending.shift()?.({ svg: '<svg data-version="new"></svg>' })
     await flush()
 
-    const preview = harness.root.querySelector('.meditor-mermaid-preview') as HTMLDivElement
+    const preview = harness.root.querySelector('.tomosona-mermaid-preview') as HTMLDivElement
     expect(preview.innerHTML).toContain('data-version="new"')
     expect(preview.innerHTML).not.toContain('data-version="old"')
     expect(beginHeavyRender).toHaveBeenCalledTimes(2)

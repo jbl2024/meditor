@@ -185,8 +185,8 @@ describe('App cosmos integration', () => {
   })
 
   it('restores mode from session storage', async () => {
-    window.sessionStorage.setItem('meditor:view:active', 'cosmos')
-    window.sessionStorage.setItem('meditor:view:last-non-cosmos', 'search')
+    window.sessionStorage.setItem('tomosona:view:active', 'cosmos')
+    window.sessionStorage.setItem('tomosona:view:last-non-cosmos', 'search')
 
     const mounted = mountApp()
     await flushUi()
@@ -202,7 +202,7 @@ describe('App cosmos integration', () => {
   })
 
   it('opens selected node only via explicit panel button', async () => {
-    window.localStorage.setItem('meditor.working-folder.path', '/vault')
+    window.localStorage.setItem('tomosona.working-folder.path', '/vault')
     const mounted = mountApp()
     await flushUi()
     await flushUi()
@@ -223,7 +223,7 @@ describe('App cosmos integration', () => {
   })
 
   it('keeps cosmos search query and matches after selecting a node', async () => {
-    window.localStorage.setItem('meditor.working-folder.path', '/vault')
+    window.localStorage.setItem('tomosona.working-folder.path', '/vault')
     const mounted = mountApp()
     await flushUi()
     await flushUi()
@@ -257,7 +257,7 @@ describe('App cosmos integration', () => {
   })
 
   it('restores cosmos state via back after opening a note from cosmos', async () => {
-    window.localStorage.setItem('meditor.working-folder.path', '/vault')
+    window.localStorage.setItem('tomosona.working-folder.path', '/vault')
     const mounted = mountApp()
     await flushUi()
     await flushUi()
@@ -297,7 +297,7 @@ describe('App cosmos integration', () => {
   })
 
   it('supports command palette actions for opening cosmos and opening active note in cosmos', async () => {
-    window.localStorage.setItem('meditor.working-folder.path', '/vault')
+    window.localStorage.setItem('tomosona.working-folder.path', '/vault')
     const mounted = mountApp()
     await flushUi()
     await flushUi()

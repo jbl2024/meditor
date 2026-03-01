@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This file defines repository-wide agent behavior for `meditor`.
+This file defines repository-wide agent behavior for `tomosona`.
 
 ## Scope
 - Applies to the entire repository unless a deeper `AGENTS.md` overrides specific rules.

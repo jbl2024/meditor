@@ -81,7 +81,7 @@ describe('EditorTableToolbar', () => {
     const harness = mountHarness()
     await flush()
 
-    const toolbar = harness.root.querySelector('.meditor-table-toolbar') as HTMLDivElement
+    const toolbar = harness.root.querySelector('.tomosona-table-toolbar') as HTMLDivElement
     toolbar.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
     await flush()
 

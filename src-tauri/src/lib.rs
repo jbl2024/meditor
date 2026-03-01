@@ -22,9 +22,9 @@ use fs_ops::{
     set_working_folder, trash_entry, write_text_file,
 };
 
-const INTERNAL_DIR_NAME: &str = ".meditor";
-const TRASH_DIR_NAME: &str = ".meditor-trash";
-const DB_FILE_NAME: &str = "meditor.sqlite";
+const INTERNAL_DIR_NAME: &str = ".tomosona";
+const TRASH_DIR_NAME: &str = ".tomosona-trash";
+const DB_FILE_NAME: &str = "tomosona.sqlite";
 const PROPERTY_TYPE_SCHEMA_FILE: &str = "property-types.json";
 const RESERVED_WORKSPACE_ERROR: &str =
     "Cannot use this folder as a workspace. Choose a dedicated project folder.";
@@ -1537,7 +1537,7 @@ fn list_markdown_files_via_find(root: &Path) -> Result<Vec<PathBuf>> {
                 continue;
             }
 
-            if name == DB_FILE_NAME || name.starts_with("meditor.sqlite-") {
+            if name == DB_FILE_NAME || name.starts_with("tomosona.sqlite-") {
                 continue;
             }
 
@@ -1848,7 +1848,7 @@ mod tests {
 
     #[test]
     fn set_active_workspace_accepts_regular_folder() {
-        let temp = std::env::temp_dir().join("meditor-workspace-guard-test");
+        let temp = std::env::temp_dir().join("tomosona-workspace-guard-test");
         fs::create_dir_all(&temp).expect("create temp dir");
 
         let set = set_active_workspace(&temp.to_string_lossy()).expect("set workspace");
@@ -1861,7 +1861,7 @@ mod tests {
     #[test]
     fn get_wikilink_graph_builds_expected_nodes_edges_and_tags() {
         let _guard = workspace_test_guard();
-        let workspace = create_temp_workspace("meditor-graph-test");
+        let workspace = create_temp_workspace("tomosona-graph-test");
         let root = workspace.to_string_lossy().to_string();
 
         fs::write(workspace.join("a.md"), "# A\n[[b]]").expect("write a");
@@ -1928,7 +1928,7 @@ mod tests {
     #[test]
     fn get_wikilink_graph_resolves_unique_basename_targets() {
         let _guard = workspace_test_guard();
-        let workspace = create_temp_workspace("meditor-graph-basename-test");
+        let workspace = create_temp_workspace("tomosona-graph-basename-test");
         let root = workspace.to_string_lossy().to_string();
 
         fs::create_dir_all(workspace.join("notes")).expect("create notes dir");

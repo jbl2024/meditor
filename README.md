@@ -1,6 +1,6 @@
-# Meditor
+# tomosona
 
-Meditor is a local-first desktop Markdown workspace built with Tauri 2, Vue 3, and Rust.
+tomosona is a local-first desktop Markdown workspace built with Tauri 2, Vue 3, and Rust.
 
 At a high level, it provides:
 - Local folder-based notes and files

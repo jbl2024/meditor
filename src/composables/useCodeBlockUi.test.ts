@@ -28,7 +28,7 @@ describe('useCodeBlockUi', () => {
     const holder = ref<HTMLDivElement | null>(document.createElement('div'))
     const api = useCodeBlockUi({ holder })
 
-    window.localStorage.setItem('meditor:editor:code-wrap', '0')
+    window.localStorage.setItem('tomosona:editor:code-wrap', '0')
     api.initFromStorage()
 
     expect(api.codeWrapEnabled.value).toBe(false)
@@ -45,8 +45,8 @@ describe('useCodeBlockUi', () => {
     api.ensureCodeBlockUi()
     api.ensureCodeBlockUi()
 
-    expect(block.querySelectorAll('.meditor-code-wrap-btn')).toHaveLength(1)
-    expect(block.querySelectorAll('.meditor-code-copy-btn')).toHaveLength(1)
+    expect(block.querySelectorAll('.tomosona-code-wrap-btn')).toHaveLength(1)
+    expect(block.querySelectorAll('.tomosona-code-copy-btn')).toHaveLength(1)
   })
 
   it('toggles wrap mode from the wrap button', () => {
@@ -60,14 +60,14 @@ describe('useCodeBlockUi', () => {
     api.ensureCodeBlockUi()
 
     const textarea = block.querySelector('.ce-code__textarea') as HTMLTextAreaElement
-    const wrapButton = block.querySelector('.meditor-code-wrap-btn') as HTMLButtonElement
+    const wrapButton = block.querySelector('.tomosona-code-wrap-btn') as HTMLButtonElement
 
-    expect(block.classList.contains('meditor-code-wrap-enabled')).toBe(true)
+    expect(block.classList.contains('tomosona-code-wrap-enabled')).toBe(true)
     expect(textarea.wrap).toBe('soft')
 
     wrapButton.click()
 
-    expect(block.classList.contains('meditor-code-wrap-enabled')).toBe(false)
+    expect(block.classList.contains('tomosona-code-wrap-enabled')).toBe(false)
     expect(textarea.wrap).toBe('off')
   })
 
@@ -91,7 +91,7 @@ describe('useCodeBlockUi', () => {
     const api = useCodeBlockUi({ holder })
     api.ensureCodeBlockUi()
 
-    const copyButton = block.querySelector('.meditor-code-copy-btn') as HTMLButtonElement
+    const copyButton = block.querySelector('.tomosona-code-copy-btn') as HTMLButtonElement
     copyButton.click()
     await Promise.resolve()
 
@@ -132,8 +132,8 @@ describe('useCodeBlockUi', () => {
 
     api.startObservers()
 
-    expect(holderEl.querySelectorAll('.meditor-code-wrap-btn')).toHaveLength(1)
-    expect(holderEl.querySelectorAll('.meditor-code-copy-btn')).toHaveLength(1)
+    expect(holderEl.querySelectorAll('.tomosona-code-wrap-btn')).toHaveLength(1)
+    expect(holderEl.querySelectorAll('.tomosona-code-copy-btn')).toHaveLength(1)
     expect(observe).toHaveBeenCalledTimes(1)
     expect(observe).toHaveBeenCalledWith(holderEl, { childList: true, subtree: true })
     expect(rafSpy).toHaveBeenCalled()

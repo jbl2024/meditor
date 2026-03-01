@@ -94,7 +94,7 @@ function onKeydown(event: KeyboardEvent) {
     v-if="open"
     ref="rootEl"
     tabindex="-1"
-    class="meditor-table-toolbar z-50 w-[320px] max-h-[72vh] overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl outline-none dark:border-slate-700 dark:bg-slate-900"
+    class="tomosona-table-toolbar z-50 w-[320px] max-h-[72vh] overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl outline-none dark:border-slate-700 dark:bg-slate-900"
     :style="toolbarStyle"
     @keydown="onKeydown"
   >

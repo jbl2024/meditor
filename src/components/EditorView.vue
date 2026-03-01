@@ -118,7 +118,7 @@ const TABLE_EDGE_SHOW_THRESHOLD = 20
 const TABLE_EDGE_STICKY_THRESHOLD = 44
 const TABLE_EDGE_STICKY_MS = 280
 const TABLE_MARKDOWN_MODE = true
-const DRAG_HANDLE_PLUGIN_KEY = 'meditor-drag-handle'
+const DRAG_HANDLE_PLUGIN_KEY = 'tomosona-drag-handle'
 const DRAG_HANDLE_DEBUG = false
 const DRAG_HANDLE_CONTENT_EDGE_GAP_PX = 2
 const dragHandleUiState = ref<DragHandleUiState>({
@@ -233,7 +233,7 @@ const blockHandleControls = useEditorBlockHandleControls({
 })
 
 const dragHandleLockXMiddleware: Middleware = {
-  name: 'meditorLockXToContent',
+  name: 'tomosonaLockXToContent',
   fn(state: MiddlewareState) {
     const shellEl = contentShell.value
     if (!shellEl) return {}
@@ -398,7 +398,7 @@ const emitOutlineSoon = caretOutline.emitOutlineSoon
 function onDocumentMouseDown(event: MouseEvent) {
   const target = event.target
   if (!(target instanceof Node)) return
-  const handleRoot = target instanceof Element ? target.closest('.meditor-block-controls') : null
+  const handleRoot = target instanceof Element ? target.closest('.tomosona-block-controls') : null
 
   if (blockMenuOpen.value) {
     if (blockMenuFloatingEl.value?.contains(target)) return
@@ -408,7 +408,7 @@ function onDocumentMouseDown(event: MouseEvent) {
 
   if (tableToolbarOpen.value) {
     if (tableToolbarFloatingEl.value?.contains(target)) return
-    if (target instanceof Element && target.closest('.meditor-table-control')) return
+    if (target instanceof Element && target.closest('.tomosona-table-control')) return
     hideTableToolbar()
   }
 }
@@ -934,16 +934,16 @@ defineExpose({
             :editor="renderedEditor"
             :plugin-key="DRAG_HANDLE_PLUGIN_KEY"
             :compute-position-config="dragHandleComputePositionConfig"
-            class="meditor-drag-handle"
+            class="tomosona-drag-handle"
             :nested="true"
             :on-node-change="onBlockHandleNodeChange"
             :on-element-drag-start="onHandleDragStart"
             :on-element-drag-end="onHandleDragEnd"
           >
-            <div class="meditor-block-controls" @mouseenter="onHandleControlsEnter" @mouseleave="onHandleControlsLeave">
+            <div class="tomosona-block-controls" @mouseenter="onHandleControlsEnter" @mouseleave="onHandleControlsLeave">
               <button
                 type="button"
-                class="meditor-block-control-btn"
+                class="tomosona-block-control-btn"
                 aria-label="Insert below"
                 @mousedown.stop
                 @click.stop.prevent="onBlockMenuPlus"
@@ -952,7 +952,7 @@ defineExpose({
               </button>
               <button
                 type="button"
-                class="meditor-block-control-btn meditor-block-grip-btn"
+                class="tomosona-block-control-btn tomosona-block-grip-btn"
                 aria-label="Open block menu"
                 @mousedown.stop
                 @click.stop.prevent="toggleBlockMenu"

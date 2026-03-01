@@ -22,7 +22,7 @@ const props = defineProps<{
       <div class="mt-3 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
         <div
           class="h-full rounded-full bg-blue-600 transition-[width] duration-200 ease-out dark:bg-blue-500"
-          :class="{ 'meditor-load-indeterminate': props.progressIndeterminate }"
+          :class="{ 'tomosona-load-indeterminate': props.progressIndeterminate }"
           :style="props.progressIndeterminate ? undefined : { width: `${props.progressPercent}%` }"
         ></div>
       </div>
@@ -34,14 +34,14 @@ const props = defineProps<{
 </template>
 
 <style scoped>
-.meditor-load-indeterminate {
+.tomosona-load-indeterminate {
   width: 45%;
   background-image: linear-gradient(90deg, #2563eb 0%, #3b82f6 50%, #2563eb 100%);
   background-size: 200% 100%;
-  animation: meditor-load-slide 1.1s linear infinite;
+  animation: tomosona-load-slide 1.1s linear infinite;
 }
 
-@keyframes meditor-load-slide {
+@keyframes tomosona-load-slide {
   from {
     transform: translateX(-120%);
     background-position: 0% 0%;

@@ -58,7 +58,7 @@ const menuEl = ref<HTMLElement | null>(null)
 const inputRef = ref<HTMLInputElement | null>(null)
 const listRef = ref<HTMLElement | null>(null)
 
-const listboxId = `meditor-filterable-listbox-${Math.random().toString(36).slice(2)}`
+const listboxId = `tomosona-filterable-listbox-${Math.random().toString(36).slice(2)}`
 const itemsRef = computed(() => props.items)
 const maxHeightPx = computed(() =>
   typeof props.maxHeight === 'number' ? `${props.maxHeight}px` : props.maxHeight

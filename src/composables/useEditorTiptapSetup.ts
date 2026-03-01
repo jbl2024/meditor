@@ -132,7 +132,7 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
       ],
       editorProps: {
         attributes: {
-          class: 'ProseMirror meditor-prosemirror'
+          class: 'ProseMirror tomosona-prosemirror'
         },
         handleKeyDown: () => {
           options.markSlashActivatedByUser()

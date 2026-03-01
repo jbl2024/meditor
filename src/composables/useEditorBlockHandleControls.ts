@@ -133,7 +133,7 @@ export function useEditorBlockHandleControls(options: UseEditorBlockHandleContro
 
   function toggleBlockMenu(event: MouseEvent) {
     const handleRoot = (event.currentTarget instanceof HTMLElement)
-      ? event.currentTarget.closest('.meditor-drag-handle')
+      ? event.currentTarget.closest('.tomosona-drag-handle')
       : null
     if (handleRoot?.getAttribute('data-dragging') === 'true') {
       options.dragHandleUiState.value = { ...options.dragHandleUiState.value, dragging: true }

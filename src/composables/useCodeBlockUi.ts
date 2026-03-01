@@ -29,7 +29,7 @@ export function useCodeBlockUi(options: { holder: Ref<HTMLDivElement | null> }) 
    * Loads persisted code UI preferences from localStorage.
    */
   function initFromStorage() {
-    codeWrapEnabled.value = window.localStorage.getItem('meditor:editor:code-wrap') !== '0'
+    codeWrapEnabled.value = window.localStorage.getItem('tomosona:editor:code-wrap') !== '0'
   }
 
   function autosizeCodeTextarea(textarea: HTMLTextAreaElement) {
@@ -40,7 +40,7 @@ export function useCodeBlockUi(options: { holder: Ref<HTMLDivElement | null> }) 
 
   function setCodeWrapEnabled(next: boolean) {
     codeWrapEnabled.value = next
-    window.localStorage.setItem('meditor:editor:code-wrap', next ? '1' : '0')
+    window.localStorage.setItem('tomosona:editor:code-wrap', next ? '1' : '0')
   }
 
   function setCodeCopyState(button: HTMLButtonElement, copied: boolean) {
@@ -61,7 +61,7 @@ export function useCodeBlockUi(options: { holder: Ref<HTMLDivElement | null> }) 
   }
 
   function applyCodeWrapToBlock(block: HTMLElement) {
-    block.classList.toggle('meditor-code-wrap-enabled', codeWrapEnabled.value)
+    block.classList.toggle('tomosona-code-wrap-enabled', codeWrapEnabled.value)
     const textarea = block.querySelector('.ce-code__textarea') as HTMLTextAreaElement | null
     if (!textarea) return
     textarea.wrap = codeWrapEnabled.value ? 'soft' : 'off'
@@ -71,7 +71,7 @@ export function useCodeBlockUi(options: { holder: Ref<HTMLDivElement | null> }) 
   function refreshCodeWrapUi() {
     if (!options.holder.value) return
     ensureCodeBlockUi(options.holder.value)
-    const buttons = Array.from(options.holder.value.querySelectorAll('.meditor-code-wrap-btn')) as HTMLButtonElement[]
+    const buttons = Array.from(options.holder.value.querySelectorAll('.tomosona-code-wrap-btn')) as HTMLButtonElement[]
     buttons.forEach((button) => setCodeWrapButtonState(button))
   }
 
@@ -96,8 +96,8 @@ export function useCodeBlockUi(options: { holder: Ref<HTMLDivElement | null> }) 
   }
 
   function initCodeTextarea(textarea: HTMLTextAreaElement) {
-    if (textarea.dataset.meditorCodeInit === '1') return
-    textarea.dataset.meditorCodeInit = '1'
+    if (textarea.dataset.tomosonaCodeInit === '1') return
+    textarea.dataset.tomosonaCodeInit = '1'
     textarea.rows = 1
     textarea.spellcheck = false
     textarea.addEventListener('input', () => autosizeCodeTextarea(textarea))
@@ -113,11 +113,11 @@ export function useCodeBlockUi(options: { holder: Ref<HTMLDivElement | null> }) 
 
     applyCodeWrapToBlock(block)
 
-    let wrapButton = block.querySelector('.meditor-code-wrap-btn') as HTMLButtonElement | null
+    let wrapButton = block.querySelector('.tomosona-code-wrap-btn') as HTMLButtonElement | null
     if (!wrapButton) {
       wrapButton = document.createElement('button')
       wrapButton.type = 'button'
-      wrapButton.className = 'meditor-code-wrap-btn'
+      wrapButton.className = 'tomosona-code-wrap-btn'
       wrapButton.innerHTML = `
         <span class="icon-wrap-on" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" focusable="false" aria-hidden="true">
@@ -139,10 +139,10 @@ export function useCodeBlockUi(options: { holder: Ref<HTMLDivElement | null> }) 
     }
     setCodeWrapButtonState(wrapButton)
 
-    if (block.querySelector('.meditor-code-copy-btn')) return
+    if (block.querySelector('.tomosona-code-copy-btn')) return
     const copyButton = document.createElement('button')
     copyButton.type = 'button'
-    copyButton.className = 'meditor-code-copy-btn'
+    copyButton.className = 'tomosona-code-copy-btn'
     copyButton.setAttribute('aria-label', 'Copy code')
     copyButton.innerHTML = `
       <span class="icon-copy" aria-hidden="true">

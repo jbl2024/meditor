@@ -71,11 +71,11 @@ function onMessageInput(event: Event) {
 </script>
 
 <template>
-  <NodeViewWrapper class="meditor-callout" :data-callout-kind="kind.toLowerCase()">
-    <div class="meditor-callout-header">
+  <NodeViewWrapper class="tomosona-callout" :data-callout-kind="kind.toLowerCase()">
+    <div class="tomosona-callout-header">
       <UiFilterableDropdown
         v-if="editor.isEditable"
-        class="meditor-callout-kind-select"
+        class="tomosona-callout-kind-select"
         :items="kindItems"
         :model-value="showKindMenu"
         :query="kindQuery"
@@ -92,32 +92,32 @@ function onMessageInput(event: Event) {
         <template #trigger="{ toggleMenu }">
           <button
             type="button"
-            class="meditor-callout-title meditor-callout-title-trigger"
+            class="tomosona-callout-title tomosona-callout-title-trigger"
             @mousedown.prevent
             @click.stop="toggleMenu"
           >
-            <span class="meditor-callout-icon">
-              <component :is="currentKindIcon" class="meditor-callout-icon-svg" aria-hidden="true" />
+            <span class="tomosona-callout-icon">
+              <component :is="currentKindIcon" class="tomosona-callout-icon-svg" aria-hidden="true" />
             </span>
-            <span class="meditor-callout-label">{{ calloutKindLabel(kind) }}</span>
+            <span class="tomosona-callout-label">{{ calloutKindLabel(kind) }}</span>
           </button>
         </template>
         <template #item="{ item, active }">
-          <span class="meditor-callout-kind-option" :class="{ 'meditor-callout-kind-active': active, 'meditor-callout-kind-selected': item.value === kind }">
-            <component :is="item.icon" class="meditor-callout-kind-option-icon" aria-hidden="true" />
+          <span class="tomosona-callout-kind-option" :class="{ 'tomosona-callout-kind-active': active, 'tomosona-callout-kind-selected': item.value === kind }">
+            <component :is="item.icon" class="tomosona-callout-kind-option-icon" aria-hidden="true" />
             <span>{{ item.label }}</span>
           </span>
         </template>
       </UiFilterableDropdown>
-      <div v-else class="meditor-callout-title">
-        <span class="meditor-callout-icon">
-          <component :is="currentKindIcon" class="meditor-callout-icon-svg" aria-hidden="true" />
+      <div v-else class="tomosona-callout-title">
+        <span class="tomosona-callout-icon">
+          <component :is="currentKindIcon" class="tomosona-callout-icon-svg" aria-hidden="true" />
         </span>
-        <span class="meditor-callout-label">{{ calloutKindLabel(kind) }}</span>
+        <span class="tomosona-callout-label">{{ calloutKindLabel(kind) }}</span>
       </div>
     </div>
     <textarea
-      class="meditor-quote-source meditor-callout-message"
+      class="tomosona-quote-source tomosona-callout-message"
       :value="message"
       :readonly="!editor.isEditable"
       spellcheck="false"
@@ -128,13 +128,13 @@ function onMessageInput(event: Event) {
 </template>
 
 <style scoped>
-.meditor-callout-kind-select {
+.tomosona-callout-kind-select {
   position: relative;
   display: inline-flex;
   align-items: center;
 }
 
-.meditor-callout-title-trigger {
+.tomosona-callout-title-trigger {
   background: transparent;
   border: none;
   color: inherit;
@@ -144,19 +144,19 @@ function onMessageInput(event: Event) {
   text-align: left;
 }
 
-.meditor-callout-icon-svg,
-.meditor-callout-kind-option-icon {
+.tomosona-callout-icon-svg,
+.tomosona-callout-kind-option-icon {
   height: 0.9rem;
   width: 0.9rem;
 }
 
-.meditor-callout-kind-option {
+.tomosona-callout-kind-option {
   align-items: center;
   display: inline-flex;
   gap: 0.45rem;
 }
 
-.meditor-callout-kind-select :deep(.ui-filterable-dropdown-menu) {
+.tomosona-callout-kind-select :deep(.ui-filterable-dropdown-menu) {
   min-width: 240px;
   max-width: 300px;
   position: absolute;
@@ -165,43 +165,43 @@ function onMessageInput(event: Event) {
   z-index: 40;
 }
 
-.dark .meditor-callout-kind-select :deep(.ui-filterable-dropdown-menu) {
+.dark .tomosona-callout-kind-select :deep(.ui-filterable-dropdown-menu) {
   background: rgb(15 23 42);
   border-color: rgb(71 85 105);
 }
 
-.dark .meditor-callout-kind-select :deep(.ui-filterable-dropdown-filter) {
+.dark .tomosona-callout-kind-select :deep(.ui-filterable-dropdown-filter) {
   border-bottom-color: rgb(71 85 105);
 }
 
-.dark .meditor-callout-kind-select :deep(.ui-filterable-dropdown-filter-input) {
+.dark .tomosona-callout-kind-select :deep(.ui-filterable-dropdown-filter-input) {
   background: rgb(15 23 42);
   border-color: rgb(71 85 105);
   color: rgb(226 232 240);
 }
 
-.dark .meditor-callout-kind-select :deep(.ui-filterable-dropdown-filter-input::placeholder) {
+.dark .tomosona-callout-kind-select :deep(.ui-filterable-dropdown-filter-input::placeholder) {
   color: rgb(148 163 184);
 }
 
-.dark .meditor-callout-kind-select :deep(.ui-filterable-dropdown-option) {
+.dark .tomosona-callout-kind-select :deep(.ui-filterable-dropdown-option) {
   color: rgb(226 232 240);
 }
 
-.dark .meditor-callout-kind-select :deep(.ui-filterable-dropdown-option:hover),
-.dark .meditor-callout-kind-select :deep(.ui-filterable-dropdown-option[data-active='true']) {
+.dark .tomosona-callout-kind-select :deep(.ui-filterable-dropdown-option:hover),
+.dark .tomosona-callout-kind-select :deep(.ui-filterable-dropdown-option[data-active='true']) {
   background: rgb(30 41 59);
 }
 
-.dark .meditor-callout-kind-select :deep(.ui-filterable-dropdown-empty) {
+.dark .tomosona-callout-kind-select :deep(.ui-filterable-dropdown-empty) {
   color: rgb(148 163 184);
 }
 
-.meditor-callout-kind-active {
+.tomosona-callout-kind-active {
   font-weight: 600;
 }
 
-.meditor-callout-kind-selected {
+.tomosona-callout-kind-selected {
   text-decoration: underline;
 }
 </style>
