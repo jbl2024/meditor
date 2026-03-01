@@ -283,17 +283,24 @@ fn workspace_absolute_path(root: &Path, stored_path: &str) -> String {
 }
 
 /// Derives a display label from a workspace-relative markdown path.
+///
+/// The label keeps folder context (`graph/synapse`) to avoid basename collisions.
 fn note_label_from_workspace_path(path: &str) -> String {
-    Path::new(path)
-        .file_stem()
-        .and_then(|value| value.to_str())
-        .unwrap_or(path)
-        .to_string()
+    let without_md = path
+        .strip_suffix(".md")
+        .or_else(|| path.strip_suffix(".markdown"))
+        .unwrap_or(path);
+    without_md.replace('\\', "/")
 }
 
 /// Normalizes a stored workspace path into the note key format used by `note_links.target_key`.
 fn normalize_note_key_from_workspace_path(root: &Path, stored_path: &str) -> Option<String> {
     normalize_note_key(root, &root.join(stored_path)).ok()
+}
+
+/// Returns the final path segment of a normalized note key.
+fn note_key_basename(key: &str) -> String {
+    key.rsplit('/').next().unwrap_or(key).to_string()
 }
 
 fn note_link_target(root: &Path, path: &Path) -> Result<String> {
@@ -970,15 +977,27 @@ fn build_wikilink_graph_from_index(
     }
 
     let mut path_by_key: HashMap<String, String> = HashMap::new();
+    let mut path_by_unique_basename: HashMap<String, Option<String>> = HashMap::new();
     for path in markdown_paths {
         if let Some(key) = normalize_note_key_from_workspace_path(root_canonical, path) {
+            let basename = note_key_basename(&key);
             let existing = path_by_key.get(&key).cloned();
             if let Some(previous) = existing {
                 if path.to_lowercase() < previous.to_lowercase() {
-                    path_by_key.insert(key, path.clone());
+                    path_by_key.insert(key.clone(), path.clone());
                 }
             } else {
-                path_by_key.insert(key, path.clone());
+                path_by_key.insert(key.clone(), path.clone());
+            }
+
+            match path_by_unique_basename.get(&basename) {
+                Some(Some(previous)) if !previous.eq_ignore_ascii_case(path) => {
+                    path_by_unique_basename.insert(basename, None);
+                }
+                Some(None) => {}
+                _ => {
+                    path_by_unique_basename.insert(basename, Some(path.clone()));
+                }
             }
         }
     }
@@ -1027,7 +1046,15 @@ fn build_wikilink_graph_from_index(
         if !nodes_set.contains(&source_path) {
             continue;
         }
-        let Some(target_path) = path_by_key.get(&target_key).cloned() else {
+        let target_path = path_by_key.get(&target_key).cloned().or_else(|| {
+            if target_key.contains('/') {
+                return None;
+            }
+            path_by_unique_basename
+                .get(&target_key)
+                .and_then(|value| value.clone())
+        });
+        let Some(target_path) = target_path else {
             continue;
         };
         if source_path == target_path {
@@ -1059,7 +1086,7 @@ fn build_wikilink_graph_from_index(
             degree: *degrees.get(&path).unwrap_or(&0),
             tags: tags_by_path.remove(&path).unwrap_or_default(),
             cluster: None,
-            path,
+            path: workspace_absolute_path(root_canonical, &path),
         })
         .collect();
 
@@ -1672,11 +1699,21 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::sync::{Mutex, OnceLock};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use directories::UserDirs;
 
     use super::*;
+
+    static WORKSPACE_TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+    fn workspace_test_guard() -> std::sync::MutexGuard<'static, ()> {
+        WORKSPACE_TEST_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .expect("workspace test mutex poisoned")
+    }
 
     fn create_temp_workspace(prefix: &str) -> PathBuf {
         let nonce = SystemTime::now()
@@ -1823,6 +1860,7 @@ mod tests {
 
     #[test]
     fn get_wikilink_graph_builds_expected_nodes_edges_and_tags() {
+        let _guard = workspace_test_guard();
         let workspace = create_temp_workspace("meditor-graph-test");
         let root = workspace.to_string_lossy().to_string();
 
@@ -1856,14 +1894,13 @@ mod tests {
         .expect("insert tags");
 
         let graph = get_wikilink_graph().expect("build graph");
-        let mut nodes = graph
+        let node_by_name = graph
             .nodes
             .iter()
-            .map(|node| (node.path.clone(), node.degree, node.tags.clone()))
-            .collect::<Vec<_>>();
-        nodes.sort_by_key(|(path, _, _)| path.to_lowercase());
+            .map(|node| (Path::new(&node.path).file_name().and_then(|v| v.to_str()).unwrap_or("").to_string(), node))
+            .collect::<HashMap<_, _>>();
 
-        assert_eq!(nodes.len(), 3);
+        assert_eq!(graph.nodes.len(), 3);
         assert_eq!(graph.edges.len(), 2);
         assert!(graph
             .edges
@@ -1871,13 +1908,48 @@ mod tests {
             .all(|edge| edge.edge_type.eq("wikilink")));
         assert!(graph.generated_at_ms > 0);
 
-        assert_eq!(nodes[0].0, "a.md");
-        assert_eq!(nodes[0].1, 2);
-        assert_eq!(nodes[0].2, vec!["dev".to_string()]);
-        assert_eq!(nodes[1].0, "b.md");
-        assert_eq!(nodes[1].1, 2);
-        assert_eq!(nodes[2].0, "c.md");
-        assert_eq!(nodes[2].1, 0);
+        let a = node_by_name.get("a.md").expect("node a");
+        assert!(a.path.ends_with("/a.md"));
+        assert_eq!(a.degree, 2);
+        assert_eq!(a.tags, vec!["dev".to_string()]);
+
+        let b = node_by_name.get("b.md").expect("node b");
+        assert!(b.path.ends_with("/b.md"));
+        assert_eq!(b.degree, 2);
+
+        let c = node_by_name.get("c.md").expect("node c");
+        assert!(c.path.ends_with("/c.md"));
+        assert_eq!(c.degree, 0);
+
+        clear_active_workspace().expect("clear workspace");
+        fs::remove_dir_all(&workspace).expect("cleanup workspace");
+    }
+
+    #[test]
+    fn get_wikilink_graph_resolves_unique_basename_targets() {
+        let _guard = workspace_test_guard();
+        let workspace = create_temp_workspace("meditor-graph-basename-test");
+        let root = workspace.to_string_lossy().to_string();
+
+        fs::create_dir_all(workspace.join("notes")).expect("create notes dir");
+        fs::write(workspace.join("a.md"), "# A\n[[nested]]").expect("write a");
+        fs::write(workspace.join("notes/nested.md"), "# Nested").expect("write nested");
+
+        set_active_workspace(&root).expect("set workspace");
+        init_db().expect("init db");
+
+        let conn = open_db().expect("open db");
+        conn.execute(
+            "INSERT INTO note_links(source_path, target_key) VALUES (?1, ?2)",
+            params!["a.md", "nested"],
+        )
+        .expect("insert edge a->nested");
+
+        let graph = get_wikilink_graph().expect("build graph");
+        assert!(graph
+            .edges
+            .iter()
+            .any(|edge| edge.source == "a.md" && edge.target == "notes/nested.md"));
 
         clear_active_workspace().expect("clear workspace");
         fs::remove_dir_all(&workspace).expect("cleanup workspace");

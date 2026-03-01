@@ -28,12 +28,19 @@ const mockGraph = {
   backgroundColor: () => mockGraph,
   nodeLabel: () => mockGraph,
   nodeRelSize: () => mockGraph,
+  nodeVal: () => mockGraph,
+  nodeOpacity: () => mockGraph,
   nodeColor: () => mockGraph,
+  linkVisibility: () => mockGraph,
   linkColor: () => mockGraph,
   linkWidth: () => mockGraph,
   linkOpacity: () => mockGraph,
+  showNavInfo: () => mockGraph,
+  enableNavigationControls: () => mockGraph,
+  enableNodeDrag: () => mockGraph,
   cooldownTicks: () => mockGraph,
   d3VelocityDecay: () => mockGraph,
+  cooldownTime: () => mockGraph,
   onNodeHover(handler: (node: RenderNode | null) => void) {
     mockState.onNodeHover = handler
     return mockGraph
@@ -43,10 +50,13 @@ const mockGraph = {
     handler({ id: 'a.md', path: '/vault/a.md', label: 'a', x: 1, y: 1, z: 1 })
     return mockGraph
   },
+  onNodeDrag: () => mockGraph,
+  onNodeDragEnd: () => mockGraph,
   onEngineStop: () => mockGraph,
   cameraPosition: () => mockGraph,
   width: () => mockGraph,
   height: () => mockGraph,
+  zoomToFit: () => mockGraph,
   graph2ScreenCoords: () => ({ x: 10, y: 10 }),
   controls: () => ({}),
   refresh: () => mockGraph,

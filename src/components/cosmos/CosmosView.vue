@@ -10,7 +10,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { CosmosGraph, CosmosGraphNode } from '../../lib/graphIndex'
 
-type RenderNode = CosmosGraphNode & { x?: number; y?: number; z?: number }
+type RenderNode = CosmosGraphNode & { x?: number; y?: number; z?: number; fx?: number; fy?: number; fz?: number }
 type RenderEdge = {
   source: string | RenderNode
   target: string | RenderNode
@@ -25,14 +25,23 @@ type ForceGraphInstance = {
   backgroundColor: (value: string) => ForceGraphInstance
   nodeLabel: (value: (node: RenderNode) => string) => ForceGraphInstance
   nodeRelSize: (value: number) => ForceGraphInstance
+  nodeVal: (value: number | string | ((node: RenderNode) => number)) => ForceGraphInstance
   nodeColor: (value: (node: RenderNode) => string) => ForceGraphInstance
+  nodeOpacity: (value: number) => ForceGraphInstance
   linkColor: (value: (edge: RenderEdge) => string) => ForceGraphInstance
+  linkVisibility: (value: boolean | ((edge: RenderEdge) => boolean)) => ForceGraphInstance
   linkWidth: (value: (edge: RenderEdge) => number) => ForceGraphInstance
   linkOpacity: (value: (edge: RenderEdge) => number) => ForceGraphInstance
+  showNavInfo: (value: boolean) => ForceGraphInstance
+  enableNavigationControls: (value: boolean) => ForceGraphInstance
+  enableNodeDrag: (value: boolean) => ForceGraphInstance
   cooldownTicks: (value: number) => ForceGraphInstance
+  cooldownTime: (value: number) => ForceGraphInstance
   d3VelocityDecay: (value: number) => ForceGraphInstance
   onNodeHover: (handler: (node: RenderNode | null) => void) => ForceGraphInstance
   onNodeClick: (handler: (node: RenderNode, event?: MouseEvent) => void) => ForceGraphInstance
+  onNodeDrag: (handler: (node: RenderNode) => void) => ForceGraphInstance
+  onNodeDragEnd: (handler: (node: RenderNode) => void) => ForceGraphInstance
   onEngineStop: (handler: () => void) => ForceGraphInstance
   cameraPosition: (
     position: { x?: number; y?: number; z?: number },
@@ -41,6 +50,7 @@ type ForceGraphInstance = {
   ) => ForceGraphInstance
   width: (value: number) => ForceGraphInstance
   height: (value: number) => ForceGraphInstance
+  zoomToFit: (ms?: number, px?: number, filter?: (node: RenderNode) => boolean) => ForceGraphInstance
   graph2ScreenCoords: (x: number, y: number, z: number) => { x: number; y: number }
   controls: () => { enableDamping?: boolean; dampingFactor?: number }
   refresh?: () => ForceGraphInstance
@@ -55,18 +65,17 @@ const props = defineProps<{
   graph: CosmosGraph
   loading: boolean
   error?: string
+  selectedNodeId?: string
 }>()
 
 const emit = defineEmits<{
   'open-node': [path: string]
+  'select-node': [nodeId: string]
 }>()
 
 const rootEl = ref<HTMLDivElement | null>(null)
 const graphEl = ref<HTMLDivElement | null>(null)
 const graphInstance = ref<ForceGraphInstance | null>(null)
-const hoverNodeId = ref('')
-const neighborIds = ref<Set<string>>(new Set())
-const highlightedEdgeKeys = ref<Set<string>>(new Set())
 const labels = ref<Array<{ id: string; text: string; x: number; y: number }>>([])
 
 let hoverThrottleTimer: ReturnType<typeof setTimeout> | null = null
@@ -74,6 +83,15 @@ let labelRaf = 0
 let lastClickAt = 0
 let lastClickNodeId = ''
 let pendingOpenTimer: ReturnType<typeof setTimeout> | null = null
+let lastDragAt = 0
+let lastDraggedNodeId = ''
+const CLICK_AFTER_DRAG_GUARD_MS = 320
+let hoveredNodeId = ''
+let selectedNodeId = ''
+let hoveredNeighborIds = new Set<string>()
+let highlightedEdgeKeys = new Set<string>()
+let cachedEdges: Array<{ source: string; target: string }> = []
+let didInitialAutoFit = false
 
 const hasRenderableGraph = computed(() => props.graph.nodes.length > 0)
 
@@ -86,27 +104,27 @@ function edgeKey(sourceId: string, targetId: string): string {
 }
 
 function shouldDimNode(nodeId: string): boolean {
-  if (!hoverNodeId.value) return false
-  if (nodeId === hoverNodeId.value) return false
-  return !neighborIds.value.has(nodeId)
+  if (!hoveredNodeId) return false
+  if (nodeId === hoveredNodeId) return false
+  return !hoveredNeighborIds.has(nodeId)
 }
 
 function isEdgeHighlighted(link: RenderEdge): boolean {
   const sourceId = typeof link.source === 'string' ? link.source : link.source.id
   const targetId = typeof link.target === 'string' ? link.target : link.target.id
-  return highlightedEdgeKeys.value.has(edgeKey(sourceId, targetId))
+  return highlightedEdgeKeys.has(edgeKey(sourceId, targetId))
 }
 
 /**
  * Recomputes hover neighborhood and highlighted links.
  */
 function updateHoverState(node: RenderNode | null) {
-  hoverNodeId.value = node?.id ?? ''
+  hoveredNodeId = node?.id ?? ''
   const nextNeighbors = new Set<string>()
   const nextEdges = new Set<string>()
 
   if (node) {
-    for (const link of props.graph.edges) {
+    for (const link of cachedEdges) {
       const sourceId = link.source
       const targetId = link.target
       if (sourceId === node.id) {
@@ -120,8 +138,8 @@ function updateHoverState(node: RenderNode | null) {
     }
   }
 
-  neighborIds.value = nextNeighbors
-  highlightedEdgeKeys.value = nextEdges
+  hoveredNeighborIds = nextNeighbors
+  highlightedEdgeKeys = nextEdges
   graphInstance.value?.refresh?.()
 }
 
@@ -144,6 +162,12 @@ function focusNode(node: RenderNode) {
  * Handles node click with single-click open and double-click focus behavior.
  */
 function onNodeClick(node: RenderNode) {
+  if (lastDraggedNodeId === node.id && Date.now() - lastDragAt < CLICK_AFTER_DRAG_GUARD_MS) {
+    return
+  }
+
+  emit('select-node', node.id)
+
   const now = Date.now()
   if (pendingOpenTimer) {
     clearTimeout(pendingOpenTimer)
@@ -167,8 +191,8 @@ function onNodeClick(node: RenderNode) {
 
 function shouldShowLabel(node: CosmosGraphNode): boolean {
   if (node.showLabelByDefault) return true
-  if (!hoverNodeId.value) return false
-  return node.id === hoverNodeId.value || neighborIds.value.has(node.id)
+  if (!hoveredNodeId) return false
+  return node.id === hoveredNodeId || hoveredNeighborIds.has(node.id)
 }
 
 /**
@@ -213,6 +237,21 @@ function scheduleLabelLoop() {
 }
 
 /**
+ * Locks current node coordinates to keep a stable layout after the simulation cools down.
+ */
+function lockNodePositions() {
+  const graph = graphInstance.value
+  if (!graph) return
+  const renderData = graph.graphData()
+  for (const node of renderData.nodes ?? []) {
+    if (!Number.isFinite(node.x) || !Number.isFinite(node.y) || !Number.isFinite(node.z)) continue
+    ;(node as RenderNode & { fx?: number; fy?: number; fz?: number }).fx = node.x
+    ;(node as RenderNode & { fx?: number; fy?: number; fz?: number }).fy = node.y
+    ;(node as RenderNode & { fx?: number; fy?: number; fz?: number }).fz = node.z
+  }
+}
+
+/**
  * Initializes and styles the 3D force-graph instance.
  */
 async function initializeGraph() {
@@ -220,8 +259,21 @@ async function initializeGraph() {
   if (!host) return
 
   const module = await import('3d-force-graph')
-  const createGraph = module.default as unknown as (el: HTMLElement) => ForceGraphInstance
-  const graph = createGraph(host)
+  const ForceGraph3D = module.default as unknown as
+    | ((el?: HTMLElement, options?: Record<string, unknown>) => ForceGraphInstance | ((el: HTMLElement) => ForceGraphInstance))
+    | (new (el: HTMLElement, options?: Record<string, unknown>) => ForceGraphInstance)
+
+  let graph: ForceGraphInstance
+  try {
+    graph = new (ForceGraph3D as new (el: HTMLElement, options?: Record<string, unknown>) => ForceGraphInstance)(
+      host,
+      { controlType: 'orbit' }
+    )
+  } catch {
+    const maybeFactory = (ForceGraph3D as (el?: HTMLElement, options?: Record<string, unknown>) => ForceGraphInstance | ((el: HTMLElement) => ForceGraphInstance))
+    const maybeInstance = maybeFactory(host, { controlType: 'orbit' })
+    graph = typeof maybeInstance === 'function' ? maybeInstance(host) : maybeInstance
+  }
 
   const controls = graph.controls()
   if (controls) {
@@ -231,22 +283,30 @@ async function initializeGraph() {
 
   graph
     .backgroundColor('#020617')
-    .nodeLabel((node) => node.label)
+    .showNavInfo(true)
+    .enableNavigationControls(true)
+    .enableNodeDrag(false)
+    .nodeLabel(() => '')
     .nodeRelSize(3.3)
+    .nodeVal((node) => Math.max(1, node.degree + 0.2))
+    .nodeOpacity(0.92)
     .nodeColor((node) => {
-      if (hoverNodeId.value && node.id === hoverNodeId.value) return '#fef08a'
-      if (hoverNodeId.value && neighborIds.value.has(node.id)) return '#e2e8f0'
+      if (selectedNodeId && node.id === selectedNodeId) return '#facc15'
+      if (hoveredNodeId && node.id === hoveredNodeId) return '#fef08a'
+      if (hoveredNodeId && hoveredNeighborIds.has(node.id)) return '#e2e8f0'
       const base = clusterColor(node.cluster)
       return shouldDimNode(node.id) ? `${base}44` : base
     })
+    .linkVisibility(() => true)
     .linkColor((link) => {
       if (isEdgeHighlighted(link)) return '#f8fafc'
-      if (!hoverNodeId.value) return '#64748b'
+      if (!hoveredNodeId) return '#64748b'
       return '#334155'
     })
-    .linkWidth((link) => (isEdgeHighlighted(link) ? 1.7 : 0.35))
-    .linkOpacity((link) => (isEdgeHighlighted(link) ? 0.96 : hoverNodeId.value ? 0.08 : 0.22))
+    .linkWidth((link) => (isEdgeHighlighted(link) ? 1.8 : 0.65))
+    .linkOpacity((link) => (isEdgeHighlighted(link) ? 0.96 : hoveredNodeId ? 0.08 : 0.22))
     .cooldownTicks(140)
+    .cooldownTime(5500)
     .d3VelocityDecay(0.35)
     .onNodeHover((node) => {
       if (hoverThrottleTimer) return
@@ -255,8 +315,17 @@ async function initializeGraph() {
         updateHoverState(node)
       }, HOVER_THROTTLE_MS)
     })
+    .onNodeDrag((node) => {
+      lastDragAt = Date.now()
+      lastDraggedNodeId = node.id
+    })
+    .onNodeDragEnd((node) => {
+      lastDragAt = Date.now()
+      lastDraggedNodeId = node.id
+    })
     .onNodeClick(onNodeClick)
     .onEngineStop(() => {
+      lockNodePositions()
       updateLabelPositions()
     })
 
@@ -271,11 +340,18 @@ async function initializeGraph() {
 function applyGraphData() {
   const graph = graphInstance.value
   if (!graph) return
+  cachedEdges = props.graph.edges.map((edge) => ({ source: edge.source, target: edge.target }))
   graph.graphData({
     nodes: props.graph.nodes.map((node) => ({ ...node })),
-    links: props.graph.edges.map((edge) => ({ ...edge }))
+    links: cachedEdges.map((edge) => ({ ...edge, type: 'wikilink' as const }))
   })
   updateHoverState(null)
+  if (!didInitialAutoFit && props.graph.nodes.length > 0) {
+    didInitialAutoFit = true
+    window.requestAnimationFrame(() => {
+      graph.zoomToFit(350, 35)
+    })
+  }
 }
 
 function resizeGraphToHost() {
@@ -300,8 +376,34 @@ function teardownGraph() {
     window.cancelAnimationFrame(labelRaf)
     labelRaf = 0
   }
+  hoveredNodeId = ''
+  hoveredNeighborIds = new Set<string>()
+  highlightedEdgeKeys = new Set<string>()
+  cachedEdges = []
+  didInitialAutoFit = false
   graphInstance.value?._destructor?.()
   graphInstance.value = null
+}
+
+/**
+ * Resets camera framing to include the current visible graph.
+ */
+function resetView() {
+  graphInstance.value?.zoomToFit(450, 40)
+}
+
+/**
+ * Focuses camera on a node by id when available in current graph data.
+ */
+function focusNodeById(nodeId: string): boolean {
+  const graph = graphInstance.value
+  if (!graph || !nodeId) return false
+  const renderData = graph.graphData()
+  const node = (renderData.nodes ?? []).find((candidate) => candidate.id === nodeId)
+  if (!node) return false
+  focusNode(node)
+  emit('select-node', node.id)
+  return true
 }
 
 watch(
@@ -310,6 +412,15 @@ watch(
     applyGraphData()
   },
   { deep: true }
+)
+
+watch(
+  () => props.selectedNodeId,
+  (value) => {
+    selectedNodeId = value ?? ''
+    graphInstance.value?.refresh?.()
+  },
+  { immediate: true }
 )
 
 onMounted(() => {
@@ -322,6 +433,11 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('resize', resizeGraphToHost)
   teardownGraph()
+})
+
+defineExpose({
+  resetView,
+  focusNodeById
 })
 </script>
 

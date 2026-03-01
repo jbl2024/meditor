@@ -76,6 +76,11 @@ type ExplorerTreeExposed = {
   revealPathInView: (path: string, options?: { focusTree?: boolean; behavior?: ScrollBehavior }) => Promise<void>
 }
 
+type CosmosViewExposed = {
+  resetView: () => void
+  focusNodeById: (nodeId: string) => boolean
+}
+
 type SaveFileOptions = {
   explicit: boolean
 }
@@ -126,6 +131,7 @@ const allWorkspaceFiles = ref<string[]>([])
 const loadingAllFiles = ref(false)
 const editorRef = ref<EditorViewExposed | null>(null)
 const explorerRef = ref<ExplorerTreeExposed | null>(null)
+const cosmosRef = ref<CosmosViewExposed | null>(null)
 const tabScrollRef = ref<HTMLElement | null>(null)
 const overflowMenuRef = ref<HTMLElement | null>(null)
 const backHistoryMenuRef = ref<HTMLElement | null>(null)
@@ -156,6 +162,10 @@ const previousNonCosmosMode = ref<SidebarMode>('explorer')
 const cosmosGraph = ref<CosmosGraph>({ nodes: [], edges: [], generated_at_ms: 0 })
 const cosmosLoading = ref(false)
 const cosmosError = ref('')
+const cosmosQuery = ref('')
+const cosmosSelectedNodeId = ref('')
+const cosmosFocusMode = ref(false)
+const cosmosFocusDepth = ref(1)
 const wikilinkRewriteQueue: Array<{
   fromPath: string
   toPath: string
@@ -366,6 +376,59 @@ const cosmosSummary = computed(() => ({
   nodes: cosmosGraph.value.nodes.length,
   edges: cosmosGraph.value.edges.length
 }))
+const cosmosNodeById = computed(() => new Map(cosmosGraph.value.nodes.map((node) => [node.id, node])))
+const cosmosSelectedNode = computed(() => cosmosNodeById.value.get(cosmosSelectedNodeId.value) ?? null)
+const cosmosSelectedLinkCount = computed(() => {
+  const selected = cosmosSelectedNodeId.value
+  if (!selected) return 0
+  return cosmosGraph.value.edges.filter((edge) => edge.source === selected || edge.target === selected).length
+})
+const cosmosQueryMatches = computed(() => {
+  const query = cosmosQuery.value.trim().toLowerCase()
+  if (!query) return []
+  return cosmosGraph.value.nodes
+    .filter((node) =>
+      node.label.toLowerCase().includes(query) ||
+      node.path.toLowerCase().includes(query)
+    )
+    .slice(0, 12)
+})
+const cosmosVisibleGraph = computed<CosmosGraph>(() => {
+  if (!cosmosFocusMode.value || !cosmosSelectedNodeId.value) {
+    return cosmosGraph.value
+  }
+
+  const adjacency = new Map<string, Set<string>>()
+  for (const node of cosmosGraph.value.nodes) {
+    adjacency.set(node.id, new Set<string>())
+  }
+  for (const edge of cosmosGraph.value.edges) {
+    adjacency.get(edge.source)?.add(edge.target)
+    adjacency.get(edge.target)?.add(edge.source)
+  }
+
+  const visible = new Set<string>([cosmosSelectedNodeId.value])
+  let frontier = new Set<string>([cosmosSelectedNodeId.value])
+  for (let depth = 0; depth < Math.max(1, cosmosFocusDepth.value); depth += 1) {
+    const next = new Set<string>()
+    for (const nodeId of frontier) {
+      for (const neighbor of adjacency.get(nodeId) ?? []) {
+        if (!visible.has(neighbor)) {
+          visible.add(neighbor)
+          next.add(neighbor)
+        }
+      }
+    }
+    if (!next.size) break
+    frontier = next
+  }
+
+  return {
+    generated_at_ms: cosmosGraph.value.generated_at_ms,
+    nodes: cosmosGraph.value.nodes.filter((node) => visible.has(node.id)),
+    edges: cosmosGraph.value.edges.filter((edge) => visible.has(edge.source) && visible.has(edge.target))
+  }
+})
 
 const mediaQuery = typeof window !== 'undefined'
   ? window.matchMedia('(prefers-color-scheme: dark)')
@@ -883,6 +946,10 @@ async function closeWorkspace() {
   cosmosGraph.value = { nodes: [], edges: [], generated_at_ms: 0 }
   cosmosError.value = ''
   cosmosLoading.value = false
+  cosmosQuery.value = ''
+  cosmosSelectedNodeId.value = ''
+  cosmosFocusMode.value = false
+  cosmosFocusDepth.value = 1
   filesystem.selectedCount.value = 0
   filesystem.clearWorkspacePath()
   try {
@@ -1629,11 +1696,7 @@ async function openWikilinkTarget(target: string) {
 
   const markdownFiles = await loadWikilinkTargets()
 
-  const withoutExtension = normalized.replace(/\.(md|markdown)$/i, '').toLowerCase()
-  const existing = markdownFiles.find((path) => {
-    const rel = path.replace(/\.(md|markdown)$/i, '').toLowerCase()
-    return rel === withoutExtension
-  })
+  const existing = resolveExistingWikilinkPath(normalized, markdownFiles)
 
   if (existing) {
     const opened = await openTabWithAutosave(`${root}/${existing}`)
@@ -1654,13 +1717,43 @@ async function openWikilinkTarget(target: string) {
 }
 
 async function onCosmosOpenNode(path: string) {
-  const opened = await openTabWithAutosave(path)
+  const root = filesystem.workingFolderPath.value
+  const targetPath = root && !path.startsWith('/') && !/^[A-Za-z]:[\\/]/.test(path)
+    ? `${root}/${path}`
+    : path
+  const opened = await openTabWithAutosave(targetPath)
   if (!opened) return
   const fallback = previousNonCosmosMode.value
   workspace.setSidebarMode(fallback)
   persistSidebarMode()
   await nextTick()
   editorRef.value?.focusEditor()
+}
+
+function onCosmosResetView() {
+  cosmosRef.value?.resetView()
+}
+
+function onCosmosSelectNode(nodeId: string) {
+  cosmosSelectedNodeId.value = nodeId
+}
+
+function onCosmosSearchEnter() {
+  const first = cosmosQueryMatches.value[0]
+  if (!first) return
+  cosmosSelectedNodeId.value = first.id
+  cosmosRef.value?.focusNodeById(first.id)
+}
+
+function onCosmosMatchClick(nodeId: string) {
+  cosmosSelectedNodeId.value = nodeId
+  cosmosRef.value?.focusNodeById(nodeId)
+}
+
+function onCosmosExpandNeighborhood() {
+  if (!cosmosSelectedNodeId.value) return
+  cosmosFocusMode.value = true
+  cosmosFocusDepth.value = Math.min(8, cosmosFocusDepth.value + 1)
 }
 
 async function loadWikilinkTargets(): Promise<string[]> {
@@ -1687,8 +1780,16 @@ async function refreshCosmosGraph() {
   cosmosLoading.value = true
   cosmosError.value = ''
   try {
+    const active = workspace.activeTabPath.value
+    if (active && isMarkdownPath(active)) {
+      await reindexMarkdownFile(active)
+    }
     const raw = await getWikilinkGraph()
     cosmosGraph.value = buildCosmosGraph(raw)
+    if (!cosmosGraph.value.nodes.some((node) => node.id === cosmosSelectedNodeId.value)) {
+      cosmosSelectedNodeId.value = ''
+      cosmosFocusDepth.value = 1
+    }
   } catch (err) {
     cosmosGraph.value = { nodes: [], edges: [], generated_at_ms: 0 }
     cosmosError.value = err instanceof Error ? err.message : 'Could not load graph.'
@@ -1729,8 +1830,20 @@ function resolveExistingWikilinkPath(normalizedTarget: string, markdownFiles: st
   const withoutExtension = normalizedTarget.replace(/\.(md|markdown)$/i, '').toLowerCase()
   const exact = markdownFiles.find((path) => path.replace(/\.(md|markdown)$/i, '').toLowerCase() === withoutExtension)
   if (exact) return exact
-  const prefixed = markdownFiles.filter((path) => path.replace(/\.(md|markdown)$/i, '').toLowerCase().startsWith(withoutExtension))
-  if (prefixed.length === 1) return prefixed[0]
+
+  const basenameMatches = markdownFiles.filter((path) => {
+    const normalized = path.replace(/\.(md|markdown)$/i, '').toLowerCase()
+    const stem = normalized.split('/').pop() ?? normalized
+    return stem === withoutExtension
+  })
+  if (basenameMatches.length === 1) return basenameMatches[0]
+
+  const suffixMatches = markdownFiles.filter((path) => {
+    const normalized = path.replace(/\.(md|markdown)$/i, '').toLowerCase()
+    return normalized.endsWith(`/${withoutExtension}`)
+  })
+  if (suffixMatches.length === 1) return suffixMatches[0]
+
   return null
 }
 
@@ -2746,8 +2859,53 @@ onBeforeUnmount(() => {
 
           <div v-else-if="workspace.sidebarMode.value === 'cosmos'" class="panel-fill cosmos-panel">
             <p class="cosmos-panel-title">Cosmos</p>
-            <p class="cosmos-panel-meta">{{ cosmosSummary.nodes }} nodes · {{ cosmosSummary.edges }} edges</p>
+            <p class="cosmos-panel-meta">{{ cosmosVisibleGraph.nodes.length }} nodes · {{ cosmosVisibleGraph.edges.length }} edges</p>
             <p class="cosmos-panel-help">Click a node to open it. Double-click to focus. Press Esc to return.</p>
+            <input
+              v-model="cosmosQuery"
+              class="cosmos-search-input"
+              type="text"
+              placeholder="Search node path..."
+              @keydown.enter.prevent="onCosmosSearchEnter"
+            />
+            <div v-if="cosmosQuery.trim() && cosmosQueryMatches.length" class="cosmos-match-list">
+              <button
+                v-for="match in cosmosQueryMatches"
+                :key="match.id"
+                type="button"
+                class="cosmos-match-item"
+                @click="onCosmosMatchClick(match.id)"
+              >
+                {{ match.label }}
+              </button>
+            </div>
+            <label class="cosmos-toggle">
+              <input v-model="cosmosFocusMode" type="checkbox">
+              <span>Focus mode (selected + neighbors)</span>
+            </label>
+            <p v-if="cosmosFocusMode" class="cosmos-focus-depth">Depth: {{ cosmosFocusDepth }}</p>
+            <button
+              type="button"
+              class="cosmos-reset-btn"
+              :disabled="!cosmosSelectedNodeId"
+              @click="onCosmosExpandNeighborhood"
+            >
+              Expand neighborhood
+            </button>
+            <div v-if="cosmosSelectedNode" class="cosmos-node-stats">
+              <p class="cosmos-node-title">{{ cosmosSelectedNode.label }}</p>
+              <p class="cosmos-node-path">{{ toRelativePath(cosmosSelectedNode.path) }}</p>
+              <p class="cosmos-node-meta">Degree: {{ cosmosSelectedNode.degree }} · Cluster: {{ cosmosSelectedNode.cluster }}</p>
+              <p class="cosmos-node-meta">Visible links: {{ cosmosSelectedLinkCount }}</p>
+            </div>
+            <button
+              type="button"
+              class="cosmos-reset-btn"
+              :disabled="cosmosLoading || !cosmosSummary.nodes"
+              @click="onCosmosResetView"
+            >
+              Reset view
+            </button>
           </div>
 
           <div v-else class="placeholder">No panel selected</div>
@@ -2998,9 +3156,12 @@ onBeforeUnmount(() => {
           <main class="center-area">
             <CosmosView
               v-if="workspace.sidebarMode.value === 'cosmos'"
-              :graph="cosmosGraph"
+              ref="cosmosRef"
+              :graph="cosmosVisibleGraph"
               :loading="cosmosLoading"
               :error="cosmosError"
+              :selected-node-id="cosmosSelectedNodeId"
+              @select-node="onCosmosSelectNode"
               @open-node="void onCosmosOpenNode($event)"
             />
             <EditorView
@@ -3865,6 +4026,92 @@ onBeforeUnmount(() => {
   line-height: 1.4;
 }
 
+.cosmos-search-input {
+  width: 100%;
+  height: 30px;
+  margin-top: 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0 8px;
+  font-size: 12px;
+  background: #fff;
+  color: #0f172a;
+}
+
+.cosmos-match-list {
+  margin-top: 6px;
+  max-height: 120px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cosmos-match-item {
+  border: 0;
+  background: #e2e8f0;
+  color: #0f172a;
+  border-radius: 6px;
+  padding: 4px 6px;
+  text-align: left;
+  font-size: 11px;
+}
+
+.cosmos-toggle {
+  margin-top: 10px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 12px;
+  color: #334155;
+}
+
+.cosmos-focus-depth {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.cosmos-node-stats {
+  margin-top: 10px;
+  padding: 8px;
+  border-radius: 8px;
+  background: #e2e8f0;
+}
+
+.cosmos-node-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.cosmos-node-path,
+.cosmos-node-meta {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: #334155;
+}
+
+.cosmos-reset-btn {
+  margin-top: 10px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #1e293b;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+}
+
+.cosmos-reset-btn:hover:not(:disabled) {
+  background: #f8fafc;
+}
+
+.cosmos-reset-btn:disabled {
+  opacity: 0.55;
+}
+
 .search-controls {
   display: flex;
   gap: 6px;
@@ -3880,6 +4127,45 @@ onBeforeUnmount(() => {
 
 .ide-root.dark .cosmos-panel-help {
   color: #94a3b8;
+}
+
+.ide-root.dark .cosmos-reset-btn {
+  border-color: #475569;
+  background: #1e293b;
+  color: #e2e8f0;
+}
+
+.ide-root.dark .cosmos-reset-btn:hover:not(:disabled) {
+  background: #334155;
+}
+
+.ide-root.dark .cosmos-search-input {
+  border-color: #475569;
+  background: #1e293b;
+  color: #e2e8f0;
+}
+
+.ide-root.dark .cosmos-match-item {
+  background: #334155;
+  color: #e2e8f0;
+}
+
+.ide-root.dark .cosmos-toggle {
+  color: #cbd5e1;
+}
+
+.ide-root.dark .cosmos-focus-depth {
+  color: #94a3b8;
+}
+
+.ide-root.dark .cosmos-node-stats {
+  background: #334155;
+}
+
+.ide-root.dark .cosmos-node-title,
+.ide-root.dark .cosmos-node-path,
+.ide-root.dark .cosmos-node-meta {
+  color: #e2e8f0;
 }
 
 .tool-input {
