@@ -82,19 +82,6 @@ function onFocusModeChange(event: Event) {
         </button>
         <p v-if="!matches.length" class="cosmos-match-empty">No matches.</p>
       </div>
-      <label class="cosmos-toggle">
-        <input :checked="focusMode" type="checkbox" @change="onFocusModeChange">
-        <span>Focus mode (selected + neighbors)</span>
-      </label>
-      <p v-if="focusMode" class="cosmos-focus-depth">Depth: {{ focusDepth }}</p>
-      <button
-        type="button"
-        class="cosmos-reset-btn"
-        :disabled="!selectedNode"
-        @click="emit('expand-neighborhood')"
-      >
-        Expand neighborhood
-      </button>
       <button
         type="button"
         class="cosmos-reset-btn"
@@ -106,6 +93,22 @@ function onFocusModeChange(event: Event) {
     </div>
 
     <div class="cosmos-panel-content">
+      <div class="cosmos-focus-controls">
+        <label class="cosmos-toggle">
+          <input :checked="focusMode" :disabled="!selectedNode" type="checkbox" @change="onFocusModeChange">
+          <span>Focus mode (selected + neighbors)</span>
+        </label>
+        <p v-if="focusMode && selectedNode" class="cosmos-focus-depth">Depth: {{ focusDepth }}</p>
+        <button
+          type="button"
+          class="cosmos-reset-btn"
+          :disabled="!selectedNode"
+          @click="emit('expand-neighborhood')"
+        >
+          Expand neighborhood
+        </button>
+      </div>
+
       <div v-if="selectedNode" class="cosmos-node-stats">
         <button type="button" class="cosmos-node-title-link" @click="emit('open-selected')">
           {{ selectedNode.displayLabel || selectedNode.label }}
@@ -193,6 +196,12 @@ function onFocusModeChange(event: Event) {
   flex-direction: column;
   gap: 8px;
   padding: 0 4px 8px;
+}
+
+.cosmos-focus-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .cosmos-panel-title {

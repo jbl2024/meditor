@@ -95,6 +95,9 @@ let hoveredNeighborIds = new Set<string>()
 let highlightedEdgeKeys = new Set<string>()
 let cachedEdges: Array<{ source: string; target: string }> = []
 let didInitialAutoFit = false
+let deferredFocusTimer: ReturnType<typeof setTimeout> | null = null
+let deferredFocusNodeId = ''
+let deferredFocusAttempts = 0
 
 const hasRenderableGraph = computed(() => props.graph.nodes.length > 0)
 
@@ -193,9 +196,70 @@ function focusNode(node: RenderNode) {
   const y = node.y ?? 0
   const z = node.z ?? 0
   const distance = 120
-  const length = Math.hypot(x, y, z) || 1
-  const ratio = 1 + distance / length
-  graph.cameraPosition({ x: x * ratio, y: y * ratio, z: z * ratio }, { x, y, z }, 700)
+  let dirX = x
+  let dirY = y
+  let dirZ = z
+  const length = Math.hypot(dirX, dirY, dirZ)
+  if (!Number.isFinite(length) || length < 1e-6) {
+    dirX = 0
+    dirY = 0
+    dirZ = 1
+  } else {
+    dirX /= length
+    dirY /= length
+    dirZ /= length
+  }
+  graph.cameraPosition(
+    { x: x + dirX * distance, y: y + dirY * distance, z: z + dirZ * distance },
+    { x, y, z },
+    700
+  )
+}
+
+function clearDeferredFocus() {
+  deferredFocusNodeId = ''
+  deferredFocusAttempts = 0
+  if (deferredFocusTimer) {
+    clearTimeout(deferredFocusTimer)
+    deferredFocusTimer = null
+  }
+}
+
+function hasReadyCoordinates(node: RenderNode): boolean {
+  return Number.isFinite(node.x) && Number.isFinite(node.y) && Number.isFinite(node.z)
+}
+
+function runDeferredFocus() {
+  const graph = graphInstance.value
+  if (!graph || !deferredFocusNodeId) {
+    clearDeferredFocus()
+    return
+  }
+
+  const renderData = graph.graphData()
+  const node = (renderData.nodes ?? []).find((candidate) => candidate.id === deferredFocusNodeId)
+  if (!node) {
+    clearDeferredFocus()
+    return
+  }
+
+  if (hasReadyCoordinates(node)) {
+    focusNode(node)
+    emit('select-node', node.id)
+    clearDeferredFocus()
+    return
+  }
+
+  deferredFocusAttempts += 1
+  if (deferredFocusAttempts > 12) {
+    clearDeferredFocus()
+    return
+  }
+
+  deferredFocusTimer = setTimeout(() => {
+    deferredFocusTimer = null
+    runDeferredFocus()
+  }, 80)
 }
 
 /**
@@ -394,6 +458,10 @@ function applyGraphData() {
       graph.zoomToFit(350, 35)
     })
   }
+
+  if (deferredFocusNodeId) {
+    runDeferredFocus()
+  }
 }
 
 function resizeGraphToHost() {
@@ -419,6 +487,7 @@ function teardownGraph() {
   highlightedEdgeKeys = new Set<string>()
   cachedEdges = []
   didInitialAutoFit = false
+  clearDeferredFocus()
   graphInstance.value?._destructor?.()
   graphInstance.value = null
 }
@@ -439,8 +508,15 @@ function focusNodeById(nodeId: string): boolean {
   const renderData = graph.graphData()
   const node = (renderData.nodes ?? []).find((candidate) => candidate.id === nodeId)
   if (!node) return false
-  focusNode(node)
-  emit('select-node', node.id)
+  if (hasReadyCoordinates(node)) {
+    focusNode(node)
+    emit('select-node', node.id)
+    clearDeferredFocus()
+    return true
+  }
+  deferredFocusNodeId = nodeId
+  deferredFocusAttempts = 0
+  runDeferredFocus()
   return true
 }
 

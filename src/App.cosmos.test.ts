@@ -295,4 +295,63 @@ describe('App cosmos integration', () => {
 
     mounted.app.unmount()
   })
+
+  it('supports command palette actions for opening cosmos and opening active note in cosmos', async () => {
+    window.localStorage.setItem('meditor.working-folder.path', '/vault')
+    const mounted = mountApp()
+    await flushUi()
+    await flushUi()
+
+    // Build an active note first by opening one from cosmos.
+    mounted.root.querySelector<HTMLButtonElement>('button[aria-label="Cosmos view"]')?.click()
+    await flushUi()
+    await flushUi()
+    mounted.root.querySelector<HTMLButtonElement>('button[data-cosmos-open="true"]')?.click()
+    await flushUi()
+    mounted.root.querySelector<HTMLButtonElement>('.cosmos-node-title-link')?.click()
+    await flushUi()
+    expect((mounted.root.textContent ?? '').toLowerCase()).toContain('opened-from-cosmos.md')
+
+    // Command: Open Cosmos View
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'P', ctrlKey: true, shiftKey: true, bubbles: true }))
+    await flushUi()
+    const paletteInput = mounted.root.querySelector<HTMLInputElement>('[data-quick-open-input="true"]')
+    expect(paletteInput).toBeTruthy()
+    if (!paletteInput) {
+      mounted.app.unmount()
+      return
+    }
+    paletteInput.value = '>open cosmos view'
+    paletteInput.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushUi()
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    await flushUi()
+    await flushUi()
+    expect(mounted.root.querySelector('[data-cosmos-stub="true"]')).toBeTruthy()
+
+    // Back to note, then command: Open Note in Cosmos
+    mounted.root.querySelector<HTMLButtonElement>('button[aria-label^="Back"]')?.click()
+    await flushUi()
+    expect((mounted.root.textContent ?? '').toLowerCase()).toContain('opened-from-cosmos.md')
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'P', ctrlKey: true, shiftKey: true, bubbles: true }))
+    await flushUi()
+    const paletteInput2 = mounted.root.querySelector<HTMLInputElement>('[data-quick-open-input="true"]')
+    expect(paletteInput2).toBeTruthy()
+    if (!paletteInput2) {
+      mounted.app.unmount()
+      return
+    }
+    paletteInput2.value = '>open note in cosmos'
+    paletteInput2.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushUi()
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    await flushUi()
+    await flushUi()
+
+    expect(mounted.root.querySelector('[data-cosmos-stub="true"]')).toBeTruthy()
+    expect((mounted.root.textContent ?? '').toLowerCase()).toContain('opened-from-cosmos')
+
+    mounted.app.unmount()
+  })
 })

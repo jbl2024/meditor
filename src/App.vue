@@ -253,6 +253,8 @@ type PaletteAction = {
 }
 
 const paletteActions = computed<PaletteAction[]>(() => [
+  { id: 'open-cosmos-view', label: 'Open Cosmos View', run: () => openCosmosViewFromPalette() },
+  { id: 'open-note-in-cosmos', label: 'Open Note in Cosmos', run: () => openNoteInCosmosFromPalette() },
   { id: 'open-workspace', label: 'Open Workspace', run: () => openWorkspaceFromPalette() },
   { id: 'close-workspace', label: 'Close Workspace', run: () => closeWorkspaceFromPalette() },
   { id: 'show-shortcuts', label: 'Show Keyboard Shortcuts', run: () => openShortcutsFromPalette() },
@@ -1008,6 +1010,60 @@ function setThemeFromOverflow(next: ThemePreference) {
 
 function setThemeFromPalette(next: ThemePreference) {
   themePreference.value = next
+  return true
+}
+
+/**
+ * Enters Cosmos mode without toggle semantics.
+ *
+ * Unlike toolbar toggle behavior, command-palette actions should be idempotent
+ * and keep Cosmos open when already active.
+ */
+async function openCosmosViewFromPalette() {
+  if (!filesystem.hasWorkspace.value) {
+    filesystem.errorMessage.value = 'Open a workspace first.'
+    return false
+  }
+
+  if (workspace.sidebarMode.value !== 'cosmos') {
+    previousNonCosmosMode.value = workspace.sidebarMode.value
+    persistPreviousNonCosmosMode()
+    workspace.setSidebarMode('cosmos')
+    persistSidebarMode()
+  }
+
+  await cosmos.refreshGraph()
+  recordCosmosHistorySnapshot()
+  return true
+}
+
+/**
+ * Opens Cosmos and selects the active note node when available.
+ */
+async function openNoteInCosmosFromPalette() {
+  const activePath = workspace.activeTabPath.value
+  if (!activePath) {
+    filesystem.errorMessage.value = 'No active note to open in Cosmos.'
+    return false
+  }
+
+  const opened = await openCosmosViewFromPalette()
+  if (!opened) return false
+
+  const target = activePath.trim()
+  const match = cosmos.graph.value.nodes.find((node) => node.path === target || node.id === target)
+  if (!match) {
+    filesystem.errorMessage.value = 'Active note is not available in the current graph index.'
+    return true
+  }
+
+  cosmos.selectNode(match.id)
+  await nextTick()
+  const focusNodeById = cosmosRef.value?.focusNodeById
+  if (typeof focusNodeById === 'function') {
+    focusNodeById(match.id)
+  }
+  recordCosmosHistorySnapshot()
   return true
 }
 
