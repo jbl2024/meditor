@@ -20,7 +20,7 @@ type MockState = {
   arrowLengthCalls: Array<number | ((edge: unknown) => number)>
   arrowRelPosCalls: Array<number | ((edge: unknown) => number)>
   arrowColorCalls: Array<string | ((edge: unknown) => string)>
-  data: { nodes: RenderNode[]; links: Array<{ source: string; target: string; type: 'wikilink' }> }
+  data: { nodes: RenderNode[]; links: Array<{ source: string; target: string; type: 'wikilink' | 'semantic'; score?: number | null }> }
 }
 
 const mockState: MockState = {
@@ -163,6 +163,10 @@ describe('CosmosView', () => {
     expect(mockState.arrowLengthCalls.length).toBeGreaterThan(0)
     expect(mockState.arrowRelPosCalls.length).toBeGreaterThan(0)
     expect(mockState.arrowColorCalls.length).toBeGreaterThan(0)
+    const arrowLengthResolver = mockState.arrowLengthCalls[mockState.arrowLengthCalls.length - 1]
+    if (typeof arrowLengthResolver === 'function') {
+      expect(arrowLengthResolver({ source: 'a.md', target: 'b.md', type: 'semantic', score: 0.9 })).toBe(0)
+    }
     expect(mockState.data.nodes[0]?.displayLabel).toBe('a')
 
     app.unmount()

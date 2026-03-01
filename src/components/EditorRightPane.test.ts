@@ -14,6 +14,8 @@ describe('EditorRightPane', () => {
         return () => h(EditorRightPane, {
           width: 320,
           outline: [{ level: 2, text: 'Roadmap' }],
+          semanticLinks: [],
+          semanticLinksLoading: false,
           backlinks: ['/wk/notes/a.md'],
           backlinksLoading: false,
           metadataRows: [{ label: 'Path', value: 'notes/a.md' }],
@@ -27,7 +29,7 @@ describe('EditorRightPane', () => {
     }))
 
     app.mount(root)
-    const buttons = Array.from(root.querySelectorAll('.outline-row')) as HTMLButtonElement[]
+    const buttons = Array.from(root.querySelectorAll('.pane-item')) as HTMLButtonElement[]
     expect(buttons.length).toBe(2)
 
     buttons[0].click()

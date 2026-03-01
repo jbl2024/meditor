@@ -1,13 +1,20 @@
+//! Tauri command surface for local filesystem, lexical search, semantic search,
+//! and Cosmos graph payload generation.
+
 mod fs_ops;
+mod semantic;
 mod workspace_watch;
 
 // Tauri command surface for workspace I/O, index/search, and graph data used by Cosmos view.
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, VecDeque},
     fs,
     path::{Path, PathBuf},
-    sync::{Mutex, OnceLock},
-    time::{SystemTime, UNIX_EPOCH},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Mutex, OnceLock,
+    },
+    time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
 use directories::UserDirs;
@@ -18,8 +25,8 @@ use thiserror::Error;
 use fs_ops::{
     clear_working_folder, copy_entry, create_entry, duplicate_entry, list_children,
     list_markdown_files, move_entry, open_external_url, open_path_external, path_exists,
-    read_file_metadata, read_text_file, rename_entry, reveal_in_file_manager, select_working_folder,
-    set_working_folder, trash_entry, write_text_file,
+    read_file_metadata, read_text_file, rename_entry, reveal_in_file_manager,
+    select_working_folder, set_working_folder, trash_entry, write_text_file,
 };
 
 const INTERNAL_DIR_NAME: &str = ".tomosona";
@@ -28,6 +35,46 @@ const DB_FILE_NAME: &str = "tomosona.sqlite";
 const PROPERTY_TYPE_SCHEMA_FILE: &str = "property-types.json";
 const RESERVED_WORKSPACE_ERROR: &str =
     "Cannot use this folder as a workspace. Choose a dedicated project folder.";
+const HYBRID_LEXICAL_WEIGHT: f64 = 0.35;
+const HYBRID_SEMANTIC_WEIGHT: f64 = 0.65;
+const SEARCH_CANDIDATE_LIMIT: i64 = 200;
+const SEARCH_RESULT_LIMIT: usize = 25;
+const SEMANTIC_TOP_K_PER_NOTE: i64 = 3;
+const SEMANTIC_THRESHOLD: f32 = 0.62;
+const INDEX_LOG_CAPACITY: usize = 400;
+static INDEX_CANCEL_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+#[derive(Clone, Serialize)]
+struct IndexLogEntry {
+    ts_ms: u64,
+    message: String,
+}
+
+static INDEX_LOGS: OnceLock<Mutex<VecDeque<IndexLogEntry>>> = OnceLock::new();
+
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|value| value.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+fn index_log_buffer() -> &'static Mutex<VecDeque<IndexLogEntry>> {
+    INDEX_LOGS.get_or_init(|| Mutex::new(VecDeque::with_capacity(INDEX_LOG_CAPACITY)))
+}
+
+fn log_index(message: &str) {
+    eprintln!("[index] {message}");
+    if let Ok(mut logs) = index_log_buffer().lock() {
+        if logs.len() >= INDEX_LOG_CAPACITY {
+            logs.pop_front();
+        }
+        logs.push_back(IndexLogEntry {
+            ts_ms: now_ms(),
+            message: message.to_string(),
+        });
+    }
+}
 
 static ACTIVE_WORKSPACE_ROOT: OnceLock<Mutex<Option<PathBuf>>> = OnceLock::new();
 
@@ -137,6 +184,7 @@ pub(crate) fn active_workspace_root() -> Result<PathBuf> {
 }
 
 fn open_db() -> Result<Connection> {
+    let _ = semantic::register_sqlite_vec_auto_extension();
     let root = active_workspace_root()?;
     let db_dir = root.join(INTERNAL_DIR_NAME);
     fs::create_dir_all(&db_dir)?;
@@ -822,6 +870,14 @@ fn init_db() -> Result<()> {
       FOREIGN KEY(chunk_id) REFERENCES chunks(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS note_embeddings (
+      path TEXT PRIMARY KEY,
+      model TEXT NOT NULL,
+      dim INTEGER NOT NULL,
+      vector BLOB NOT NULL,
+      updated_at_ms INTEGER NOT NULL DEFAULT 0
+    );
+
     CREATE TABLE IF NOT EXISTS note_links (
       source_path TEXT NOT NULL,
       target_key TEXT NOT NULL
@@ -847,11 +903,15 @@ fn init_db() -> Result<()> {
   "#,
   )?;
 
+    // sqlite-vec may be unavailable on some environments (or not bundled yet).
+    // We keep lexical indexing operational even when this table cannot be created.
+    let _ = semantic::try_ensure_vec_table(&conn, 1024);
+
     Ok(())
 }
 
-#[tauri::command]
-fn reindex_markdown_file(path: String) -> Result<()> {
+fn reindex_markdown_file_sync(path: String) -> Result<()> {
+    let started_at = Instant::now();
     let root = active_workspace_root()?;
     let file_path = normalize_existing_file(&path)?;
     ensure_within_root(&root, &file_path)?;
@@ -862,6 +922,9 @@ fn reindex_markdown_file(path: String) -> Result<()> {
     let chunks = chunk_markdown(content_for_indexing);
     let targets = parse_note_targets(&markdown);
     let properties = parse_yaml_frontmatter_properties(&markdown);
+    let chunk_count = chunks.len();
+    let target_count = targets.len();
+    let property_count = properties.len();
     let mtime = fs::metadata(&normalized_path)
         .and_then(|meta| meta.modified())
         .ok()
@@ -878,6 +941,7 @@ fn reindex_markdown_file(path: String) -> Result<()> {
     let tx = conn.unchecked_transaction()?;
     let root_canonical = root;
     let path_for_db = normalize_workspace_relative_path(&root_canonical, &normalized_path)?;
+    log_index(&format!("reindex:start path={path_for_db}"));
     let source_key = normalize_note_key(&root_canonical, &normalized_path)?;
 
     tx.execute(
@@ -893,11 +957,19 @@ fn reindex_markdown_file(path: String) -> Result<()> {
         params![path_for_db.clone()],
     )?;
 
+    tx.execute(
+        "DELETE FROM note_embeddings WHERE path = ?1",
+        params![path_for_db.clone()],
+    )?;
+    semantic::try_delete_note_vector(&tx, &path_for_db);
+
+    let mut inserted_chunks: Vec<(i64, String)> = Vec::new();
     for (anchor, text) in chunks {
         tx.execute(
             "INSERT INTO chunks(path, anchor, text, mtime) VALUES (?1, ?2, ?3, ?4)",
             params![path_for_db, anchor, text, mtime],
         )?;
+        inserted_chunks.push((tx.last_insert_rowid(), text));
     }
 
     for target in targets {
@@ -925,13 +997,87 @@ fn reindex_markdown_file(path: String) -> Result<()> {
     )?;
     }
 
+    let chunk_texts: Vec<String> = inserted_chunks
+        .iter()
+        .map(|(_, text)| text.clone())
+        .collect();
+    let embedding_started_at = Instant::now();
+    let mut embedding_status = "skipped".to_string();
+    if !chunk_texts.is_empty() {
+        if let Ok(mut chunk_vectors) = semantic::embed_texts(&chunk_texts) {
+            embedding_status = format!("ok:{} chunks", chunk_vectors.len());
+            for vector in &mut chunk_vectors {
+                semantic::normalize_in_place(vector);
+            }
+            for ((chunk_id, _), vector) in inserted_chunks.iter().zip(chunk_vectors.iter()) {
+                tx.execute(
+                    "INSERT INTO embeddings(chunk_id, model, dim, vector) VALUES (?1, ?2, ?3, ?4)
+                     ON CONFLICT(chunk_id) DO UPDATE SET model=excluded.model, dim=excluded.dim, vector=excluded.vector",
+                    params![
+                        chunk_id,
+                        semantic::embedding_model_name(),
+                        vector.len() as i64,
+                        semantic::vector_to_blob(vector)
+                    ],
+                )?;
+            }
+
+            if let Some(note_vector) = semantic::centroid(&chunk_vectors) {
+                let updated_at_ms = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map(|value| value.as_millis() as i64)
+                    .unwrap_or(0);
+                tx.execute(
+                    "INSERT INTO note_embeddings(path, model, dim, vector, updated_at_ms) VALUES (?1, ?2, ?3, ?4, ?5)
+                     ON CONFLICT(path) DO UPDATE SET model=excluded.model, dim=excluded.dim, vector=excluded.vector, updated_at_ms=excluded.updated_at_ms",
+                    params![
+                        path_for_db,
+                        semantic::embedding_model_name(),
+                        note_vector.len() as i64,
+                        semantic::vector_to_blob(&note_vector),
+                        updated_at_ms
+                    ],
+                )?;
+                if semantic::try_ensure_vec_table(&tx, note_vector.len()) {
+                    let _ = semantic::try_upsert_note_vector(&tx, &path_for_db, &note_vector);
+                }
+            }
+        } else {
+            embedding_status = "failed".to_string();
+        }
+    }
+    let embedding_ms = embedding_started_at.elapsed().as_millis();
+
     tx.commit()?;
+    let total_ms = started_at.elapsed().as_millis();
+    log_index(&format!(
+        "reindex:done path={path_for_db} chunks={chunk_count} targets={target_count} properties={property_count} embedding={embedding_status} embedding_ms={embedding_ms} total_ms={total_ms}"
+    ));
     Ok(())
+}
+
+#[tauri::command]
+async fn reindex_markdown_file(path: String) -> Result<()> {
+    tauri::async_runtime::spawn_blocking(move || reindex_markdown_file_sync(path))
+        .await
+        .map_err(|_| AppError::OperationFailed)?
 }
 
 #[derive(Serialize)]
 struct RebuildIndexResult {
     indexed_files: usize,
+    canceled: bool,
+}
+
+#[derive(Serialize)]
+struct IndexRuntimeStatus {
+    model_name: String,
+    model_state: String,
+    model_init_attempts: u32,
+    model_last_started_at_ms: Option<u64>,
+    model_last_finished_at_ms: Option<u64>,
+    model_last_duration_ms: Option<u64>,
+    model_last_error: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -950,6 +1096,8 @@ struct GraphEdgeDto {
     target: String,
     #[serde(rename = "type")]
     edge_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    score: Option<f32>,
 }
 
 #[derive(Serialize)]
@@ -957,6 +1105,122 @@ struct WikilinkGraphDto {
     nodes: Vec<GraphNodeDto>,
     edges: Vec<GraphEdgeDto>,
     generated_at_ms: u64,
+}
+
+#[derive(Debug)]
+struct RankedSearchRow {
+    chunk_id: i64,
+    path: String,
+    snippet: String,
+    lexical_score: f64,
+}
+
+/// Applies min-max normalization to convert arbitrary score ranges into `[0, 1]`.
+fn min_max_normalize(values: &[f64]) -> Vec<f64> {
+    if values.is_empty() {
+        return Vec::new();
+    }
+    let min = values
+        .iter()
+        .copied()
+        .fold(f64::INFINITY, |acc, item| acc.min(item));
+    let max = values
+        .iter()
+        .copied()
+        .fold(f64::NEG_INFINITY, |acc, item| acc.max(item));
+    if (max - min).abs() <= f64::EPSILON {
+        return vec![1.0; values.len()];
+    }
+    values
+        .iter()
+        .map(|value| (value - min) / (max - min))
+        .collect()
+}
+
+/// Appends semantic note-to-note edges using sqlite-vec nearest-neighbor queries.
+///
+/// This function is intentionally best-effort:
+/// - if vector tables are unavailable it returns early,
+/// - it never fails the caller, preserving wikilink-only graph behavior.
+fn build_semantic_edges(
+    conn: &Connection,
+    nodes_set: &HashSet<String>,
+    seen_edges: &mut HashSet<(String, String)>,
+    edges: &mut Vec<GraphEdgeDto>,
+    degrees: &mut HashMap<String, usize>,
+) {
+    let mut node_paths: Vec<String> = nodes_set.iter().cloned().collect();
+    node_paths.sort_by_key(|item| item.to_lowercase());
+
+    for source_path in node_paths {
+        let vector_blob = match conn.query_row(
+            "SELECT vector, dim FROM note_embeddings WHERE path = ?1",
+            params![source_path.clone()],
+            |row| Ok((row.get::<_, Vec<u8>>(0)?, row.get::<_, i64>(1)?)),
+        ) {
+            Ok((blob, dim)) => {
+                let Some(vector) = semantic::blob_to_vector(&blob, dim as usize) else {
+                    continue;
+                };
+                vector
+            }
+            Err(_) => continue,
+        };
+
+        let mut added_for_source = 0i64;
+        let payload = semantic::vector_to_json(&vector_blob);
+        let mut stmt = match conn.prepare(
+            r#"
+            SELECT path, distance
+            FROM note_embeddings_vec
+            WHERE embedding MATCH ?1 AND k = ?2
+            ORDER BY distance ASC
+        "#,
+        ) {
+            Ok(value) => value,
+            Err(_) => return,
+        };
+        let mut rows = match stmt.query(params![payload, SEMANTIC_TOP_K_PER_NOTE + 1]) {
+            Ok(value) => value,
+            Err(_) => return,
+        };
+
+        while let Ok(Some(row)) = rows.next() {
+            let target_path: String = match row.get(0) {
+                Ok(value) => value,
+                Err(_) => continue,
+            };
+            let distance: f32 = match row.get(1) {
+                Ok(value) => value,
+                Err(_) => continue,
+            };
+            if target_path == source_path {
+                continue;
+            }
+            if !nodes_set.contains(&target_path) {
+                continue;
+            }
+            let score = (1.0 - distance).clamp(0.0, 1.0);
+            if score < SEMANTIC_THRESHOLD {
+                continue;
+            }
+            if !seen_edges.insert((source_path.clone(), target_path.clone())) {
+                continue;
+            }
+            edges.push(GraphEdgeDto {
+                source: source_path.clone(),
+                target: target_path.clone(),
+                edge_type: "semantic".to_string(),
+                score: Some(score),
+            });
+            *degrees.entry(source_path.clone()).or_insert(0) += 1;
+            *degrees.entry(target_path).or_insert(0) += 1;
+            added_for_source += 1;
+            if added_for_source >= SEMANTIC_TOP_K_PER_NOTE {
+                break;
+            }
+        }
+    }
 }
 
 /// Builds a graph payload from indexed wikilinks and current markdown files.
@@ -1071,8 +1335,11 @@ fn build_wikilink_graph_from_index(
             source: source_path,
             target: target_path,
             edge_type: "wikilink".to_string(),
+            score: None,
         });
     }
+
+    build_semantic_edges(conn, &nodes_set, &mut seen_edges, &mut edges, &mut degrees);
 
     let mut node_paths: Vec<String> = markdown_paths.to_vec();
     node_paths.sort_by_key(|item| item.to_lowercase());
@@ -1102,23 +1369,44 @@ fn build_wikilink_graph_from_index(
     })
 }
 
-#[tauri::command]
-fn rebuild_workspace_index() -> Result<RebuildIndexResult> {
+fn rebuild_workspace_index_sync() -> Result<RebuildIndexResult> {
+    let rebuild_started_at = Instant::now();
     let root_canonical = active_workspace_root()?;
+    log_index(&format!(
+        "rebuild:start workspace={}",
+        root_canonical.to_string_lossy()
+    ));
     let conn = open_db()?;
 
+    let clear_started_at = Instant::now();
     conn.execute_batch(
         r#"
     DELETE FROM embeddings;
+    DELETE FROM note_embeddings;
     DELETE FROM chunks;
     DELETE FROM note_links;
     DELETE FROM note_properties;
   "#,
     )?;
+    let _ = conn.execute("DELETE FROM note_embeddings_vec", []);
+    log_index(&format!(
+        "rebuild:cleared_tables elapsed_ms={}",
+        clear_started_at.elapsed().as_millis()
+    ));
 
     let markdown_files = list_markdown_files_via_find(&root_canonical)?;
+    log_index(&format!("rebuild:discovered_files count={}", markdown_files.len()));
     let mut indexed_files = 0usize;
+    let mut processed_files = 0usize;
+    let mut canceled = false;
+    INDEX_CANCEL_REQUESTED.store(false, Ordering::SeqCst);
     for candidate in markdown_files {
+        if INDEX_CANCEL_REQUESTED.load(Ordering::SeqCst) {
+            canceled = true;
+            log_index("rebuild:canceled requested_by_user=true");
+            break;
+        }
+        processed_files += 1;
         let canonical_candidate = match fs::canonicalize(&candidate) {
             Ok(value) => value,
             Err(_) => continue,
@@ -1126,11 +1414,61 @@ fn rebuild_workspace_index() -> Result<RebuildIndexResult> {
         if ensure_within_root(&root_canonical, &canonical_candidate).is_err() {
             continue;
         }
-        reindex_markdown_file(canonical_candidate.to_string_lossy().to_string())?;
+        reindex_markdown_file_sync(canonical_candidate.to_string_lossy().to_string())?;
         indexed_files += 1;
+        if indexed_files % 25 == 0 || processed_files % 50 == 0 {
+            log_index(&format!(
+                "rebuild:progress indexed={indexed_files} scanned={processed_files}"
+            ));
+        }
     }
 
-    Ok(RebuildIndexResult { indexed_files })
+    log_index(&format!(
+        "rebuild:done indexed={indexed_files} scanned={processed_files} canceled={canceled} total_ms={}",
+        rebuild_started_at.elapsed().as_millis()
+    ));
+    Ok(RebuildIndexResult {
+        indexed_files,
+        canceled,
+    })
+}
+
+#[tauri::command]
+async fn rebuild_workspace_index() -> Result<RebuildIndexResult> {
+    tauri::async_runtime::spawn_blocking(rebuild_workspace_index_sync)
+        .await
+        .map_err(|_| AppError::OperationFailed)?
+}
+
+#[tauri::command]
+fn request_index_cancel() -> Result<()> {
+    INDEX_CANCEL_REQUESTED.store(true, Ordering::SeqCst);
+    log_index("cancel:requested");
+    Ok(())
+}
+
+#[tauri::command]
+fn read_index_runtime_status() -> Result<IndexRuntimeStatus> {
+    let status = semantic::runtime_status();
+    Ok(IndexRuntimeStatus {
+        model_name: status.model_name,
+        model_state: status.model_state,
+        model_init_attempts: status.model_init_attempts,
+        model_last_started_at_ms: status.model_last_started_at_ms,
+        model_last_finished_at_ms: status.model_last_finished_at_ms,
+        model_last_duration_ms: status.model_last_duration_ms,
+        model_last_error: status.model_last_error,
+    })
+}
+
+#[tauri::command]
+fn read_index_logs(limit: Option<usize>) -> Result<Vec<IndexLogEntry>> {
+    let max_items = limit.unwrap_or(80).clamp(1, INDEX_LOG_CAPACITY);
+    let guard = index_log_buffer()
+        .lock()
+        .map_err(|_| AppError::OperationFailed)?;
+    let start = guard.len().saturating_sub(max_items);
+    Ok(guard.iter().skip(start).cloned().collect())
 }
 
 /// Returns a workspace wikilink graph for the Cosmos view.
@@ -1149,10 +1487,11 @@ fn get_wikilink_graph() -> Result<WikilinkGraphDto> {
             Ok(value) => value,
             Err(_) => continue,
         };
-        let relative = match normalize_workspace_relative_path(&root_canonical, &canonical_candidate) {
-            Ok(value) => value,
-            Err(_) => continue,
-        };
+        let relative =
+            match normalize_workspace_relative_path(&root_canonical, &canonical_candidate) {
+                Ok(value) => value,
+                Err(_) => continue,
+            };
         markdown_paths.push(relative);
     }
 
@@ -1473,36 +1812,97 @@ fn fts_search(query: String) -> Result<Vec<Hit>> {
             })
             .collect();
         out.sort_by(|a, b| a.path.to_lowercase().cmp(&b.path.to_lowercase()));
-        out.truncate(25);
+        out.truncate(SEARCH_RESULT_LIMIT);
         return Ok(out);
     }
 
     let mut stmt = conn.prepare(
         r#"
-    SELECT path,
+    SELECT chunks.id,
+           chunks.path,
            snippet(chunks_fts, 2, '<b>', '</b>', '...', 12) AS snip,
            bm25(chunks_fts) AS score
     FROM chunks_fts
+    JOIN chunks ON chunks_fts.rowid = chunks.id
     WHERE chunks_fts MATCH ?1
     ORDER BY score
-    LIMIT 25;
+    LIMIT ?2;
   "#,
     )?;
 
-    let mut rows = stmt.query(params![text_query])?;
-    let mut out = Vec::new();
-
+    let mut rows = stmt.query(params![text_query, SEARCH_CANDIDATE_LIMIT])?;
+    let mut ranked_rows: Vec<RankedSearchRow> = Vec::new();
     while let Some(row) = rows.next()? {
-        let path = row.get::<_, String>(0)?;
+        let path = row.get::<_, String>(1)?;
         if let Some(paths) = property_paths.as_ref() {
             if !paths.contains(&path) {
                 continue;
             }
         }
+        ranked_rows.push(RankedSearchRow {
+            chunk_id: row.get::<_, i64>(0)?,
+            path,
+            snippet: row.get::<_, String>(2)?,
+            lexical_score: row.get::<_, f64>(3)?,
+        });
+    }
+
+    if ranked_rows.is_empty() {
+        return Ok(vec![]);
+    }
+
+    let lexical_relevance: Vec<f64> = ranked_rows.iter().map(|item| -item.lexical_score).collect();
+    let lexical_norm = min_max_normalize(&lexical_relevance);
+
+    let mut semantic_norm = vec![0.0f64; ranked_rows.len()];
+    let query_vec = semantic::embed_texts(&[text_query.clone()])
+        .ok()
+        .and_then(|mut items| {
+            let first = items.pop()?;
+            Some(first)
+        });
+
+    if let Some(mut query_vector) = query_vec {
+        semantic::normalize_in_place(&mut query_vector);
+        let mut semantic_scores = vec![0.0f64; ranked_rows.len()];
+        for (index, row) in ranked_rows.iter().enumerate() {
+            let embedding = conn.query_row(
+                "SELECT vector, dim FROM embeddings WHERE chunk_id = ?1",
+                params![row.chunk_id],
+                |db_row| Ok((db_row.get::<_, Vec<u8>>(0)?, db_row.get::<_, i64>(1)?)),
+            );
+            let Ok((blob, dim)) = embedding else {
+                continue;
+            };
+            let Some(vector) = semantic::blob_to_vector(&blob, dim as usize) else {
+                continue;
+            };
+            let Some(score) = semantic::cosine_similarity(&query_vector, &vector) else {
+                continue;
+            };
+            semantic_scores[index] = score as f64;
+        }
+        semantic_norm = min_max_normalize(&semantic_scores);
+    }
+
+    let mut scored: Vec<(usize, f64)> = ranked_rows
+        .iter()
+        .enumerate()
+        .map(|(index, _)| {
+            let hybrid = lexical_norm[index] * HYBRID_LEXICAL_WEIGHT
+                + semantic_norm[index] * HYBRID_SEMANTIC_WEIGHT;
+            (index, hybrid)
+        })
+        .collect();
+    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    let mut out = Vec::new();
+    for (index, hybrid_score) in scored.into_iter().take(SEARCH_RESULT_LIMIT) {
+        let row = &ranked_rows[index];
         out.push(Hit {
-            path: workspace_absolute_path(&root_canonical, &path),
-            snippet: row.get::<_, String>(1)?,
-            score: row.get::<_, f64>(2)?,
+            path: workspace_absolute_path(&root_canonical, &row.path),
+            snippet: row.snippet.clone(),
+            score: hybrid_score,
         });
     }
     Ok(out)
@@ -1651,7 +2051,7 @@ fn update_wikilinks_for_rename(
         }
 
         fs::write(&canonical_candidate, updated_markdown)?;
-        reindex_markdown_file(canonical_candidate.to_string_lossy().to_string())?;
+        reindex_markdown_file_sync(canonical_candidate.to_string_lossy().to_string())?;
         changed_files += 1;
     }
 
@@ -1662,6 +2062,7 @@ fn update_wikilinks_for_rename(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    semantic::set_index_logger(log_index);
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             select_working_folder,
@@ -1686,6 +2087,9 @@ pub fn run() {
             reindex_markdown_file,
             fts_search,
             rebuild_workspace_index,
+            request_index_cancel,
+            read_index_runtime_status,
+            read_index_logs,
             backlinks_for_path,
             update_wikilinks_for_rename,
             get_wikilink_graph,
@@ -1811,6 +2215,16 @@ mod tests {
     }
 
     #[test]
+    fn min_max_normalize_handles_flat_and_spread_inputs() {
+        assert_eq!(min_max_normalize(&[2.0, 2.0, 2.0]), vec![1.0, 1.0, 1.0]);
+        let normalized = min_max_normalize(&[1.0, 3.0, 5.0]);
+        assert_eq!(normalized.len(), 3);
+        assert!((normalized[0] - 0.0).abs() < 1e-6);
+        assert!((normalized[1] - 0.5).abs() < 1e-6);
+        assert!((normalized[2] - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
     fn set_active_workspace_rejects_home_directory() {
         let Some(user_dirs) = UserDirs::new() else {
             return;
@@ -1897,15 +2311,21 @@ mod tests {
         let node_by_name = graph
             .nodes
             .iter()
-            .map(|node| (Path::new(&node.path).file_name().and_then(|v| v.to_str()).unwrap_or("").to_string(), node))
+            .map(|node| {
+                (
+                    Path::new(&node.path)
+                        .file_name()
+                        .and_then(|v| v.to_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    node,
+                )
+            })
             .collect::<HashMap<_, _>>();
 
         assert_eq!(graph.nodes.len(), 3);
         assert_eq!(graph.edges.len(), 2);
-        assert!(graph
-            .edges
-            .iter()
-            .all(|edge| edge.edge_type.eq("wikilink")));
+        assert!(graph.edges.iter().all(|edge| edge.edge_type.eq("wikilink")));
         assert!(graph.generated_at_ms > 0);
 
         let a = node_by_name.get("a.md").expect("node a");

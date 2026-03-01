@@ -1,8 +1,8 @@
 /**
  * Cosmos controller state/computation layer.
  *
- * This module isolates graph-fetching, selection/focus behavior, and preview loading
- * from `App.vue` so the view shell only wires events between panel and canvas.
+ * This module isolates graph-fetching, selection/focus behavior, semantic edge
+ * filtering, and preview loading from `App.vue`.
  */
 import { computed, ref, watch, type Ref } from 'vue'
 import type { WikilinkGraph } from '../lib/api'
@@ -19,6 +19,7 @@ type CosmosDeps = {
   getWikilinkGraph: () => Promise<WikilinkGraph>
   reindexMarkdownFile: (path: string) => Promise<void>
   readTextFile: (path: string) => Promise<string>
+  ftsSearch: (query: string) => Promise<Array<{ path: string; snippet: string; score: number }>>
   buildCosmosGraph?: (raw: WikilinkGraph) => CosmosGraph
 }
 
@@ -30,9 +31,7 @@ function isMarkdownPath(path: string): boolean {
   return /\.(md|markdown)$/i.test(path)
 }
 
-/**
- * Produces a compact, readable preview used in the Cosmos context card.
- */
+/** Produces a compact preview used in the Cosmos context card. */
 function buildPreview(markdown: string): string {
   return markdown
     .replace(/\r\n?/g, '\n')
@@ -44,14 +43,6 @@ function buildPreview(markdown: string): string {
     .slice(0, 6400)
 }
 
-/**
- * Creates the Cosmos graph controller used by the sidebar panel and 3D canvas.
- *
- * Responsibilities:
- * - fetch and shape graph data from the indexed backend payload,
- * - derive panel-friendly computed state (selection, links, matches),
- * - keep preview loading isolated from the rendering component.
- */
 export function useCosmosController(deps: CosmosDeps) {
   const graph = ref<CosmosGraph>({ nodes: [], edges: [], generated_at_ms: 0 })
   const loading = ref(false)
@@ -60,11 +51,14 @@ export function useCosmosController(deps: CosmosDeps) {
   const selectedNodeId = ref('')
   const focusMode = ref(false)
   const focusDepth = ref(1)
+  const showSemanticEdges = ref(true)
   const preview = ref('')
   const previewLoading = ref(false)
   const previewError = ref('')
+  const semanticPathOrder = ref<string[]>([])
 
   let previewRequestToken = 0
+  let queryRequestToken = 0
 
   const summary = computed<GraphSummary>(() => ({
     nodes: graph.value.nodes.length,
@@ -72,18 +66,24 @@ export function useCosmosController(deps: CosmosDeps) {
   }))
 
   const nodeById = computed(() => new Map(graph.value.nodes.map((node) => [node.id, node])))
+
+  const visibleEdges = computed(() => {
+    if (showSemanticEdges.value) return graph.value.edges
+    return graph.value.edges.filter((edge) => edge.type !== 'semantic')
+  })
+
   const selectedNode = computed(() => nodeById.value.get(selectedNodeId.value) ?? null)
 
   const selectedLinkCount = computed(() => {
     const selected = selectedNodeId.value
     if (!selected) return 0
-    return graph.value.edges.filter((edge) => edge.source === selected || edge.target === selected).length
+    return visibleEdges.value.filter((edge) => edge.source === selected || edge.target === selected).length
   })
 
   const outgoingNodes = computed(() => {
     const selected = selectedNodeId.value
     if (!selected) return []
-    const outgoingIds = graph.value.edges.filter((edge) => edge.source === selected).map((edge) => edge.target)
+    const outgoingIds = visibleEdges.value.filter((edge) => edge.source === selected).map((edge) => edge.target)
     return Array.from(new Set(outgoingIds))
       .map((id) => nodeById.value.get(id))
       .filter((node): node is CosmosGraphNode => Boolean(node))
@@ -93,7 +93,7 @@ export function useCosmosController(deps: CosmosDeps) {
   const incomingNodes = computed(() => {
     const selected = selectedNodeId.value
     if (!selected) return []
-    const incomingIds = graph.value.edges.filter((edge) => edge.target === selected).map((edge) => edge.source)
+    const incomingIds = visibleEdges.value.filter((edge) => edge.target === selected).map((edge) => edge.source)
     return Array.from(new Set(incomingIds))
       .map((id) => nodeById.value.get(id))
       .filter((node): node is CosmosGraphNode => Boolean(node))
@@ -103,25 +103,42 @@ export function useCosmosController(deps: CosmosDeps) {
   const queryMatches = computed(() => {
     const value = query.value.trim().toLowerCase()
     if (!value) return []
+
+    if (semanticPathOrder.value.length) {
+      const byPath = new Map(graph.value.nodes.map((node) => [node.path.toLowerCase(), node]))
+      const ordered: CosmosGraphNode[] = []
+      for (const path of semanticPathOrder.value) {
+        const node = byPath.get(path)
+        if (node) {
+          ordered.push(node)
+        }
+      }
+      if (ordered.length) {
+        return ordered.slice(0, 12)
+      }
+    }
+
     return graph.value.nodes
       .filter((node) => node.label.toLowerCase().includes(value) || node.path.toLowerCase().includes(value))
       .slice(0, 12)
   })
 
-  /**
-   * Applies focus-mode filtering as a bounded neighborhood expansion
-   * around the selected node.
-   */
   const visibleGraph = computed<CosmosGraph>(() => {
+    const edgesForView = visibleEdges.value
+
     if (!focusMode.value || !selectedNodeId.value) {
-      return graph.value
+      return {
+        generated_at_ms: graph.value.generated_at_ms,
+        nodes: graph.value.nodes,
+        edges: edgesForView
+      }
     }
 
     const adjacency = new Map<string, Set<string>>()
     for (const node of graph.value.nodes) {
       adjacency.set(node.id, new Set<string>())
     }
-    for (const edge of graph.value.edges) {
+    for (const edge of edgesForView) {
       adjacency.get(edge.source)?.add(edge.target)
       adjacency.get(edge.target)?.add(edge.source)
     }
@@ -145,13 +162,28 @@ export function useCosmosController(deps: CosmosDeps) {
     return {
       generated_at_ms: graph.value.generated_at_ms,
       nodes: graph.value.nodes.filter((node) => visible.has(node.id)),
-      edges: graph.value.edges.filter((edge) => visible.has(edge.source) && visible.has(edge.target))
+      edges: edgesForView.filter((edge) => visible.has(edge.source) && visible.has(edge.target))
     }
   })
 
-  /**
-   * Refreshes the selected-node preview while discarding stale async results.
-   */
+  async function refreshSemanticMatches() {
+    const trimmed = query.value.trim()
+    if (!trimmed || !deps.workingFolderPath.value) {
+      semanticPathOrder.value = []
+      return
+    }
+
+    const requestToken = ++queryRequestToken
+    try {
+      const hits = await deps.ftsSearch(trimmed)
+      if (requestToken !== queryRequestToken) return
+      semanticPathOrder.value = hits.map((hit) => hit.path.toLowerCase())
+    } catch {
+      if (requestToken !== queryRequestToken) return
+      semanticPathOrder.value = []
+    }
+  }
+
   async function loadSelectedPreview() {
     const node = selectedNode.value
     const requestToken = ++previewRequestToken
@@ -179,13 +211,11 @@ export function useCosmosController(deps: CosmosDeps) {
     }
   }
 
-  /**
-   * Loads and reshapes the indexed wikilink graph for Cosmos rendering.
-   */
   async function refreshGraph() {
     if (!deps.workingFolderPath.value) {
       graph.value = { nodes: [], edges: [], generated_at_ms: 0 }
       error.value = ''
+      semanticPathOrder.value = []
       return
     }
 
@@ -204,6 +234,7 @@ export function useCosmosController(deps: CosmosDeps) {
         selectedNodeId.value = ''
         focusDepth.value = 1
       }
+      await refreshSemanticMatches()
     } catch (err) {
       graph.value = { nodes: [], edges: [], generated_at_ms: 0 }
       error.value = err instanceof Error ? err.message : 'Could not load graph.'
@@ -212,9 +243,6 @@ export function useCosmosController(deps: CosmosDeps) {
     }
   }
 
-  /**
-   * Sets the selected node while preserving the current search text.
-   */
   function selectNode(nodeId: string) {
     const searchSnapshot = query.value
     selectedNodeId.value = nodeId
@@ -223,9 +251,6 @@ export function useCosmosController(deps: CosmosDeps) {
     }
   }
 
-  /**
-   * Selects a node from search/related lists and returns its id for camera focus.
-   */
   function focusMatch(nodeId: string): string {
     const searchSnapshot = query.value
     selectedNodeId.value = nodeId
@@ -235,9 +260,6 @@ export function useCosmosController(deps: CosmosDeps) {
     return nodeId
   }
 
-  /**
-   * Selects the first current search result, if any.
-   */
   function searchEnter(): string | null {
     const first = queryMatches.value[0]
     if (!first) return null
@@ -245,34 +267,22 @@ export function useCosmosController(deps: CosmosDeps) {
     return first.id
   }
 
-  /**
-   * Enables focus mode and gradually expands visible neighborhood depth.
-   */
   function expandNeighborhood() {
     if (!selectedNodeId.value) return
     focusMode.value = true
     focusDepth.value = Math.min(8, focusDepth.value + 1)
   }
 
-  /**
-   * Alias for selecting a related node from outgoing/backlink lists.
-   */
   function jumpToRelated(nodeId: string): string {
     return focusMatch(nodeId)
   }
 
-  /**
-   * Returns the selected note path for explicit open action.
-   */
   function openSelected(): OpenSelectedResult {
     const node = selectedNode.value
     if (!node) return null
     return { path: node.path }
   }
 
-  /**
-   * Clears current selection/focus/preview while preserving graph payload.
-   */
   function resetSelection() {
     selectedNodeId.value = ''
     focusMode.value = false
@@ -282,14 +292,12 @@ export function useCosmosController(deps: CosmosDeps) {
     previewError.value = ''
   }
 
-  /**
-   * Clears the entire Cosmos controller state, including graph and query.
-   */
   function clearState() {
     graph.value = { nodes: [], edges: [], generated_at_ms: 0 }
     error.value = ''
     loading.value = false
     query.value = ''
+    semanticPathOrder.value = []
     resetSelection()
   }
 
@@ -297,6 +305,13 @@ export function useCosmosController(deps: CosmosDeps) {
     () => selectedNodeId.value,
     () => {
       void loadSelectedPreview()
+    }
+  )
+
+  watch(
+    () => query.value,
+    () => {
+      void refreshSemanticMatches()
     }
   )
 
@@ -309,6 +324,7 @@ export function useCosmosController(deps: CosmosDeps) {
     selectedNodeId,
     focusMode,
     focusDepth,
+    showSemanticEdges,
     preview,
     previewLoading,
     previewError,

@@ -12,7 +12,7 @@ export function useFilesystemState() {
   const workingFolderPath = ref('')
   const notification = ref<NotificationState | null>(null)
   const selectedCount = ref(0)
-  const indexingState = ref<'idle' | 'indexing'>('idle')
+  const indexingState = ref<'indexing' | 'indexed' | 'out_of_sync'>('indexed')
   const embeddingQueueState = ref<'idle' | 'queued' | 'running'>('idle')
   let notificationTimer: ReturnType<typeof setTimeout> | null = null
 

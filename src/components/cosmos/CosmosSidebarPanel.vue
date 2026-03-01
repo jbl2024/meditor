@@ -20,6 +20,7 @@ const props = defineProps<{
   matches: CosmosGraphNode[]
   focusMode: boolean
   focusDepth: number
+  showSemanticEdges: boolean
   selectedNode: CosmosGraphNode | null
   selectedLinkCount: number
   preview: string
@@ -35,6 +36,7 @@ const emit = defineEmits<{
   'search-enter': []
   'select-match': [nodeId: string]
   'toggle-focus-mode': [value: boolean]
+  'toggle-semantic-edges': [value: boolean]
   'expand-neighborhood': []
   'jump-related': [nodeId: string]
   'open-selected': []
@@ -53,6 +55,11 @@ function onQueryInput(event: Event) {
 function onFocusModeChange(event: Event) {
   const target = event.target as HTMLInputElement | null
   emit('toggle-focus-mode', Boolean(target?.checked))
+}
+
+function onSemanticEdgesChange(event: Event) {
+  const target = event.target as HTMLInputElement | null
+  emit('toggle-semantic-edges', Boolean(target?.checked))
 }
 
 /** Clears the search query and keeps keyboard focus in the input. */
@@ -120,6 +127,10 @@ function onClearQuery() {
         <label class="cosmos-toggle">
           <input :checked="focusMode" :disabled="!selectedNode" type="checkbox" @change="onFocusModeChange">
           <span>Focus mode (selected + neighbors)</span>
+        </label>
+        <label class="cosmos-toggle">
+          <input :checked="showSemanticEdges" type="checkbox" @change="onSemanticEdgesChange">
+          <span>Show semantic links</span>
         </label>
         <p v-if="focusMode && selectedNode" class="cosmos-focus-depth">Depth: {{ focusDepth }}</p>
         <button

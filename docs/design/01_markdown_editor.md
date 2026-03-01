@@ -203,3 +203,21 @@ And most importantly:
 
 You are not building a toy.  
 You are building a tool you can rely on.
+
+## 12. Semantic Retrieval Addendum
+
+The runtime now supports hybrid lexical + semantic retrieval:
+
+- Lexical candidate retrieval still uses SQLite FTS5/BM25.
+- Semantic vectors are generated locally in Rust with `fastembed`.
+- Search results are reranked by blending lexical and semantic relevance.
+- Cosmos graph supports two edge types:
+  - `wikilink`: explicit links from markdown content
+  - `semantic`: inferred nearest-neighbor links from note embeddings
+
+Semantic behavior is best-effort and non-blocking:
+
+- If model initialization fails, indexing/search fall back to lexical-only mode.
+- If sqlite-vec extension is unavailable, Cosmos keeps wikilink-only edges and regular search still works.
+
+See `docs/design/05_semantic_search_and_cosmos.md` for details.

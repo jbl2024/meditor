@@ -32,15 +32,21 @@ import {
   listChildren,
   pathExists,
   readFileMetadata,
+  readIndexLogs,
+  readIndexRuntimeStatus,
   readTextFile,
   rebuildWorkspaceIndex,
   renameEntry,
+  requestIndexCancel,
   reindexMarkdownFile,
   readPropertyTypeSchema,
   revealInFileManager,
   setWorkingFolder,
   selectWorkingFolder,
   type FileMetadata,
+  type IndexLogEntry,
+  type IndexRuntimeStatus,
+  type WikilinkGraph,
   type WorkspaceFsChange,
   listenWorkspaceFsChanged,
   updateWikilinksForRename,
@@ -59,6 +65,7 @@ import { useWorkspaceState, type SidebarMode } from './composables/useWorkspaceS
 type ThemePreference = 'light' | 'dark' | 'system'
 type SearchHit = { path: string; snippet: string; score: number }
 type PropertyPreviewRow = { key: string; value: string }
+type SemanticLinkRow = { path: string; score: number | null; direction: 'incoming' | 'outgoing' }
 
 type EditorViewExposed = {
   saveNow: () => Promise<void>
@@ -111,6 +118,8 @@ type CosmosHistorySnapshot = {
   focusMode: boolean
   focusDepth: number
 }
+type IndexRunKind = 'idle' | 'background' | 'rebuild' | 'rename'
+type IndexRunPhase = 'idle' | 'indexing_files' | 'refreshing_views' | 'done' | 'error'
 
 const THEME_STORAGE_KEY = 'tomosona.theme.preference'
 const WORKING_FOLDER_STORAGE_KEY = 'tomosona.working-folder.path'
@@ -149,6 +158,8 @@ const backHistoryButtonRef = ref<HTMLElement | null>(null)
 const forwardHistoryButtonRef = ref<HTMLElement | null>(null)
 const backlinks = ref<string[]>([])
 const backlinksLoading = ref(false)
+const semanticLinks = ref<SemanticLinkRow[]>([])
+const semanticLinksLoading = ref(false)
 const activeFileMetadata = ref<FileMetadata | null>(null)
 const propertiesPreview = ref<PropertyPreviewRow[]>([])
 const propertyParseErrorCount = ref(0)
@@ -166,6 +177,7 @@ const openDateModalVisible = ref(false)
 const openDateInput = ref('')
 const openDateModalError = ref('')
 const shortcutsModalVisible = ref(false)
+const indexStatusModalVisible = ref(false)
 const shortcutsFilterQuery = ref('')
 const previousNonCosmosMode = ref<SidebarMode>('explorer')
 const wikilinkRewriteQueue: Array<{
@@ -183,6 +195,21 @@ let cosmosHistoryDebounceTimer: ReturnType<typeof setTimeout> | null = null
 let isApplyingHistoryNavigation = false
 let unlistenWorkspaceFsChanged: (() => void) | null = null
 let modalFocusReturnTarget: HTMLElement | null = null
+let reindexWorkerRunning = false
+let reindexGeneration = 0
+const pendingReindexPaths = new Set<string>()
+const pendingReindexCount = ref(0)
+const indexRunKind = ref<IndexRunKind>('idle')
+const indexRunPhase = ref<IndexRunPhase>('idle')
+const indexRunCurrentPath = ref('')
+const indexRunCompleted = ref(0)
+const indexRunTotal = ref(0)
+const indexRunMessage = ref('')
+const indexRunLastFinishedAt = ref<number | null>(null)
+const indexStatusBusy = ref(false)
+const indexRuntimeStatus = ref<IndexRuntimeStatus | null>(null)
+const indexLogEntries = ref<IndexLogEntry[]>([])
+let indexStatusPollTimer: ReturnType<typeof setInterval> | null = null
 
 const resizeState = ref<{
   side: 'left' | 'right'
@@ -218,12 +245,118 @@ const tabView = computed(() =>
 
 const activeFilePath = computed(() => workspace.activeTabPath.value)
 const activeStatus = computed(() => editorState.getStatus(activeFilePath.value))
+const indexStateLabel = computed(() => {
+  if (filesystem.indexingState.value === 'indexing') return 'reindexing'
+  if (filesystem.indexingState.value === 'indexed') return 'indexed'
+  return 'out of sync'
+})
+const indexStateClass = computed(() => {
+  if (filesystem.indexingState.value === 'indexing') return 'status-item-indexing'
+  if (filesystem.indexingState.value === 'indexed') return 'status-item-indexed'
+  return 'status-item-out-of-sync'
+})
+const indexRunning = computed(() => filesystem.indexingState.value === 'indexing')
+const indexProgressLabel = computed(() => {
+  if (!indexRunning.value) return indexStateLabel.value
+  if (indexRunKind.value === 'background') {
+    const total = Math.max(indexRunTotal.value, indexRunCompleted.value + pendingReindexCount.value)
+    if (total <= 0) return 'processing queued files'
+    return `${indexRunCompleted.value}/${total} files`
+  }
+  if (indexRunKind.value === 'rebuild') {
+    return indexRunPhase.value === 'refreshing_views' ? 'refreshing views' : 'rebuilding workspace index'
+  }
+  if (indexRunKind.value === 'rename') {
+    return indexRunPhase.value === 'refreshing_views' ? 'refreshing links' : 'rewriting wikilinks'
+  }
+  return 'indexing'
+})
+const indexStepRows = computed(() => {
+  const phase = indexRunPhase.value
+  if (indexRunKind.value === 'background') {
+    return [
+      {
+        title: 'Collect changed files',
+        state: phase === 'idle' ? 'pending' : 'done',
+        detail: `${pendingReindexCount.value} pending`
+      },
+      {
+        title: 'Reindex queued markdown files',
+        state: phase === 'indexing_files' ? 'running' : phase === 'error' ? 'error' : phase === 'idle' ? 'pending' : 'done',
+        detail: indexRunCurrentPath.value
+          ? `${indexRunCompleted.value}/${Math.max(indexRunTotal.value, indexRunCompleted.value + pendingReindexCount.value)} • ${toRelativePath(indexRunCurrentPath.value)}`
+          : `${indexRunCompleted.value}/${Math.max(indexRunTotal.value, indexRunCompleted.value + pendingReindexCount.value)}`
+      },
+      {
+        title: 'Refresh backlinks and Cosmos',
+        state: phase === 'refreshing_views' ? 'running' : phase === 'done' ? 'done' : phase === 'error' ? 'error' : 'pending',
+        detail: phase === 'error' ? (indexRunMessage.value || 'Indexing failed') : ''
+      }
+    ]
+  }
+  if (indexRunKind.value === 'rebuild') {
+    return [
+      {
+        title: 'Rebuild workspace index',
+        state: phase === 'indexing_files' ? 'running' : phase === 'error' ? 'error' : phase === 'idle' ? 'pending' : 'done',
+        detail: indexRunTotal.value ? `${indexRunTotal.value} files indexed` : 'Running backend rebuild'
+      },
+      {
+        title: 'Refresh explorer/search/cosmos',
+        state: phase === 'refreshing_views' ? 'running' : phase === 'done' ? 'done' : phase === 'error' ? 'error' : 'pending',
+        detail: phase === 'error' ? (indexRunMessage.value || 'Rebuild failed') : ''
+      }
+    ]
+  }
+  if (indexRunKind.value === 'rename') {
+    return [
+      {
+        title: 'Rewrite wikilinks for rename',
+        state: phase === 'indexing_files' ? 'running' : phase === 'error' ? 'error' : phase === 'idle' ? 'pending' : 'done',
+        detail: indexRunTotal.value ? `${indexRunTotal.value} files updated` : ''
+      },
+      {
+        title: 'Refresh backlinks',
+        state: phase === 'refreshing_views' ? 'running' : phase === 'done' ? 'done' : phase === 'error' ? 'error' : 'pending',
+        detail: phase === 'error' ? (indexRunMessage.value || 'Rename indexing failed') : ''
+      }
+    ]
+  }
+  return [
+    {
+      title: 'Index status',
+      state: filesystem.indexingState.value === 'out_of_sync' ? 'error' : 'done',
+      detail: filesystem.indexingState.value === 'out_of_sync'
+        ? 'Workspace changed. Reindexing is pending.'
+        : indexRunLastFinishedAt.value
+          ? `Last completed at ${formatTimestamp(indexRunLastFinishedAt.value)}`
+          : 'No active indexing operation.'
+    }
+  ]
+})
+const indexActionLabel = computed(() => (indexRunning.value ? 'Stop' : 'Index'))
+const indexModelStatusLabel = computed(() => {
+  const status = indexRuntimeStatus.value
+  if (!status) return 'unknown'
+  if (status.model_state === 'ready') return 'ready'
+  if (status.model_state === 'initializing') return 'initializing'
+  if (status.model_state === 'failed') return 'failed'
+  if (status.model_state === 'not_initialized') return 'not initialized'
+  return status.model_state
+})
+const indexLogRows = computed(() =>
+  indexLogEntries.value
+    .slice()
+    .reverse()
+    .map((entry) => formatIndexLogEntry(entry))
+)
 const cosmos = useCosmosController({
   workingFolderPath: filesystem.workingFolderPath,
   activeTabPath: workspace.activeTabPath,
   getWikilinkGraph,
   reindexMarkdownFile,
   readTextFile: async (path: string) => await readTextFile(path),
+  ftsSearch,
   buildCosmosGraph
 })
 
@@ -510,6 +643,259 @@ function replaceWorkspaceFilePath(oldPath: string, newPath: string) {
   allWorkspaceFiles.value = Array.from(new Set(next)).sort((a, b) => a.localeCompare(b))
 }
 
+function markIndexOutOfSync() {
+  if (filesystem.indexingState.value !== 'indexing') {
+    filesystem.indexingState.value = 'out_of_sync'
+  }
+}
+
+function updatePendingReindexCount() {
+  pendingReindexCount.value = pendingReindexPaths.size
+}
+
+function parseIndexLogFields(message: string): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const token of message.split(/\s+/)) {
+    const equals = token.indexOf('=')
+    if (equals <= 0 || equals >= token.length - 1) continue
+    const key = token.slice(0, equals).trim()
+    const value = token.slice(equals + 1).trim()
+    if (!key || !value) continue
+    out[key] = value
+  }
+  return out
+}
+
+function formatIndexLogEntry(entry: IndexLogEntry): { time: string; title: string; detail: string } {
+  const message = entry.message.trim()
+  const fields = parseIndexLogFields(message)
+  const path = fields.path ? toRelativePath(fields.path) : ''
+
+  if (message.startsWith('reindex:start')) {
+    return {
+      time: formatTimestamp(entry.ts_ms),
+      title: path ? `Reindex start • ${path}` : 'Reindex start',
+      detail: ''
+    }
+  }
+  if (message.startsWith('reindex:done')) {
+    const stats = [`chunks ${fields.chunks ?? '?'}`, `targets ${fields.targets ?? '?'}`, `props ${fields.properties ?? '?'}`]
+    if (fields.embedding) stats.push(`embedding ${fields.embedding}`)
+    if (fields.embedding_ms) stats.push(`${fields.embedding_ms} ms`)
+    return {
+      time: formatTimestamp(entry.ts_ms),
+      title: path ? `Reindex done • ${path}` : 'Reindex done',
+      detail: stats.join(' · ')
+    }
+  }
+  if (message.startsWith('rebuild:progress')) {
+    return {
+      time: formatTimestamp(entry.ts_ms),
+      title: `Rebuild progress • ${fields.indexed ?? '?'} indexed`,
+      detail: fields.scanned ? `${fields.scanned} scanned` : ''
+    }
+  }
+  if (message.startsWith('rebuild:start')) {
+    return { time: formatTimestamp(entry.ts_ms), title: 'Rebuild start', detail: '' }
+  }
+  if (message.startsWith('rebuild:done')) {
+    return {
+      time: formatTimestamp(entry.ts_ms),
+      title: `Rebuild done • ${fields.indexed ?? '?'} indexed`,
+      detail: fields.total_ms ? `${fields.total_ms} ms` : ''
+    }
+  }
+  return { time: formatTimestamp(entry.ts_ms), title: message, detail: '' }
+}
+
+function stopIndexStatusPolling() {
+  if (indexStatusPollTimer) {
+    clearInterval(indexStatusPollTimer)
+    indexStatusPollTimer = null
+  }
+}
+
+function startIndexStatusPolling() {
+  stopIndexStatusPolling()
+  indexStatusPollTimer = setInterval(() => {
+    if (!indexStatusModalVisible.value) return
+    void refreshIndexModalData()
+  }, 900)
+}
+
+function openIndexStatusModal() {
+  modalFocusReturnTarget = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  indexStatusModalVisible.value = true
+  void refreshIndexModalData()
+  startIndexStatusPolling()
+}
+
+function closeIndexStatusModal() {
+  indexStatusModalVisible.value = false
+  stopIndexStatusPolling()
+  void nextTick(() => {
+    restoreFocusAfterModalClose()
+  })
+}
+
+async function refreshIndexLogs() {
+  if (!filesystem.hasWorkspace.value) {
+    indexLogEntries.value = []
+    return
+  }
+  try {
+    indexLogEntries.value = await readIndexLogs(80)
+  } catch {
+    indexLogEntries.value = []
+  }
+}
+
+async function refreshIndexRuntimeStatus() {
+  if (!filesystem.hasWorkspace.value) return
+  try {
+    indexRuntimeStatus.value = await readIndexRuntimeStatus()
+  } catch {
+    indexRuntimeStatus.value = null
+  }
+}
+
+async function refreshIndexModalData() {
+  await Promise.all([refreshIndexRuntimeStatus(), refreshIndexLogs()])
+}
+
+async function stopCurrentIndexOperation() {
+  if (!indexRunning.value) return
+  if (indexRunKind.value === 'background') {
+    reindexGeneration += 1
+    pendingReindexPaths.clear()
+    updatePendingReindexCount()
+    reindexWorkerRunning = false
+    filesystem.indexingState.value = 'out_of_sync'
+    indexRunPhase.value = 'error'
+    indexRunMessage.value = 'Stopped by user.'
+    return
+  }
+  try {
+    await requestIndexCancel()
+    indexRunMessage.value = 'Stop requested. Waiting for backend to stop...'
+  } catch {
+    indexRunMessage.value = 'Could not request stop.'
+  }
+}
+
+async function onIndexPrimaryAction() {
+  if (indexStatusBusy.value) return
+  indexStatusBusy.value = true
+  try {
+    if (indexRunning.value) {
+      await stopCurrentIndexOperation()
+    } else {
+      await rebuildIndexFromOverflow()
+    }
+    await refreshIndexModalData()
+  } finally {
+    indexStatusBusy.value = false
+  }
+}
+
+function enqueueMarkdownReindex(path: string) {
+  if (!filesystem.workingFolderPath.value || !isMarkdownPath(path)) return
+  pendingReindexPaths.add(path)
+  updatePendingReindexCount()
+  if (filesystem.indexingState.value !== 'indexing') {
+    filesystem.indexingState.value = 'out_of_sync'
+  }
+  if (indexRunKind.value !== 'background' || indexRunPhase.value === 'idle') {
+    indexRunKind.value = 'background'
+    indexRunPhase.value = 'idle'
+    indexRunCompleted.value = 0
+    indexRunTotal.value = Math.max(1, pendingReindexCount.value)
+    indexRunCurrentPath.value = ''
+    indexRunMessage.value = ''
+  } else {
+    indexRunTotal.value = Math.max(indexRunTotal.value, indexRunCompleted.value + pendingReindexCount.value)
+  }
+  void runReindexWorker()
+}
+
+async function runReindexWorker() {
+  if (reindexWorkerRunning) return
+  if (!filesystem.workingFolderPath.value) return
+  const generationAtStart = reindexGeneration
+  reindexWorkerRunning = true
+  console.info('[index] background:worker:start', { queued: pendingReindexCount.value })
+  indexRunKind.value = 'background'
+  indexRunPhase.value = 'indexing_files'
+  indexRunCompleted.value = 0
+  indexRunTotal.value = Math.max(1, pendingReindexCount.value)
+  indexRunCurrentPath.value = ''
+  indexRunMessage.value = ''
+  filesystem.indexingState.value = 'indexing'
+  try {
+    while (pendingReindexPaths.size > 0) {
+      if (reindexGeneration !== generationAtStart) {
+        pendingReindexPaths.clear()
+        updatePendingReindexCount()
+        return
+      }
+      const [nextPath] = pendingReindexPaths
+      if (!nextPath) break
+      pendingReindexPaths.delete(nextPath)
+      updatePendingReindexCount()
+      indexRunCurrentPath.value = nextPath
+      indexRunTotal.value = Math.max(indexRunTotal.value, indexRunCompleted.value + pendingReindexCount.value + 1)
+      try {
+        await reindexMarkdownFile(nextPath)
+      } catch {
+        filesystem.indexingState.value = 'out_of_sync'
+        indexRunPhase.value = 'error'
+        indexRunMessage.value = `Failed to reindex ${toRelativePath(nextPath)}.`
+        console.warn('[index] background:file:error', { path: nextPath })
+      }
+      indexRunCompleted.value += 1
+      indexRunCurrentPath.value = ''
+    }
+  } finally {
+    reindexWorkerRunning = false
+    if (reindexGeneration !== generationAtStart) {
+      return
+    }
+    if (pendingReindexPaths.size > 0) {
+      filesystem.indexingState.value = 'out_of_sync'
+      console.info('[index] background:worker:restart', { queued: pendingReindexPaths.size })
+      void runReindexWorker()
+      return
+    }
+    indexRunPhase.value = 'refreshing_views'
+    indexRunCurrentPath.value = ''
+    if (filesystem.indexingState.value !== 'out_of_sync') {
+      filesystem.indexingState.value = 'indexed'
+    }
+    await refreshBacklinks()
+    if (workspace.sidebarMode.value === 'cosmos') {
+      await cosmos.refreshGraph()
+    }
+    if (filesystem.indexingState.value === 'indexed') {
+      indexRunPhase.value = 'done'
+      indexRunMessage.value = ''
+      indexRunLastFinishedAt.value = Date.now()
+      console.info('[index] background:worker:done', {
+        indexed: indexRunCompleted.value,
+        total: indexRunTotal.value
+      })
+      setTimeout(() => {
+        if (indexRunKind.value === 'background' && indexRunPhase.value === 'done' && pendingReindexCount.value === 0) {
+          indexRunKind.value = 'idle'
+          indexRunPhase.value = 'idle'
+        }
+      }, 600)
+    } else {
+      indexRunPhase.value = 'error'
+      console.warn('[index] background:worker:out_of_sync')
+    }
+  }
+}
+
 function applyWorkspaceFsChanges(changes: WorkspaceFsChange[]) {
   if (!changes.length) return
   const activePath = activeFilePath.value
@@ -521,6 +907,7 @@ function applyWorkspaceFsChanges(changes: WorkspaceFsChange[]) {
       removeWorkspaceFilePath(change.path)
       if (isMarkdownPath(change.path)) {
         shouldRefreshCosmos = true
+        markIndexOutOfSync()
       }
       if (activePathKey && normalizePathKey(change.path) === activePathKey) {
         activeFileMetadata.value = null
@@ -532,16 +919,19 @@ function applyWorkspaceFsChanges(changes: WorkspaceFsChange[]) {
         replaceWorkspaceFilePath(change.old_path, change.new_path)
         if (isMarkdownPath(change.old_path) || isMarkdownPath(change.new_path)) {
           shouldRefreshCosmos = true
+          markIndexOutOfSync()
         }
       } else if (change.old_path) {
         removeWorkspaceFilePath(change.old_path)
         if (isMarkdownPath(change.old_path)) {
           shouldRefreshCosmos = true
+          markIndexOutOfSync()
         }
       } else if (!change.is_dir && change.new_path) {
         upsertWorkspaceFilePath(change.new_path)
         if (isMarkdownPath(change.new_path)) {
           shouldRefreshCosmos = true
+          enqueueMarkdownReindex(change.new_path)
         }
       }
       if (
@@ -557,6 +947,7 @@ function applyWorkspaceFsChanges(changes: WorkspaceFsChange[]) {
       upsertWorkspaceFilePath(change.path)
       if (isMarkdownPath(change.path)) {
         shouldRefreshCosmos = true
+        enqueueMarkdownReindex(change.path)
       }
       if (activePathKey && normalizePathKey(change.path) === activePathKey) {
         shouldRefreshActiveMetadata = true
@@ -1069,6 +1460,16 @@ async function openNoteInCosmosFromPalette() {
 
 async function closeWorkspace() {
   if (!filesystem.hasWorkspace.value) return
+  reindexGeneration += 1
+  pendingReindexPaths.clear()
+  updatePendingReindexCount()
+  reindexWorkerRunning = false
+  indexRunKind.value = 'idle'
+  indexRunPhase.value = 'idle'
+  indexRunCurrentPath.value = ''
+  indexRunCompleted.value = 0
+  indexRunTotal.value = 0
+  indexRunMessage.value = ''
   workspace.closeAllTabs()
   documentHistory.reset()
   editorState.setActiveOutline([])
@@ -1076,6 +1477,8 @@ async function closeWorkspace() {
   allWorkspaceFiles.value = []
   backlinks.value = []
   backlinksLoading.value = false
+  semanticLinks.value = []
+  semanticLinksLoading.value = false
   cosmos.clearState()
   filesystem.selectedCount.value = 0
   filesystem.clearWorkspacePath()
@@ -1085,6 +1488,7 @@ async function closeWorkspace() {
     filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not close workspace.'
   }
   window.localStorage.removeItem(WORKING_FOLDER_STORAGE_KEY)
+  filesystem.indexingState.value = 'indexed'
   closeOverflowMenu()
 }
 
@@ -1129,6 +1533,16 @@ async function onSelectWorkingFolder() {
 
 async function loadWorkingFolder(path: string) {
   try {
+    reindexGeneration += 1
+    pendingReindexPaths.clear()
+    updatePendingReindexCount()
+    reindexWorkerRunning = false
+    indexRunKind.value = 'idle'
+    indexRunPhase.value = 'idle'
+    indexRunCurrentPath.value = ''
+    indexRunCompleted.value = 0
+    indexRunTotal.value = 0
+    indexRunMessage.value = ''
     const canonical = await setWorkingFolder(path)
     filesystem.setWorkspacePath(canonical)
     filesystem.indexingState.value = 'indexing'
@@ -1151,7 +1565,9 @@ async function loadWorkingFolder(path: string) {
     window.localStorage.removeItem(WORKING_FOLDER_STORAGE_KEY)
     filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not open working folder.'
   } finally {
-    filesystem.indexingState.value = 'idle'
+    if (filesystem.hasWorkspace.value) {
+      filesystem.indexingState.value = 'indexed'
+    }
   }
 }
 
@@ -1372,13 +1788,26 @@ async function maybeRewriteWikilinksForRename(fromPath: string, toPath: string) 
   const shouldRewrite = await promptWikilinkRewritePermission(fromPath, toPath)
   if (!shouldRewrite) return
   filesystem.indexingState.value = 'indexing'
+  indexRunKind.value = 'rename'
+  indexRunPhase.value = 'indexing_files'
+  indexRunCurrentPath.value = ''
+  indexRunCompleted.value = 0
+  indexRunTotal.value = 0
+  indexRunMessage.value = ''
   try {
-    await updateWikilinksForRename(fromPath, toPath)
+    const result = await updateWikilinksForRename(fromPath, toPath)
+    indexRunTotal.value = result.updated_files
+    indexRunCompleted.value = result.updated_files
+    indexRunPhase.value = 'refreshing_views'
     await refreshBacklinks()
+    filesystem.indexingState.value = 'indexed'
+    indexRunPhase.value = 'done'
+    indexRunLastFinishedAt.value = Date.now()
   } catch (err) {
+    filesystem.indexingState.value = 'out_of_sync'
+    indexRunPhase.value = 'error'
+    indexRunMessage.value = err instanceof Error ? err.message : 'Could not update wikilinks.'
     filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not update wikilinks.'
-  } finally {
-    filesystem.indexingState.value = 'idle'
   }
 }
 
@@ -1497,14 +1926,7 @@ async function saveFile(path: string, txt: string, options: SaveFileOptions): Pr
   }
 
   upsertWorkspaceFilePath(path)
-
-  filesystem.indexingState.value = 'indexing'
-  try {
-    await reindexMarkdownFile(path)
-  } finally {
-    filesystem.indexingState.value = 'idle'
-  }
-  await refreshBacklinks()
+  enqueueMarkdownReindex(path)
   return { persisted: true }
 }
 
@@ -1693,22 +2115,73 @@ function openSearchPanel() {
   })
 }
 
+function collectSemanticLinksForPath(path: string, rawGraph: WikilinkGraph | null): SemanticLinkRow[] {
+  if (!rawGraph) return []
+  const nodeById = new Map(rawGraph.nodes.map((node) => [node.id, node]))
+  const activeNode = rawGraph.nodes.find((node) => normalizePathKey(node.path) === normalizePathKey(path))
+  if (!activeNode) return []
+
+  const merged = new Map<string, SemanticLinkRow>()
+  for (const edge of rawGraph.edges) {
+    if (edge.type !== 'semantic') continue
+    const isOutgoing = edge.source === activeNode.id
+    const isIncoming = edge.target === activeNode.id
+    if (!isOutgoing && !isIncoming) continue
+    const otherId = isOutgoing ? edge.target : edge.source
+    if (otherId === activeNode.id) continue
+    const otherNode = nodeById.get(otherId)
+    if (!otherNode) continue
+    const key = normalizePathKey(otherNode.path)
+    const nextScore = typeof edge.score === 'number' ? edge.score : null
+    const current = merged.get(key)
+    if (!current) {
+      merged.set(key, {
+        path: otherNode.path,
+        score: nextScore,
+        direction: isOutgoing ? 'outgoing' : 'incoming'
+      })
+      continue
+    }
+    const currentScore = current.score ?? -1
+    const candidateScore = nextScore ?? -1
+    if (candidateScore > currentScore) {
+      current.score = nextScore
+      current.direction = isOutgoing ? 'outgoing' : 'incoming'
+    }
+  }
+
+  return Array.from(merged.values()).sort((a, b) => {
+    const scoreA = a.score ?? -1
+    const scoreB = b.score ?? -1
+    if (scoreB !== scoreA) return scoreB - scoreA
+    return a.path.localeCompare(b.path)
+  })
+}
+
 async function refreshBacklinks() {
   const root = filesystem.workingFolderPath.value
   const path = workspace.activeTabPath.value
   if (!root || !path) {
     backlinks.value = []
+    semanticLinks.value = []
     return
   }
 
   backlinksLoading.value = true
+  semanticLinksLoading.value = true
   try {
-    const results = await backlinksForPath(path)
+    const [results, rawGraph] = await Promise.all([
+      backlinksForPath(path),
+      getWikilinkGraph().catch(() => null)
+    ])
     backlinks.value = results.map((item) => item.path)
+    semanticLinks.value = collectSemanticLinksForPath(path, rawGraph)
   } catch {
     backlinks.value = []
+    semanticLinks.value = []
   } finally {
     backlinksLoading.value = false
+    semanticLinksLoading.value = false
   }
 }
 
@@ -1893,6 +2366,11 @@ function onCosmosQueryUpdate(value: string) {
 
 function onCosmosToggleFocusMode(value: boolean) {
   cosmos.focusMode.value = value
+  recordCosmosHistorySnapshot()
+}
+
+function onCosmosToggleSemanticEdges(value: boolean) {
+  cosmos.showSemanticEdges.value = value
   recordCosmosHistorySnapshot()
 }
 
@@ -2339,18 +2817,47 @@ async function rebuildIndexFromOverflow() {
   if (!root) return
   closeOverflowMenu()
   filesystem.indexingState.value = 'indexing'
+  reindexGeneration += 1
+  pendingReindexPaths.clear()
+  updatePendingReindexCount()
+  reindexWorkerRunning = false
+  indexRunKind.value = 'rebuild'
+  indexRunPhase.value = 'indexing_files'
+  indexRunCurrentPath.value = ''
+  indexRunCompleted.value = 0
+  indexRunTotal.value = 0
+  indexRunMessage.value = ''
+  console.info('[index] rebuild:start')
   try {
     const result = await rebuildWorkspaceIndex()
+    indexRunTotal.value = result.indexed_files
+    indexRunCompleted.value = result.indexed_files
+    if (result.canceled) {
+      filesystem.indexingState.value = 'out_of_sync'
+      indexRunPhase.value = 'error'
+      indexRunMessage.value = 'Rebuild canceled by user.'
+      filesystem.notifyInfo('Index rebuild canceled.')
+      return
+    }
+    indexRunPhase.value = 'refreshing_views'
     await loadAllFiles()
     await refreshBacklinks()
     if (workspace.sidebarMode.value === 'cosmos') {
       await cosmos.refreshGraph()
     }
+    filesystem.indexingState.value = 'indexed'
+    indexRunPhase.value = 'done'
+    indexRunLastFinishedAt.value = Date.now()
+    console.info('[index] rebuild:done', { indexed: result.indexed_files })
     filesystem.notifySuccess(`Index rebuilt (${result.indexed_files} file${result.indexed_files === 1 ? '' : 's'}).`)
   } catch (err) {
+    filesystem.indexingState.value = 'out_of_sync'
+    indexRunPhase.value = 'error'
+    indexRunMessage.value = err instanceof Error ? err.message : 'Could not rebuild index.'
+    console.warn('[index] rebuild:error', {
+      message: err instanceof Error ? err.message : 'Could not rebuild index.'
+    })
     filesystem.notifyError(err instanceof Error ? err.message : 'Could not rebuild index.')
-  } finally {
-    filesystem.indexingState.value = 'idle'
   }
 }
 
@@ -2421,6 +2928,7 @@ function onOpenDateInputKeydown(event: KeyboardEvent) {
 
 function activeModalSelector(): string | null {
   if (wikilinkRewritePrompt.value) return '[data-modal="wikilink-rewrite"]'
+  if (indexStatusModalVisible.value) return '[data-modal="index-status"]'
   if (shortcutsModalVisible.value) return '[data-modal="shortcuts"]'
   if (openDateModalVisible.value) return '[data-modal="open-date"]'
   if (newFolderModalVisible.value) return '[data-modal="new-folder"]'
@@ -2432,6 +2940,7 @@ function activeModalSelector(): string | null {
 function hasBlockingModalOpen(): boolean {
   return Boolean(
     quickOpenVisible.value ||
+    indexStatusModalVisible.value ||
     newFileModalVisible.value ||
     newFolderModalVisible.value ||
     openDateModalVisible.value ||
@@ -2571,6 +3080,12 @@ function onWindowKeydown(event: KeyboardEvent) {
     event.preventDefault()
     event.stopPropagation()
     closeShortcutsModal()
+    return
+  }
+  if (isEscape && indexStatusModalVisible.value) {
+    event.preventDefault()
+    event.stopPropagation()
+    closeIndexStatusModal()
     return
   }
   if (isEscape && workspace.sidebarMode.value === 'cosmos') {
@@ -2795,8 +3310,18 @@ watch(
     documentHistory.reset()
     allWorkspaceFiles.value = []
     backlinks.value = []
+    semanticLinks.value = []
     virtualDocs.value = {}
     activeFileMetadata.value = null
+  }
+)
+
+watch(
+  () => filesystem.indexingState.value,
+  () => {
+    if (indexStatusModalVisible.value) {
+      void refreshIndexModalData()
+    }
   }
 )
 
@@ -2882,6 +3407,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   clearWikilinkRewritePromptQueue()
+  stopIndexStatusPolling()
   if (searchDebounceTimer) {
     clearTimeout(searchDebounceTimer)
     searchDebounceTimer = null
@@ -3012,6 +3538,7 @@ onBeforeUnmount(() => {
               :matches="cosmos.queryMatches.value"
               :focus-mode="cosmos.focusMode.value"
               :focus-depth="cosmos.focusDepth.value"
+              :show-semantic-edges="cosmos.showSemanticEdges.value"
               :selected-node="cosmosSelectedNodeForPanel"
               :selected-link-count="cosmos.selectedLinkCount.value"
               :preview="cosmos.preview.value"
@@ -3024,6 +3551,7 @@ onBeforeUnmount(() => {
               @search-enter="onCosmosSearchEnter"
               @select-match="onCosmosMatchClick"
               @toggle-focus-mode="onCosmosToggleFocusMode"
+              @toggle-semantic-edges="onCosmosToggleSemanticEdges"
               @expand-neighborhood="onCosmosExpandNeighborhood"
               @jump-related="onCosmosJumpToRelatedNode"
               @open-selected="void onCosmosOpenSelectedNode()"
@@ -3316,6 +3844,8 @@ onBeforeUnmount(() => {
             v-if="workspace.rightPaneVisible.value"
             :width="rightPaneWidth"
             :outline="editorState.activeOutline.value"
+            :semantic-links="semanticLinks"
+            :semantic-links-loading="semanticLinksLoading"
             :backlinks="backlinks"
             :backlinks-loading="backlinksLoading"
             :metadata-rows="metadataRows"
@@ -3332,7 +3862,10 @@ onBeforeUnmount(() => {
     <footer class="status-bar">
       <span class="status-item">{{ activeFilePath ? toRelativePath(activeFilePath) : 'No file' }}</span>
       <span class="status-item status-item-state">{{ activeStatus.saving ? 'saving...' : virtualDocs[activeFilePath] ? 'unsaved' : activeStatus.dirty ? 'edit' : 'saved' }}</span>
-      <span class="status-item">index: {{ filesystem.indexingState.value }}</span>
+      <button type="button" class="status-item status-item-index status-trigger" :class="indexStateClass" @click="openIndexStatusModal">
+        <span class="status-dot" :class="indexStateClass"></span>
+        <span>index: {{ indexStateLabel }}</span>
+      </button>
       <span class="status-item">embeddings: {{ filesystem.embeddingQueueState.value }}</span>
       <span class="status-item">workspace: {{ filesystem.workingFolderPath.value || 'none' }}</span>
     </footer>
@@ -3348,6 +3881,63 @@ onBeforeUnmount(() => {
       <button type="button" class="toast-close" aria-label="Dismiss notification" @click="filesystem.clearNotification()">
         ×
       </button>
+    </div>
+
+    <div v-if="indexStatusModalVisible" class="modal-overlay" @click.self="closeIndexStatusModal">
+      <div
+        class="modal confirm-modal index-status-modal"
+        data-modal="index-status"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="index-status-title"
+        tabindex="-1"
+      >
+        <h3 id="index-status-title" class="confirm-title">Index Status</h3>
+        <p class="confirm-text">Current state: <strong>{{ indexStateLabel }}</strong></p>
+        <p class="confirm-text">Progress: {{ indexProgressLabel }}</p>
+        <p class="confirm-text">
+          Embedding model: <strong>{{ indexRuntimeStatus?.model_name || 'n/a' }}</strong>
+          ({{ indexModelStatusLabel }})
+        </p>
+        <p v-if="indexRuntimeStatus?.model_last_duration_ms != null" class="confirm-text">
+          Last model init: {{ indexRuntimeStatus.model_last_duration_ms }} ms
+          <span v-if="indexRuntimeStatus.model_last_finished_at_ms">
+            at {{ formatTimestamp(indexRuntimeStatus.model_last_finished_at_ms) }}
+          </span>
+        </p>
+        <p v-if="indexRuntimeStatus?.model_last_error" class="confirm-text">
+          Last model error: {{ indexRuntimeStatus.model_last_error }}
+        </p>
+        <p class="confirm-text">Note: first model initialization may download weights and take longer.</p>
+        <p v-if="indexRunCurrentPath" class="confirm-text">Current file: {{ toRelativePath(indexRunCurrentPath) }}</p>
+        <div class="index-steps">
+          <div v-for="step in indexStepRows" :key="step.title" class="index-step">
+            <span class="index-step-dot" :class="`index-step-${step.state}`"></span>
+            <div class="index-step-copy">
+              <p class="index-step-title">{{ step.title }}</p>
+              <p v-if="step.detail" class="index-step-detail">{{ step.detail }}</p>
+            </div>
+          </div>
+        </div>
+        <div class="index-log-panel">
+          <p class="index-log-title">Recent indexing activity</p>
+          <div v-if="!indexLogRows.length" class="index-log-empty">No index activity yet.</div>
+          <div v-else class="index-log-list">
+            <div v-for="(item, idx) in indexLogRows" :key="`${item.time}-${item.title}-${idx}`" class="index-log-row">
+              <span class="index-log-time">{{ item.time }}</span>
+              <div class="index-log-copy">
+                <p class="index-log-main">{{ item.title }}</p>
+                <p v-if="item.detail" class="index-log-detail">{{ item.detail }}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="confirm-actions">
+          <UiButton size="sm" :disabled="indexStatusBusy" @click="onIndexPrimaryAction">{{ indexActionLabel }}</UiButton>
+          <UiButton size="sm" variant="ghost" :disabled="indexStatusBusy" @click="void refreshIndexModalData()">Refresh</UiButton>
+          <UiButton size="sm" @click="closeIndexStatusModal">Close</UiButton>
+        </div>
+      </div>
     </div>
 
     <div v-if="quickOpenVisible" class="modal-overlay" @click.self="closeQuickOpen">
@@ -4255,9 +4845,57 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
+.status-trigger {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.status-trigger:hover {
+  filter: brightness(0.94);
+}
+
 .status-item-state {
   width: 10ch;
   justify-content: center;
+}
+
+.status-item-index {
+  gap: 6px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  display: inline-block;
+  background: #94a3b8;
+}
+
+.status-dot.status-item-indexing {
+  background: #2563eb;
+  animation: statusPulse 1.2s ease-in-out infinite;
+}
+
+.status-dot.status-item-indexed {
+  background: #22c55e;
+}
+
+.status-dot.status-item-out-of-sync {
+  background: #f97316;
+}
+
+.ide-root.dark .status-dot.status-item-indexing {
+  background: #60a5fa;
+}
+
+.ide-root.dark .status-dot.status-item-indexed {
+  background: #4ade80;
+}
+
+.ide-root.dark .status-dot.status-item-out-of-sync {
+  background: #fb923c;
 }
 
 .status-item + .status-item {
@@ -4266,6 +4904,176 @@ onBeforeUnmount(() => {
 
 .ide-root.dark .status-item + .status-item {
   border-left-color: #3e4451;
+}
+
+@keyframes statusPulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+.index-status-modal {
+  width: min(560px, calc(100vw - 40px));
+}
+
+.index-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 28vh;
+  overflow: auto;
+  padding: 4px 0 2px;
+}
+
+.index-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 8px;
+  background: #ffffff;
+}
+
+.ide-root.dark .index-step {
+  border-color: #3e4451;
+  background: #282c34;
+}
+
+.index-step-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  margin-top: 4px;
+  flex: 0 0 auto;
+}
+
+.index-step-running {
+  background: #2563eb;
+  animation: statusPulse 1.2s ease-in-out infinite;
+}
+
+.index-step-done {
+  background: #22c55e;
+}
+
+.index-step-pending {
+  background: #94a3b8;
+}
+
+.index-step-error {
+  background: #f97316;
+}
+
+.index-step-title {
+  margin: 0;
+  font-size: 12px;
+  color: #1f2937;
+}
+
+.index-step-detail {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.ide-root.dark .index-step-title {
+  color: #e2e8f0;
+}
+
+.ide-root.dark .index-step-detail {
+  color: #94a3b8;
+}
+
+.index-log-panel {
+  margin-top: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 8px;
+  background: #ffffff;
+}
+
+.ide-root.dark .index-log-panel {
+  border-color: #3e4451;
+  background: #282c34;
+}
+
+.index-log-title {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.ide-root.dark .index-log-title {
+  color: #e2e8f0;
+}
+
+.index-log-empty {
+  margin: 0;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.index-log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 22vh;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.index-log-row {
+  display: grid;
+  grid-template-columns: 68px 1fr;
+  gap: 8px;
+  align-items: start;
+}
+
+.index-log-time {
+  font-size: 10px;
+  line-height: 1.2;
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+}
+
+.index-log-copy {
+  min-width: 0;
+}
+
+.index-log-main {
+  margin: 0;
+  font-size: 11px;
+  color: #1f2937;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.index-log-detail {
+  margin: 1px 0 0;
+  font-size: 10px;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ide-root.dark .index-log-empty,
+.ide-root.dark .index-log-time,
+.ide-root.dark .index-log-detail {
+  color: #94a3b8;
+}
+
+.ide-root.dark .index-log-main {
+  color: #e2e8f0;
 }
 
 .toast {

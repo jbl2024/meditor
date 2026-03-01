@@ -743,8 +743,15 @@ fn sanitize_external_url(raw: &str) -> Result<String> {
     }
 
     if is_http || is_https {
-        let scheme_len = if is_https { "https://".len() } else { "http://".len() };
-        let host = value[scheme_len..].split(['/', '?', '#']).next().unwrap_or("");
+        let scheme_len = if is_https {
+            "https://".len()
+        } else {
+            "http://".len()
+        };
+        let host = value[scheme_len..]
+            .split(['/', '?', '#'])
+            .next()
+            .unwrap_or("");
         if host.trim().is_empty() {
             return Err(AppError::InvalidPath);
         }

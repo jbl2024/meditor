@@ -14,7 +14,8 @@ type RenderNode = CosmosGraphNode & { x?: number; y?: number; z?: number; fx?: n
 type RenderEdge = {
   source: string | RenderNode
   target: string | RenderNode
-  type: 'wikilink'
+  type: 'wikilink' | 'semantic'
+  score?: number | null
 }
 
 type ForceGraphInstance = {
@@ -93,7 +94,7 @@ let hoveredNodeId = ''
 let selectedNodeId = ''
 let hoveredNeighborIds = new Set<string>()
 let highlightedEdgeKeys = new Set<string>()
-let cachedEdges: Array<{ source: string; target: string }> = []
+let cachedEdges: Array<{ source: string; target: string; type: 'wikilink' | 'semantic'; score?: number | null }> = []
 let didInitialAutoFit = false
 let deferredFocusTimer: ReturnType<typeof setTimeout> | null = null
 let deferredFocusNodeId = ''
@@ -142,6 +143,7 @@ function isEdgeHighlighted(link: RenderEdge): boolean {
 }
 
 function linkArrowColor(link: RenderEdge): string {
+  if (link.type === 'semantic') return '#64748b'
   if (isEdgeHighlighted(link)) return '#f8fafc'
   return hoveredNodeId ? '#94a3b8' : '#475569'
 }
@@ -402,13 +404,31 @@ async function initializeGraph() {
     })
     .linkVisibility(() => true)
     .linkColor((link) => {
+      if (link.type === 'semantic') {
+        if (isEdgeHighlighted(link)) return '#a7f3d0'
+        return hoveredNodeId ? '#064e3b' : '#065f46'
+      }
       if (isEdgeHighlighted(link)) return '#f8fafc'
       if (!hoveredNodeId) return '#64748b'
       return '#334155'
     })
-    .linkWidth((link) => (isEdgeHighlighted(link) ? 1.4 : 0.45))
-    .linkOpacity((link) => (isEdgeHighlighted(link) ? 0.96 : hoveredNodeId ? 0.08 : 0.22))
-    .linkDirectionalArrowLength((link) => (isEdgeHighlighted(link) ? 3.4 : 2.6))
+    .linkWidth((link) => {
+      if (link.type === 'semantic') {
+        const base = Number.isFinite(link.score) ? Math.max(0.45, (link.score ?? 0) * 1.1) : 0.55
+        return isEdgeHighlighted(link) ? base + 0.5 : base
+      }
+      return isEdgeHighlighted(link) ? 1.4 : 0.45
+    })
+    .linkOpacity((link) => {
+      if (link.type === 'semantic') {
+        return isEdgeHighlighted(link) ? 0.86 : hoveredNodeId ? 0.05 : 0.14
+      }
+      return isEdgeHighlighted(link) ? 0.96 : hoveredNodeId ? 0.08 : 0.22
+    })
+    .linkDirectionalArrowLength((link) => {
+      if (link.type === 'semantic') return 0
+      return isEdgeHighlighted(link) ? 3.4 : 2.6
+    })
     .linkDirectionalArrowRelPos(0.9)
     .linkDirectionalArrowColor((link) => linkArrowColor(link))
     .cooldownTicks(140)
@@ -446,10 +466,15 @@ async function initializeGraph() {
 function applyGraphData() {
   const graph = graphInstance.value
   if (!graph) return
-  cachedEdges = props.graph.edges.map((edge) => ({ source: edge.source, target: edge.target }))
+  cachedEdges = props.graph.edges.map((edge) => ({
+    source: edge.source,
+    target: edge.target,
+    type: edge.type,
+    score: edge.score ?? null
+  }))
   graph.graphData({
     nodes: props.graph.nodes.map((node) => ({ ...node })),
-    links: cachedEdges.map((edge) => ({ ...edge, type: 'wikilink' as const }))
+    links: cachedEdges.map((edge) => ({ ...edge }))
   })
   updateHoverState(null)
   if (!didInitialAutoFit && props.graph.nodes.length > 0) {

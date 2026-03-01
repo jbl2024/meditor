@@ -57,4 +57,11 @@ describe('graphIndex', () => {
     expect(c?.folderKey).toBe('root')
     expect((d?.opacityHint ?? 0) > 0).toBe(true)
   })
+
+  it('keeps semantic edges in normalized graph output', () => {
+    const raw = sampleGraph()
+    raw.edges.push({ source: 'a.md', target: 'd.md', type: 'semantic', score: 0.77 })
+    const graph = buildCosmosGraph(raw)
+    expect(graph.edges.some((edge) => edge.type === 'semantic')).toBe(true)
+  })
 })

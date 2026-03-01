@@ -30,7 +30,8 @@ describe('useCosmosController', () => {
         activeTabPath: ref('/vault/a.md'),
         getWikilinkGraph: vi.fn(async () => rawGraph),
         reindexMarkdownFile: vi.fn(async () => {}),
-        readTextFile: vi.fn(async () => '# A')
+        readTextFile: vi.fn(async () => '# A'),
+        ftsSearch: vi.fn(async () => [])
       })
 
       await ctrl.refreshGraph()
@@ -53,7 +54,8 @@ describe('useCosmosController', () => {
         activeTabPath: ref('/vault/a.md'),
         getWikilinkGraph: vi.fn(async () => rawGraph),
         reindexMarkdownFile: vi.fn(async () => {}),
-        readTextFile: vi.fn(async () => '# A')
+        readTextFile: vi.fn(async () => '# A'),
+        ftsSearch: vi.fn(async () => [])
       })
 
       await ctrl.refreshGraph()
@@ -74,7 +76,8 @@ describe('useCosmosController', () => {
         activeTabPath: ref('/vault/a.md'),
         getWikilinkGraph: vi.fn(async () => rawGraph),
         reindexMarkdownFile: vi.fn(async () => {}),
-        readTextFile: vi.fn(async () => '# A')
+        readTextFile: vi.fn(async () => '# A'),
+        ftsSearch: vi.fn(async () => [])
       })
 
       await ctrl.refreshGraph()
@@ -102,7 +105,8 @@ describe('useCosmosController', () => {
         activeTabPath: ref('/vault/a.md'),
         getWikilinkGraph: getGraph,
         reindexMarkdownFile: vi.fn(async () => {}),
-        readTextFile: vi.fn(async () => '# A')
+        readTextFile: vi.fn(async () => '# A'),
+        ftsSearch: vi.fn(async () => [])
       })
 
       await ctrl.refreshGraph()
@@ -129,7 +133,8 @@ describe('useCosmosController', () => {
         activeTabPath: ref('/vault/a.md'),
         getWikilinkGraph: vi.fn(async () => rawGraph),
         reindexMarkdownFile: vi.fn(async () => {}),
-        readTextFile
+        readTextFile,
+        ftsSearch: vi.fn(async () => [])
       })
 
       await ctrl.refreshGraph()
@@ -142,6 +147,57 @@ describe('useCosmosController', () => {
       await flush()
       expect(ctrl.preview.value).toBe('')
       expect(ctrl.previewError.value).toBe('boom')
+    })
+    scope.stop()
+  })
+
+  it('filters semantic edges when toggle is off', async () => {
+    const scope = effectScope()
+    await scope.run(async () => {
+      const ctrl = useCosmosController({
+        workingFolderPath: ref('/vault'),
+        activeTabPath: ref('/vault/a.md'),
+        getWikilinkGraph: vi.fn(async () => ({
+          ...rawGraph,
+          edges: [
+            { source: 'a', target: 'b', type: 'wikilink' as const },
+            { source: 'a', target: 'c', type: 'semantic' as const, score: 0.82 }
+          ]
+        })),
+        reindexMarkdownFile: vi.fn(async () => {}),
+        readTextFile: vi.fn(async () => '# A'),
+        ftsSearch: vi.fn(async () => [])
+      })
+
+      await ctrl.refreshGraph()
+      expect(ctrl.visibleGraph.value.edges).toHaveLength(2)
+      ctrl.showSemanticEdges.value = false
+      expect(ctrl.visibleGraph.value.edges).toHaveLength(1)
+      expect(ctrl.visibleGraph.value.edges[0]?.type).toBe('wikilink')
+    })
+    scope.stop()
+  })
+
+  it('prefers semantic search order when available', async () => {
+    const scope = effectScope()
+    await scope.run(async () => {
+      const ctrl = useCosmosController({
+        workingFolderPath: ref('/vault'),
+        activeTabPath: ref('/vault/a.md'),
+        getWikilinkGraph: vi.fn(async () => rawGraph),
+        reindexMarkdownFile: vi.fn(async () => {}),
+        readTextFile: vi.fn(async () => '# A'),
+        ftsSearch: vi.fn(async () => [
+          { path: '/vault/b.md', snippet: 'B', score: 2 },
+          { path: '/vault/a.md', snippet: 'A', score: 1 }
+        ])
+      })
+
+      await ctrl.refreshGraph()
+      ctrl.query.value = 'x'
+      await flush()
+      await flush()
+      expect(ctrl.queryMatches.value.map((item) => item.id)).toEqual(['b', 'a'])
     })
     scope.stop()
   })

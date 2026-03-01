@@ -14,10 +14,13 @@
 type HeadingNode = { level: 1 | 2 | 3; text: string }
 type PropertyPreviewRow = { key: string; value: string }
 type MetadataRow = { label: string; value: string }
+type SemanticLinkRow = { path: string; score: number | null; direction: 'incoming' | 'outgoing' }
 
 const props = defineProps<{
   width: number
   outline: HeadingNode[]
+  semanticLinks: SemanticLinkRow[]
+  semanticLinksLoading: boolean
   backlinks: string[]
   backlinksLoading: boolean
   metadataRows: MetadataRow[]
@@ -46,6 +49,25 @@ const emit = defineEmits<{
         @click="emit('outline-click', { index: idx, heading })"
       >
         {{ heading.text }}
+      </button>
+    </section>
+
+    <section class="pane-card">
+      <h3 class="section-title">Semantic Links</h3>
+      <div v-if="props.semanticLinksLoading" class="empty-state">Loading...</div>
+      <div v-else-if="!props.semanticLinks.length" class="empty-state">No semantic links</div>
+      <button
+        v-for="item in props.semanticLinks"
+        :key="`semantic-${item.path}`"
+        type="button"
+        class="pane-item semantic-link-item"
+        @click="emit('backlink-open', item.path)"
+      >
+        <span class="semantic-link-path">{{ props.toRelativePath(item.path) }}</span>
+        <span class="semantic-link-meta">
+          <span class="semantic-link-direction">{{ item.direction === 'outgoing' ? 'out' : 'in' }}</span>
+          <span v-if="item.score != null" class="semantic-link-score">{{ item.score.toFixed(2) }}</span>
+        </span>
       </button>
     </section>
 
@@ -158,6 +180,46 @@ const emit = defineEmits<{
   transition: background-color 120ms ease, color 120ms ease;
 }
 
+.semantic-link-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.semantic-link-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.semantic-link-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.semantic-link-direction,
+.semantic-link-score {
+  font-size: 10px;
+  line-height: 1;
+  border-radius: 999px;
+  padding: 2px 6px;
+  font-weight: 600;
+}
+
+.semantic-link-direction {
+  color: #4b5563;
+  background: #e5e7eb;
+}
+
+.semantic-link-score {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
 .pane-item:hover {
   background: #eef2f8;
   color: #1f2937;
@@ -170,6 +232,16 @@ const emit = defineEmits<{
 .ide-root.dark .pane-item:hover {
   background: #2f3845;
   color: #e2e8f0;
+}
+
+.ide-root.dark .semantic-link-direction {
+  color: #cbd5e1;
+  background: #334155;
+}
+
+.ide-root.dark .semantic-link-score {
+  color: #bfdbfe;
+  background: #1e3a8a;
 }
 
 .metadata-grid {

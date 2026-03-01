@@ -36,6 +36,21 @@ export type FileMetadata = {
   updated_at_ms: number | null
 }
 
+export type IndexRuntimeStatus = {
+  model_name: string
+  model_state: string
+  model_init_attempts: number
+  model_last_started_at_ms: number | null
+  model_last_finished_at_ms: number | null
+  model_last_duration_ms: number | null
+  model_last_error: string | null
+}
+
+export type IndexLogEntry = {
+  ts_ms: number
+  message: string
+}
+
 export type WikilinkGraphNode = {
   id: string
   path: string
@@ -45,10 +60,17 @@ export type WikilinkGraphNode = {
   cluster: number | null
 }
 
+/**
+ * Graph edge returned by backend Cosmos payload.
+ *
+ * - `wikilink`: explicit markdown link.
+ * - `semantic`: inferred nearest-neighbor link from note embeddings.
+ */
 export type WikilinkGraphEdge = {
   source: string
   target: string
-  type: 'wikilink'
+  type: 'wikilink' | 'semantic'
+  score?: number | null
 }
 
 export type WikilinkGraph = {
@@ -177,8 +199,20 @@ export async function updateWikilinksForRename(
   return await invoke('update_wikilinks_for_rename', { oldPath, newPath })
 }
 
-export async function rebuildWorkspaceIndex(): Promise<{ indexed_files: number }> {
+export async function rebuildWorkspaceIndex(): Promise<{ indexed_files: number; canceled: boolean }> {
   return await invoke('rebuild_workspace_index')
+}
+
+export async function requestIndexCancel(): Promise<void> {
+  await invoke('request_index_cancel')
+}
+
+export async function readIndexRuntimeStatus(): Promise<IndexRuntimeStatus> {
+  return await invoke('read_index_runtime_status')
+}
+
+export async function readIndexLogs(limit = 80): Promise<IndexLogEntry[]> {
+  return await invoke('read_index_logs', { limit })
 }
 
 export async function readPropertyTypeSchema(): Promise<Record<string, string>> {
