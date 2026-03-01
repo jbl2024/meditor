@@ -186,40 +186,39 @@ function onEditorKeydown(event: KeyboardEvent) {
 
 <template>
   <NodeViewWrapper class="meditor-html-node" :class="{ 'is-editing': editor.isEditable && showSource }">
-    <div class="meditor-html-header" contenteditable="false">
-      <span class="meditor-html-title">HTML</span>
-      <button
-        v-if="editor.isEditable"
-        type="button"
-        class="meditor-html-toggle-btn"
-        @mousedown.stop.prevent="onEditorToggle($event)"
-      >
-        &lt;/&gt;
-      </button>
-    </div>
+    <div class="meditor-html-surface">
+      <div class="meditor-html-body">
+        <button
+          v-if="editor.isEditable"
+          type="button"
+          class="meditor-html-toggle-btn"
+          contenteditable="false"
+          @mousedown.stop.prevent="onEditorToggle($event)"
+        >
+          &lt;/&gt;
+        </button>
+        <div
+          v-if="!showSource"
+          class="meditor-html-preview"
+          contenteditable="false"
+          v-html="sanitizedPreview"
+        ></div>
 
-    <div class="meditor-html-body">
-      <div
-        v-if="!showSource"
-        class="meditor-html-preview"
-        contenteditable="false"
-        v-html="sanitizedPreview"
-      ></div>
-
-      <div v-else class="meditor-html-source-shell">
-        <pre ref="sourcePre" class="meditor-html-source" aria-hidden="true"><code class="hljs language-xml" v-html="highlightedSource"></code></pre>
-        <textarea
-          ref="sourceTextarea"
-          class="meditor-html-textarea"
-          :value="html"
-          spellcheck="false"
-          @input="onInput"
-          @scroll="syncHighlightedScroll"
-          @keydown="onEditorKeydown"
-        />
+        <div v-else class="meditor-html-source-shell">
+          <pre ref="sourcePre" class="meditor-html-source" aria-hidden="true"><code class="hljs language-xml" v-html="highlightedSource"></code></pre>
+          <textarea
+            ref="sourceTextarea"
+            class="meditor-html-textarea"
+            :value="html"
+            spellcheck="false"
+            @input="onInput"
+            @scroll="syncHighlightedScroll"
+            @keydown="onEditorKeydown"
+          />
+        </div>
       </div>
     </div>
-  </NodeViewWrapper>
+   </NodeViewWrapper>
 </template>
 
 <style scoped>
@@ -227,23 +226,12 @@ function onEditorKeydown(event: KeyboardEvent) {
   margin: 0.5rem 0;
 }
 
-.meditor-html-header {
-  align-items: center;
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 0.35rem;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 120ms ease;
-  visibility: hidden;
+.meditor-html-surface {
+  position: relative;
 }
 
-.meditor-html-title {
-  color: rgb(100 116 139);
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
+.meditor-html-body {
+  position: relative;
 }
 
 .meditor-html-toggle-btn {
@@ -255,7 +243,15 @@ function onEditorKeydown(event: KeyboardEvent) {
   font-family: var(--font-mono);
   font-size: 0.72rem;
   line-height: 1;
-  padding: 0.26rem 0.45rem;
+  padding: 0.24rem 0.42rem;
+  position: absolute;
+  right: 0.58rem;
+  top: 0.56rem;
+  z-index: 2;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+  visibility: hidden;
 }
 
 .meditor-html-toggle-btn:hover {
@@ -265,7 +261,7 @@ function onEditorKeydown(event: KeyboardEvent) {
 .meditor-html-preview {
   border: 1px solid transparent;
   border-radius: 0.7rem;
-  padding: 1rem 1.05rem;
+  padding: 2.45rem 1.05rem 1rem;
   transition: border-color 120ms ease, background-color 120ms ease;
 }
 
@@ -325,10 +321,6 @@ function onEditorKeydown(event: KeyboardEvent) {
   color: #0f766e;
 }
 
-.dark .meditor-html-title {
-  color: rgb(148 163 184);
-}
-
 .dark .meditor-html-toggle-btn {
   border-color: rgb(71 85 105);
   background: rgb(15 23 42);
@@ -345,22 +337,19 @@ function onEditorKeydown(event: KeyboardEvent) {
   border-color: rgb(71 85 105);
 }
 
-.meditor-html-node:hover .meditor-html-header,
-.meditor-html-node:focus-within .meditor-html-header,
-.meditor-html-node.is-editing .meditor-html-header {
+.meditor-html-node:hover .meditor-html-toggle-btn,
+.meditor-html-node.is-editing .meditor-html-toggle-btn {
   opacity: 1;
   pointer-events: auto;
   visibility: visible;
 }
 
 .meditor-html-node:hover .meditor-html-preview,
-.meditor-html-node:focus-within .meditor-html-preview,
 .meditor-html-node.is-editing .meditor-html-preview {
   border-color: rgb(203 213 225);
 }
 
 .dark .meditor-html-node:hover .meditor-html-preview,
-.dark .meditor-html-node:focus-within .meditor-html-preview,
 .dark .meditor-html-node.is-editing .meditor-html-preview {
   border-color: rgb(71 85 105);
 }

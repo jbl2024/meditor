@@ -70,6 +70,26 @@ describe('HtmlNodeView', () => {
     harness.app.unmount()
   })
 
+  it('applies edit mode class while source editor is open', async () => {
+    const harness = mountHarness()
+    await flush()
+
+    const wrapper = harness.root.querySelector('.meditor-html-node') as HTMLElement
+    const toggle = harness.root.querySelector('.meditor-html-toggle-btn') as HTMLButtonElement
+    expect(wrapper.classList.contains('is-editing')).toBe(false)
+
+    toggle.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+    await flush()
+    expect(wrapper.classList.contains('is-editing')).toBe(true)
+
+    const editorToggle = harness.root.querySelector('.meditor-html-toggle-btn') as HTMLButtonElement
+    editorToggle.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+    await flush()
+    expect(wrapper.classList.contains('is-editing')).toBe(false)
+
+    harness.app.unmount()
+  })
+
   it('supports tab indentation and enter auto-indent', async () => {
     const harness = mountHarness({ initialHtml: '<div>\n  <span>x</span>\n</div>' })
     await flush()
