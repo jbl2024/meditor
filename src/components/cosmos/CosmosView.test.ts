@@ -190,4 +190,61 @@ describe('CosmosView', () => {
 
     app.unmount()
   })
+
+  it('keeps focus-mode enable on double click when already enabled', async () => {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+    const focusModeToggle = ref<boolean | null>(null)
+
+    const graph: CosmosGraph = {
+      nodes: [
+        {
+          id: 'a.md',
+          path: '/vault/a.md',
+          label: 'a',
+          displayLabel: 'a',
+          folderKey: 'vault',
+          fullLabel: 'a',
+          degree: 2,
+          tags: [],
+          cluster: 0,
+          importance: 1,
+          opacityHint: 1,
+          showLabelByDefault: true
+        }
+      ],
+      edges: [],
+      generated_at_ms: 1
+    }
+
+    const Harness = defineComponent({
+      setup() {
+        return () =>
+          h(CosmosView, {
+            graph,
+            loading: false,
+            error: '',
+            selectedNodeId: '',
+            focusMode: true,
+            focusDepth: 1,
+            onToggleFocusMode: (value: boolean) => {
+              focusModeToggle.value = value
+            }
+          })
+      }
+    })
+
+    const app = createApp(Harness)
+    app.mount(root)
+    await flushUi()
+    await new Promise<void>((resolve) => setTimeout(resolve, 20))
+
+    mockState.onNodeClick?.({ id: 'a.md', path: '/vault/a.md', label: 'a', x: 1, y: 1 })
+    mockState.onNodeClick?.({ id: 'a.md', path: '/vault/a.md', label: 'a', x: 1, y: 1 })
+    await flushUi()
+
+    expect(focusModeToggle.value).toBe(true)
+
+    app.unmount()
+  })
 })

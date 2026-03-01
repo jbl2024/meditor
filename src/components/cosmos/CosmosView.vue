@@ -477,7 +477,7 @@ function onNodeClick(node: RenderNode) {
   const now = Date.now()
   if (lastClickNodeId === node.id && now - lastClickAt <= DOUBLE_CLICK_MS) {
     focusNode(node)
-    emit('toggle-focus-mode', !Boolean(props.focusMode))
+    emit('toggle-focus-mode', true)
     lastClickAt = 0
     lastClickNodeId = ''
     return
