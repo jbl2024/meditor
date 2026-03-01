@@ -387,24 +387,51 @@ function onFocusModeChange(event: Event) {
 }
 
 :global(.ide-root.dark) .cosmos-sidebar-panel {
-  --cosmos-panel-bg: #1b2029;
-  --cosmos-card-bg: #2b3240;
-  --cosmos-text-primary: #e5edf7;
-  --cosmos-text-secondary: #c1cedd;
-  --cosmos-text-muted: #91a0b4;
-  --cosmos-border: #3b4759;
-  --cosmos-input-bg: #161b23;
-  --cosmos-input-text: #e5edf7;
-  --cosmos-button-bg: #161b23;
-  --cosmos-button-hover: #222a36;
-  --cosmos-link-accent: #7ab2ff;
-  --cosmos-chip-bg: #39475b;
-  --cosmos-preview-bg: rgb(15 23 42 / 55%);
+  --cosmos-panel-bg: #21252b;
+  --cosmos-card-bg: #282c34;
+  --cosmos-text-primary: #d7dce5;
+  --cosmos-text-secondary: #abb2bf;
+  --cosmos-text-muted: #8b93a3;
+  --cosmos-border: #3e4451;
+  --cosmos-input-bg: #282c34;
+  --cosmos-input-text: #abb2bf;
+  --cosmos-button-bg: #282c34;
+  --cosmos-button-hover: #2c313a;
+  --cosmos-link-accent: #61afef;
+  --cosmos-chip-bg: #2f3540;
+  --cosmos-preview-bg: rgb(32 37 43 / 92%);
+  --cosmos-error: #fecaca;
+}
+
+:global(.ide-root.dark .cosmos-sidebar-panel) {
+  --cosmos-panel-bg: #21252b;
+  --cosmos-card-bg: #282c34;
+  --cosmos-text-primary: #d7dce5;
+  --cosmos-text-secondary: #abb2bf;
+  --cosmos-text-muted: #8b93a3;
+  --cosmos-border: #3e4451;
+  --cosmos-input-bg: #282c34;
+  --cosmos-input-text: #abb2bf;
+  --cosmos-button-bg: #282c34;
+  --cosmos-button-hover: #2c313a;
+  --cosmos-link-accent: #61afef;
+  --cosmos-chip-bg: #2f3540;
+  --cosmos-preview-bg: rgb(32 37 43 / 92%);
   --cosmos-error: #fecaca;
 }
 
 :global(.ide-root.dark) .cosmos-match-item:hover,
 :global(.ide-root.dark) .cosmos-links-item:hover {
   filter: brightness(1.08);
+}
+
+:global(.ide-root.dark .cosmos-search-input),
+:global(.ide-root.dark .cosmos-reset-btn),
+:global(.ide-root.dark .cosmos-match-item),
+:global(.ide-root.dark .cosmos-links-item),
+:global(.ide-root.dark .cosmos-node-stats),
+:global(.ide-root.dark .cosmos-links-card),
+:global(.ide-root.dark .cosmos-node-preview) {
+  box-shadow: none;
 }
 </style>
