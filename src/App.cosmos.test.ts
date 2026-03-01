@@ -2,6 +2,19 @@ import { createApp, defineComponent, h, nextTick } from 'vue'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const hoisted = vi.hoisted(() => ({
+  listChildren: vi.fn(async (path: string) => {
+    if (path === '/vault') {
+      return [
+        {
+          path: '/vault/opened-from-cosmos.md',
+          name: 'opened-from-cosmos.md',
+          is_dir: false,
+          is_markdown: true
+        }
+      ]
+    }
+    return []
+  }),
   getWikilinkGraph: vi.fn(async () => ({
     nodes: [
       {
@@ -22,7 +35,7 @@ vi.mock('./lib/api', () => ({
   selectWorkingFolder: vi.fn(async () => null),
   clearWorkingFolder: vi.fn(async () => {}),
   setWorkingFolder: vi.fn(async (path: string) => path),
-  listChildren: vi.fn(async () => []),
+  listChildren: hoisted.listChildren,
   listMarkdownFiles: vi.fn(async () => []),
   pathExists: vi.fn(async () => false),
   readTextFile: vi.fn(async () => ''),
@@ -163,7 +176,7 @@ describe('App cosmos integration', () => {
     vi.clearAllMocks()
   })
 
-  it('toggles cosmos view from activity bar', async () => {
+  it('focuses cosmos view from activity bar without toggling it off on second click', async () => {
     const mounted = mountApp()
     await flushUi()
 
@@ -171,10 +184,12 @@ describe('App cosmos integration', () => {
     cosmosBtn?.click()
     await flushUi()
     expect((mounted.root.textContent ?? '').toLowerCase()).toContain('cosmos')
+    expect(mounted.root.querySelector('[data-cosmos-stub="true"]')).toBeTruthy()
 
     cosmosBtn?.click()
     await flushUi()
-    expect((mounted.root.textContent ?? '').toLowerCase()).toContain('explorer')
+    expect((mounted.root.textContent ?? '').toLowerCase()).toContain('cosmos')
+    expect(mounted.root.querySelector('[data-cosmos-stub="true"]')).toBeTruthy()
 
     mounted.app.unmount()
   })
@@ -196,7 +211,7 @@ describe('App cosmos integration', () => {
     mounted.app.unmount()
   })
 
-  it('restores mode from session storage', async () => {
+  it('restores mode from session storage and keeps cosmos focused on cosmos button click', async () => {
     window.sessionStorage.setItem('tomosona:view:active', 'cosmos')
     window.sessionStorage.setItem('tomosona:view:last-non-cosmos', 'search')
 
@@ -207,7 +222,10 @@ describe('App cosmos integration', () => {
 
     mounted.root.querySelector<HTMLButtonElement>('button[aria-label="Cosmos view"]')?.click()
     await flushUi()
+    expect(mounted.root.querySelector('[data-cosmos-stub="true"]')).toBeTruthy()
 
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    await flushUi()
     expect((mounted.root.textContent ?? '').toLowerCase()).toContain('search')
 
     mounted.app.unmount()
@@ -369,6 +387,82 @@ describe('App cosmos integration', () => {
     mounted.app.unmount()
   })
 
+  it('opens a file from quick open while in cosmos without requiring tab click', async () => {
+    window.localStorage.setItem('tomosona.working-folder.path', '/vault')
+    const mounted = mountApp()
+    await flushUi()
+    await flushUi()
+
+    mounted.root.querySelector<HTMLButtonElement>('button[aria-label="Cosmos view"]')?.click()
+    await flushUi()
+    await flushUi()
+    expect(mounted.root.querySelector('[data-cosmos-stub="true"]')).toBeTruthy()
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'p', ctrlKey: true, bubbles: true }))
+    await flushUi()
+    const input = mounted.root.querySelector<HTMLInputElement>('[data-quick-open-input="true"]')
+    expect(input).toBeTruthy()
+    if (!input) {
+      mounted.app.unmount()
+      return
+    }
+
+    input.value = 'opened-from-cosmos'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushUi()
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    await flushUi()
+    await flushUi()
+
+    const hiddenCosmosAfterQuickOpen = mounted.root.querySelector<HTMLElement>('[data-cosmos-stub="true"]')
+    expect(hiddenCosmosAfterQuickOpen).toBeTruthy()
+    expect(hiddenCosmosAfterQuickOpen?.style.display).toBe('none')
+    expect((mounted.root.textContent ?? '').toLowerCase()).toContain('opened-from-cosmos.md')
+
+    mounted.app.unmount()
+  })
+
+  it('keeps cosmos tab after opening a file and allows re-focusing cosmos from activity bar', async () => {
+    window.localStorage.setItem('tomosona.working-folder.path', '/vault')
+    const mounted = mountApp()
+    await flushUi()
+    await flushUi()
+
+    mounted.root.querySelector<HTMLButtonElement>('button[aria-label="Cosmos view"]')?.click()
+    await flushUi()
+    await flushUi()
+    expect(mounted.root.querySelector('[data-cosmos-stub="true"]')).toBeTruthy()
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'p', ctrlKey: true, bubbles: true }))
+    await flushUi()
+    const input = mounted.root.querySelector<HTMLInputElement>('[data-quick-open-input="true"]')
+    expect(input).toBeTruthy()
+    if (!input) {
+      mounted.app.unmount()
+      return
+    }
+    input.value = 'opened-from-cosmos'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushUi()
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    await flushUi()
+    await flushUi()
+
+    const hiddenCosmosAfterFileOpen = mounted.root.querySelector<HTMLElement>('[data-cosmos-stub="true"]')
+    expect(hiddenCosmosAfterFileOpen).toBeTruthy()
+    expect(hiddenCosmosAfterFileOpen?.style.display).toBe('none')
+    const cosmosTab = Array.from(mounted.root.querySelectorAll<HTMLElement>('.tab-item'))
+      .find((item) => item.querySelector('.tab-name')?.textContent?.trim() === 'Cosmos')
+    expect(cosmosTab).toBeTruthy()
+
+    mounted.root.querySelector<HTMLButtonElement>('button[aria-label="Cosmos view"]')?.click()
+    await flushUi()
+    await flushUi()
+    expect(mounted.root.querySelector('[data-cosmos-stub="true"]')).toBeTruthy()
+
+    mounted.app.unmount()
+  })
+
   it('closes command palette immediately and shows cosmos loading modal while action is running', async () => {
     window.localStorage.setItem('tomosona.working-folder.path', '/vault')
     let resolveGraphLoad: ((value: {
@@ -453,8 +547,63 @@ describe('App cosmos integration', () => {
     mounted.root.querySelector<HTMLElement>('.tab-item')?.click()
     await flushUi()
 
-    expect(mounted.root.querySelector('[data-cosmos-stub="true"]')).toBeFalsy()
+    const hiddenCosmosAfterTabClick = mounted.root.querySelector<HTMLElement>('[data-cosmos-stub="true"]')
+    expect(hiddenCosmosAfterTabClick).toBeTruthy()
+    expect(hiddenCosmosAfterTabClick?.style.display).toBe('none')
     expect(mounted.root.querySelector('[data-editor-stub="true"]')).toBeTruthy()
+
+    mounted.app.unmount()
+  })
+
+  it('shows a cosmos tab when cosmos is active and closes to explorer via tab close', async () => {
+    window.localStorage.setItem('tomosona.working-folder.path', '/vault')
+    const mounted = mountApp()
+    await flushUi()
+    await flushUi()
+
+    mounted.root.querySelector<HTMLButtonElement>('button[aria-label="Cosmos view"]')?.click()
+    await flushUi()
+    await flushUi()
+
+    const cosmosTab = Array.from(mounted.root.querySelectorAll<HTMLElement>('.tab-item'))
+      .find((item) => item.querySelector('.tab-name')?.textContent?.trim() === 'Cosmos')
+    expect(cosmosTab).toBeTruthy()
+    cosmosTab?.querySelector<HTMLButtonElement>('.tab-close')?.click()
+    await flushUi()
+
+    expect(mounted.root.querySelector('[data-cosmos-stub="true"]')).toBeFalsy()
+    expect((mounted.root.textContent ?? '').toLowerCase()).toContain('explorer')
+
+    mounted.app.unmount()
+  })
+
+  it('closes cosmos tab via Ctrl+W and returns to explorer with last opened file', async () => {
+    window.localStorage.setItem('tomosona.working-folder.path', '/vault')
+    const mounted = mountApp()
+    await flushUi()
+    await flushUi()
+
+    mounted.root.querySelector<HTMLButtonElement>('button[aria-label="Cosmos view"]')?.click()
+    await flushUi()
+    await flushUi()
+    mounted.root.querySelector<HTMLButtonElement>('button[data-cosmos-open="true"]')?.click()
+    await flushUi()
+    mounted.root.querySelector<HTMLButtonElement>('.cosmos-node-title-link')?.click()
+    await flushUi()
+    expect((mounted.root.textContent ?? '').toLowerCase()).toContain('opened-from-cosmos.md')
+
+    mounted.root.querySelector<HTMLButtonElement>('button[aria-label="Cosmos view"]')?.click()
+    await flushUi()
+    await flushUi()
+    expect(mounted.root.querySelector('[data-cosmos-stub="true"]')).toBeTruthy()
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'w', ctrlKey: true, bubbles: true }))
+    await flushUi()
+    await flushUi()
+
+    expect(mounted.root.querySelector('[data-cosmos-stub="true"]')).toBeFalsy()
+    expect((mounted.root.textContent ?? '').toLowerCase()).toContain('explorer')
+    expect((mounted.root.textContent ?? '').toLowerCase()).toContain('opened-from-cosmos.md')
 
     mounted.app.unmount()
   })

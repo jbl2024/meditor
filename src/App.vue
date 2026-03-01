@@ -202,6 +202,7 @@ const shortcutsModalVisible = ref(false)
 const indexStatusModalVisible = ref(false)
 const cosmosCommandLoadingVisible = ref(false)
 const cosmosCommandLoadingLabel = ref('Loading graph...')
+const cosmosTabOpen = ref(false)
 const shortcutsFilterQuery = ref('')
 const previousNonCosmosMode = ref<SidebarMode>('explorer')
 const wikilinkRewriteQueue: Array<{
@@ -256,8 +257,8 @@ const resolvedTheme = computed<'light' | 'dark'>(() => {
   return themePreference.value
 })
 
-const tabView = computed(() =>
-  workspace.openTabs.value.map((tab) => {
+const tabView = computed<TabViewItem[]>(() => {
+  const fileTabs = workspace.openTabs.value.map((tab) => {
     const status = editorState.getStatus(tab.path)
     const unsavedVirtual = Boolean(virtualDocs.value[tab.path])
     return {
@@ -265,12 +266,35 @@ const tabView = computed(() =>
       title: fileName(tab.path),
       dirty: status.dirty || unsavedVirtual,
       saving: status.saving,
-      saveError: status.saveError
+      saveError: status.saveError,
+      kind: 'file' as const,
+      draggable: true
     }
   })
-)
+
+  if (!cosmosTabOpen.value) {
+    return fileTabs
+  }
+
+  return [
+    ...fileTabs,
+    {
+      path: COSMOS_TAB_PATH,
+      title: 'Cosmos',
+      pinned: true,
+      dirty: false,
+      saving: false,
+      saveError: '',
+      kind: 'cosmos',
+      draggable: false
+    }
+  ]
+})
 
 const activeFilePath = computed(() => workspace.activeTabPath.value)
+const activeTabPathForView = computed(() =>
+  workspace.sidebarMode.value === 'cosmos' ? COSMOS_TAB_PATH : workspace.activeTabPath.value
+)
 const activeStatus = computed(() => editorState.getStatus(activeFilePath.value))
 const indexStateLabel = computed(() => {
   if (filesystem.indexingState.value === 'indexing') return 'reindexing'
@@ -453,6 +477,19 @@ type PaletteAction = {
   run: () => boolean | Promise<boolean>
   closeBeforeRun?: boolean
   loadingLabel?: string
+}
+
+const COSMOS_TAB_PATH = '__tomosona_cosmos_view__'
+
+type TabViewItem = {
+  path: string
+  title: string
+  pinned: boolean
+  dirty: boolean
+  saving: boolean
+  saveError: string
+  kind: 'file' | 'cosmos'
+  draggable: boolean
 }
 
 const paletteActions = computed<PaletteAction[]>(() => [
@@ -649,6 +686,9 @@ function loadSavedSidebarMode() {
   const saved = window.sessionStorage.getItem(VIEW_MODE_STORAGE_KEY)
   if (saved === 'explorer' || saved === 'search' || saved === 'cosmos') {
     workspace.sidebarMode.value = saved
+    if (saved === 'cosmos') {
+      cosmosTabOpen.value = true
+    }
   }
   const savedPrevious = window.sessionStorage.getItem(PREVIOUS_NON_COSMOS_VIEW_MODE_STORAGE_KEY)
   if (savedPrevious === 'explorer' || savedPrevious === 'search') {
@@ -1468,6 +1508,7 @@ function scheduleCosmosHistorySnapshot() {
 async function applyCosmosHistorySnapshot(snapshot: CosmosHistorySnapshot): Promise<boolean> {
   if (!filesystem.hasWorkspace.value) return false
 
+  cosmosTabOpen.value = true
   if (workspace.sidebarMode.value !== 'cosmos') {
     previousNonCosmosMode.value = workspace.sidebarMode.value
     persistPreviousNonCosmosMode()
@@ -1660,6 +1701,7 @@ async function openCosmosViewFromPalette() {
     return false
   }
 
+  cosmosTabOpen.value = true
   if (workspace.sidebarMode.value !== 'cosmos') {
     previousNonCosmosMode.value = workspace.sidebarMode.value
     persistPreviousNonCosmosMode()
@@ -1682,6 +1724,7 @@ async function openNoteInCosmosFromPalette() {
     return false
   }
 
+  cosmosTabOpen.value = true
   const opened = await openCosmosViewFromPalette()
   if (!opened) return false
 
@@ -1731,6 +1774,7 @@ async function closeWorkspace() {
   semanticLinks.value = []
   semanticLinksLoading.value = false
   cosmos.clearState()
+  cosmosTabOpen.value = false
   filesystem.selectedCount.value = 0
   filesystem.clearWorkspacePath()
   try {
@@ -1858,6 +1902,7 @@ async function openTabWithAutosave(path: string, options: NavigateOptions = {}):
   const canSwitch = await ensureActiveTabSavedBeforeSwitch(target)
   if (!canSwitch) return false
   workspace.openTab(target)
+  exitCosmosForNoteNavigation()
   if (options.recordHistory !== false) {
     documentHistory.record(target)
   }
@@ -1870,10 +1915,18 @@ async function setActiveTabWithAutosave(path: string, options: NavigateOptions =
   const canSwitch = await ensureActiveTabSavedBeforeSwitch(target)
   if (!canSwitch) return false
   workspace.setActiveTab(target)
+  exitCosmosForNoteNavigation()
   if (options.recordHistory !== false) {
     documentHistory.record(target)
   }
   return true
+}
+
+function exitCosmosForNoteNavigation() {
+  if (workspace.sidebarMode.value !== 'cosmos') return
+  const fallback = previousNonCosmosMode.value
+  workspace.setSidebarMode(fallback)
+  persistSidebarMode()
 }
 
 async function goBackInHistory() {
@@ -2256,14 +2309,15 @@ async function onSearchResultOpen(hit: SearchHit) {
   await editorRef.value?.revealSnippet(hit.snippet)
 }
 
-async function onTabClick(path: string) {
-  const opened = await setActiveTabWithAutosave(path)
-  if (!opened) return
-  if (workspace.sidebarMode.value === 'cosmos') {
-    const fallback = previousNonCosmosMode.value
-    workspace.setSidebarMode(fallback)
-    persistSidebarMode()
+async function onTabClick(tab: TabViewItem) {
+  if (tab.kind === 'cosmos') {
+    if (workspace.sidebarMode.value !== 'cosmos') {
+      setSidebarMode('cosmos')
+    }
+    return
   }
+  const opened = await setActiveTabWithAutosave(tab.path)
+  if (!opened) return
 }
 
 async function openNextTabWithAutosave() {
@@ -2284,15 +2338,30 @@ async function onBacklinkOpen(path: string) {
   editorRef.value?.focusEditor()
 }
 
-function onTabAuxClick(event: MouseEvent, path: string) {
+function onTabAuxClick(event: MouseEvent, tab: TabViewItem) {
   if (event.button !== 1) return
   event.preventDefault()
-  workspace.closeTab(path)
+  onTabClose(tab)
 }
 
-function onTabClose(path: string) {
-  workspace.closeTab(path)
-  editorState.clearStatus(path)
+function closeCosmosTab() {
+  if (!cosmosTabOpen.value) return
+  cosmosTabOpen.value = false
+  if (workspace.sidebarMode.value === 'cosmos') {
+    previousNonCosmosMode.value = 'explorer'
+    persistPreviousNonCosmosMode()
+    workspace.setSidebarMode('explorer')
+    persistSidebarMode()
+  }
+}
+
+function onTabClose(tab: TabViewItem) {
+  if (tab.kind === 'cosmos') {
+    closeCosmosTab()
+    return
+  }
+  workspace.closeTab(tab.path)
+  editorState.clearStatus(tab.path)
 }
 
 function onTabDragStart(index: number, event: DragEvent) {
@@ -2351,12 +2420,8 @@ async function onOutlineHeadingClick(payload: { index: number; heading: { level:
 function setSidebarMode(mode: SidebarMode) {
   const current = workspace.sidebarMode.value
   if (mode === 'cosmos') {
-    if (current === 'cosmos') {
-      const fallback = previousNonCosmosMode.value
-      workspace.setSidebarMode(fallback)
-      persistSidebarMode()
-      return
-    }
+    if (current === 'cosmos') return
+    cosmosTabOpen.value = true
     previousNonCosmosMode.value = current
     persistPreviousNonCosmosMode()
     workspace.setSidebarMode('cosmos')
@@ -3518,6 +3583,10 @@ function onWindowKeydown(event: KeyboardEvent) {
 
   if (key === 'w') {
     event.preventDefault()
+    if (workspace.sidebarMode.value === 'cosmos') {
+      closeCosmosTab()
+      return
+    }
     workspace.closeCurrentTab()
     return
   }
@@ -3924,20 +3993,23 @@ onBeforeUnmount(() => {
                 role="button"
                 tabindex="0"
                 class="tab-item"
-                :class="{ active: activeFilePath === tab.path }"
-                draggable="true"
-                @click="onTabClick(tab.path)"
-                @auxclick="onTabAuxClick($event, tab.path)"
-                @keydown.enter.prevent="onTabClick(tab.path)"
-                @keydown.space.prevent="onTabClick(tab.path)"
-                @dragstart="onTabDragStart(index, $event)"
+                :class="{ active: activeTabPathForView === tab.path }"
+                :draggable="tab.draggable"
+                @click="onTabClick(tab)"
+                @auxclick="onTabAuxClick($event, tab)"
+                @keydown.enter.prevent="onTabClick(tab)"
+                @keydown.space.prevent="onTabClick(tab)"
+                @dragstart="tab.draggable ? onTabDragStart(index, $event) : undefined"
                 @dragover.prevent
-                @drop="onTabDrop(index, $event)"
+                @drop="tab.draggable ? onTabDrop(index, $event) : undefined"
               >
-                <span class="tab-name">{{ tab.title }}</span>
+                <span class="tab-name">
+                  <ShareIcon v-if="tab.kind === 'cosmos'" class="tab-cosmos-icon" aria-hidden="true" />
+                  <span>{{ tab.title }}</span>
+                </span>
                 <span v-if="tab.saving" class="tab-state" title="Saving">~</span>
                 <span v-else-if="tab.dirty" class="tab-state" title="Unsaved">•</span>
-                <button class="tab-close" type="button" @click.stop="onTabClose(tab.path)">
+                <button class="tab-close" type="button" @click.stop="onTabClose(tab)">
                   <XMarkIcon />
                 </button>
               </div>
@@ -4157,7 +4229,8 @@ onBeforeUnmount(() => {
 
           <main class="center-area">
             <CosmosView
-              v-if="workspace.sidebarMode.value === 'cosmos'"
+              v-if="cosmosTabOpen"
+              v-show="workspace.sidebarMode.value === 'cosmos'"
               ref="cosmosRef"
               :graph="cosmos.visibleGraph.value"
               :loading="cosmos.loading.value"
@@ -4169,7 +4242,7 @@ onBeforeUnmount(() => {
               @toggle-focus-mode="onCosmosToggleFocusModeFromGraph"
             />
             <EditorView
-              v-else
+              v-show="workspace.sidebarMode.value !== 'cosmos'"
               ref="editorRef"
               :path="activeFilePath"
               :openPaths="workspace.openTabs.value.map((tab) => tab.path)"
@@ -4680,12 +4753,21 @@ onBeforeUnmount(() => {
 }
 
 .tab-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
   flex: 1;
   text-align: left;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.tab-cosmos-icon {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
 }
 
 .tab-state {

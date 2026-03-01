@@ -114,6 +114,7 @@ let deferredFocusTimer: ReturnType<typeof setTimeout> | null = null
 let deferredFocusNodeId = ''
 let deferredFocusAttempts = 0
 let themeObserver: MutationObserver | null = null
+let hostResizeObserver: ResizeObserver | null = null
 
 const hasRenderableGraph = computed(() => props.graph.nodes.length > 0)
 const resolvedFocusDepth = computed(() => Math.max(1, props.focusDepth ?? 1))
@@ -603,7 +604,12 @@ function applyGraphData() {
   if (!didInitialAutoFit && props.graph.nodes.length > 0) {
     didInitialAutoFit = true
     window.requestAnimationFrame(() => {
+      resizeGraphToHost()
       graph.zoomToFit(420, 100)
+      window.requestAnimationFrame(() => {
+        resizeGraphToHost()
+        graph.zoomToFit(420, 100)
+      })
     })
   }
 
@@ -619,6 +625,16 @@ function resizeGraphToHost() {
   const rect = host.getBoundingClientRect()
   graph.width(Math.max(1, Math.floor(rect.width)))
   graph.height(Math.max(1, Math.floor(rect.height)))
+}
+
+function setupResizeObserver() {
+  const host = rootEl.value
+  if (!host || typeof ResizeObserver === 'undefined') return
+
+  hostResizeObserver = new ResizeObserver(() => {
+    resizeGraphToHost()
+  })
+  hostResizeObserver.observe(host)
 }
 
 function setupThemeObserver() {
@@ -650,6 +666,10 @@ function teardownGraph() {
   if (themeObserver) {
     themeObserver.disconnect()
     themeObserver = null
+  }
+  if (hostResizeObserver) {
+    hostResizeObserver.disconnect()
+    hostResizeObserver = null
   }
 
   hoveredNodeId = ''
@@ -726,6 +746,7 @@ watch(
 onMounted(() => {
   void initializeGraph()
   setupThemeObserver()
+  setupResizeObserver()
   window.addEventListener('resize', resizeGraphToHost)
 })
 
@@ -739,7 +760,6 @@ defineExpose({
   focusNodeById
 })
 </script>
-
 <template>
   <div ref="rootEl" class="cosmos-root">
     <div ref="graphEl" class="cosmos-canvas" :aria-busy="loading ? 'true' : 'false'"></div>
