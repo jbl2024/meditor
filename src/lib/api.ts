@@ -119,6 +119,10 @@ export async function reindexMarkdownFile(path: string): Promise<void> {
   await invoke('reindex_markdown_file', { path })
 }
 
+export async function removeMarkdownFileFromIndex(path: string): Promise<void> {
+  await invoke('remove_markdown_file_from_index', { path })
+}
+
 export async function createEntry(
   parentPath: string,
   name: string,

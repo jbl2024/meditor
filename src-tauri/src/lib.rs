@@ -395,6 +395,26 @@ fn normalize_workspace_path(root: &Path, raw: &str) -> Result<PathBuf> {
     Ok(path)
 }
 
+fn normalize_workspace_relative_from_input(root: &Path, raw: &str) -> Result<String> {
+    let mut path = PathBuf::from(raw);
+    if path.as_os_str().is_empty() {
+        return Err(AppError::InvalidPath);
+    }
+    if !path.is_absolute() {
+        path = root.join(path);
+    }
+
+    if path.exists() {
+        let canonical = fs::canonicalize(path)?;
+        return normalize_workspace_relative_path(root, &canonical);
+    }
+
+    let parent = path.parent().ok_or(AppError::InvalidPath)?;
+    let parent_canonical = fs::canonicalize(parent)?;
+    ensure_within_root(root, &parent_canonical)?;
+    normalize_workspace_relative_path(root, &path)
+}
+
 fn normalize_wikilink_target(raw: &str) -> Option<String> {
     let mut target = raw.trim().replace('\\', "/");
     if target.is_empty() {
@@ -902,6 +922,17 @@ fn init_db() -> Result<()> {
     CREATE INDEX IF NOT EXISTS idx_note_properties_key_num ON note_properties(key, value_num);
     CREATE INDEX IF NOT EXISTS idx_note_properties_key_bool ON note_properties(key, value_bool);
     CREATE INDEX IF NOT EXISTS idx_note_properties_key_date ON note_properties(key, value_date);
+
+    CREATE TABLE IF NOT EXISTS semantic_edges (
+      source_path TEXT NOT NULL,
+      target_path TEXT NOT NULL,
+      score REAL NOT NULL,
+      model TEXT NOT NULL,
+      updated_at_ms INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY(source_path, target_path)
+    );
+    CREATE INDEX IF NOT EXISTS idx_semantic_edges_source ON semantic_edges(source_path);
+    CREATE INDEX IF NOT EXISTS idx_semantic_edges_target ON semantic_edges(target_path);
   "#,
   )?;
 
@@ -913,6 +944,10 @@ fn init_db() -> Result<()> {
 }
 
 fn reindex_markdown_file_sync(path: String) -> Result<()> {
+    reindex_markdown_file_sync_inner(path, true)
+}
+
+fn reindex_markdown_file_sync_inner(path: String, refresh_semantic_cache: bool) -> Result<()> {
     let started_at = Instant::now();
     let root = active_workspace_root()?;
     let file_path = normalize_existing_file(&path)?;
@@ -1065,12 +1100,59 @@ fn reindex_markdown_file_sync(path: String) -> Result<()> {
     log_index(&format!(
         "reindex:done path={path_for_db} chunks={chunk_count} targets={target_count} properties={property_count} embedding={embedding_status} embedding_ms={embedding_ms} total_ms={total_ms}"
     ));
+    if refresh_semantic_cache {
+        if let Ok(conn) = open_db() {
+            if let Err(err) = refresh_semantic_edges_cache(&conn, &root_canonical) {
+                log_index(&format!("semantic_edges:refresh_error err={err}"));
+            }
+        }
+    }
     Ok(())
 }
 
 #[tauri::command]
 async fn reindex_markdown_file(path: String) -> Result<()> {
     tauri::async_runtime::spawn_blocking(move || reindex_markdown_file_sync(path))
+        .await
+        .map_err(|_| AppError::OperationFailed)?
+}
+
+fn remove_markdown_file_from_index_sync(path: String) -> Result<()> {
+    let root = active_workspace_root()?;
+    let path_for_db = normalize_workspace_relative_from_input(&root, &path)?;
+    let source_key = normalize_note_key(&root, &root.join(&path_for_db))?;
+    let conn = open_db()?;
+    let tx = conn.unchecked_transaction()?;
+    tx.execute("DELETE FROM chunks WHERE path = ?1", params![path_for_db.clone()])?;
+    tx.execute(
+        "DELETE FROM note_links WHERE source_path = ?1 OR target_key = ?2",
+        params![path_for_db.clone(), source_key],
+    )?;
+    tx.execute(
+        "DELETE FROM note_properties WHERE path = ?1",
+        params![path_for_db.clone()],
+    )?;
+    tx.execute(
+        "DELETE FROM note_embeddings WHERE path = ?1",
+        params![path_for_db.clone()],
+    )?;
+    semantic::try_delete_note_vector(&tx, &path_for_db);
+    tx.execute(
+        "DELETE FROM semantic_edges WHERE source_path = ?1 OR target_path = ?1",
+        params![path_for_db.clone()],
+    )?;
+    tx.commit()?;
+
+    if let Err(err) = refresh_semantic_edges_cache(&conn, &root) {
+        log_index(&format!("semantic_edges:refresh_error err={err}"));
+    }
+    log_index(&format!("reindex:removed path={path_for_db}"));
+    Ok(())
+}
+
+#[tauri::command]
+async fn remove_markdown_file_from_index(path: String) -> Result<()> {
+    tauri::async_runtime::spawn_blocking(move || remove_markdown_file_from_index_sync(path))
         .await
         .map_err(|_| AppError::OperationFailed)?
 }
@@ -1149,43 +1231,46 @@ fn min_max_normalize(values: &[f64]) -> Vec<f64> {
         .collect()
 }
 
-/// Appends semantic note-to-note edges using sqlite-vec nearest-neighbor queries.
+/// Rebuilds semantic edge cache from note-level embeddings and sqlite-vec KNN.
 ///
-/// This function is intentionally best-effort:
-/// - if vector tables are unavailable it returns early,
-/// - it never fails the caller, preserving wikilink-only graph behavior.
-fn build_semantic_edges(
-    conn: &Connection,
-    nodes_set: &HashSet<String>,
-    seen_edges: &mut HashSet<(String, String)>,
-    edges: &mut Vec<GraphEdgeDto>,
-    degrees: &mut HashMap<String, usize>,
-) {
-    let mut node_paths: Vec<String> = nodes_set.iter().cloned().collect();
-    node_paths.sort_by_key(|item| item.to_lowercase());
+/// This is invoked at the end of index updates (full and partial) so graph reads
+/// can stay fast and deterministic.
+fn refresh_semantic_edges_cache(conn: &Connection, root_canonical: &Path) -> Result<()> {
+    let started_at = Instant::now();
+    let mut source_paths: Vec<String> = {
+        let mut stmt = conn.prepare("SELECT path FROM note_embeddings ORDER BY path")?;
+        let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+        let mut items = Vec::new();
+        for row in rows {
+            items.push(row?);
+        }
+        items
+    };
+    source_paths.sort_by_key(|item| item.to_lowercase());
     log_index(&format!(
-        "semantic_edges:start nodes={} top_k={} threshold={}",
-        node_paths.len(),
+        "semantic_edges:refresh_start sources={} top_k={} threshold={}",
+        source_paths.len(),
         SEMANTIC_TOP_K_PER_NOTE,
         SEMANTIC_THRESHOLD
     ));
 
-    let mut sources_total = 0usize;
+    conn.execute("DELETE FROM semantic_edges", [])?;
+    let updated_at_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|value| value.as_millis() as i64)
+        .unwrap_or(0);
+
     let mut sources_with_vector = 0usize;
     let mut sources_query_ok = 0usize;
     let mut total_candidates = 0usize;
     let mut total_added = 0usize;
     let mut total_skipped_self = 0usize;
-    let mut total_skipped_outside_nodes = 0usize;
-    let mut total_skipped_below_threshold = 0usize;
-    let mut total_skipped_existing_edge = 0usize;
-    let mut total_row_decode_errors = 0usize;
-    let mut total_sources_missing_vector = 0usize;
-    let mut total_sources_invalid_vector_blob = 0usize;
+    let mut total_skipped_threshold = 0usize;
+    let mut total_skipped_existing_link = 0usize;
+    let mut total_skipped_missing_target_key = 0usize;
+    let mut total_missing_vector = 0usize;
 
-    for source_path in node_paths {
-        sources_total += 1;
-
+    for source_path in source_paths {
         let vector_blob = match conn.query_row(
             "SELECT vector, dim FROM note_embeddings WHERE path = ?1",
             params![source_path.clone()],
@@ -1193,19 +1278,18 @@ fn build_semantic_edges(
         ) {
             Ok((blob, dim)) => {
                 let Some(vector) = semantic::blob_to_vector(&blob, dim as usize) else {
-                    total_sources_invalid_vector_blob += 1;
+                    total_missing_vector += 1;
                     continue;
                 };
                 sources_with_vector += 1;
                 vector
             }
             Err(_) => {
-                total_sources_missing_vector += 1;
+                total_missing_vector += 1;
                 continue;
             }
         };
 
-        let mut added_for_source = 0i64;
         let payload = semantic::vector_to_json(&vector_blob);
         let mut stmt = match conn.prepare(
             r#"
@@ -1218,72 +1302,64 @@ fn build_semantic_edges(
         ) {
             Ok(value) => value,
             Err(err) => {
-                log_index(&format!(
-                    "semantic_edges:error stage=prepare_query path={} err={}",
-                    source_path, err
-                ));
-                return;
+                log_index(&format!("semantic_edges:refresh_error stage=prepare err={err}"));
+                return Err(AppError::Sqlite(err));
             }
         };
         let mut rows = match stmt.query(params![payload, SEMANTIC_TOP_K_PER_NOTE + 1]) {
             Ok(value) => value,
             Err(err) => {
-                log_index(&format!(
-                    "semantic_edges:error stage=run_query path={} err={}",
-                    source_path, err
-                ));
-                return;
+                log_index(&format!("semantic_edges:refresh_error stage=query err={err}"));
+                return Err(AppError::Sqlite(err));
             }
         };
         sources_query_ok += 1;
 
-        while let Ok(Some(row)) = rows.next() {
+        let mut added_for_source = 0i64;
+        while let Some(row) = rows.next()? {
             total_candidates += 1;
-            let target_path: String = match row.get(0) {
-                Ok(value) => value,
-                Err(_) => {
-                    total_row_decode_errors += 1;
-                    continue;
-                }
-            };
-            let distance: f32 = match row.get(1) {
-                Ok(value) => value,
-                Err(_) => {
-                    total_row_decode_errors += 1;
-                    continue;
-                }
-            };
+            let target_path: String = row.get(0)?;
+            let distance: f32 = row.get(1)?;
             if target_path == source_path {
                 total_skipped_self += 1;
                 continue;
             }
-            if !nodes_set.contains(&target_path) {
-                total_skipped_outside_nodes += 1;
-                continue;
-            }
-            // vec0 default distance is L2. Stored note vectors are normalized, so we
-            // convert L2 distance back to cosine similarity for thresholding.
-            // For unit vectors: cos = 1 - (||a-b||^2)/2.
             let score = (1.0 - ((distance * distance) * 0.5)).clamp(0.0, 1.0);
             if score < SEMANTIC_THRESHOLD {
-                total_skipped_below_threshold += 1;
+                total_skipped_threshold += 1;
                 continue;
             }
-            if seen_edges.contains(&(source_path.clone(), target_path.clone())) {
-                total_skipped_existing_edge += 1;
+
+            let Some(target_key) =
+                normalize_note_key_from_workspace_path(root_canonical, &target_path)
+            else {
+                total_skipped_missing_target_key += 1;
+                continue;
+            };
+
+            let exists = conn.query_row(
+                "SELECT 1 FROM note_links WHERE source_path = ?1 AND target_key = ?2 LIMIT 1",
+                params![source_path.clone(), target_key],
+                |_row| Ok(()),
+            );
+            if exists.is_ok() {
+                total_skipped_existing_link += 1;
                 continue;
             }
-            seen_edges.insert((source_path.clone(), target_path.clone()));
-            edges.push(GraphEdgeDto {
-                source: source_path.clone(),
-                target: target_path.clone(),
-                edge_type: "semantic".to_string(),
-                score: Some(score),
-            });
-            *degrees.entry(source_path.clone()).or_insert(0) += 1;
-            *degrees.entry(target_path).or_insert(0) += 1;
-            added_for_source += 1;
+
+            conn.execute(
+                "INSERT INTO semantic_edges(source_path, target_path, score, model, updated_at_ms)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![
+                    source_path.clone(),
+                    target_path,
+                    score,
+                    semantic::embedding_model_name(),
+                    updated_at_ms
+                ],
+            )?;
             total_added += 1;
+            added_for_source += 1;
             if added_for_source >= SEMANTIC_TOP_K_PER_NOTE {
                 break;
             }
@@ -1291,20 +1367,19 @@ fn build_semantic_edges(
     }
 
     log_index(&format!(
-        "semantic_edges:done sources_total={} sources_with_vector={} sources_query_ok={} candidates={} added={} skip_self={} skip_outside={} skip_threshold={} skip_existing={} missing_vector_sources={} invalid_vector_sources={} decode_errors={}",
-        sources_total,
+        "semantic_edges:refresh_done sources_with_vector={} sources_query_ok={} candidates={} added={} skip_self={} skip_threshold={} skip_existing_link={} skip_missing_target_key={} missing_vectors={} total_ms={}",
         sources_with_vector,
         sources_query_ok,
         total_candidates,
         total_added,
         total_skipped_self,
-        total_skipped_outside_nodes,
-        total_skipped_below_threshold,
-        total_skipped_existing_edge,
-        total_sources_missing_vector,
-        total_sources_invalid_vector_blob,
-        total_row_decode_errors
+        total_skipped_threshold,
+        total_skipped_existing_link,
+        total_skipped_missing_target_key,
+        total_missing_vector,
+        started_at.elapsed().as_millis()
     ));
+    Ok(())
 }
 
 /// Builds a graph payload from indexed wikilinks and current markdown files.
@@ -1423,7 +1498,41 @@ fn build_wikilink_graph_from_index(
         });
     }
 
-    build_semantic_edges(conn, &nodes_set, &mut seen_edges, &mut edges, &mut degrees);
+    let mut semantic_stmt = conn.prepare(
+        r#"
+      SELECT source_path, target_path, score
+      FROM semantic_edges
+      ORDER BY source_path, target_path
+    "#,
+    )?;
+    let semantic_rows = semantic_stmt.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, f32>(2)?,
+        ))
+    })?;
+
+    for row in semantic_rows {
+        let (source_path, target_path, score) = row?;
+        if !nodes_set.contains(&source_path) || !nodes_set.contains(&target_path) {
+            continue;
+        }
+        if source_path == target_path {
+            continue;
+        }
+        if !seen_edges.insert((source_path.clone(), target_path.clone())) {
+            continue;
+        }
+        edges.push(GraphEdgeDto {
+            source: source_path.clone(),
+            target: target_path.clone(),
+            edge_type: "semantic".to_string(),
+            score: Some(score),
+        });
+        *degrees.entry(source_path).or_insert(0) += 1;
+        *degrees.entry(target_path).or_insert(0) += 1;
+    }
 
     let mut node_paths: Vec<String> = markdown_paths.to_vec();
     node_paths.sort_by_key(|item| item.to_lowercase());
@@ -1470,6 +1579,7 @@ fn rebuild_workspace_index_sync() -> Result<RebuildIndexResult> {
     DELETE FROM chunks;
     DELETE FROM note_links;
     DELETE FROM note_properties;
+    DELETE FROM semantic_edges;
   "#,
     )?;
     let _ = conn.execute("DELETE FROM note_embeddings_vec", []);
@@ -1498,12 +1608,18 @@ fn rebuild_workspace_index_sync() -> Result<RebuildIndexResult> {
         if ensure_within_root(&root_canonical, &canonical_candidate).is_err() {
             continue;
         }
-        reindex_markdown_file_sync(canonical_candidate.to_string_lossy().to_string())?;
+        reindex_markdown_file_sync_inner(canonical_candidate.to_string_lossy().to_string(), false)?;
         indexed_files += 1;
         if indexed_files % 25 == 0 || processed_files % 50 == 0 {
             log_index(&format!(
                 "rebuild:progress indexed={indexed_files} scanned={processed_files}"
             ));
+        }
+    }
+
+    if !canceled {
+        if let Err(err) = refresh_semantic_edges_cache(&conn, &root_canonical) {
+            log_index(&format!("semantic_edges:refresh_error err={err}"));
         }
     }
 
@@ -2175,6 +2291,7 @@ pub fn run() {
             reveal_in_file_manager,
             init_db,
             reindex_markdown_file,
+            remove_markdown_file_from_index,
             fts_search,
             rebuild_workspace_index,
             request_index_cancel,

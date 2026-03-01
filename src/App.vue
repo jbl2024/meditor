@@ -36,6 +36,7 @@ import {
   readIndexRuntimeStatus,
   readTextFile,
   rebuildWorkspaceIndex,
+  removeMarkdownFileFromIndex,
   renameEntry,
   requestIndexCancel,
   reindexMarkdownFile,
@@ -896,6 +897,22 @@ async function runReindexWorker() {
   }
 }
 
+function removeMarkdownFromIndexInBackground(path: string) {
+  void removeMarkdownFileFromIndex(path).then(() => {
+    console.info('[index] background:remove:done', { path })
+    if (workspace.sidebarMode.value === 'cosmos') {
+      void cosmos.refreshGraph()
+    }
+    void refreshBacklinks()
+  }).catch((err) => {
+    console.warn('[index] background:remove:error', {
+      path,
+      reason: err instanceof Error ? err.message : String(err)
+    })
+    markIndexOutOfSync()
+  })
+}
+
 function applyWorkspaceFsChanges(changes: WorkspaceFsChange[]) {
   if (!changes.length) return
   const activePath = activeFilePath.value
@@ -907,7 +924,7 @@ function applyWorkspaceFsChanges(changes: WorkspaceFsChange[]) {
       removeWorkspaceFilePath(change.path)
       if (isMarkdownPath(change.path)) {
         shouldRefreshCosmos = true
-        markIndexOutOfSync()
+        removeMarkdownFromIndexInBackground(change.path)
       }
       if (activePathKey && normalizePathKey(change.path) === activePathKey) {
         activeFileMetadata.value = null
@@ -919,13 +936,18 @@ function applyWorkspaceFsChanges(changes: WorkspaceFsChange[]) {
         replaceWorkspaceFilePath(change.old_path, change.new_path)
         if (isMarkdownPath(change.old_path) || isMarkdownPath(change.new_path)) {
           shouldRefreshCosmos = true
-          markIndexOutOfSync()
+          if (isMarkdownPath(change.old_path)) {
+            removeMarkdownFromIndexInBackground(change.old_path)
+          }
+          if (isMarkdownPath(change.new_path)) {
+            enqueueMarkdownReindex(change.new_path)
+          }
         }
       } else if (change.old_path) {
         removeWorkspaceFilePath(change.old_path)
         if (isMarkdownPath(change.old_path)) {
           shouldRefreshCosmos = true
-          markIndexOutOfSync()
+          removeMarkdownFromIndexInBackground(change.old_path)
         }
       } else if (!change.is_dir && change.new_path) {
         upsertWorkspaceFilePath(change.new_path)

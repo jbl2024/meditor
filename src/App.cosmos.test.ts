@@ -29,6 +29,7 @@ vi.mock('./lib/api', () => ({
   readFileMetadata: vi.fn(async () => ({ created_at_ms: null, updated_at_ms: null })),
   writeTextFile: vi.fn(async () => {}),
   reindexMarkdownFile: vi.fn(async () => {}),
+  removeMarkdownFileFromIndex: vi.fn(async () => {}),
   createEntry: vi.fn(async (parent: string, name: string) => `${parent}/${name}`),
   renameEntry: vi.fn(async (path: string, name: string) => path.replace(/[^/]+$/, name)),
   duplicateEntry: vi.fn(async (path: string) => `${path}.copy`),
