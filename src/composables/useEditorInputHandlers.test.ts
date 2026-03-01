@@ -54,6 +54,34 @@ function createHandlers(overrides: Partial<Parameters<typeof useEditorInputHandl
 }
 
 describe('useEditorInputHandlers', () => {
+  it('moves slash selection with arrow keys', () => {
+    const { handlers, options } = createHandlers({
+      menusPort: {
+        visibleSlashCommands: ref([
+          { id: 'quote', label: 'Quote', type: 'quote', data: {} },
+          { id: 'code', label: 'Code', type: 'code', data: {} }
+        ]),
+        slashOpen: ref(true),
+        slashIndex: ref(0),
+        closeSlashMenu: vi.fn(),
+        blockMenuOpen: ref(false),
+        closeBlockMenu: vi.fn(),
+        tableToolbarOpen: ref(false),
+        hideTableToolbar: vi.fn(),
+        inlineFormatToolbar: {
+          linkPopoverOpen: ref(false),
+          cancelLink: vi.fn()
+        }
+      }
+    })
+
+    handlers.onEditorKeydown(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
+    expect(options.menusPort.slashIndex.value).toBe(1)
+
+    handlers.onEditorKeydown(new KeyboardEvent('keydown', { key: 'ArrowUp' }))
+    expect(options.menusPort.slashIndex.value).toBe(0)
+  })
+
   it('handles slash Enter selection', () => {
     const { handlers, options } = createHandlers()
     const event = new KeyboardEvent('keydown', { key: 'Enter' })

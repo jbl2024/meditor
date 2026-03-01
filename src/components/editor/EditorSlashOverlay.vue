@@ -13,6 +13,7 @@ defineProps<{
 const emit = defineEmits<{
   'update:index': [value: number]
   select: [command: SlashCommand]
+  close: []
 }>()
 </script>
 
@@ -27,6 +28,7 @@ const emit = defineEmits<{
         :commands="commands"
         @update:index="emit('update:index', $event)"
         @select="emit('select', $event)"
+        @close="emit('close')"
       />
     </div>
   </Teleport>

@@ -1012,6 +1012,7 @@ defineExpose({
             :commands="visibleSlashCommands"
             @update:index="slashIndex = $event"
             @select="closeSlashMenu(); insertBlockFromDescriptor($event.type, $event.data)"
+            @close="closeSlashMenu(); focusEditor()"
           />
 
           <EditorWikilinkOverlay

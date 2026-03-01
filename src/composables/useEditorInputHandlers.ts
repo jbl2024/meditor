@@ -69,6 +69,18 @@ export function useEditorInputHandlers(options: UseEditorInputHandlersOptions) {
   function onEditorKeydown(event: KeyboardEvent) {
     if (!options.editingPort.getEditor()) return
 
+    const slashInteractionKey =
+      event.key === 'ArrowDown' ||
+      event.key === 'ArrowUp' ||
+      event.key === 'Enter' ||
+      event.key === 'Escape'
+
+    // Keep slash interactions responsive even when reactive open-state lags one tick
+    // behind the current cursor token (e.g. fast "/"+ArrowDown key sequences).
+    if (!options.menusPort.slashOpen.value && slashInteractionKey) {
+      options.uiPort.syncSlashMenuFromSelection({ preserveIndex: true })
+    }
+
     if (isEditorZoomModifier(event)) {
       if (isZoomInShortcut(event)) {
         event.preventDefault()

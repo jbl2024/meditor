@@ -31,6 +31,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:index': [value: number]
   select: [command: SlashCommand]
+  close: []
 }>()
 
 const ICON_BY_ID: Record<string, unknown> = {
@@ -76,6 +77,10 @@ function onSelect(item: FilterableDropdownItem) {
   emit('select', command)
 }
 
+function onOpenChange(open: boolean) {
+  if (!open) emit('close')
+}
+
 function commandFromItem(item: unknown): SlashCommand | null {
   const command = (item as { command?: SlashCommand } | null)?.command
   return command ?? null
@@ -101,11 +106,11 @@ function iconForItem(item: unknown) {
       query=""
       :active-index="props.index"
       :show-filter="false"
-      :auto-focus-on-open="false"
+      :auto-focus-on-open="true"
       :close-on-outside="false"
       :close-on-select="false"
       :max-height="320"
-      @open-change="() => {}"
+      @open-change="onOpenChange($event)"
       @query-change="() => {}"
       @active-index-change="emit('update:index', $event)"
       @select="onSelect($event)"
