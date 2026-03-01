@@ -133,7 +133,7 @@ describe('CosmosSidebarPanel', () => {
     app.mount(root)
     await flushUi()
 
-    root.querySelector<HTMLButtonElement>('.cosmos-open-btn')?.click()
+    root.querySelector<HTMLButtonElement>('.cosmos-node-title-link')?.click()
     root.querySelectorAll<HTMLButtonElement>('.cosmos-reset-btn')[1]?.click()
     root.querySelector<HTMLButtonElement>('.cosmos-match-item')?.click()
     root.querySelectorAll<HTMLButtonElement>('.cosmos-links-item')[0]?.click()

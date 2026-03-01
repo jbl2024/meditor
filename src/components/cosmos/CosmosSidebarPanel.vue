@@ -107,13 +107,12 @@ function onFocusModeChange(event: Event) {
 
     <div class="cosmos-panel-content">
       <div v-if="selectedNode" class="cosmos-node-stats">
-        <p class="cosmos-node-title">{{ selectedNode.label }}</p>
+        <button type="button" class="cosmos-node-title-link" @click="emit('open-selected')">
+          {{ selectedNode.label }}
+        </button>
         <p class="cosmos-node-path">{{ selectedNode.path }}</p>
         <p class="cosmos-node-meta">Degree: {{ selectedNode.degree }} · Cluster: {{ selectedNode.cluster }}</p>
         <p class="cosmos-node-meta">Visible links: {{ selectedLinkCount }}</p>
-        <button type="button" class="cosmos-open-btn" @click="emit('open-selected')">
-          Open note
-        </button>
         <p v-if="previewLoading" class="cosmos-node-preview">Loading preview...</p>
         <p v-else-if="previewError" class="cosmos-node-preview cosmos-node-preview-error">{{ previewError }}</p>
         <pre v-else class="cosmos-node-preview">{{ preview || 'No preview content.' }}</pre>
@@ -159,13 +158,10 @@ function onFocusModeChange(event: Event) {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  overflow: hidden;
+  overflow: auto;
 }
 
 .cosmos-panel-controls {
-  position: sticky;
-  top: 0;
-  z-index: 1;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -174,9 +170,6 @@ function onFocusModeChange(event: Event) {
 }
 
 .cosmos-panel-content {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -275,10 +268,8 @@ function onFocusModeChange(event: Event) {
   padding: 8px;
   border-radius: 8px;
   background: #e2e8f0;
-  max-height: 420px;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 
 .cosmos-node-title {
@@ -288,6 +279,20 @@ function onFocusModeChange(event: Event) {
   color: #0f172a;
 }
 
+.cosmos-node-title-link {
+  border: 0;
+  background: transparent;
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #1d4ed8;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
 .cosmos-node-path,
 .cosmos-node-meta {
   margin: 4px 0 0;
@@ -295,25 +300,14 @@ function onFocusModeChange(event: Event) {
   color: #334155;
 }
 
-.cosmos-open-btn {
-  margin-top: 8px;
-  border: 1px solid #3b82f6;
-  color: #1d4ed8;
-  background: #eff6ff;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 5px 10px;
-}
-
 .cosmos-node-preview {
   margin: 8px 0 0;
   white-space: pre-wrap;
-  font-size: 13px;
-  line-height: 1.55;
+  font-size: 11px;
+  line-height: 1.35;
   color: #0f172a;
-  min-height: 220px;
-  max-height: 260px;
+  min-height: calc(10 * 1.35em + 20px);
+  max-height: calc(10 * 1.35em + 20px);
   overflow: auto;
   flex: 0 0 auto;
   background: rgb(255 255 255 / 48%);
@@ -371,6 +365,7 @@ function onFocusModeChange(event: Event) {
 
 :global(.ide-root.dark) .cosmos-panel-title,
 :global(.ide-root.dark) .cosmos-node-title,
+:global(.ide-root.dark) .cosmos-node-title-link,
 :global(.ide-root.dark) .cosmos-node-path,
 :global(.ide-root.dark) .cosmos-node-meta,
 :global(.ide-root.dark) .cosmos-links-title,
@@ -403,12 +398,6 @@ function onFocusModeChange(event: Event) {
 :global(.ide-root.dark) .cosmos-node-stats,
 :global(.ide-root.dark) .cosmos-links-card {
   background: #334155;
-}
-
-:global(.ide-root.dark) .cosmos-open-btn {
-  border-color: #60a5fa;
-  color: #bfdbfe;
-  background: #1e3a8a;
 }
 
 :global(.ide-root.dark) .cosmos-node-preview {
