@@ -910,6 +910,12 @@ async function initializeExplorer() {
     }
   }
 
+  const activePath = props.activePath?.trim() ?? ''
+  if (activePath) {
+    await revealPathInView(activePath, { behavior: 'auto' })
+    return
+  }
+
   if (!selectionPaths.value.length && visibleNodePaths.value.length) {
     selectionManager.selectSingle(visibleNodePaths.value[0])
     focusedPath.value = visibleNodePaths.value[0]
@@ -936,9 +942,22 @@ async function revealPath(path: string) {
 async function revealPathInView(path: string, options: RevealPathOptions = {}) {
   await revealPath(path)
   await nextTick()
+  const container = treeRef.value
+  if (!container) return
   const selector = `[data-explorer-path="${escapeSelectorValue(path)}"]`
-  const row = treeRef.value?.querySelector<HTMLElement>(selector)
-  row?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: options.behavior ?? 'auto' })
+  const row = container.querySelector<HTMLElement>(selector)
+  if (row) {
+    const containerRect = container.getBoundingClientRect()
+    const rowRect = row.getBoundingClientRect()
+    const nextTop =
+      container.scrollTop +
+      (rowRect.top - containerRect.top) -
+      (container.clientHeight - rowRect.height) / 2
+    container.scrollTo({
+      top: Math.max(0, nextTop),
+      behavior: options.behavior ?? 'auto'
+    })
+  }
   if (options.focusTree) {
     focusTree()
   }

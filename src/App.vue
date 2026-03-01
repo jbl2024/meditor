@@ -1745,13 +1745,22 @@ async function openTodayNote() {
 
 async function showExplorerForActiveFile(options: { focusTree?: boolean } = {}) {
   setSidebarMode('explorer')
+  if (!workspace.sidebarVisible.value) return
   await nextTick()
   const activePath = workspace.activeTabPath.value
   if (!activePath) return
-  await explorerRef.value?.revealPathInView(activePath, {
-    focusTree: options.focusTree ?? false,
-    behavior: 'auto'
-  })
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const revealPathInView = explorerRef.value?.revealPathInView
+    if (typeof revealPathInView === 'function') {
+      await revealPathInView(activePath, {
+        focusTree: options.focusTree ?? false,
+        behavior: 'auto'
+      })
+      return
+    }
+    await nextTick()
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+  }
 }
 
 async function openYesterdayNote() {
