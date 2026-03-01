@@ -14,7 +14,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Mutex, OnceLock,
     },
-    time::{Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use directories::UserDirs;
@@ -190,7 +190,9 @@ fn open_db() -> Result<Connection> {
     fs::create_dir_all(&db_dir)?;
 
     let db_path = db_dir.join(DB_FILE_NAME);
-    Ok(Connection::open(db_path)?)
+    let conn = Connection::open(db_path)?;
+    let _ = conn.busy_timeout(Duration::from_millis(3_000));
+    Ok(conn)
 }
 
 fn property_type_schema_path() -> Result<PathBuf> {

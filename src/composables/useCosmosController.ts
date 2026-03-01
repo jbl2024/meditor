@@ -31,6 +31,24 @@ function isMarkdownPath(path: string): boolean {
   return /\.(md|markdown)$/i.test(path)
 }
 
+function normalizeGraphLoadError(err: unknown): string {
+  if (err instanceof Error && err.message.trim()) {
+    return err.message.trim()
+  }
+  if (typeof err === 'string' && err.trim()) {
+    return err.trim()
+  }
+  try {
+    const serialized = JSON.stringify(err)
+    if (serialized && serialized !== '{}' && serialized !== 'null') {
+      return serialized
+    }
+  } catch {
+    // Ignore JSON conversion failure.
+  }
+  return 'Could not load graph.'
+}
+
 /** Produces a compact preview used in the Cosmos context card. */
 function buildPreview(markdown: string): string {
   return markdown
@@ -226,7 +244,26 @@ export function useCosmosController(deps: CosmosDeps) {
       if (active && isMarkdownPath(active)) {
         await deps.reindexMarkdownFile(active)
       }
-      const raw = await deps.getWikilinkGraph()
+      let raw: WikilinkGraph | null = null
+      let lastError: unknown = null
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          raw = await deps.getWikilinkGraph()
+          if (attempt > 0) {
+            console.info('[cosmos] graph refresh recovered after retry')
+          }
+          break
+        } catch (err) {
+          lastError = err
+          console.warn('[cosmos] graph refresh attempt failed', { attempt: attempt + 1, error: err })
+          if (attempt < 1) {
+            await new Promise<void>((resolve) => setTimeout(resolve, 250))
+          }
+        }
+      }
+      if (!raw) {
+        throw lastError ?? new Error('Could not load graph.')
+      }
       const shape = deps.buildCosmosGraph ?? defaultBuildCosmosGraph
       graph.value = shape(raw)
 
@@ -237,7 +274,8 @@ export function useCosmosController(deps: CosmosDeps) {
       await refreshSemanticMatches()
     } catch (err) {
       graph.value = { nodes: [], edges: [], generated_at_ms: 0 }
-      error.value = err instanceof Error ? err.message : 'Could not load graph.'
+      error.value = normalizeGraphLoadError(err)
+      console.error('[cosmos] graph refresh failed', err)
     } finally {
       loading.value = false
     }
