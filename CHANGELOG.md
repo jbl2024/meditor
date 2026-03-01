@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.7.0] - 2026-03-01
+
+### Changed
+- chore: rename meditor to tomosona (d523bd7)
+
 ## [0.6.0] - 2026-03-01
 
 ### Added
