@@ -127,7 +127,6 @@ type IndexActivityRow = {
   id: string
   ts: number
   timeLabel: string
-  relativeTime: string
   state: IndexActivityState
   group: 'file' | 'engine' | 'rebuild' | 'system'
   path: string
@@ -225,6 +224,8 @@ const indexRunPhase = ref<IndexRunPhase>('idle')
 const indexRunCurrentPath = ref('')
 const indexRunCompleted = ref(0)
 const indexRunTotal = ref(0)
+const indexFinalizeCompleted = ref(0)
+const indexFinalizeTotal = ref(0)
 const indexRunMessage = ref('')
 const indexRunLastFinishedAt = ref<number | null>(null)
 const indexStatusBusy = ref(false)
@@ -281,80 +282,32 @@ const indexRunning = computed(() => filesystem.indexingState.value === 'indexing
 const indexProgressLabel = computed(() => {
   if (!indexRunning.value) return indexStateLabel.value
   if (indexRunKind.value === 'background') {
+    if (indexRunPhase.value === 'refreshing_views') {
+      const total = Math.max(1, indexFinalizeTotal.value)
+      const completed = Math.min(indexFinalizeCompleted.value, total)
+      return `finalizing ${completed}/${total}`
+    }
     const total = Math.max(indexRunTotal.value, indexRunCompleted.value + pendingReindexCount.value)
     if (total <= 0) return 'processing queued files'
     return `${indexRunCompleted.value}/${total} files`
   }
   if (indexRunKind.value === 'rebuild') {
-    return indexRunPhase.value === 'refreshing_views' ? 'refreshing views' : 'rebuilding workspace index'
+    if (indexRunPhase.value === 'refreshing_views') {
+      const total = Math.max(1, indexFinalizeTotal.value)
+      const completed = Math.min(indexFinalizeCompleted.value, total)
+      return `finalizing ${completed}/${total}`
+    }
+    return 'rebuilding workspace index'
   }
   if (indexRunKind.value === 'rename') {
-    return indexRunPhase.value === 'refreshing_views' ? 'refreshing links' : 'rewriting wikilinks'
+    if (indexRunPhase.value === 'refreshing_views') {
+      const total = Math.max(1, indexFinalizeTotal.value)
+      const completed = Math.min(indexFinalizeCompleted.value, total)
+      return `finalizing ${completed}/${total}`
+    }
+    return 'rewriting wikilinks'
   }
   return 'indexing'
-})
-const indexStepRows = computed(() => {
-  const phase = indexRunPhase.value
-  if (indexRunKind.value === 'background') {
-    return [
-      {
-        title: 'Collect changed files',
-        state: phase === 'idle' ? 'pending' : 'done',
-        detail: `${pendingReindexCount.value} pending`
-      },
-      {
-        title: 'Reindex queued markdown files',
-        state: phase === 'indexing_files' ? 'running' : phase === 'error' ? 'error' : phase === 'idle' ? 'pending' : 'done',
-        detail: indexRunCurrentPath.value
-          ? `${indexRunCompleted.value}/${Math.max(indexRunTotal.value, indexRunCompleted.value + pendingReindexCount.value)} • ${toRelativePath(indexRunCurrentPath.value)}`
-          : `${indexRunCompleted.value}/${Math.max(indexRunTotal.value, indexRunCompleted.value + pendingReindexCount.value)}`
-      },
-      {
-        title: 'Refresh backlinks and Cosmos',
-        state: phase === 'refreshing_views' ? 'running' : phase === 'done' ? 'done' : phase === 'error' ? 'error' : 'pending',
-        detail: phase === 'error' ? (indexRunMessage.value || 'Indexing failed') : ''
-      }
-    ]
-  }
-  if (indexRunKind.value === 'rebuild') {
-    return [
-      {
-        title: 'Rebuild workspace index',
-        state: phase === 'indexing_files' ? 'running' : phase === 'error' ? 'error' : phase === 'idle' ? 'pending' : 'done',
-        detail: indexRunTotal.value ? `${indexRunTotal.value} files indexed` : 'Running backend rebuild'
-      },
-      {
-        title: 'Refresh explorer/search/cosmos',
-        state: phase === 'refreshing_views' ? 'running' : phase === 'done' ? 'done' : phase === 'error' ? 'error' : 'pending',
-        detail: phase === 'error' ? (indexRunMessage.value || 'Rebuild failed') : ''
-      }
-    ]
-  }
-  if (indexRunKind.value === 'rename') {
-    return [
-      {
-        title: 'Rewrite wikilinks for rename',
-        state: phase === 'indexing_files' ? 'running' : phase === 'error' ? 'error' : phase === 'idle' ? 'pending' : 'done',
-        detail: indexRunTotal.value ? `${indexRunTotal.value} files updated` : ''
-      },
-      {
-        title: 'Refresh backlinks',
-        state: phase === 'refreshing_views' ? 'running' : phase === 'done' ? 'done' : phase === 'error' ? 'error' : 'pending',
-        detail: phase === 'error' ? (indexRunMessage.value || 'Rename indexing failed') : ''
-      }
-    ]
-  }
-  return [
-    {
-      title: 'Index status',
-      state: filesystem.indexingState.value === 'out_of_sync' ? 'error' : 'done',
-      detail: filesystem.indexingState.value === 'out_of_sync'
-        ? 'Workspace changed. Reindexing is pending.'
-        : indexRunLastFinishedAt.value
-          ? `Last completed at ${formatTimestamp(indexRunLastFinishedAt.value)}`
-          : 'No active indexing operation.'
-    }
-  ]
 })
 const indexActionLabel = computed(() => (indexRunning.value ? 'Stop' : 'Rebuild index'))
 const indexModelStatusLabel = computed(() => {
@@ -388,19 +341,34 @@ const indexProgressCurrent = computed(() => {
   return Math.min(indexRunCompleted.value, total)
 })
 const indexProgressPercent = computed(() => {
-  const total = indexProgressTotal.value
-  if (total <= 0) return indexRunning.value ? 8 : filesystem.indexingState.value === 'indexed' ? 100 : 0
-  return Math.min(100, Math.max(0, Math.round((indexProgressCurrent.value / total) * 100)))
+  if (indexRunning.value) {
+    if (indexRunPhase.value === 'refreshing_views') {
+      const finalizeTotal = Math.max(1, indexFinalizeTotal.value)
+      const finalizeCurrent = Math.min(indexFinalizeCompleted.value, finalizeTotal)
+      const finalizePercent = Math.round((finalizeCurrent / finalizeTotal) * 15)
+      return Math.min(99, 85 + Math.max(0, finalizePercent))
+    }
+    const total = indexProgressTotal.value
+    if (total <= 0) return 8
+    return Math.min(85, Math.max(0, Math.round((indexProgressCurrent.value / total) * 85)))
+  }
+  return filesystem.indexingState.value === 'indexed' ? 100 : 0
 })
 const indexProgressSummary = computed(() => {
   if (!indexRunning.value) {
     if (filesystem.indexingState.value === 'out_of_sync') return 'Pending reindex'
-    return indexRunLastFinishedAt.value ? `Last run ${formatTimestamp(indexRunLastFinishedAt.value)}` : 'No active run'
+    return indexRunLastFinishedAt.value ? `Last run ${formatTimestamp(indexRunLastFinishedAt.value)}` : ''
+  }
+  if (indexRunPhase.value === 'refreshing_views') {
+    const total = Math.max(1, indexFinalizeTotal.value)
+    const completed = Math.min(indexFinalizeCompleted.value, total)
+    return `Finalizing ${completed}/${total} tasks`
   }
   const total = indexProgressTotal.value
   if (total <= 0) return indexProgressLabel.value
   return `${indexProgressCurrent.value}/${total} files`
 })
+const indexShowProgressBar = computed(() => indexRunning.value)
 const indexModelStateClass = computed(() => {
   if (indexModelStatusLabel.value === 'ready') return 'index-model-ready'
   if (indexModelStatusLabel.value === 'initializing') return 'index-model-busy'
@@ -418,13 +386,6 @@ const indexAlert = computed(() => {
       level: 'error',
       title: 'Index run interrupted',
       message: indexRunMessage.value || 'An indexing step failed. You can retry a full rebuild.'
-    } as const
-  }
-  if (indexRuntimeStatus.value?.model_last_error) {
-    return {
-      level: 'warning',
-      title: 'Embedding engine issue',
-      message: indexRuntimeStatus.value.model_last_error
     } as const
   }
   if (filesystem.indexingState.value === 'out_of_sync') {
@@ -774,18 +735,26 @@ function formatTimeOnly(value: number): string {
   return `${normalizeDatePart(date.getHours())}:${normalizeDatePart(date.getMinutes())}:${normalizeDatePart(date.getSeconds())}`
 }
 
-function formatRelativeTime(value: number): string {
-  const delta = Date.now() - value
-  if (!Number.isFinite(delta) || delta < 0) return 'just now'
-  const secs = Math.floor(delta / 1000)
-  if (secs < 5) return 'just now'
-  if (secs < 60) return `${secs}s ago`
-  const mins = Math.floor(secs / 60)
-  if (mins < 60) return `${mins}m ago`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  return `${days}d ago`
+function formatDurationMs(value: number | null): string {
+  if (value == null || !Number.isFinite(value)) return ''
+  const durationMs = Math.max(0, Math.round(value))
+  if (durationMs < 1000) return `${durationMs} ms`
+  const seconds = durationMs / 1000
+  if (seconds < 60) {
+    const precision = seconds < 10 ? 1 : 0
+    return `${seconds.toFixed(precision)} s`
+  }
+  const totalSeconds = Math.floor(seconds)
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const remainderSeconds = totalSeconds % 60
+  if (hours > 0) {
+    if (remainderSeconds > 0) return `${hours} h ${minutes} min ${remainderSeconds} s`
+    if (minutes > 0) return `${hours} h ${minutes} min`
+    return `${hours} h`
+  }
+  if (remainderSeconds > 0) return `${minutes} min ${remainderSeconds} s`
+  return `${minutes} min`
 }
 
 function splitRelativePath(path: string): { directory: string; fileName: string } {
@@ -813,7 +782,6 @@ function buildIndexActivityRows(entries: IndexLogEntry[]): IndexActivityRow[] {
     const base = {
       ts: entry.ts_ms,
       timeLabel: formatTimeOnly(entry.ts_ms),
-      relativeTime: formatRelativeTime(entry.ts_ms),
       path: resolvedPath,
       directory: split.directory,
       fileName: split.fileName,
@@ -836,7 +804,8 @@ function buildIndexActivityRows(entries: IndexLogEntry[]): IndexActivityRow[] {
       if (base.targets != null) stats.push(`🎯 ${base.targets}`)
       if (base.properties != null) stats.push(`🏷️ ${base.properties}`)
       if (base.embeddingStatus) stats.push(`embed ${base.embeddingStatus}`)
-      if (base.durationMs != null) stats.push(`${base.durationMs} ms`)
+      const durationLabel = formatDurationMs(base.durationMs)
+      if (durationLabel) stats.push(durationLabel)
       const failedEmbedding = base.embeddingStatus.includes('failed')
       rows.push({
         id: `done-${resolvedPath}-${entry.ts_ms}`,
@@ -857,7 +826,7 @@ function buildIndexActivityRows(entries: IndexLogEntry[]): IndexActivityRow[] {
         state: 'done',
         group: 'rebuild',
         title: `Workspace rebuild done (${indexed} indexed)`,
-        detail: base.durationMs != null ? `${base.durationMs} ms` : '',
+        detail: formatDurationMs(base.durationMs),
         ...base
       })
       continue
@@ -899,7 +868,6 @@ function buildIndexActivityRows(entries: IndexLogEntry[]): IndexActivityRow[] {
       id: `running-${run.path}-${run.startedAt}`,
       ts: run.startedAt,
       timeLabel: formatTimeOnly(run.startedAt),
-      relativeTime: formatRelativeTime(run.startedAt),
       state: 'running',
       group: 'file',
       path: run.path,
@@ -1021,6 +989,8 @@ function enqueueMarkdownReindex(path: string) {
     indexRunPhase.value = 'idle'
     indexRunCompleted.value = 0
     indexRunTotal.value = Math.max(1, pendingReindexCount.value)
+    indexFinalizeCompleted.value = 0
+    indexFinalizeTotal.value = 0
     indexRunCurrentPath.value = ''
     indexRunMessage.value = ''
   } else {
@@ -1039,6 +1009,8 @@ async function runReindexWorker() {
   indexRunPhase.value = 'indexing_files'
   indexRunCompleted.value = 0
   indexRunTotal.value = Math.max(1, pendingReindexCount.value)
+  indexFinalizeCompleted.value = 0
+  indexFinalizeTotal.value = 0
   indexRunCurrentPath.value = ''
   indexRunMessage.value = ''
   filesystem.indexingState.value = 'indexing'
@@ -1079,14 +1051,16 @@ async function runReindexWorker() {
     }
     indexRunPhase.value = 'refreshing_views'
     indexRunCurrentPath.value = ''
-    if (filesystem.indexingState.value !== 'out_of_sync') {
-      filesystem.indexingState.value = 'indexed'
-    }
+    indexFinalizeCompleted.value = 0
+    indexFinalizeTotal.value = workspace.sidebarMode.value === 'cosmos' ? 2 : 1
     await refreshBacklinks()
+    indexFinalizeCompleted.value = 1
     if (workspace.sidebarMode.value === 'cosmos') {
       await cosmos.refreshGraph()
+      indexFinalizeCompleted.value = 2
     }
-    if (filesystem.indexingState.value === 'indexed') {
+    if (filesystem.indexingState.value !== 'out_of_sync') {
+      filesystem.indexingState.value = 'indexed'
       indexRunPhase.value = 'done'
       indexRunMessage.value = ''
       indexRunLastFinishedAt.value = Date.now()
@@ -1710,6 +1684,8 @@ async function closeWorkspace() {
   indexRunCurrentPath.value = ''
   indexRunCompleted.value = 0
   indexRunTotal.value = 0
+  indexFinalizeCompleted.value = 0
+  indexFinalizeTotal.value = 0
   indexRunMessage.value = ''
   workspace.closeAllTabs()
   documentHistory.reset()
@@ -1783,6 +1759,8 @@ async function loadWorkingFolder(path: string) {
     indexRunCurrentPath.value = ''
     indexRunCompleted.value = 0
     indexRunTotal.value = 0
+    indexFinalizeCompleted.value = 0
+    indexFinalizeTotal.value = 0
     indexRunMessage.value = ''
     const canonical = await setWorkingFolder(path)
     filesystem.setWorkspacePath(canonical)
@@ -2034,13 +2012,18 @@ async function maybeRewriteWikilinksForRename(fromPath: string, toPath: string) 
   indexRunCurrentPath.value = ''
   indexRunCompleted.value = 0
   indexRunTotal.value = 0
+  indexFinalizeCompleted.value = 0
+  indexFinalizeTotal.value = 0
   indexRunMessage.value = ''
   try {
     const result = await updateWikilinksForRename(fromPath, toPath)
     indexRunTotal.value = result.updated_files
     indexRunCompleted.value = result.updated_files
     indexRunPhase.value = 'refreshing_views'
+    indexFinalizeCompleted.value = 0
+    indexFinalizeTotal.value = 1
     await refreshBacklinks()
+    indexFinalizeCompleted.value = 1
     filesystem.indexingState.value = 'indexed'
     indexRunPhase.value = 'done'
     indexRunLastFinishedAt.value = Date.now()
@@ -3087,6 +3070,8 @@ async function rebuildIndexFromOverflow() {
   indexRunCurrentPath.value = ''
   indexRunCompleted.value = 0
   indexRunTotal.value = 0
+  indexFinalizeCompleted.value = 0
+  indexFinalizeTotal.value = 0
   indexRunMessage.value = ''
   console.info('[index] rebuild:start')
   try {
@@ -3101,10 +3086,15 @@ async function rebuildIndexFromOverflow() {
       return
     }
     indexRunPhase.value = 'refreshing_views'
+    indexFinalizeCompleted.value = 0
+    indexFinalizeTotal.value = workspace.sidebarMode.value === 'cosmos' ? 3 : 2
     await loadAllFiles()
+    indexFinalizeCompleted.value = 1
     await refreshBacklinks()
+    indexFinalizeCompleted.value = 2
     if (workspace.sidebarMode.value === 'cosmos') {
       await cosmos.refreshGraph()
+      indexFinalizeCompleted.value = 3
     }
     filesystem.indexingState.value = 'indexed'
     indexRunPhase.value = 'done'
@@ -4165,17 +4155,22 @@ onBeforeUnmount(() => {
                 <span class="index-status-badge-dot"></span>
                 {{ indexStatusBadgeLabel }}
               </span>
-              <p class="index-overview-summary">{{ indexProgressSummary }}</p>
+              <div
+                v-if="indexShowProgressBar"
+                class="index-overview-progress-inline"
+              >
+                <div class="index-progress-track" role="progressbar" :aria-valuenow="indexProgressPercent" aria-valuemin="0" aria-valuemax="100">
+                  <div class="index-progress-fill" :style="{ width: `${indexProgressPercent}%` }"></div>
+                </div>
+                <div class="index-progress-meta">
+                  <span>{{ indexProgressLabel }}</span>
+                  <span>{{ indexProgressPercent }}%</span>
+                </div>
+              </div>
+              <p v-else-if="indexProgressSummary" class="index-overview-summary">{{ indexProgressSummary }}</p>
               <p v-if="indexRunCurrentPath" class="index-overview-current">
                 Current: {{ toRelativePath(indexRunCurrentPath) }}
               </p>
-            </div>
-            <div class="index-progress-track" role="progressbar" :aria-valuenow="indexProgressPercent" aria-valuemin="0" aria-valuemax="100">
-              <div class="index-progress-fill" :style="{ width: `${indexProgressPercent}%` }"></div>
-            </div>
-            <div class="index-progress-meta">
-              <span>{{ indexProgressLabel }}</span>
-              <span>{{ indexProgressPercent }}%</span>
             </div>
           </section>
 
@@ -4186,7 +4181,7 @@ onBeforeUnmount(() => {
             </div>
             <p class="index-model-name">{{ indexRuntimeStatus?.model_name || 'n/a' }}</p>
             <p v-if="indexRuntimeStatus?.model_last_duration_ms != null" class="index-model-meta">
-              Last init {{ indexRuntimeStatus.model_last_duration_ms }} ms
+              Last init {{ formatDurationMs(indexRuntimeStatus.model_last_duration_ms) }}
               <span v-if="indexRuntimeStatus.model_last_finished_at_ms"> at {{ formatTimestamp(indexRuntimeStatus.model_last_finished_at_ms) }}</span>
             </p>
             <p v-if="indexShowWarmupNote" class="index-model-hint">
@@ -4212,15 +4207,6 @@ onBeforeUnmount(() => {
           </section>
 
           <div class="index-status-sections">
-            <div class="index-steps">
-              <div v-for="step in indexStepRows" :key="step.title" class="index-step">
-                <span class="index-step-dot" :class="`index-step-${step.state}`"></span>
-                <div class="index-step-copy">
-                  <p class="index-step-title">{{ step.title }}</p>
-                  <p v-if="step.detail" class="index-step-detail">{{ step.detail }}</p>
-                </div>
-              </div>
-            </div>
             <div class="index-log-panel">
               <div class="index-log-header">
                 <p class="index-log-title">Recent indexing activity</p>
@@ -4259,7 +4245,7 @@ onBeforeUnmount(() => {
                   class="index-log-row"
                   :class="`index-log-row-${row.state}`"
                 >
-                  <span class="index-log-time">{{ row.timeLabel }} · {{ row.relativeTime }}</span>
+                  <span class="index-log-time">{{ row.timeLabel }}</span>
                   <div class="index-log-copy">
                     <p class="index-log-main">
                       <span class="index-log-state-icon" aria-hidden="true">{{ row.state === 'done' ? '✅' : row.state === 'error' ? '⚠️' : '⏳' }}</span>
@@ -5312,6 +5298,14 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
 }
 
+.index-overview-progress-inline {
+  flex: 1 1 260px;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .index-status-badge {
   display: inline-flex;
   align-items: center;
@@ -5403,6 +5397,11 @@ onBeforeUnmount(() => {
   color: #475569;
   display: flex;
   justify-content: space-between;
+}
+
+.index-overview-progress-inline .index-progress-track,
+.index-overview-progress-inline .index-progress-meta {
+  margin-top: 0;
 }
 
 .ide-root.dark .index-progress-meta {
@@ -5553,73 +5552,6 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 10px;
-}
-
-.index-steps {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 4px 0 2px;
-}
-
-.index-step {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 8px;
-  background: #ffffff;
-}
-
-.ide-root.dark .index-step {
-  border-color: #3e4451;
-  background: #282c34;
-}
-
-.index-step-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 999px;
-  margin-top: 4px;
-  flex: 0 0 auto;
-}
-
-.index-step-running {
-  background: #2563eb;
-  animation: statusPulse 1.2s ease-in-out infinite;
-}
-
-.index-step-done {
-  background: #22c55e;
-}
-
-.index-step-pending {
-  background: #94a3b8;
-}
-
-.index-step-error {
-  background: #f97316;
-}
-
-.index-step-title {
-  margin: 0;
-  font-size: 12px;
-  color: #1f2937;
-}
-
-.index-step-detail {
-  margin: 2px 0 0;
-  font-size: 11px;
-  color: #64748b;
-}
-
-.ide-root.dark .index-step-title {
-  color: #e2e8f0;
-}
-
-.ide-root.dark .index-step-detail {
-  color: #94a3b8;
 }
 
 .index-log-panel {
