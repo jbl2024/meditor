@@ -1,19 +1,17 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { ClipboardDocumentIcon, PaperAirplaneIcon } from '@heroicons/vue/24/outline'
 import EditorView from '../EditorView.vue'
 import {
   createDeliberationSession,
-  exportSessionMarkdown,
   fetchSecondBrainConfigStatus,
   fetchSecondBrainSessions,
-  insertAssistantMessageIntoTarget,
   linkSessionTargetNote,
   loadDeliberationSession,
   replaceSessionContext,
   runDeliberation,
   subscribeSecondBrainStream
 } from '../../lib/secondBrainApi'
-import { SECOND_BRAIN_MODES } from '../../lib/secondBrainModes'
 import type { SecondBrainMessage, SecondBrainSessionSummary } from '../../lib/api'
 
 const props = defineProps<{
@@ -33,8 +31,6 @@ const props = defineProps<{
   loadPropertyTypeSchema: () => Promise<Record<string, string>>
   savePropertyTypeSchema: (schema: Record<string, string>) => Promise<void>
   openLinkTarget: (target: string) => Promise<boolean>
-  createTargetNoteFromApp: () => Promise<string>
-  chooseTargetNoteFromApp: () => Promise<string>
 }>()
 
 const emit = defineEmits<{
@@ -43,13 +39,7 @@ const emit = defineEmits<{
   'target-changed': [path: string]
 }>()
 
-type EditorViewExposed = {
-  reloadCurrent: () => Promise<void>
-}
-
 const TOKEN_LIMIT = 120000
-const modes = SECOND_BRAIN_MODES
-const modeById = new Map(modes.map((item) => [item.id, item]))
 
 const configError = ref('')
 const loading = ref(false)
@@ -57,7 +47,6 @@ const sessionId = ref('')
 const sessionTitle = ref('Second Brain Session')
 const contextPaths = ref<string[]>([])
 const contextTokenEstimate = ref<Record<string, number>>({})
-const selectedModeId = ref('freestyle')
 const inputMessage = ref('')
 const messages = ref<SecondBrainMessage[]>([])
 const streamByMessage = ref<Record<string, string>>({})
@@ -65,8 +54,7 @@ const sending = ref(false)
 const sendError = ref('')
 const targetNotePath = ref('')
 const sessionsIndex = ref<SecondBrainSessionSummary[]>([])
-const editorTargetRef = ref<EditorViewExposed | null>(null)
-const rightPanelWidth = ref(420)
+const rightPanelWidth = ref(620)
 const resizing = ref(false)
 const resizeState = ref<{ startX: number; startWidth: number } | null>(null)
 
@@ -78,31 +66,6 @@ function toRelativePath(path: string): string {
   if (value.startsWith(`${root}/`)) return value.slice(root.length + 1)
   return value
 }
-
-const modeUi = computed(() => {
-  const mode = modeById.get(selectedModeId.value)
-  const fallback = {
-    label: 'Freestyle',
-    tone: 'Neutral',
-    placeholder: 'Posez une question libre sur votre contexte actif...'
-  }
-  if (!mode) return fallback
-
-  const mapping: Record<string, { tone: string; placeholder: string }> = {
-    freestyle: { tone: 'Libre', placeholder: 'Posez une question libre sur votre contexte actif...' },
-    synthese: { tone: 'Synthese', placeholder: 'Demandez une synthese exploitable des notes selectionnees...' },
-    plan_action: { tone: 'Action', placeholder: 'Demandez un plan d\'action concret et priorise...' },
-    diagnostic: { tone: 'Diagnostic', placeholder: 'Demandez un diagnostic avec hypotheses et validations...' },
-    fusion_notes: { tone: 'Fusion', placeholder: 'Demandez une fusion coherente de plusieurs notes...' },
-    extraction_concepts: { tone: 'Concepts', placeholder: 'Demandez extraction de concepts, relations, ambiguities...' }
-  }
-
-  return {
-    label: mode.label,
-    tone: mapping[mode.id]?.tone ?? mode.label,
-    placeholder: mapping[mode.id]?.placeholder ?? fallback.placeholder
-  }
-})
 
 const contextCards = computed(() =>
   contextPaths.value.map((path) => {
@@ -234,7 +197,7 @@ async function onSendMessage() {
   messages.value = [...messages.value, {
     id: `temp-user-${Date.now()}`,
     role: 'user',
-    mode: selectedModeId.value,
+    mode: 'freestyle',
     content_md: outgoing,
     citations_json: '[]',
     attachments_json: '[]',
@@ -244,14 +207,14 @@ async function onSendMessage() {
   try {
     const result = await runDeliberation({
       sessionId: sessionId.value,
-      mode: selectedModeId.value,
+      mode: 'freestyle',
       message: outgoing
     })
 
     messages.value = [...messages.value, {
       id: result.assistantMessageId,
       role: 'assistant',
-      mode: selectedModeId.value,
+      mode: 'freestyle',
       content_md: '',
       citations_json: JSON.stringify(contextPaths.value.map((path) => path.replace(`${props.workspacePath}/`, ''))),
       attachments_json: '[]',
@@ -270,19 +233,15 @@ async function onSendMessage() {
   }
 }
 
-async function onInsertIntoTarget(message: SecondBrainMessage) {
-  if (!sessionId.value) return
+async function onCopyAssistantMessage(message: SecondBrainMessage) {
   if (message.role !== 'assistant') return
-  if (!targetNotePath.value) {
-    sendError.value = 'Choose or create a target note first.'
-    return
-  }
+  const content = displayMessage(message).trim()
+  if (!content) return
 
   try {
-    await insertAssistantMessageIntoTarget(sessionId.value, message.id)
-    await editorTargetRef.value?.reloadCurrent()
+    await navigator.clipboard.writeText(content)
   } catch (err) {
-    sendError.value = err instanceof Error ? err.message : 'Could not insert into target note.'
+    sendError.value = err instanceof Error ? err.message : 'Could not copy assistant response.'
   }
 }
 
@@ -291,28 +250,6 @@ async function linkTargetPath(absolutePath: string) {
   const linkedRelative = await linkSessionTargetNote(sessionId.value, absolutePath)
   targetNotePath.value = asAbsolute(linkedRelative)
   emit('target-changed', targetNotePath.value)
-}
-
-async function onChooseTargetFromApp() {
-  try {
-    sendError.value = ''
-    const selected = await props.chooseTargetNoteFromApp()
-    if (!selected) return
-    await linkTargetPath(selected)
-  } catch (err) {
-    sendError.value = err instanceof Error ? err.message : 'Could not set target note.'
-  }
-}
-
-async function onCreateTargetFromApp() {
-  try {
-    sendError.value = ''
-    const created = await props.createTargetNoteFromApp()
-    if (!created) return
-    await linkTargetPath(created)
-  } catch (err) {
-    sendError.value = err instanceof Error ? err.message : 'Could not create target note.'
-  }
 }
 
 function openContextNote(path: string) {
@@ -337,17 +274,6 @@ function onPointerMove(event: MouseEvent) {
 function stopResize() {
   resizing.value = false
   resizeState.value = null
-}
-
-async function onExportSession() {
-  if (!sessionId.value) return
-  try {
-    const outPath = await exportSessionMarkdown(sessionId.value)
-    sendError.value = ''
-    emit('open-note', outPath)
-  } catch (err) {
-    sendError.value = err instanceof Error ? err.message : 'Could not export session.'
-  }
 }
 
 onMounted(async () => {
@@ -405,7 +331,12 @@ watch(
   (value) => {
     const [path] = value.split('::')
     if (!path.trim()) return
-    void linkTargetPath(path)
+    void (async () => {
+      if (!sessionId.value) {
+        await ensureSession(path)
+      }
+      await linkTargetPath(path)
+    })()
   }
 )
 
@@ -425,10 +356,8 @@ watch(
       <header class="sb-center-head">
         <div>
           <h2>{{ sessionTitle }}</h2>
-          <p class="tone">Mode {{ modeUi.label }} · Tone {{ modeUi.tone }}</p>
           <p v-if="configError" class="sb-error">{{ configError }}</p>
         </div>
-        <button type="button" class="sb-btn" :disabled="!sessionId" @click="onExportSession">Export session .md</button>
       </header>
 
       <section class="sb-context-summary">
@@ -467,9 +396,10 @@ watch(
               v-if="message.role === 'assistant'"
               type="button"
               class="insert"
-              @click="onInsertIntoTarget(message)"
+              title="Copy to clipboard"
+              @click="onCopyAssistantMessage(message)"
             >
-              → Inserer dans la note
+              <ClipboardDocumentIcon class="h-4 w-4" />
             </button>
           </header>
           <pre>{{ displayMessage(message) }}</pre>
@@ -477,18 +407,20 @@ watch(
       </section>
 
       <footer class="sb-input-row">
-        <select v-model="selectedModeId" class="sb-mode">
-          <option v-for="mode in modes" :key="mode.id" :value="mode.id">{{ mode.label }}</option>
-        </select>
-        <textarea
-          v-model="inputMessage"
-          class="sb-textarea"
-          :placeholder="modeUi.placeholder"
-        ></textarea>
+        <div class="sb-composer">
+          <textarea
+            v-model="inputMessage"
+            class="sb-textarea"
+            placeholder="Posez une question sur votre contexte actif..."
+          ></textarea>
+          <div class="composer-action">
+            <span v-if="sending" class="sb-loader" aria-label="Thinking"></span>
+            <button v-else type="button" class="send-icon-btn" :disabled="!sessionId || !inputMessage.trim()" @click="onSendMessage">
+              <PaperAirplaneIcon class="h-4 w-4" />
+            </button>
+          </div>
+        </div>
         <div class="actions">
-          <button type="button" class="sb-btn" :disabled="sending || !sessionId" @click="onSendMessage">
-            {{ sending ? 'Thinking...' : 'Send' }}
-          </button>
           <span v-if="loading" class="hint">Loading...</span>
           <span v-if="sendError" class="sb-error">{{ sendError }}</span>
         </div>
@@ -499,24 +431,16 @@ watch(
       <div class="sb-right-inner" :style="{ width: `${rightPanelWidth}px` }">
       <header class="sb-right-head">
         <h3>Target note</h3>
-        <div class="sb-target-actions">
-          <button type="button" class="sb-btn secondary" @click="onChooseTargetFromApp">Choose</button>
-          <button type="button" class="sb-btn" @click="onCreateTargetFromApp">New note</button>
-        </div>
       </header>
 
       <div v-if="!targetNotePath" class="target-empty">
         <p>No target note linked.</p>
-        <div class="sb-target-actions">
-          <button type="button" class="sb-btn secondary" @click="onChooseTargetFromApp">Choose</button>
-          <button type="button" class="sb-btn" @click="onCreateTargetFromApp">New note</button>
-        </div>
+        <p>Click a markdown file in the left explorer.</p>
       </div>
       <p v-if="targetNotePath" class="sb-target-path">{{ toRelativePath(targetNotePath) }}</p>
 
       <EditorView
         v-if="targetNotePath"
-        ref="editorTargetRef"
         :path="targetNotePath"
         :open-paths="[targetNotePath]"
         :open-file="props.openFile"
@@ -557,12 +481,9 @@ watch(
 .sb-center-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .sb-right-head h3,
 .sb-center-head h2,
-.tone,
 .row { margin: 0; }
-.tone { font-size: 12px; color: #64748b; }
 .sb-input,
 .sb-textarea,
-.sb-mode,
 .sb-btn {
   border: 1px solid #cbd5e1;
   border-radius: 8px;
@@ -570,8 +491,15 @@ watch(
   color: #0f172a;
   font-size: 12px;
 }
-.sb-input, .sb-mode { height: 32px; padding: 0 8px; }
-.sb-textarea { min-height: 92px; padding: 8px; resize: vertical; }
+.sb-input { height: 32px; padding: 0 8px; }
+.sb-textarea {
+  width: 100%;
+  min-height: 92px;
+  padding: 10px 44px 10px 10px;
+  resize: vertical;
+  box-sizing: border-box;
+  display: block;
+}
 .sb-btn { height: 32px; padding: 0 10px; }
 .sb-btn.secondary { background: #f8fafc; }
 .sb-center { padding: 10px; gap: 8px; }
@@ -593,11 +521,44 @@ watch(
 .msg header { display: flex; justify-content: space-between; gap: 8px; }
 .msg pre { white-space: pre-wrap; margin: 8px 0 0; font-size: 12px; }
 .insert { border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; font-size: 11px; padding: 3px 8px; }
-.sb-input-row { display: grid; grid-template-columns: 180px 1fr; gap: 8px; }
-.sb-input-row .actions { grid-column: 1 / span 2; display: flex; align-items: center; gap: 10px; }
+.sb-input-row { display: flex; flex-direction: column; gap: 6px; }
+.sb-composer { position: relative; width: 100%; }
+.composer-action {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.send-icon-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #fff;
+  color: #334155;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.send-icon-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.sb-loader {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #93c5fd;
+  border-top-color: #2563eb;
+  border-radius: 999px;
+  animation: sb-spin 0.75s linear infinite;
+}
+.sb-input-row .actions { display: flex; align-items: center; gap: 10px; min-height: 18px; }
 .sb-error { color: #b91c1c; font-size: 12px; }
 .hint { color: #64748b; font-size: 12px; }
-.sb-target-actions { display: flex; align-items: center; gap: 8px; }
 .sb-target-path { margin: 8px 0 6px; color: #64748b; font-size: 12px; }
 .target-empty { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; justify-content: center; height: 100%; color: #64748b; font-size: 12px; }
 .sb-right-inner { width: 420px; min-width: 0; height: 100%; display: flex; flex-direction: column; }
@@ -640,9 +601,9 @@ watch(
 :global(.ide-root.dark) .card,
 :global(.ide-root.dark) .msg,
 :global(.ide-root.dark) .insert,
+:global(.ide-root.dark) .send-icon-btn,
 :global(.ide-root.dark) .sb-input,
 :global(.ide-root.dark) .sb-textarea,
-:global(.ide-root.dark) .sb-mode,
 :global(.ide-root.dark) .sb-btn {
   border-color: #3e4451;
   background: #282c34;
@@ -651,7 +612,9 @@ watch(
 :global(.ide-root.dark) .msg.assistant,
 :global(.ide-root.dark) .msg.assistant { background: #2c313c; }
 :global(.ide-root.dark) .msg.user { background: #21252b; }
-:global(.ide-root.dark) .tone,
+:global(.ide-root.dark) .send-icon-btn:disabled {
+  opacity: 0.35;
+}
 :global(.ide-root.dark) .card span,
 :global(.ide-root.dark) .sb-v2-hint,
 :global(.ide-root.dark) .hint,
@@ -659,10 +622,18 @@ watch(
 :global(.ide-root.dark) .sb-target-path { color: #94a3b8; }
 :global(.ide-root.dark) .sb-error { color: #e06c75; }
 :global(.ide-root.dark) .fill { background: linear-gradient(90deg, #61afef, #56b6c2); }
+:global(.ide-root.dark) .sb-loader {
+  border-color: #475569;
+  border-top-color: #61afef;
+}
 :global(.ide-root.dark) .sb-splitter {
   background: linear-gradient(180deg, transparent, #3e4451 30%, #3e4451 70%, transparent);
 }
 :global(.ide-root.dark) .sb-splitter.active {
   background: linear-gradient(180deg, transparent, #61afef 30%, #61afef 70%, transparent);
+}
+@keyframes sb-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 </style>

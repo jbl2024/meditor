@@ -3901,15 +3901,6 @@ function onWindowKeydown(event: KeyboardEvent) {
     persistSidebarMode()
     return
   }
-  if (isEscape && workspace.sidebarMode.value === 'second-brain') {
-    event.preventDefault()
-    event.stopPropagation()
-    const fallback = previousNonCosmosMode.value
-    workspace.setSidebarMode(fallback)
-    persistSidebarMode()
-    return
-  }
-
   if (quickOpenVisible.value) {
     if (event.key === 'ArrowDown') {
       event.preventDefault()
