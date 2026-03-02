@@ -76,6 +76,13 @@ vi.mock('./lib/api', () => ({
   readIndexLogs: vi.fn(async () => []),
   readPropertyTypeSchema: vi.fn(async () => ({})),
   writePropertyTypeSchema: vi.fn(async () => {}),
+  readAppSettings: vi.fn(async () => ({
+    exists: false,
+    path: '/Users/test/.tomosona/conf.json',
+    llm: null,
+    embeddings: { mode: 'internal', external: null }
+  })),
+  writeAppSettings: vi.fn(async () => ({ path: '/Users/test/.tomosona/conf.json', embeddings_changed: false })),
   listenWorkspaceFsChanged: vi.fn(async () => () => {}),
   getWikilinkGraph: hoisted.getWikilinkGraph
 }))

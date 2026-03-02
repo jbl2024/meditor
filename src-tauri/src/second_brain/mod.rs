@@ -4,14 +4,13 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
-use directories::BaseDirs;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 
 use super::{
     active_workspace_root, normalize_workspace_relative_path, now_ms, open_db,
-    reindex_markdown_file_sync, AppError, Result,
+    reindex_markdown_file_sync, settings, AppError, Result,
 };
 
 pub mod config;
@@ -26,8 +25,7 @@ use llm::{run_llm, run_llm_stream};
 use modes::resolve_mode_prompt;
 use session_store::{
     create_session, delete_session, estimate_tokens, insert_message, list_sessions, load_session,
-    set_target_note_path,
-    update_session_title, upsert_context, ContextItem, MessageRow,
+    set_target_note_path, update_session_title, upsert_context, ContextItem, MessageRow,
 };
 
 const SESSION_PREFIX: &str = "sb";
@@ -148,36 +146,14 @@ pub struct ExportSessionMarkdownResult {
     pub path: String,
 }
 
-fn conf_path() -> Result<PathBuf> {
-    let base_dirs = BaseDirs::new().ok_or_else(|| {
-        AppError::InvalidOperation("Could not resolve user home directory.".to_string())
-    })?;
-    Ok(base_dirs.home_dir().join(".tomosona").join("conf.json"))
-}
-
-fn ensure_conf_parent(path: &Path) -> Result<()> {
-    let Some(parent) = path.parent() else {
-        return Err(AppError::InvalidPath);
-    };
-    fs::create_dir_all(parent)?;
-    Ok(())
-}
-
 fn load_config() -> Result<SecondBrainConfig> {
-    let path = conf_path()?;
-    if !path.exists() {
-        return Err(AppError::InvalidOperation(
-            "Second Brain configuration not found (.tomosona/conf.json).".to_string(),
-        ));
-    }
-    let raw = fs::read_to_string(path)?;
-    let parsed: SecondBrainConfig = serde_json::from_str(&raw).map_err(|_| {
-        AppError::InvalidOperation("Second Brain configuration is invalid JSON.".to_string())
-    })?;
-    validate_config(&parsed).map_err(|message| {
-        AppError::InvalidOperation(format!("Second Brain configuration error: {message}"))
-    })?;
-    Ok(parsed)
+    settings::load_llm_for_runtime().map_err(|err| {
+        if matches!(err, AppError::InvalidOperation(_)) {
+            err
+        } else {
+            AppError::InvalidOperation("Second Brain configuration is unavailable.".to_string())
+        }
+    })
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -294,9 +270,7 @@ fn session_exists(conn: &rusqlite::Connection, session_id: &str) -> Result<bool>
 }
 
 fn normalize_title_from_first_message(raw: &str) -> String {
-    let normalized = raw
-        .replace("\r\n", "\n")
-        .replace('\r', "\n");
+    let normalized = raw.replace("\r\n", "\n").replace('\r', "\n");
     let line = normalized
         .lines()
         .map(str::trim)
@@ -353,9 +327,7 @@ pub fn write_second_brain_global_config(
         AppError::InvalidOperation(format!("Second Brain configuration error: {message}"))
     })?;
 
-    let path = conf_path()?;
-    ensure_conf_parent(&path)?;
-    fs::write(&path, format!("{}\n", payload.content_json.trim()))?;
+    let path = settings::write_llm_only(parsed)?;
 
     Ok(WriteGlobalConfigResult {
         path: path.to_string_lossy().to_string(),
@@ -644,9 +616,7 @@ pub fn insert_second_brain_assistant_into_target_note(
             |row| row.get(0),
         )
         .map_err(|_| {
-            AppError::InvalidOperation(
-                "No target note is linked to this session.".to_string(),
-            )
+            AppError::InvalidOperation("No target note is linked to this session.".to_string())
         })?;
 
     if target_relative.trim().is_empty() {
@@ -707,7 +677,11 @@ pub fn export_second_brain_session_markdown(
     for msg in &payload.messages {
         thread.push_str(&format!(
             "\n### {} ({})\n\n{}\n",
-            if msg.role == "assistant" { "Assistant" } else { "User" },
+            if msg.role == "assistant" {
+                "Assistant"
+            } else {
+                "User"
+            },
             msg.mode,
             msg.content_md
         ));

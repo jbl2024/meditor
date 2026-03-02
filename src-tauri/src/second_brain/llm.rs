@@ -1,8 +1,8 @@
+use futures_util::StreamExt;
 use genai::{
     chat::{ChatMessage, ChatOptions, ChatRequest, ChatStreamEvent, MessageContent},
     Client,
 };
-use futures_util::StreamExt;
 
 use super::config::ProviderProfile;
 

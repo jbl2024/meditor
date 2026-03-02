@@ -44,18 +44,21 @@ import {
   requestIndexCancel,
   reindexMarkdownFile,
   readPropertyTypeSchema,
+  readAppSettings,
   revealInFileManager,
   setWorkingFolder,
   selectWorkingFolder,
+  type AppSettingsView,
   type FileMetadata,
   type IndexLogEntry,
   type IndexRuntimeStatus,
+  type SaveAppSettingsPayload,
   type WikilinkGraph,
   type WorkspaceFsChange,
   listenWorkspaceFsChanged,
   updateWikilinksForRename,
+  writeAppSettings,
   writePropertyTypeSchema,
-  writeSecondBrainGlobalConfig,
   writeTextFile
 } from './lib/api'
 import { parseSearchSnippet } from './lib/searchSnippets'
@@ -205,14 +208,24 @@ const newFolderModalError = ref('')
 const openDateModalVisible = ref(false)
 const openDateInput = ref('')
 const openDateModalError = ref('')
-const secondBrainInitModalVisible = ref(false)
-const secondBrainInitProvider = ref<'openai' | 'anthropic' | 'custom'>('openai')
-const secondBrainInitApiKey = ref('')
-const secondBrainInitModel = ref('gpt-4.1')
-const secondBrainInitBaseUrl = ref('')
-const secondBrainInitCustomProvider = ref('openai_compatible')
-const secondBrainInitLabel = ref('OpenAI Remote')
-const secondBrainInitModalError = ref('')
+const settingsModalVisible = ref(false)
+const settingsActiveTab = ref<'llm' | 'embeddings'>('llm')
+const settingsConfigPath = ref('~/.tomosona/conf.json')
+const settingsLlmProviderPreset = ref<'openai' | 'anthropic' | 'custom'>('openai')
+const settingsLlmApiKey = ref('')
+const settingsLlmHasStoredApiKey = ref(false)
+const settingsLlmModel = ref('gpt-4.1')
+const settingsLlmBaseUrl = ref('')
+const settingsLlmCustomProvider = ref('openai')
+const settingsLlmLabel = ref('OpenAI Remote')
+const settingsEmbeddingsMode = ref<'internal' | 'external'>('internal')
+const settingsEmbeddingsProvider = ref<'openai'>('openai')
+const settingsEmbeddingsApiKey = ref('')
+const settingsEmbeddingsHasStoredApiKey = ref(false)
+const settingsEmbeddingsModel = ref('text-embedding-3-small')
+const settingsEmbeddingsBaseUrl = ref('')
+const settingsEmbeddingsLabel = ref('OpenAI Embeddings')
+const settingsModalError = ref('')
 const shortcutsModalVisible = ref(false)
 const indexStatusModalVisible = ref(false)
 const cosmosCommandLoadingVisible = ref(false)
@@ -554,7 +567,7 @@ const paletteActionPriority: Record<string, number> = {
   'open-cosmos-view': 5,
   'open-second-brain-view': 6,
   'open-second-brain-sessions': 7,
-  'second-brain-init': 8,
+  'open-settings': 8,
   'open-note-in-cosmos': 9,
   'reveal-in-explorer': 10,
   'show-shortcuts': 11,
@@ -591,9 +604,9 @@ const paletteActions = computed<PaletteAction[]>(() => [
     closeBeforeRun: true
   },
   {
-    id: 'second-brain-init',
-    label: 'Second Brain: Init',
-    run: () => openSecondBrainInitFromPalette(),
+    id: 'open-settings',
+    label: 'Open Settings',
+    run: () => openSettingsFromPalette(),
     closeBeforeRun: true
   },
   {
@@ -1505,6 +1518,11 @@ function openShortcutsFromOverflow() {
   openShortcutsModal()
 }
 
+function openSettingsFromOverflow() {
+  closeOverflowMenu()
+  void openSettingsModal()
+}
+
 function openShortcutsFromPalette() {
   openShortcutsModal()
   return true
@@ -1957,112 +1975,195 @@ function onSecondBrainContextChanged(paths: string[]) {
   secondBrainContextPaths.value = [...paths]
 }
 
-function applySecondBrainInitPreset(provider: 'openai' | 'anthropic' | 'custom') {
-  secondBrainInitProvider.value = provider
-  secondBrainInitModalError.value = ''
+function applySettingsLlmPreset(provider: 'openai' | 'anthropic' | 'custom') {
+  settingsLlmProviderPreset.value = provider
+  settingsModalError.value = ''
   if (provider === 'openai') {
-    secondBrainInitLabel.value = 'OpenAI Remote'
-    secondBrainInitCustomProvider.value = 'openai'
-    secondBrainInitModel.value = 'gpt-4.1'
-    secondBrainInitBaseUrl.value = ''
+    settingsLlmLabel.value = 'OpenAI Remote'
+    settingsLlmCustomProvider.value = 'openai'
+    settingsLlmModel.value = 'gpt-4.1'
+    settingsLlmBaseUrl.value = ''
     return
   }
   if (provider === 'anthropic') {
-    secondBrainInitLabel.value = 'Anthropic Claude'
-    secondBrainInitCustomProvider.value = 'anthropic'
-    secondBrainInitModel.value = 'claude-3-7-sonnet-latest'
-    secondBrainInitBaseUrl.value = ''
+    settingsLlmLabel.value = 'Anthropic Claude'
+    settingsLlmCustomProvider.value = 'anthropic'
+    settingsLlmModel.value = 'claude-3-7-sonnet-latest'
+    settingsLlmBaseUrl.value = ''
     return
   }
-  secondBrainInitLabel.value = 'Local OpenAI Compatible'
-  secondBrainInitCustomProvider.value = 'openai_compatible'
-  secondBrainInitModel.value = 'gpt-oss-20b'
-  secondBrainInitBaseUrl.value = 'http://localhost:11434/v1'
+  settingsLlmLabel.value = 'Custom LLM'
+  settingsLlmCustomProvider.value = 'openai_compatible'
+  settingsLlmModel.value = ''
+  settingsLlmBaseUrl.value = ''
 }
 
-function closeSecondBrainInitModal() {
-  secondBrainInitModalVisible.value = false
-  secondBrainInitModalError.value = ''
+function applySettingsDefaults() {
+  settingsActiveTab.value = 'llm'
+  settingsConfigPath.value = '~/.tomosona/conf.json'
+  settingsLlmApiKey.value = ''
+  settingsLlmHasStoredApiKey.value = false
+  applySettingsLlmPreset('openai')
+  settingsEmbeddingsMode.value = 'internal'
+  settingsEmbeddingsProvider.value = 'openai'
+  settingsEmbeddingsLabel.value = 'OpenAI Embeddings'
+  settingsEmbeddingsModel.value = 'text-embedding-3-small'
+  settingsEmbeddingsBaseUrl.value = ''
+  settingsEmbeddingsApiKey.value = ''
+  settingsEmbeddingsHasStoredApiKey.value = false
+  settingsModalError.value = ''
+}
+
+function hydrateSettingsFromConfig(view: AppSettingsView) {
+  settingsConfigPath.value = view.path || settingsConfigPath.value
+  if (view.llm && view.llm.profiles.length > 0) {
+    const active = view.llm.profiles.find((item) => item.id === view.llm!.active_profile) ?? view.llm.profiles[0]
+    const provider = active.provider.trim().toLowerCase()
+    settingsLlmProviderPreset.value = provider === 'openai'
+      ? 'openai'
+      : provider === 'anthropic'
+        ? 'anthropic'
+        : 'custom'
+    settingsLlmCustomProvider.value = active.provider
+    settingsLlmLabel.value = active.label
+    settingsLlmModel.value = active.model
+    settingsLlmBaseUrl.value = active.base_url ?? ''
+    settingsLlmHasStoredApiKey.value = active.has_api_key
+    settingsLlmApiKey.value = ''
+  }
+  settingsEmbeddingsMode.value = view.embeddings.mode
+  if (view.embeddings.external) {
+    settingsEmbeddingsProvider.value = 'openai'
+    settingsEmbeddingsLabel.value = view.embeddings.external.label
+    settingsEmbeddingsModel.value = view.embeddings.external.model
+    settingsEmbeddingsBaseUrl.value = view.embeddings.external.base_url ?? ''
+    settingsEmbeddingsHasStoredApiKey.value = view.embeddings.external.has_api_key
+    settingsEmbeddingsApiKey.value = ''
+  } else {
+    settingsEmbeddingsProvider.value = 'openai'
+    settingsEmbeddingsLabel.value = 'OpenAI Embeddings'
+    settingsEmbeddingsModel.value = 'text-embedding-3-small'
+    settingsEmbeddingsBaseUrl.value = ''
+    settingsEmbeddingsHasStoredApiKey.value = false
+    settingsEmbeddingsApiKey.value = ''
+  }
+}
+
+function closeSettingsModal() {
+  settingsModalVisible.value = false
+  settingsModalError.value = ''
   void nextTick(() => {
     restoreFocusAfterModalClose()
   })
 }
 
-async function openSecondBrainInitModal() {
+async function openSettingsModal() {
   modalFocusReturnTarget = document.activeElement instanceof HTMLElement ? document.activeElement : null
-  secondBrainInitApiKey.value = ''
-  applySecondBrainInitPreset('openai')
-  secondBrainInitModalVisible.value = true
+  applySettingsDefaults()
+  try {
+    const view = await readAppSettings()
+    hydrateSettingsFromConfig(view)
+  } catch (err) {
+    settingsModalError.value = err instanceof Error ? err.message : 'Could not read settings.'
+  }
+  settingsModalVisible.value = true
   await nextTick()
-  document.querySelector<HTMLInputElement>('[data-second-brain-init-apikey="true"]')?.focus()
+  document.querySelector<HTMLInputElement>('[data-settings-llm-apikey="true"]')?.focus()
 }
 
-function buildSecondBrainConfJson(): string {
-  const provider = secondBrainInitProvider.value === 'openai'
+function buildSaveSettingsPayload(): SaveAppSettingsPayload {
+  const llmProvider = settingsLlmProviderPreset.value === 'openai'
     ? 'openai'
-    : secondBrainInitProvider.value === 'anthropic'
+    : settingsLlmProviderPreset.value === 'anthropic'
       ? 'anthropic'
-      : secondBrainInitCustomProvider.value.trim()
-
-  const profileId = secondBrainInitProvider.value === 'custom' ? 'custom-profile' : `${provider}-profile`
+      : settingsLlmCustomProvider.value.trim()
+  const llmProfileId = settingsLlmProviderPreset.value === 'custom' ? 'custom-profile' : `${llmProvider}-profile`
   const capabilities = {
     text: true,
-    image_input: secondBrainInitProvider.value !== 'custom',
+    image_input: settingsLlmProviderPreset.value !== 'custom',
     audio_input: false,
     tool_calling: true,
     streaming: true
   }
-
-  const profile: Record<string, unknown> = {
-    id: profileId,
-    label: secondBrainInitLabel.value.trim(),
-    provider,
-    api_key: secondBrainInitApiKey.value.trim(),
-    model: secondBrainInitModel.value.trim(),
+  const llmProfile = {
+    id: llmProfileId,
+    label: settingsLlmLabel.value.trim(),
+    provider: llmProvider,
+    model: settingsLlmModel.value.trim(),
+    preserve_existing_api_key: settingsLlmHasStoredApiKey.value && !settingsLlmApiKey.value.trim(),
     capabilities,
-    default_mode: 'freestyle'
-  }
-  if (secondBrainInitBaseUrl.value.trim()) {
-    profile.base_url = secondBrainInitBaseUrl.value.trim()
+    default_mode: 'freestyle',
+    ...(settingsLlmApiKey.value.trim() ? { api_key: settingsLlmApiKey.value.trim() } : {}),
+    ...(settingsLlmBaseUrl.value.trim() ? { base_url: settingsLlmBaseUrl.value.trim() } : {})
   }
 
-  return JSON.stringify({
-    active_profile: profileId,
-    profiles: [profile]
-  }, null, 2)
+  const payload: SaveAppSettingsPayload = {
+    llm: {
+      active_profile: llmProfileId,
+      profiles: [llmProfile]
+    },
+    embeddings: {
+      mode: settingsEmbeddingsMode.value
+    }
+  }
+  if (settingsEmbeddingsMode.value === 'external') {
+    payload.embeddings.external = {
+      id: 'emb-openai-profile',
+      label: settingsEmbeddingsLabel.value.trim() || 'OpenAI Embeddings',
+      provider: settingsEmbeddingsProvider.value,
+      model: settingsEmbeddingsModel.value.trim(),
+      preserve_existing_api_key: settingsEmbeddingsHasStoredApiKey.value && !settingsEmbeddingsApiKey.value.trim(),
+      ...(settingsEmbeddingsApiKey.value.trim() ? { api_key: settingsEmbeddingsApiKey.value.trim() } : {}),
+      ...(settingsEmbeddingsBaseUrl.value.trim() ? { base_url: settingsEmbeddingsBaseUrl.value.trim() } : {})
+    }
+  }
+  return payload
 }
 
-async function submitSecondBrainInitModal() {
-  if (!secondBrainInitApiKey.value.trim()) {
-    secondBrainInitModalError.value = 'API key is required.'
+async function submitSettingsModal() {
+  if (!settingsLlmModel.value.trim()) {
+    settingsModalError.value = 'LLM model is required.'
     return false
   }
-  if (!secondBrainInitModel.value.trim()) {
-    secondBrainInitModalError.value = 'Model is required.'
+  if (!settingsLlmLabel.value.trim()) {
+    settingsModalError.value = 'LLM profile label is required.'
     return false
   }
-  if (!secondBrainInitLabel.value.trim()) {
-    secondBrainInitModalError.value = 'Profile label is required.'
+  if (settingsLlmProviderPreset.value === 'custom' && !settingsLlmCustomProvider.value.trim()) {
+    settingsModalError.value = 'Custom LLM provider is required.'
     return false
   }
-  if (secondBrainInitProvider.value === 'custom' && !secondBrainInitCustomProvider.value.trim()) {
-    secondBrainInitModalError.value = 'Custom provider is required.'
+  if (!settingsLlmHasStoredApiKey.value && !settingsLlmApiKey.value.trim()) {
+    settingsModalError.value = 'LLM API key is required.'
     return false
   }
+  if (settingsEmbeddingsMode.value === 'external' && !settingsEmbeddingsModel.value.trim()) {
+    settingsModalError.value = 'Embeddings model is required.'
+    return false
+  }
+  if (settingsEmbeddingsMode.value === 'external' && !settingsEmbeddingsHasStoredApiKey.value && !settingsEmbeddingsApiKey.value.trim()) {
+    settingsModalError.value = 'Embeddings API key is required for external mode.'
+    return false
+  }
+  settingsModalError.value = ''
 
   try {
-    const result = await writeSecondBrainGlobalConfig(buildSecondBrainConfJson())
-    filesystem.notifySuccess(`Second Brain config initialized at ${result.path}.`)
-    closeSecondBrainInitModal()
+    const result = await writeAppSettings(buildSaveSettingsPayload())
+    filesystem.notifySuccess(`Settings saved at ${result.path}.`)
+    if (result.embeddings_changed) {
+      markIndexOutOfSync()
+      filesystem.notifyInfo('Embedding settings changed. Rebuild index to resync semantic search.')
+    }
+    closeSettingsModal()
     return true
   } catch (err) {
-    secondBrainInitModalError.value = err instanceof Error ? err.message : 'Could not initialize config.'
+    settingsModalError.value = err instanceof Error ? err.message : 'Could not save settings.'
     return false
   }
 }
 
-async function openSecondBrainInitFromPalette() {
-  await openSecondBrainInitModal()
+async function openSettingsFromPalette() {
+  await openSettingsModal()
   return true
 }
 
@@ -3384,7 +3485,7 @@ async function runQuickOpenAction(id: string) {
         !newFileModalVisible.value &&
         !newFolderModalVisible.value &&
         !openDateModalVisible.value &&
-        !secondBrainInitModalVisible.value &&
+        !settingsModalVisible.value &&
         !shortcutsModalVisible.value &&
         !cosmosCommandLoadingVisible.value
       ) {
@@ -3740,7 +3841,7 @@ function onOpenDateInputKeydown(event: KeyboardEvent) {
   }
 }
 
-function onSecondBrainInitInputKeydown(event: KeyboardEvent) {
+function onSettingsInputKeydown(event: KeyboardEvent) {
   if (event.metaKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
     event.stopPropagation()
     return
@@ -3748,13 +3849,13 @@ function onSecondBrainInitInputKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape') {
     event.preventDefault()
     event.stopPropagation()
-    closeSecondBrainInitModal()
+    closeSettingsModal()
     return
   }
   if (event.key === 'Enter') {
     event.preventDefault()
     event.stopPropagation()
-    void submitSecondBrainInitModal()
+    void submitSettingsModal()
   }
 }
 
@@ -3763,7 +3864,7 @@ function activeModalSelector(): string | null {
   if (cosmosCommandLoadingVisible.value) return '[data-modal="cosmos-command-loading"]'
   if (indexStatusModalVisible.value) return '[data-modal="index-status"]'
   if (shortcutsModalVisible.value) return '[data-modal="shortcuts"]'
-  if (secondBrainInitModalVisible.value) return '[data-modal="second-brain-init"]'
+  if (settingsModalVisible.value) return '[data-modal="settings"]'
   if (openDateModalVisible.value) return '[data-modal="open-date"]'
   if (newFolderModalVisible.value) return '[data-modal="new-folder"]'
   if (newFileModalVisible.value) return '[data-modal="new-file"]'
@@ -3779,7 +3880,7 @@ function hasBlockingModalOpen(): boolean {
     newFileModalVisible.value ||
     newFolderModalVisible.value ||
     openDateModalVisible.value ||
-    secondBrainInitModalVisible.value ||
+    settingsModalVisible.value ||
     shortcutsModalVisible.value ||
     wikilinkRewritePrompt.value
   )
@@ -3922,10 +4023,10 @@ function onWindowKeydown(event: KeyboardEvent) {
     closeOpenDateModal()
     return
   }
-  if (isEscape && secondBrainInitModalVisible.value) {
+  if (isEscape && settingsModalVisible.value) {
     event.preventDefault()
     event.stopPropagation()
-    closeSecondBrainInitModal()
+    closeSettingsModal()
     return
   }
   if (isEscape && shortcutsModalVisible.value) {
@@ -4649,6 +4750,17 @@ onBeforeUnmount(() => {
                 <button
                   type="button"
                   class="overflow-item"
+                  @click="openSettingsFromOverflow"
+                >
+                  <svg class="overflow-item-icon" viewBox="0 0 16 16" aria-hidden="true">
+                    <circle cx="8" cy="8" r="2.2" />
+                    <path d="M8 1.6v2M8 12.4v2M1.6 8h2M12.4 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M12.9 3.1l-1.4 1.4M4.5 11.5l-1.4 1.4" />
+                  </svg>
+                  Open Settings
+                </button>
+                <button
+                  type="button"
+                  class="overflow-item"
                   :disabled="!filesystem.hasWorkspace.value || filesystem.indexingState.value === 'indexing'"
                   @click="void rebuildIndexFromOverflow()"
                 >
@@ -5124,85 +5236,113 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div v-if="secondBrainInitModalVisible" class="modal-overlay" @click.self="closeSecondBrainInitModal">
+    <div v-if="settingsModalVisible" class="modal-overlay" @click.self="closeSettingsModal">
       <div
-        class="modal confirm-modal second-brain-init-modal"
-        data-modal="second-brain-init"
+        class="modal settings-modal"
+        data-modal="settings"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="second-brain-init-title"
-        aria-describedby="second-brain-init-description"
+        aria-labelledby="settings-title"
         tabindex="-1"
       >
-        <h3 id="second-brain-init-title" class="confirm-title">Second Brain: Init</h3>
-        <p id="second-brain-init-description" class="confirm-text">
-          Create <code>~/.tomosona/conf.json</code> for a provider profile.
-        </p>
+        <h3 id="settings-title" class="confirm-title">Settings</h3>
+        <p class="confirm-text">Config path: <code>{{ settingsConfigPath }}</code></p>
+        <div class="settings-tabs" role="tablist" aria-label="Settings tabs">
+          <button type="button" class="settings-tab-btn" :class="{ active: settingsActiveTab === 'llm' }" @click="settingsActiveTab = 'llm'">LLM</button>
+          <button type="button" class="settings-tab-btn" :class="{ active: settingsActiveTab === 'embeddings' }" @click="settingsActiveTab = 'embeddings'">Embeddings</button>
+        </div>
 
-        <label class="modal-field-label" for="second-brain-provider">Provider preset</label>
-        <select
-          id="second-brain-provider"
-          class="tool-input"
-          :value="secondBrainInitProvider"
-          @change="applySecondBrainInitPreset(($event.target as HTMLSelectElement).value as 'openai' | 'anthropic' | 'custom')"
-        >
-          <option value="openai">OpenAI</option>
-          <option value="anthropic">Anthropic Claude</option>
-          <option value="custom">Custom</option>
-        </select>
+        <div v-if="settingsActiveTab === 'llm'" class="settings-tab-panel">
+          <label class="modal-field-label" for="settings-llm-provider">Provider preset</label>
+          <select
+            id="settings-llm-provider"
+            class="tool-input"
+            :value="settingsLlmProviderPreset"
+            @change="applySettingsLlmPreset(($event.target as HTMLSelectElement).value as 'openai' | 'anthropic' | 'custom')"
+          >
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Anthropic</option>
+            <option value="custom">Custom</option>
+          </select>
 
-        <label class="modal-field-label" for="second-brain-label">Profile label</label>
-        <input
-          id="second-brain-label"
-          v-model="secondBrainInitLabel"
-          class="tool-input"
-          placeholder="Profile label"
-          @keydown="onSecondBrainInitInputKeydown"
-        />
+          <label class="modal-field-label" for="settings-llm-label">Profile label</label>
+          <input id="settings-llm-label" v-model="settingsLlmLabel" class="tool-input" placeholder="Profile label" @keydown="onSettingsInputKeydown" />
 
-        <label v-if="secondBrainInitProvider === 'custom'" class="modal-field-label" for="second-brain-custom-provider">Custom provider</label>
-        <input
-          v-if="secondBrainInitProvider === 'custom'"
-          id="second-brain-custom-provider"
-          v-model="secondBrainInitCustomProvider"
-          class="tool-input"
-          placeholder="openai_compatible"
-          @keydown="onSecondBrainInitInputKeydown"
-        />
+          <label v-if="settingsLlmProviderPreset === 'custom'" class="modal-field-label" for="settings-llm-custom-provider">Custom provider</label>
+          <input
+            v-if="settingsLlmProviderPreset === 'custom'"
+            id="settings-llm-custom-provider"
+            v-model="settingsLlmCustomProvider"
+            class="tool-input"
+            placeholder="openai_compatible"
+            @keydown="onSettingsInputKeydown"
+          />
 
-        <label class="modal-field-label" for="second-brain-model">Model</label>
-        <input
-          id="second-brain-model"
-          v-model="secondBrainInitModel"
-          class="tool-input"
-          placeholder="Model name"
-          @keydown="onSecondBrainInitInputKeydown"
-        />
+          <label class="modal-field-label" for="settings-llm-model">Model</label>
+          <input id="settings-llm-model" v-model="settingsLlmModel" class="tool-input" placeholder="Model name" @keydown="onSettingsInputKeydown" />
 
-        <label class="modal-field-label" for="second-brain-base-url">Base URL (optional)</label>
-        <input
-          id="second-brain-base-url"
-          v-model="secondBrainInitBaseUrl"
-          class="tool-input"
-          placeholder="https://... or http://localhost:11434/v1"
-          @keydown="onSecondBrainInitInputKeydown"
-        />
+          <label class="modal-field-label" for="settings-llm-base-url">Base URL (optional)</label>
+          <input
+            id="settings-llm-base-url"
+            v-model="settingsLlmBaseUrl"
+            class="tool-input"
+            placeholder="https://... or http://localhost:11434/v1"
+            @keydown="onSettingsInputKeydown"
+          />
 
-        <label class="modal-field-label" for="second-brain-apikey">API key</label>
-        <input
-          id="second-brain-apikey"
-          v-model="secondBrainInitApiKey"
-          data-second-brain-init-apikey="true"
-          class="tool-input"
-          type="password"
-          placeholder="api key"
-          @keydown="onSecondBrainInitInputKeydown"
-        />
+          <label class="modal-field-label" for="settings-llm-apikey">API key</label>
+          <input
+            id="settings-llm-apikey"
+            v-model="settingsLlmApiKey"
+            data-settings-llm-apikey="true"
+            class="tool-input"
+            type="password"
+            :placeholder="settingsLlmHasStoredApiKey ? 'stored key (leave empty to keep)' : 'api key'"
+            @keydown="onSettingsInputKeydown"
+          />
+        </div>
 
-        <p v-if="secondBrainInitModalError" class="modal-input-error">{{ secondBrainInitModalError }}</p>
+        <div v-else class="settings-tab-panel">
+          <label class="modal-field-label settings-checkbox-row">
+            <input v-model="settingsEmbeddingsMode" type="radio" value="internal" />
+            <span>Internal model (fastembed)</span>
+          </label>
+          <label class="modal-field-label settings-checkbox-row">
+            <input v-model="settingsEmbeddingsMode" type="radio" value="external" />
+            <span>External model (API)</span>
+          </label>
+
+          <template v-if="settingsEmbeddingsMode === 'external'">
+            <label class="modal-field-label" for="settings-emb-provider">Provider</label>
+            <select id="settings-emb-provider" v-model="settingsEmbeddingsProvider" class="tool-input">
+              <option value="openai">OpenAI</option>
+            </select>
+
+            <label class="modal-field-label" for="settings-emb-label">Profile label</label>
+            <input id="settings-emb-label" v-model="settingsEmbeddingsLabel" class="tool-input" placeholder="OpenAI Embeddings" @keydown="onSettingsInputKeydown" />
+
+            <label class="modal-field-label" for="settings-emb-model">Model</label>
+            <input id="settings-emb-model" v-model="settingsEmbeddingsModel" class="tool-input" placeholder="text-embedding-3-small" @keydown="onSettingsInputKeydown" />
+
+            <label class="modal-field-label" for="settings-emb-base-url">Base URL (optional)</label>
+            <input id="settings-emb-base-url" v-model="settingsEmbeddingsBaseUrl" class="tool-input" placeholder="https://..." @keydown="onSettingsInputKeydown" />
+
+            <label class="modal-field-label" for="settings-emb-apikey">API key</label>
+            <input
+              id="settings-emb-apikey"
+              v-model="settingsEmbeddingsApiKey"
+              class="tool-input"
+              type="password"
+              :placeholder="settingsEmbeddingsHasStoredApiKey ? 'stored key (leave empty to keep)' : 'api key'"
+              @keydown="onSettingsInputKeydown"
+            />
+          </template>
+        </div>
+
+        <p v-if="settingsModalError" class="modal-input-error">{{ settingsModalError }}</p>
         <div class="confirm-actions">
-          <UiButton size="sm" variant="ghost" @click="closeSecondBrainInitModal">Cancel</UiButton>
-          <UiButton size="sm" @click="submitSecondBrainInitModal">Generate conf.json</UiButton>
+          <UiButton size="sm" variant="ghost" @click="closeSettingsModal">Close</UiButton>
+          <UiButton size="sm" @click="submitSettingsModal">Save</UiButton>
         </div>
       </div>
     </div>
@@ -6854,8 +6994,58 @@ onBeforeUnmount(() => {
   width: min(460px, calc(100vw - 32px));
 }
 
-.second-brain-init-modal {
-  width: min(640px, calc(100vw - 32px));
+.settings-modal {
+  width: min(960px, calc(100vw - 32px));
+}
+
+.settings-tabs {
+  display: inline-flex;
+  gap: 6px;
+  margin: 2px 0 10px;
+}
+
+.settings-tab-btn {
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  border-radius: 8px;
+  font-size: 12px;
+  padding: 6px 10px;
+  color: #334155;
+}
+
+.settings-tab-btn.active {
+  border-color: #60a5fa;
+  background: #dbeafe;
+  color: #1e3a8a;
+}
+
+.settings-tab-panel {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.settings-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ide-root.dark .settings-tab-btn {
+  border-color: #3e4451;
+  background: #21252b;
+  color: #cbd5e1;
+}
+
+.ide-root.dark .settings-tab-btn.active {
+  border-color: #61afef;
+  background: #1e3a5f;
+  color: #dbeafe;
+}
+
+.ide-root.dark .settings-tab-panel {
+  border-color: #3e4451;
+  background: rgba(30, 41, 59, 0.35);
 }
 
 .cosmos-command-loading-track {

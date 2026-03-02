@@ -4,6 +4,7 @@
 mod fs_ops;
 mod second_brain;
 mod semantic;
+mod settings;
 mod workspace_watch;
 
 // Tauri command surface for workspace I/O, index/search, and graph data used by Cosmos view.
@@ -2629,6 +2630,8 @@ pub fn run() {
             get_wikilink_graph,
             read_property_type_schema,
             write_property_type_schema,
+            settings::read_app_settings,
+            settings::write_app_settings,
             second_brain::read_second_brain_config_status,
             second_brain::write_second_brain_global_config,
             second_brain::list_second_brain_sessions,

@@ -14,11 +14,15 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use directories::BaseDirs;
 use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
+use genai::Client;
 use rusqlite::{ffi::sqlite3_auto_extension, params, Connection};
 use serde::Serialize;
 use sqlite_vec::sqlite3_vec_init;
 
+use crate::settings;
+
 const EMBEDDING_MODEL_NAME: &str = "lightonai/modernbert-embed-large";
+const EXTERNAL_PROVIDER_OPENAI: &str = "openai";
 #[derive(Default)]
 struct SemanticState {
     model: Option<TextEmbedding>,
@@ -87,9 +91,26 @@ fn model_cache_dir() -> std::path::PathBuf {
     std::env::temp_dir().join("tomosona-models")
 }
 
+fn configured_embedding_model_name() -> String {
+    let settings = settings::load_embeddings_for_runtime();
+    if let Ok(embeddings) = settings {
+        if embeddings.mode.trim().eq_ignore_ascii_case("external") {
+            if let Some(profile) = embeddings.external {
+                let provider = profile.provider.trim().to_lowercase();
+                let model = profile.model.trim().to_string();
+                if model.contains("::") {
+                    return model;
+                }
+                return format!("{provider}::{model}");
+            }
+        }
+    }
+    EMBEDDING_MODEL_NAME.to_string()
+}
+
 /// Returns the configured embedding model label persisted in the index.
-pub fn embedding_model_name() -> &'static str {
-    EMBEDDING_MODEL_NAME
+pub fn embedding_model_name() -> String {
+    configured_embedding_model_name()
 }
 
 /// Registers sqlite-vec as an SQLite auto-extension for future connections.
@@ -103,10 +124,7 @@ pub fn register_sqlite_vec_auto_extension() -> bool {
     })
 }
 
-/// Embeds a text batch with local fastembed runtime.
-///
-/// Returns `Err` if model init or inference fails.
-pub fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>, String> {
+fn embed_texts_internal(texts: &[String]) -> Result<Vec<Vec<f32>>, String> {
     if texts.is_empty() {
         return Ok(Vec::new());
     }
@@ -189,6 +207,70 @@ pub fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>, String> {
         .map_err(|_| "Semantic embedding inference failed.".to_string())
 }
 
+fn configure_external_embedding_environment(profile: &settings::EmbeddingProviderProfile) {
+    let provider = profile.provider.trim().to_lowercase();
+    if provider == EXTERNAL_PROVIDER_OPENAI {
+        std::env::set_var("OPENAI_API_KEY", profile.api_key.trim());
+        if let Some(base_url) = &profile.base_url {
+            let trimmed = base_url.trim();
+            if !trimmed.is_empty() {
+                std::env::set_var("OPENAI_BASE_URL", trimmed);
+            } else {
+                std::env::remove_var("OPENAI_BASE_URL");
+            }
+        } else {
+            std::env::remove_var("OPENAI_BASE_URL");
+        }
+    }
+}
+
+fn external_model_name(profile: &settings::EmbeddingProviderProfile) -> String {
+    let model = profile.model.trim();
+    if model.contains("::") {
+        return model.to_string();
+    }
+    format!("{}::{model}", profile.provider.trim().to_lowercase())
+}
+
+fn embed_texts_external(
+    texts: &[String],
+    profile: &settings::EmbeddingProviderProfile,
+) -> Result<Vec<Vec<f32>>, String> {
+    configure_external_embedding_environment(profile);
+    let model = external_model_name(profile);
+    let payload = texts.to_vec();
+    let response = tauri::async_runtime::block_on(async {
+        let client = Client::default();
+        client.embed_batch(&model, payload, None).await
+    })
+    .map_err(|_| "Semantic embedding inference failed.".to_string())?;
+
+    let mut vectors = Vec::with_capacity(response.embeddings.len());
+    for embedding in &response.embeddings {
+        vectors.push(embedding.vector().to_vec());
+    }
+    Ok(vectors)
+}
+
+/// Embeds a text batch according to configured settings.
+///
+/// - `internal` mode uses local fastembed runtime.
+/// - `external` mode uses provider APIs via `genai`.
+pub fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>, String> {
+    if texts.is_empty() {
+        return Ok(Vec::new());
+    }
+    let embeddings = settings::load_embeddings_for_runtime()
+        .map_err(|_| "Semantic embedding settings are invalid.".to_string())?;
+    if embeddings.mode.trim().eq_ignore_ascii_case("external") {
+        let profile = embeddings
+            .external
+            .ok_or_else(|| "Semantic embedding settings are invalid.".to_string())?;
+        return embed_texts_external(texts, &profile);
+    }
+    embed_texts_internal(texts)
+}
+
 pub fn runtime_status() -> SemanticRuntimeStatus {
     let guard = semantic_state().try_lock();
     if let Ok(state) = guard {
@@ -200,7 +282,7 @@ pub fn runtime_status() -> SemanticRuntimeStatus {
             state.model_state.clone()
         };
         return SemanticRuntimeStatus {
-            model_name: EMBEDDING_MODEL_NAME.to_string(),
+            model_name: configured_embedding_model_name(),
             model_state,
             model_init_attempts: state.model_init_attempts,
             model_last_started_at_ms: state.model_last_started_at_ms,
@@ -211,7 +293,7 @@ pub fn runtime_status() -> SemanticRuntimeStatus {
     }
 
     SemanticRuntimeStatus {
-        model_name: EMBEDDING_MODEL_NAME.to_string(),
+        model_name: configured_embedding_model_name(),
         model_state: "busy".to_string(),
         model_init_attempts: 0,
         model_last_started_at_ms: None,

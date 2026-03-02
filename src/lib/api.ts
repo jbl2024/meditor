@@ -62,6 +62,89 @@ export type SecondBrainConfigStatus = {
   error: string | null
 }
 
+export type AppSettingsLlmProfile = {
+  id: string
+  label: string
+  provider: string
+  model: string
+  has_api_key: boolean
+  base_url: string | null
+  default_mode: string | null
+  capabilities: {
+    text: boolean
+    image_input: boolean
+    audio_input: boolean
+    tool_calling: boolean
+    streaming: boolean
+  }
+}
+
+export type AppSettingsLlm = {
+  active_profile: string
+  profiles: AppSettingsLlmProfile[]
+}
+
+export type AppSettingsEmbeddingProfile = {
+  id: string
+  label: string
+  provider: string
+  model: string
+  has_api_key: boolean
+  base_url: string | null
+}
+
+export type AppSettingsEmbeddings = {
+  mode: 'internal' | 'external'
+  external: AppSettingsEmbeddingProfile | null
+}
+
+export type AppSettingsView = {
+  exists: boolean
+  path: string
+  llm: AppSettingsLlm | null
+  embeddings: AppSettingsEmbeddings
+}
+
+export type SaveAppSettingsPayload = {
+  llm: {
+    active_profile: string
+    profiles: Array<{
+      id: string
+      label: string
+      provider: string
+      model: string
+      api_key?: string
+      preserve_existing_api_key: boolean
+      base_url?: string | null
+      default_mode?: string | null
+      capabilities: {
+        text: boolean
+        image_input: boolean
+        audio_input: boolean
+        tool_calling: boolean
+        streaming: boolean
+      }
+    }>
+  }
+  embeddings: {
+    mode: 'internal' | 'external'
+    external?: {
+      id: string
+      label: string
+      provider: string
+      model: string
+      api_key?: string
+      preserve_existing_api_key: boolean
+      base_url?: string | null
+    } | null
+  }
+}
+
+export type WriteAppSettingsResult = {
+  path: string
+  embeddings_changed: boolean
+}
+
 export type SecondBrainAttachmentMeta = {
   id: string
   kind: string
@@ -290,6 +373,16 @@ export async function readPropertyTypeSchema(): Promise<Record<string, string>> 
 
 export async function writePropertyTypeSchema(schema: Record<string, string>): Promise<void> {
   await invoke('write_property_type_schema', { schema })
+}
+
+/** Reads redacted app settings from `~/.tomosona/conf.json`. */
+export async function readAppSettings(): Promise<AppSettingsView> {
+  return await invoke('read_app_settings')
+}
+
+/** Writes app settings and reports whether embedding identity changed. */
+export async function writeAppSettings(payload: SaveAppSettingsPayload): Promise<WriteAppSettingsResult> {
+  return await invoke('write_app_settings', { payload })
 }
 
 export async function listenWorkspaceFsChanged(

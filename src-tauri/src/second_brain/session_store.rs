@@ -163,7 +163,11 @@ pub fn update_session_title(conn: &Connection, session_id: &str, title: &str) ->
     Ok(())
 }
 
-pub fn set_target_note_path(conn: &Connection, session_id: &str, target_note_path: &str) -> Result<()> {
+pub fn set_target_note_path(
+    conn: &Connection,
+    session_id: &str,
+    target_note_path: &str,
+) -> Result<()> {
     conn.execute(
         "INSERT INTO second_brain_session_targets(session_id, target_note_path, updated_at_ms)
          VALUES (?1, ?2, ?3)
