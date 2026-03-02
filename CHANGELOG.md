@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.9.4] - 2026-03-02
+
+### Fixed
+- fix(semantic): initialize sqlite-vec before DB opens and surface vec upsert SQL errors (c29f1fa)
+
 ## [0.9.3] - 2026-03-02
 
 ### Changed
