@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.9.3] - 2026-03-02
+
+### Changed
+- test(settings): fix strict typing for mocked writeAppSettings call payload (c4b47ea)
+
 ## [0.9.2] - 2026-03-02
 
 ### Added
