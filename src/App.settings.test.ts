@@ -194,7 +194,12 @@ describe('App settings modal', () => {
     saveBtn?.click()
     await flushUi()
     expect(hoisted.writeAppSettings).toHaveBeenCalledTimes(1)
-    const payload = hoisted.writeAppSettings.mock.calls[0][0]
+    const firstCall = hoisted.writeAppSettings.mock.calls[0]
+    expect(firstCall).toBeDefined()
+    if (!firstCall) throw new Error('Expected writeAppSettings to be called')
+    const rawPayload = (firstCall as unknown[])[0]
+    if (!rawPayload || typeof rawPayload !== 'object') throw new Error('Expected payload object')
+    const payload = rawPayload as { embeddings: { mode: string } }
     expect(payload.embeddings.mode).toBe('external')
     expect((mounted.root.textContent ?? '').toLowerCase()).toContain('out of sync')
     mounted.app.unmount()
