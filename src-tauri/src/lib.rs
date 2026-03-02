@@ -1,6 +1,7 @@
 //! Tauri command surface for local filesystem, lexical search, semantic search,
 //! and Cosmos graph payload generation.
 
+mod db;
 mod fs_ops;
 mod second_brain;
 mod semantic;
@@ -191,7 +192,9 @@ pub(crate) fn active_workspace_root() -> Result<PathBuf> {
 }
 
 fn open_db() -> Result<Connection> {
-    let _ = semantic::register_sqlite_vec_auto_extension();
+    if !db::init_sqlite_runtime() {
+        return Err(AppError::OperationFailed);
+    }
     let root = active_workspace_root()?;
     let db_dir = root.join(INTERNAL_DIR_NAME);
     fs::create_dir_all(&db_dir)?;
@@ -1173,10 +1176,12 @@ fn reindex_markdown_file_sync_inner(path: String, refresh_semantic_cache: bool) 
                     ],
                 )?;
                 if semantic::try_ensure_vec_table(&tx, note_vector.len()) {
-                    if !semantic::try_upsert_note_vector(&tx, &path_for_db, &note_vector) {
+                    if let Err(err) =
+                        semantic::try_upsert_note_vector(&tx, &path_for_db, &note_vector)
+                    {
                         log_index(&format!(
-                            "reindex:vec_upsert_failed path={path_for_db} dim={}",
-                            note_vector.len()
+                            "reindex:vec_upsert_failed path={path_for_db} dim={} err={err}",
+                            note_vector.len(),
                         ));
                     }
                 } else {
@@ -2596,6 +2601,9 @@ fn update_wikilinks_for_rename(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    if !db::init_sqlite_runtime() {
+        eprintln!("[index] sqlite_runtime:init_failed");
+    }
     semantic::set_index_logger(log_index);
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![

@@ -426,30 +426,36 @@ fn parse_vec_embedding_dim(create_sql: &str) -> Option<usize> {
 }
 
 /// Upserts one note-level vector into vec table.
-pub fn try_upsert_note_vector(conn: &Connection, path: &str, vector: &[f32]) -> bool {
+pub fn try_upsert_note_vector(conn: &Connection, path: &str, vector: &[f32]) -> Result<(), String> {
     let payload = vector_to_json(vector);
-    if conn
-        .execute(
-            "INSERT OR REPLACE INTO note_embeddings_vec(path, embedding) VALUES (?1, ?2)",
-            params![path, payload],
-        )
-        .is_ok()
-    {
-        return true;
-    }
+    match conn.execute(
+        "INSERT OR REPLACE INTO note_embeddings_vec(path, embedding) VALUES (?1, ?2)",
+        params![path, payload],
+    ) {
+        Ok(_) => return Ok(()),
+        Err(replace_err) => {
+            conn.execute(
+                "DELETE FROM note_embeddings_vec WHERE path = ?1",
+                params![path],
+            )
+            .map_err(|delete_err| {
+                format!(
+                    "replace_err={replace_err}; fallback_delete_err={delete_err}"
+                )
+            })?;
 
-    // Fallback for vec-table builds that do not support REPLACE semantics.
-    conn.execute(
-        "DELETE FROM note_embeddings_vec WHERE path = ?1",
-        params![path],
-    )
-    .is_ok()
-        && conn
-            .execute(
+            conn.execute(
                 "INSERT INTO note_embeddings_vec(path, embedding) VALUES (?1, ?2)",
                 params![path, payload],
             )
-            .is_ok()
+            .map(|_| ())
+            .map_err(|insert_err| {
+                format!(
+                    "replace_err={replace_err}; fallback_insert_err={insert_err}"
+                )
+            })
+        }
+    }
 }
 
 /// Deletes one note-level vector from vec table.
