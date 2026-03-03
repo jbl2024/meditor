@@ -4422,7 +4422,6 @@ onBeforeUnmount(() => {
               <button
                 type="button"
                 class="toolbar-icon-btn"
-                :class="{ active: multiPane.findPaneContainingSurface('cosmos') !== null }"
                 :disabled="!filesystem.hasWorkspace.value"
                 title="Cosmos view"
                 aria-label="Cosmos view"
@@ -4433,7 +4432,6 @@ onBeforeUnmount(() => {
               <button
                 type="button"
                 class="toolbar-icon-btn"
-                :class="{ active: multiPane.findPaneContainingSurface('second-brain-chat') !== null || multiPane.findPaneContainingSurface('second-brain-sessions') !== null }"
                 :disabled="!filesystem.hasWorkspace.value"
                 title="Second Brain"
                 aria-label="Second Brain"
