@@ -78,6 +78,9 @@ const DOUBLE_CLICK_MS = 260
 const AUTO_SHOW_LABEL_THRESHOLD = 24
 const CLICK_AFTER_DRAG_GUARD_MS = 320
 const MIN_LABEL_SCALE = 0.95
+const RESET_VIEW_PADDING_PX = 56
+const RESET_MIN_ZOOM = 0.45
+const RESET_OUTLIER_TRIM_RATIO = 0.08
 
 const props = defineProps<{
   graph: CosmosGraph
@@ -685,8 +688,36 @@ function teardownGraph() {
   graphInstance.value = null
 }
 
+function resetCandidateNodeIds(nodes: RenderNode[]): Set<string> {
+  const ready = nodes.filter((node) => hasReadyCoordinates(node))
+  if (ready.length <= 10) return new Set(ready.map((node) => node.id))
+
+  const centerX = ready.reduce((sum, node) => sum + (node.x ?? 0), 0) / ready.length
+  const centerY = ready.reduce((sum, node) => sum + (node.y ?? 0), 0) / ready.length
+  const scored = ready.map((node) => ({
+    id: node.id,
+    d2: Math.pow((node.x ?? 0) - centerX, 2) + Math.pow((node.y ?? 0) - centerY, 2)
+  }))
+  scored.sort((a, b) => a.d2 - b.d2)
+  const trimCount = Math.max(1, Math.floor(scored.length * RESET_OUTLIER_TRIM_RATIO))
+  const keepCount = Math.max(8, scored.length - trimCount)
+  return new Set(scored.slice(0, keepCount).map((item) => item.id))
+}
+
 function resetView() {
-  graphInstance.value?.zoomToFit(520, 110)
+  const graph = graphInstance.value
+  if (!graph) return
+  const renderData = graph.graphData()
+  const candidateIds = resetCandidateNodeIds(renderData.nodes ?? [])
+  const filter = candidateIds.size > 0
+    ? (node: RenderNode) => candidateIds.has(node.id)
+    : undefined
+
+  graph.zoomToFit(520, RESET_VIEW_PADDING_PX, filter)
+  const currentZoom = graph.zoom()
+  if (typeof currentZoom === 'number' && currentZoom < RESET_MIN_ZOOM) {
+    graph.zoom(RESET_MIN_ZOOM, 260)
+  }
 }
 
 function focusNodeById(nodeId: string): boolean {

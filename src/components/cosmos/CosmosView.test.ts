@@ -19,6 +19,8 @@ type MockState = {
   linkDashCalls: Array<(edge: unknown) => number[] | null>
   centerAtCalls: Array<{ x?: number; y?: number; ms?: number }>
   zoomCalls: Array<{ value: number; ms?: number }>
+  zoomToFitCalls: Array<{ ms?: number; px?: number; hasFilter: boolean }>
+  zoomValue: number
   data: { nodes: RenderNode[]; links: Array<{ source: string; target: string; type: 'wikilink' | 'semantic'; score?: number | null }> }
 }
 
@@ -28,6 +30,8 @@ const mockState: MockState = {
   linkDashCalls: [],
   centerAtCalls: [],
   zoomCalls: [],
+  zoomToFitCalls: [],
+  zoomValue: 1,
   data: { nodes: [], links: [] }
 }
 
@@ -88,12 +92,16 @@ const mockGraph = {
   },
   zoom(value?: number, ms?: number) {
     if (typeof value === 'number') {
+      mockState.zoomValue = value
       mockState.zoomCalls.push({ value, ms })
       return mockGraph
     }
-    return 1
+    return mockState.zoomValue
   },
-  zoomToFit: () => mockGraph,
+  zoomToFit(ms?: number, px?: number, filter?: (node: RenderNode) => boolean) {
+    mockState.zoomToFitCalls.push({ ms, px, hasFilter: typeof filter === 'function' })
+    return mockGraph
+  },
   refresh: () => mockGraph,
   _destructor: () => {}
 }
@@ -118,6 +126,8 @@ describe('CosmosView', () => {
     mockState.linkDashCalls = []
     mockState.centerAtCalls = []
     mockState.zoomCalls = []
+    mockState.zoomToFitCalls = []
+    mockState.zoomValue = 1
     mockState.data = { nodes: [], links: [] }
   })
 
@@ -244,6 +254,62 @@ describe('CosmosView', () => {
     await flushUi()
 
     expect(focusModeToggle.value).toBe(true)
+
+    app.unmount()
+  })
+
+  it('clamps reset view zoom when zoomToFit returns too small', async () => {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+    const cosmosRef = ref<{ resetView: () => void } | null>(null)
+
+    const graph: CosmosGraph = {
+      nodes: [
+        {
+          id: 'a.md',
+          path: '/vault/a.md',
+          label: 'a',
+          displayLabel: 'a',
+          folderKey: 'vault',
+          fullLabel: 'a',
+          degree: 2,
+          tags: [],
+          cluster: 0,
+          importance: 1,
+          opacityHint: 1,
+          showLabelByDefault: true
+        }
+      ],
+      edges: [],
+      generated_at_ms: 1
+    }
+
+    const Harness = defineComponent({
+      setup() {
+        return () =>
+          h(CosmosView, {
+            ref: cosmosRef,
+            graph,
+            loading: false,
+            error: '',
+            selectedNodeId: '',
+            focusMode: false,
+            focusDepth: 1
+          })
+      }
+    })
+
+    const app = createApp(Harness)
+    app.mount(root)
+    await flushUi()
+    await new Promise<void>((resolve) => setTimeout(resolve, 20))
+
+    mockState.zoomValue = 0.15
+    cosmosRef.value?.resetView()
+    await flushUi()
+
+    expect(mockState.zoomToFitCalls.length).toBeGreaterThan(0)
+    expect(mockState.zoomCalls.some((call) => call.value === 0.45)).toBe(true)
 
     app.unmount()
   })
