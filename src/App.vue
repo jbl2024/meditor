@@ -5,12 +5,12 @@ import {
   ArrowRightIcon,
   ComputerDesktopIcon,
   CommandLineIcon,
-  CpuChipIcon,
   EllipsisHorizontalIcon,
   FolderIcon,
   HomeIcon,
   MagnifyingGlassIcon,
   MoonIcon,
+  SparklesIcon,
   ShareIcon,
   SunIcon
 } from '@heroicons/vue/24/outline'
@@ -4291,26 +4291,6 @@ onBeforeUnmount(() => {
         >
           <MagnifyingGlassIcon class="activity-btn-icon" />
         </button>
-        <button
-          class="activity-btn"
-          :class="{ active: multiPane.findPaneContainingSurface('cosmos') !== null }"
-          type="button"
-          title="Cosmos view"
-          aria-label="Cosmos view"
-          @click="void openCosmosViewFromPalette()"
-        >
-          <ShareIcon class="activity-btn-icon" />
-        </button>
-        <button
-          class="activity-btn"
-          :class="{ active: multiPane.findPaneContainingSurface('second-brain-chat') !== null || multiPane.findPaneContainingSurface('second-brain-sessions') !== null }"
-          type="button"
-          title="Second Brain"
-          aria-label="Second Brain"
-          @click="void openSecondBrainViewFromPalette()"
-        >
-          <CpuChipIcon class="activity-btn-icon" />
-        </button>
       </aside>
 
       <aside
@@ -4438,6 +4418,28 @@ onBeforeUnmount(() => {
                 @click="void openTodayNote()"
               >
                 <HomeIcon />
+              </button>
+              <button
+                type="button"
+                class="toolbar-icon-btn"
+                :class="{ active: multiPane.findPaneContainingSurface('cosmos') !== null }"
+                :disabled="!filesystem.hasWorkspace.value"
+                title="Cosmos view"
+                aria-label="Cosmos view"
+                @click="void openCosmosViewFromPalette()"
+              >
+                <ShareIcon />
+              </button>
+              <button
+                type="button"
+                class="toolbar-icon-btn"
+                :class="{ active: multiPane.findPaneContainingSurface('second-brain-chat') !== null || multiPane.findPaneContainingSurface('second-brain-sessions') !== null }"
+                :disabled="!filesystem.hasWorkspace.value"
+                title="Second Brain"
+                aria-label="Second Brain"
+                @click="void openSecondBrainViewFromPalette()"
+              >
+                <SparklesIcon />
               </button>
               <div ref="forwardHistoryMenuRef" class="history-nav-wrap">
                 <button
@@ -5227,7 +5229,7 @@ onBeforeUnmount(() => {
   height: 42px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   border-bottom: 1px solid #e5e7eb;
   background: #f2f4f8;
 }
@@ -5358,6 +5360,7 @@ onBeforeUnmount(() => {
   gap: 6px;
   padding: 0 8px;
   position: relative;
+  margin: 0 auto;
 }
 
 .nav-actions {
