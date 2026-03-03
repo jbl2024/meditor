@@ -311,6 +311,12 @@ defineExpose({
 }
 
 .ui-filterable-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 60;
+  min-width: 240px;
+  max-width: min(420px, calc(100vw - 24px));
   background: var(--ui-dropdown-bg);
   border: 1px solid var(--ui-dropdown-border);
   border-radius: 10px;

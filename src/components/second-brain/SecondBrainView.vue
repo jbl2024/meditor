@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { ClipboardDocumentIcon, PaperAirplaneIcon } from '@heroicons/vue/24/outline'
+import { ClipboardDocumentIcon, PaperAirplaneIcon, PlusIcon } from '@heroicons/vue/24/outline'
 import {
   createDeliberationSession,
   fetchSecondBrainConfigStatus,
@@ -602,14 +602,18 @@ watch(
           <h2>{{ sessionTitle }}</h2>
           <p v-if="configError" class="sb-error">{{ configError }}</p>
         </div>
-        <SecondBrainSessionDropdown
-          :sessions="sessionsIndex"
-          :active-session-id="sessionId"
-          :loading="loading"
-          @select="loadSession"
-          @create="onCreateSession"
-          @delete="onDeleteSession"
-        />
+        <div class="sb-session-actions">
+          <button type="button" class="sb-session-create-btn" title="New session" aria-label="New session" @click="onCreateSession">
+            <PlusIcon class="h-4 w-4" />
+          </button>
+          <SecondBrainSessionDropdown
+            :sessions="sessionsIndex"
+            :active-session-id="sessionId"
+            :loading="loading"
+            @select="loadSession"
+            @delete="onDeleteSession"
+          />
+        </div>
       </header>
 
       <section class="sb-thread">
@@ -711,6 +715,24 @@ watch(
   justify-content: space-between;
   align-items: flex-start;
   gap: 10px;
+}
+
+.sb-session-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sb-session-create-btn {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #fff;
+  color: #0f172a;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .title-wrap {
@@ -967,6 +989,7 @@ watch(
 :global(.ide-root.dark) .sb-thread,
 :global(.ide-root.dark) .msg,
 :global(.ide-root.dark) .insert,
+:global(.ide-root.dark) .sb-session-create-btn,
 :global(.ide-root.dark) .sb-composer,
 :global(.ide-root.dark) .sb-textarea,
 :global(.ide-root.dark) .send-icon-btn {

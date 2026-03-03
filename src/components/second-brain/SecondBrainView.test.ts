@@ -143,12 +143,12 @@ describe('SecondBrainView', () => {
     mounted.app.unmount()
   })
 
-  it('renders session dropdown trigger', async () => {
+  it('renders session action buttons', async () => {
     const mounted = mountView()
     await flushUi()
 
-    const trigger = mounted.root.querySelector<HTMLButtonElement>('.sb-session-trigger')
-    expect(trigger).toBeTruthy()
+    expect(mounted.root.querySelector('.sb-session-create-btn')).toBeTruthy()
+    expect(mounted.root.querySelector('.sb-session-gear-btn')).toBeTruthy()
 
     mounted.app.unmount()
   })

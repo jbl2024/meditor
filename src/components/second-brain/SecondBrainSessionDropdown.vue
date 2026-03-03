@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { Cog6ToothIcon } from '@heroicons/vue/24/outline'
 import UiFilterableDropdown, { type FilterableDropdownItem } from '../ui/UiFilterableDropdown.vue'
 import type { SecondBrainSessionSummary } from '../../lib/api'
 
@@ -17,7 +18,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   select: [sessionId: string]
-  create: []
   delete: [sessionId: string]
 }>()
 
@@ -37,12 +37,6 @@ const items = computed<SessionDropdownItem[]>(() =>
     }))
 )
 
-const activeLabel = computed(() => {
-  const active = props.sessions.find((item) => item.session_id === props.activeSessionId)
-  if (!active) return 'Select session'
-  return active.title || 'Second Brain Session'
-})
-
 function dateLabel(ts: number): string {
   return new Date(ts).toLocaleString()
 }
@@ -55,86 +49,83 @@ function onDelete(sessionId: string) {
   emit('delete', sessionId)
 }
 
-function onCreate() {
-  emit('create')
-  open.value = false
-}
 </script>
 
 <template>
-  <UiFilterableDropdown
-    :items="items"
-    :model-value="open"
-    :query="query"
-    :active-index="activeIndex"
-    filter-placeholder="Search sessions..."
-    :show-filter="true"
-    :max-height="280"
-    @open-change="open = $event"
-    @query-change="query = $event"
-    @active-index-change="activeIndex = $event"
-    @select="onSelect($event as SessionDropdownItem)"
-  >
-    <template #trigger="{ toggleMenu }">
-      <button
-        type="button"
-        class="sb-session-trigger"
-        :disabled="loading"
-        @click="toggleMenu"
-      >
-        <span class="label">{{ activeLabel }}</span>
-        <span class="chevron">▾</span>
-      </button>
-    </template>
+  <div class="sb-session-dropdown">
+    <UiFilterableDropdown
+      :items="items"
+      :model-value="open"
+      :query="query"
+      :active-index="activeIndex"
+      filter-placeholder="Search sessions..."
+      :show-filter="true"
+      :max-height="280"
+      @open-change="open = $event"
+      @query-change="query = $event"
+      @active-index-change="activeIndex = $event"
+      @select="onSelect($event as SessionDropdownItem)"
+    >
+      <template #trigger="{ toggleMenu }">
+        <button
+          type="button"
+          class="sb-session-gear-btn"
+          title="Manage sessions"
+          aria-label="Manage sessions"
+          :disabled="loading"
+          @click="toggleMenu"
+        >
+          <Cog6ToothIcon class="h-4 w-4" />
+        </button>
+      </template>
 
-    <template #item="{ item }">
-      <div class="sb-session-option" :data-active="item.sessionId === activeSessionId ? 'true' : 'false'">
-        <div class="meta">
-          <strong>{{ item.title }}</strong>
-          <span>{{ dateLabel(item.updatedAtMs) }}</span>
+      <template #item="{ item }">
+        <div class="sb-session-option" :data-active="item.sessionId === activeSessionId ? 'true' : 'false'">
+          <div class="meta">
+            <strong>{{ item.title }}</strong>
+            <span>{{ dateLabel(item.updatedAtMs) }}</span>
+          </div>
+          <span
+            class="delete"
+            role="button"
+            tabindex="0"
+            title="Delete session"
+            @mousedown.stop
+            @click.stop.prevent="onDelete(item.sessionId)"
+            @keydown.enter.prevent.stop="onDelete(item.sessionId)"
+          >×</span>
         </div>
-        <span
-          class="delete"
-          role="button"
-          tabindex="0"
-          title="Delete session"
-          @mousedown.stop
-          @click.stop.prevent="onDelete(item.sessionId)"
-          @keydown.enter.prevent.stop="onDelete(item.sessionId)"
-        >×</span>
-      </div>
-    </template>
+      </template>
 
-    <template #empty>
-      <span>{{ loading ? 'Loading sessions...' : 'No session found' }}</span>
-    </template>
-
-    <template #footer>
-      <button type="button" class="sb-create-session" @click="onCreate">+ New session</button>
-    </template>
-  </UiFilterableDropdown>
+      <template #empty>
+        <span>{{ loading ? 'Loading sessions...' : 'No session found' }}</span>
+      </template>
+    </UiFilterableDropdown>
+  </div>
 </template>
 
 <style scoped>
-.sb-session-trigger {
-  min-width: 240px;
-  max-width: 420px;
+.sb-session-dropdown {
+  position: relative;
+}
+
+:deep(.ui-filterable-dropdown-menu) {
+  right: 0;
+  left: auto;
+  width: min(520px, calc(100vw - 36px));
+  max-width: min(520px, calc(100vw - 36px));
+}
+
+.sb-session-gear-btn {
+  width: 32px;
+  height: 32px;
   display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  justify-content: center;
   border: 1px solid #cbd5e1;
   border-radius: 10px;
   background: #fff;
   color: #0f172a;
-  font-size: 12px;
-  padding: 6px 10px;
-}
-
-.sb-session-trigger .label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .sb-session-option {
@@ -178,19 +169,7 @@ function onCreate() {
   border: 1px solid #fecaca;
 }
 
-.sb-create-session {
-  width: 100%;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  background: #fff;
-  color: #0f172a;
-  font-size: 12px;
-  padding: 6px 8px;
-  text-align: left;
-}
-
-:global(.ide-root.dark) .sb-session-trigger,
-:global(.ide-root.dark) .sb-create-session {
+:global(.ide-root.dark) .sb-session-gear-btn {
   border-color: #334155;
   background: #0f172a;
   color: #e2e8f0;
