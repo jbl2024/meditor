@@ -152,4 +152,27 @@ describe('SecondBrainView', () => {
 
     mounted.app.unmount()
   })
+
+  it('does not create a new session while current session is empty', async () => {
+    const mounted = mountView()
+    await flushUi()
+
+    const createBtn = mounted.root.querySelector<HTMLButtonElement>('.sb-session-create-btn')
+    expect(createBtn).toBeTruthy()
+    if (!createBtn) return
+
+    for (let i = 0; i < 4 && createBtn.disabled; i += 1) {
+      await flushUi()
+    }
+    expect(createBtn.disabled).toBe(false)
+
+    createBtn.click()
+    createBtn.click()
+    await flushUi()
+
+    expect(api.createDeliberationSession).not.toHaveBeenCalled()
+    expect(mounted.root.textContent).toContain('Current session is empty')
+
+    mounted.app.unmount()
+  })
 })

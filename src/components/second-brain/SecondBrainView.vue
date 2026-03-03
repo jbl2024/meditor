@@ -41,6 +41,7 @@ const messages = ref<SecondBrainMessage[]>([])
 const streamByMessage = ref<Record<string, string>>({})
 const sending = ref(false)
 const sendError = ref('')
+const creatingSession = ref(false)
 const sessionsIndex = ref<SecondBrainSessionSummary[]>([])
 const mentionInfo = ref('')
 const composerContextPaths = ref<string[]>([])
@@ -169,22 +170,33 @@ async function refreshSessionsIndex() {
 }
 
 async function onCreateSession() {
+  if (sessionId.value && messages.value.length === 0) {
+    mentionInfo.value = 'Current session is empty. Reuse it instead of creating another one.'
+    return
+  }
+
+  if (creatingSession.value) return
   const seed = contextPaths.value[0] || props.allWorkspaceFiles.find((path) => /\.(md|markdown)$/i.test(path))
   if (!seed) {
     sendError.value = 'No markdown note found to seed a new session.'
     return
   }
-  const created = await createDeliberationSession({ contextPaths: [seed], title: '' })
-  sessionId.value = created.sessionId
-  sessionTitle.value = 'Second Brain Session'
-  contextPaths.value = [seed]
-  contextTokenEstimate.value = { [seed]: Math.max(1, Math.round((seed.length + 400) / 4)) }
-  messages.value = []
-  streamByMessage.value = {}
-  composerContextPaths.value = []
-  mentionInfo.value = ''
-  emit('context-changed', contextPaths.value)
-  await refreshSessionsIndex()
+  creatingSession.value = true
+  try {
+    const created = await createDeliberationSession({ contextPaths: [seed], title: '' })
+    sessionId.value = created.sessionId
+    sessionTitle.value = 'Second Brain Session'
+    contextPaths.value = [seed]
+    contextTokenEstimate.value = { [seed]: Math.max(1, Math.round((seed.length + 400) / 4)) }
+    messages.value = []
+    streamByMessage.value = {}
+    composerContextPaths.value = []
+    mentionInfo.value = ''
+    emit('context-changed', contextPaths.value)
+    await refreshSessionsIndex()
+  } finally {
+    creatingSession.value = false
+  }
 }
 
 async function onDeleteSession(sessionToDelete: string) {
@@ -603,13 +615,20 @@ watch(
           <p v-if="configError" class="sb-error">{{ configError }}</p>
         </div>
         <div class="sb-session-actions">
-          <button type="button" class="sb-session-create-btn" title="New session" aria-label="New session" @click="onCreateSession">
+          <button
+            type="button"
+            class="sb-session-create-btn"
+            title="New session"
+            aria-label="New session"
+            :disabled="loading || creatingSession"
+            @click="onCreateSession"
+          >
             <PlusIcon class="h-4 w-4" />
           </button>
           <SecondBrainSessionDropdown
             :sessions="sessionsIndex"
             :active-session-id="sessionId"
-            :loading="loading"
+            :loading="loading || creatingSession"
             @select="loadSession"
             @delete="onDeleteSession"
           />
@@ -733,6 +752,11 @@ watch(
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+.sb-session-create-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .title-wrap {
