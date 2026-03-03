@@ -2,13 +2,12 @@ import { computed, ref } from 'vue'
 
 export type PaneId = string
 
-export type SurfaceType = 'document' | 'cosmos' | 'second-brain-chat' | 'second-brain-sessions'
+export type SurfaceType = 'document' | 'cosmos' | 'second-brain-chat'
 
 export type PaneTab =
   | { id: string; type: 'document'; path: string; pinned: boolean }
   | { id: string; type: 'cosmos'; pinned: boolean }
   | { id: string; type: 'second-brain-chat'; pinned: boolean }
-  | { id: string; type: 'second-brain-sessions'; pinned: boolean }
 
 export type PaneState = {
   id: PaneId
@@ -174,7 +173,7 @@ export function hydrateLayout(payload: unknown): MultiPaneLayout | null {
     const openTabs: PaneTab[] = []
     for (const raw of rawTabs) {
       if (!raw || typeof raw !== 'object') continue
-      const tab = raw as Partial<PaneTab>
+      const tab = raw as { type?: string; path?: string; pinned?: boolean }
       if (tab.type === 'document') {
         const path = typeof tab.path === 'string' ? tab.path.trim() : ''
         if (!path || seenDocumentPaths.has(path)) continue
@@ -182,10 +181,12 @@ export function hydrateLayout(payload: unknown): MultiPaneLayout | null {
         openTabs.push({ id: documentTabId(path), type: 'document', path, pinned: Boolean(tab.pinned) })
         continue
       }
-      if (tab.type === 'cosmos' || tab.type === 'second-brain-chat' || tab.type === 'second-brain-sessions') {
-        if (seenSpecialSurfaces.has(tab.type)) continue
-        seenSpecialSurfaces.add(tab.type)
-        openTabs.push({ id: surfaceTabId(tab.type), type: tab.type, pinned: Boolean(tab.pinned) })
+      // Backward compatibility: hydrate legacy "second-brain-sessions" tabs as chat tabs.
+      const nextType = tab.type === 'second-brain-sessions' ? 'second-brain-chat' : tab.type
+      if (nextType === 'cosmos' || nextType === 'second-brain-chat') {
+        if (seenSpecialSurfaces.has(nextType)) continue
+        seenSpecialSurfaces.add(nextType)
+        openTabs.push({ id: surfaceTabId(nextType), type: nextType, pinned: Boolean(tab.pinned) })
       }
     }
 

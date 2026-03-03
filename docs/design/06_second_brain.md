@@ -4,14 +4,21 @@
 Second Brain provides a dedicated deliberation view where AI answers are constrained to an explicit note context and transformed into reusable graph-linked outputs.
 
 ## Frontend architecture
-- Entry point in `App.vue` as a dedicated sidebar mode and special tab.
+- Entry point in `App.vue` as a dedicated special tab (`second-brain-chat`).
 - View implementation in `src/components/second-brain`.
 - Stateful orchestration in composables:
-  - `useSecondBrainState`
-  - `useSecondBrainSessions`
-  - `useSecondBrainDeliberation`
-  - `useSecondBrainDraft`
+  - `useSecondBrainAtMentions` for inline `@` note mentions,
+  - `useSecondBrainSessions`,
+  - `useSecondBrainDeliberation`,
+  - `useSecondBrainDraft`.
 - API layer in `src/lib/secondBrainApi.ts` and type-safe wrappers in `src/lib/api.ts`.
+
+## UX model
+- Sessions are switched from a header dropdown inside the chat view.
+- Session history no longer has a dedicated surface/tab.
+- Context is edited inline in the composer via `@relative/path.md` mentions.
+- On send, frontend resolves mentioned markdown notes under workspace and merges them into explicit context before calling deliberation.
+- Unresolved mentions are ignored with a non-blocking UI hint.
 
 ## Backend architecture
 - Module: `src-tauri/src/second_brain`.

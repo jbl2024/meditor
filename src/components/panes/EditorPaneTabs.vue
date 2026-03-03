@@ -45,14 +45,12 @@ function fileName(path: string): string {
 function tabTitle(tab: PaneTab): string {
   if (tab.type === 'document') return fileName(tab.path)
   if (tab.type === 'cosmos') return 'Cosmos'
-  if (tab.type === 'second-brain-chat') return 'Second Brain'
-  return 'SB Sessions'
+  return 'Second Brain'
 }
 
 function tabIcon(tab: PaneTab): string {
   if (tab.type === 'cosmos') return '◎'
   if (tab.type === 'second-brain-chat') return '◉'
-  if (tab.type === 'second-brain-sessions') return '≡'
   return ''
 }
 </script>

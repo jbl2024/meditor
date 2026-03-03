@@ -95,6 +95,27 @@ describe('useMultiPaneWorkspaceState', () => {
     expect(hydrateLayout({})).toBeNull()
   })
 
+  it('hydrates legacy second-brain sessions surface as chat', () => {
+    const hydrated = hydrateLayout({
+      root: { kind: 'pane', paneId: 'pane-1' },
+      panesById: {
+        'pane-1': {
+          id: 'pane-1',
+          openTabs: [
+            { id: 'surface:second-brain-sessions', type: 'second-brain-sessions', pinned: false }
+          ],
+          activeTabId: 'surface:second-brain-sessions',
+          activePath: ''
+        }
+      },
+      activePaneId: 'pane-1'
+    })
+
+    expect(hydrated).toBeTruthy()
+    expect(hydrated?.panesById['pane-1'].openTabs[0].type).toBe('second-brain-chat')
+    expect(hydrated?.panesById['pane-1'].openTabs[0].id).toBe('surface:second-brain-chat')
+  })
+
   it('creates a valid initial layout helper', () => {
     const initial = createInitialLayout()
     expect(initial.root.kind).toBe('pane')

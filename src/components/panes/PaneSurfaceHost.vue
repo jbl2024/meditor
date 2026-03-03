@@ -3,7 +3,6 @@ import { ref } from 'vue'
 import EditorView from '../EditorView.vue'
 import CosmosPaneSurface from '../cosmos/CosmosPaneSurface.vue'
 import SecondBrainPaneSurface from '../second-brain/SecondBrainPaneSurface.vue'
-import SecondBrainSessionsView from '../second-brain/SecondBrainSessionsView.vue'
 import type { PaneTab } from '../../composables/useMultiPaneWorkspaceState'
 import type { FileEditorStatus } from './EditorPaneTabs.vue'
 import type { WikilinkAnchor } from '../../lib/wikilinks'
@@ -46,9 +45,6 @@ defineProps<{
     allWorkspaceFiles: string[]
     requestedSessionId: string
     requestedSessionNonce: number
-    requestedContextTogglePath: string
-    requestedContextToggleNonce: number
-    contextPaths: string[]
   }
 }>()
 
@@ -70,12 +66,6 @@ const emit = defineEmits<{
   'cosmos-select-node': [nodeId: string]
   'open-note': [path: string]
   'second-brain-context-changed': [paths: string[]]
-  'second-brain-toggle-context': [path: string]
-  'open-second-brain-session': [sessionId: string]
-  'explorer-error': [message: string]
-  'explorer-path-renamed': [payload: { from: string; to: string }]
-  'explorer-request-create': [payload: { parentPath: string; entryKind: 'file' | 'folder' }]
-  'explorer-select': [paths: string[]]
 }>()
 
 type EditorSurfaceExposed = {
@@ -176,25 +166,11 @@ defineExpose<EditorSurfaceExposed>({
   <SecondBrainPaneSurface
     v-else-if="activeTab?.type === 'second-brain-chat'"
     :workspace-path="secondBrain.workspacePath"
-    :active-path="activeDocumentPath"
     :all-workspace-files="secondBrain.allWorkspaceFiles"
     :requested-session-id="secondBrain.requestedSessionId"
     :requested-session-nonce="secondBrain.requestedSessionNonce"
-    :requested-context-toggle-path="secondBrain.requestedContextTogglePath"
-    :requested-context-toggle-nonce="secondBrain.requestedContextToggleNonce"
-    :context-paths="secondBrain.contextPaths"
     @open-note="emit('open-note', $event)"
     @context-changed="emit('second-brain-context-changed', $event)"
-    @toggle-context="emit('second-brain-toggle-context', $event)"
-    @error="emit('explorer-error', $event)"
-    @path-renamed="emit('explorer-path-renamed', $event)"
-    @request-create="emit('explorer-request-create', $event)"
-    @select="emit('explorer-select', $event)"
-  />
-
-  <SecondBrainSessionsView
-    v-else-if="activeTab?.type === 'second-brain-sessions'"
-    @open-session="emit('open-second-brain-session', $event)"
   />
 
   <div v-else class="surface-placeholder">Open a tab to start.</div>

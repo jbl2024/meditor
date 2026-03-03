@@ -113,7 +113,7 @@ type CosmosHistorySnapshot = {
   focusDepth: number
 }
 type SecondBrainHistorySnapshot = {
-  surface: 'chat' | 'sessions'
+  surface: 'chat'
 }
 type IndexRunKind = 'idle' | 'background' | 'rebuild' | 'rename'
 type IndexRunPhase = 'idle' | 'indexing_files' | 'refreshing_views' | 'done' | 'error'
@@ -216,9 +216,6 @@ const cosmosCommandLoadingVisible = ref(false)
 const cosmosCommandLoadingLabel = ref('Loading graph...')
 const secondBrainRequestedSessionId = ref('')
 const secondBrainRequestedSessionNonce = ref(0)
-const secondBrainRequestedContextTogglePath = ref('')
-const secondBrainRequestedContextToggleNonce = ref(0)
-const secondBrainContextPaths = ref<string[]>([])
 const shortcutsFilterQuery = ref('')
 const previousNonCosmosMode = ref<SidebarMode>('explorer')
 const hydratedMultiPane = hydrateLayout(
@@ -481,32 +478,31 @@ const paletteActionPriority: Record<string, number> = {
   'open-specific-date': 4,
   'open-cosmos-view': 5,
   'open-second-brain-view': 6,
-  'open-second-brain-sessions': 7,
-  'open-settings': 8,
-  'open-note-in-cosmos': 9,
-  'reveal-in-explorer': 10,
-  'show-shortcuts': 11,
-  'create-new-file': 12,
-  'close-other-tabs': 13,
-  'close-all-tabs': 14,
-  'split-pane-right': 15,
-  'split-pane-down': 16,
-  'focus-pane-1': 17,
-  'focus-pane-2': 18,
-  'focus-pane-3': 19,
-  'focus-pane-4': 20,
-  'focus-next-pane': 21,
-  'move-tab-next-pane': 22,
-  'close-active-pane': 23,
-  'join-panes': 24,
-  'reset-pane-layout': 25,
-  'zoom-in': 26,
-  'zoom-out': 27,
-  'zoom-reset': 28,
-  'theme-light': 29,
-  'theme-dark': 30,
-  'theme-system': 31,
-  'close-workspace': 32
+  'open-settings': 7,
+  'open-note-in-cosmos': 8,
+  'reveal-in-explorer': 9,
+  'show-shortcuts': 10,
+  'create-new-file': 11,
+  'close-other-tabs': 12,
+  'close-all-tabs': 13,
+  'split-pane-right': 14,
+  'split-pane-down': 15,
+  'focus-pane-1': 16,
+  'focus-pane-2': 17,
+  'focus-pane-3': 18,
+  'focus-pane-4': 19,
+  'focus-next-pane': 20,
+  'move-tab-next-pane': 21,
+  'close-active-pane': 22,
+  'join-panes': 23,
+  'reset-pane-layout': 24,
+  'zoom-in': 25,
+  'zoom-out': 26,
+  'zoom-reset': 27,
+  'theme-light': 28,
+  'theme-dark': 29,
+  'theme-system': 30,
+  'close-workspace': 31
 }
 
 const paletteActions = computed<PaletteAction[]>(() => [
@@ -521,12 +517,6 @@ const paletteActions = computed<PaletteAction[]>(() => [
     id: 'open-second-brain-view',
     label: 'Open Second Brain View',
     run: () => openSecondBrainViewFromPalette(),
-    closeBeforeRun: true
-  },
-  {
-    id: 'open-second-brain-sessions',
-    label: 'Open Second Brain Sessions',
-    run: () => openSecondBrainSessionsFromPalette(),
     closeBeforeRun: true
   },
   {
@@ -706,7 +696,7 @@ const metadataRows = computed(() => {
       ? 'Cosmos'
       : activeTab.type === 'second-brain-chat'
         ? 'Second Brain'
-        : 'SB Sessions'
+        : 'Surface'
     return [
       { label: 'Surface', value: label },
       { label: 'Metadata', value: 'No document metadata for this surface' }
@@ -1584,31 +1574,27 @@ function historyTargetLabel(entry: DocumentHistoryEntry): string {
 
 function readSecondBrainHistorySnapshot(payload: unknown): SecondBrainHistorySnapshot | null {
   if (!payload || typeof payload !== 'object') return null
-  const value = payload as Partial<SecondBrainHistorySnapshot>
+  const value = payload as { surface?: string }
   if (value.surface !== 'chat' && value.surface !== 'sessions') return null
-  return { surface: value.surface }
+  return { surface: 'chat' }
 }
 
 function currentSecondBrainHistorySnapshot(): SecondBrainHistorySnapshot {
-  const activeTab = multiPane.getActiveTab()
-  const surface = activeTab?.type === 'second-brain-sessions' ? 'sessions' : 'chat'
-  return {
-    surface
-  }
+  return { surface: 'chat' }
 }
 
 function secondBrainSnapshotStateKey(snapshot: SecondBrainHistorySnapshot): string {
   return snapshot.surface
 }
 
-function secondBrainHistoryLabel(snapshot: SecondBrainHistorySnapshot): string {
-  return snapshot.surface === 'sessions' ? 'Second Brain: Sessions' : 'Second Brain'
+function secondBrainHistoryLabel(_snapshot: SecondBrainHistorySnapshot): string {
+  return 'Second Brain'
 }
 
 function recordSecondBrainHistorySnapshot() {
   if (isApplyingHistoryNavigation) return
   const active = multiPane.getActiveTab()
-  if (!active || (active.type !== 'second-brain-chat' && active.type !== 'second-brain-sessions')) return
+  if (!active || active.type !== 'second-brain-chat') return
   const snapshot = currentSecondBrainHistorySnapshot()
   documentHistory.recordEntry({
     kind: 'second-brain',
@@ -1672,7 +1658,7 @@ async function openHistoryEntry(entry: DocumentHistoryEntry): Promise<boolean> {
   if (entry.kind === 'second-brain') {
     const snapshot = readSecondBrainHistorySnapshot(entry.payload)
     if (!snapshot) return false
-    multiPane.openSurfaceInPane(snapshot.surface === 'sessions' ? 'second-brain-sessions' : 'second-brain-chat')
+    multiPane.openSurfaceInPane('second-brain-chat')
     if (!allWorkspaceFiles.value.length) {
       await loadAllFiles()
     }
@@ -1858,33 +1844,7 @@ async function openSecondBrainViewFromPalette() {
   return true
 }
 
-async function openSecondBrainSessionsFromPalette() {
-  if (!filesystem.hasWorkspace.value) {
-    filesystem.errorMessage.value = 'Open a workspace first.'
-    return false
-  }
-  multiPane.openSurfaceInPane('second-brain-sessions')
-  recordSecondBrainHistorySnapshot()
-  return true
-}
-
-function openSecondBrainSessionFromHistory(sessionId: string) {
-  if (!sessionId.trim()) return
-  secondBrainRequestedSessionId.value = sessionId.trim()
-  secondBrainRequestedSessionNonce.value += 1
-  multiPane.openSurfaceInPane('second-brain-chat')
-  recordSecondBrainHistorySnapshot()
-}
-
-function onSecondBrainSidebarToggleContext(path: string) {
-  if (!path.trim()) return
-  secondBrainRequestedContextTogglePath.value = path
-  secondBrainRequestedContextToggleNonce.value += 1
-}
-
-function onSecondBrainContextChanged(paths: string[]) {
-  secondBrainContextPaths.value = [...paths]
-}
+function onSecondBrainContextChanged(_paths: string[]) {}
 
 function applySettingsLlmPreset(provider: 'openai' | 'anthropic' | 'custom') {
   settingsLlmProviderPreset.value = provider
@@ -2138,9 +2098,6 @@ async function closeWorkspace() {
   semanticLinks.value = []
   semanticLinksLoading.value = false
   cosmos.clearState()
-  secondBrainRequestedContextTogglePath.value = ''
-  secondBrainRequestedContextToggleNonce.value = 0
-  secondBrainContextPaths.value = []
   filesystem.selectedCount.value = 0
   filesystem.clearWorkspacePath()
   try {
@@ -4667,10 +4624,7 @@ onBeforeUnmount(() => {
                 workspacePath: filesystem.workingFolderPath.value,
                 allWorkspaceFiles,
                 requestedSessionId: secondBrainRequestedSessionId,
-                requestedSessionNonce: secondBrainRequestedSessionNonce,
-                requestedContextTogglePath: secondBrainRequestedContextTogglePath,
-                requestedContextToggleNonce: secondBrainRequestedContextToggleNonce,
-                contextPaths: secondBrainContextPaths
+                requestedSessionNonce: secondBrainRequestedSessionNonce
               }"
               @pane-focus="multiPane.setActivePane($event.paneId)"
               @pane-tab-click="void onPaneTabClick($event)"
@@ -4680,8 +4634,6 @@ onBeforeUnmount(() => {
               @pane-request-move-tab="multiPane.moveActiveTabToAdjacentPane($event.direction)"
               @open-note="void openTabWithAutosave($event)"
               @second-brain-context-changed="onSecondBrainContextChanged"
-              @second-brain-toggle-context="onSecondBrainSidebarToggleContext"
-              @open-second-brain-session="openSecondBrainSessionFromHistory"
               @cosmos-query-update="onCosmosQueryUpdate"
               @cosmos-search-enter="onCosmosSearchEnter"
               @cosmos-select-match="onCosmosMatchClick"
@@ -4693,10 +4645,6 @@ onBeforeUnmount(() => {
               @cosmos-locate-selected="onCosmosLocateSelectedNode"
               @cosmos-reset-view="onCosmosResetView"
               @cosmos-select-node="onCosmosSelectNode"
-              @explorer-error="onExplorerError"
-              @explorer-path-renamed="onExplorerPathRenamed"
-              @explorer-request-create="onExplorerRequestCreate"
-              @explorer-select="onExplorerSelection"
               @status="onEditorStatus"
               @path-renamed="onEditorPathRenamed"
               @outline="onEditorOutline"

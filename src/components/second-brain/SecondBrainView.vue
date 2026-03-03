@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ClipboardDocumentIcon, PaperAirplaneIcon } from '@heroicons/vue/24/outline'
-import SecondBrainSessionsList from './SecondBrainSessionsList.vue'
 import {
   createDeliberationSession,
   fetchSecondBrainConfigStatus,
@@ -15,14 +14,15 @@ import {
 import { sanitizeHtmlForPreview } from '../../lib/htmlSanitizer'
 import { inlineTextToHtml } from '../../lib/markdownBlocks'
 import type { SecondBrainMessage, SecondBrainSessionSummary } from '../../lib/api'
+import { useSecondBrainAtMentions, type SecondBrainAtMentionItem } from '../../composables/useSecondBrainAtMentions'
+import SecondBrainAtMentionsMenu from './SecondBrainAtMentionsMenu.vue'
+import SecondBrainSessionDropdown from './SecondBrainSessionDropdown.vue'
 
 const props = defineProps<{
   workspacePath: string
   allWorkspaceFiles: string[]
   requestedSessionId: string
   requestedSessionNonce: number
-  requestedContextTogglePath: string
-  requestedContextToggleNonce: number
 }>()
 
 const emit = defineEmits<{
@@ -42,10 +42,18 @@ const streamByMessage = ref<Record<string, string>>({})
 const sending = ref(false)
 const sendError = ref('')
 const sessionsIndex = ref<SecondBrainSessionSummary[]>([])
-const rightPanelWidth = ref(360)
-const resizing = ref(false)
-const resizeState = ref<{ startX: number; startWidth: number } | null>(null)
+const mentionInfo = ref('')
+const composerContextPaths = ref<string[]>([])
+const composerRef = ref<HTMLTextAreaElement | null>(null)
 const streamUnsubscribers: Array<() => void> = []
+
+const workspacePathRef = computed(() => props.workspacePath)
+const allWorkspaceFilesRef = computed(() => props.allWorkspaceFiles)
+
+const mentions = useSecondBrainAtMentions({
+  workspacePath: workspacePathRef,
+  allWorkspaceFiles: allWorkspaceFilesRef
+})
 
 function toRelativePath(path: string): string {
   const value = path.replace(/\\/g, '/')
@@ -56,39 +64,35 @@ function toRelativePath(path: string): string {
   return value
 }
 
-const contextCards = computed(() =>
-  contextPaths.value.map((path) => {
-    const normalized = toRelativePath(path)
-    const parts = normalized.split('/')
-    const name = parts[parts.length - 1]
-    const parent = parts.slice(0, -1).join('/') || '.'
+const composerContextCards = computed(() =>
+  composerContextPaths.value.map((path) => {
+    const relativePath = toRelativePath(path)
+    const parts = relativePath.split('/')
     return {
       path,
-      name,
-      parent
+      name: parts[parts.length - 1],
+      parent: parts.slice(0, -1).join('/') || '.'
     }
   })
 )
 
-function isInContext(path: string): boolean {
-  return contextPaths.value.includes(path)
-}
-
-function toggleContextPath(path: string) {
-  if (!sessionId.value) return
-  if (isInContext(path)) {
-    contextPaths.value = contextPaths.value.filter((item) => item !== path)
-  } else {
-    contextPaths.value = [...contextPaths.value, path]
+function mergeContextPaths(nextPaths: string[]): string[] {
+  const merged = new Set(contextPaths.value)
+  for (const path of nextPaths) {
+    merged.add(path)
   }
-  emit('context-changed', contextPaths.value)
-  void syncContextWithBackend()
+  return Array.from(merged)
 }
 
-function removeContextPath(path: string) {
-  contextPaths.value = contextPaths.value.filter((item) => item !== path)
-  emit('context-changed', contextPaths.value)
-  void syncContextWithBackend()
+function addComposerContextPath(path: string) {
+  if (!path.trim()) return
+  const merged = new Set(composerContextPaths.value)
+  merged.add(path)
+  composerContextPaths.value = Array.from(merged)
+}
+
+function removeComposerContextPath(path: string) {
+  composerContextPaths.value = composerContextPaths.value.filter((item) => item !== path)
 }
 
 async function syncContextWithBackend() {
@@ -133,6 +137,8 @@ async function loadSession(nextSessionId: string) {
   if (!nextSessionId.trim()) return
   loading.value = true
   sendError.value = ''
+  mentionInfo.value = ''
+  composerContextPaths.value = []
   try {
     const payload = await loadDeliberationSession(nextSessionId)
     sessionId.value = payload.session_id
@@ -175,6 +181,8 @@ async function onCreateSession() {
   contextTokenEstimate.value = { [seed]: Math.max(1, Math.round((seed.length + 400) / 4)) }
   messages.value = []
   streamByMessage.value = {}
+  composerContextPaths.value = []
+  mentionInfo.value = ''
   emit('context-changed', contextPaths.value)
   await refreshSessionsIndex()
 }
@@ -198,6 +206,7 @@ async function onDeleteSession(sessionToDelete: string) {
   contextTokenEstimate.value = {}
   messages.value = []
   streamByMessage.value = {}
+  composerContextPaths.value = []
   emit('context-changed', [])
 }
 
@@ -359,13 +368,87 @@ function renderAssistantMarkdown(message: SecondBrainMessage): string {
   return sanitizeHtmlForPreview(html || `<p>${inlineTextToHtml(source)}</p>`)
 }
 
+function applyMentionSuggestion(item: SecondBrainAtMentionItem) {
+  const trigger = mentions.trigger.value
+  if (trigger) {
+    inputMessage.value = `${inputMessage.value.slice(0, trigger.start)}${inputMessage.value.slice(trigger.end)}`
+  }
+  addComposerContextPath(item.absolutePath)
+  mentionInfo.value = ''
+  mentions.close()
+
+  void nextTick(() => {
+    composerRef.value?.focus()
+    const caret = trigger?.start ?? composerRef.value?.value.length ?? 0
+    composerRef.value?.setSelectionRange(caret, caret)
+  })
+}
+
+function updateMentionTriggerFromComposer() {
+  mentions.updateTrigger(inputMessage.value, composerRef.value?.selectionStart ?? null)
+}
+
+function onComposerInput(event: Event) {
+  inputMessage.value = (event.target as HTMLTextAreaElement).value
+  updateMentionTriggerFromComposer()
+}
+
+function onComposerKeydown(event: KeyboardEvent) {
+  if (!mentions.isOpen.value) return
+
+  if (event.key === 'ArrowDown') {
+    event.preventDefault()
+    mentions.moveActive(1)
+    return
+  }
+
+  if (event.key === 'ArrowUp') {
+    event.preventDefault()
+    mentions.moveActive(-1)
+    return
+  }
+
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    const next = mentions.suggestions.value[mentions.activeIndex.value]
+    if (next) {
+      applyMentionSuggestion(next)
+    }
+    return
+  }
+
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    mentions.close()
+  }
+}
+
 async function onSendMessage() {
   if (!sessionId.value || !inputMessage.value.trim()) return
   sending.value = true
   sendError.value = ''
+  mentionInfo.value = ''
   const outgoing = inputMessage.value.trim()
+
+  const mentionResolution = mentions.resolveMentionedPaths(outgoing)
+  const mergedMentionPaths = Array.from(new Set([
+    ...composerContextPaths.value,
+    ...mentionResolution.resolvedPaths
+  ]))
+
+  if (mergedMentionPaths.length > 0) {
+    contextPaths.value = mergeContextPaths(mergedMentionPaths)
+    emit('context-changed', contextPaths.value)
+    await syncContextWithBackend()
+  }
+  if (mentionResolution.unresolved.length > 0) {
+    mentionInfo.value = `Ignored unresolved mentions: ${mentionResolution.unresolved.map((item) => `@${item}`).join(', ')}`
+  }
+
   const tempUserId = `temp-user-${Date.now()}`
   inputMessage.value = ''
+  composerContextPaths.value = []
+  mentions.close()
 
   messages.value = [...messages.value, {
     id: tempUserId,
@@ -428,26 +511,6 @@ function openContextNote(path: string) {
   emit('open-note', path)
 }
 
-function beginResize(event: MouseEvent) {
-  event.preventDefault()
-  resizeState.value = {
-    startX: event.clientX,
-    startWidth: rightPanelWidth.value
-  }
-  resizing.value = true
-}
-
-function onPointerMove(event: MouseEvent) {
-  if (!resizeState.value) return
-  const delta = resizeState.value.startX - event.clientX
-  rightPanelWidth.value = Math.max(320, Math.min(760, resizeState.value.startWidth + delta))
-}
-
-function stopResize() {
-  resizing.value = false
-  resizeState.value = null
-}
-
 onMounted(async () => {
   try {
     const status = await fetchSecondBrainConfigStatus()
@@ -478,6 +541,7 @@ onMounted(async () => {
       }]
     }
   }))
+
   streamUnsubscribers.push(await subscribeSecondBrainStream('second-brain://assistant-delta', (payload) => {
     if (payload.session_id !== sessionId.value) return
     const current = streamByMessage.value[payload.message_id] ?? ''
@@ -497,6 +561,7 @@ onMounted(async () => {
       }]
     }
   }))
+
   streamUnsubscribers.push(await subscribeSecondBrainStream('second-brain://assistant-complete', (payload) => {
     if (payload.session_id !== sessionId.value) return
     streamByMessage.value = {
@@ -505,21 +570,18 @@ onMounted(async () => {
     }
     sending.value = false
   }))
+
   streamUnsubscribers.push(await subscribeSecondBrainStream('second-brain://assistant-error', (payload) => {
     if (payload.session_id !== sessionId.value) return
     sending.value = false
     sendError.value = payload.error || 'Assistant stream failed.'
   }))
-  window.addEventListener('mousemove', onPointerMove)
-  window.addEventListener('mouseup', stopResize)
 })
 
 onBeforeUnmount(() => {
   for (const unsubscribe of streamUnsubscribers) {
     unsubscribe()
   }
-  window.removeEventListener('mousemove', onPointerMove)
-  window.removeEventListener('mouseup', stopResize)
 })
 
 watch(
@@ -530,38 +592,25 @@ watch(
     void loadSession(id)
   }
 )
-
-watch(
-  () => `${props.requestedContextTogglePath}::${props.requestedContextToggleNonce}`,
-  (value) => {
-    const [path] = value.split('::')
-    if (!path.trim()) return
-    toggleContextPath(path)
-  }
-)
 </script>
 
 <template>
   <div class="sb-layout">
-    <section class="sb-col sb-center">
+    <section class="sb-center">
       <header class="sb-center-head">
-        <div>
+        <div class="title-wrap">
           <h2>{{ sessionTitle }}</h2>
           <p v-if="configError" class="sb-error">{{ configError }}</p>
         </div>
+        <SecondBrainSessionDropdown
+          :sessions="sessionsIndex"
+          :active-session-id="sessionId"
+          :loading="loading"
+          @select="loadSession"
+          @create="onCreateSession"
+          @delete="onDeleteSession"
+        />
       </header>
-
-      <section class="sb-context-summary">
-        <div class="cards">
-          <article v-for="card in contextCards" :key="card.path" class="card">
-            <div class="meta" @click="openContextNote(card.path)">
-              <strong>{{ card.name }}</strong>
-              <span>{{ card.parent }}</span>
-            </div>
-            <button type="button" class="x" @click="removeContextPath(card.path)">×</button>
-          </article>
-        </div>
-      </section>
 
       <section class="sb-thread">
         <article
@@ -589,11 +638,35 @@ watch(
 
       <footer class="sb-input-row">
         <div class="sb-composer">
+          <SecondBrainAtMentionsMenu
+            :open="mentions.isOpen.value"
+            :suggestions="mentions.suggestions.value"
+            :active-index="mentions.activeIndex.value"
+            @select="applyMentionSuggestion"
+            @update:active-index="mentions.setActiveIndex"
+          />
+
+          <div v-if="composerContextCards.length" class="sb-chip-row">
+            <article v-for="chip in composerContextCards" :key="chip.path" class="sb-chip">
+              <button type="button" class="sb-chip-main" @click="openContextNote(chip.path)">
+                <strong>{{ chip.name }}</strong>
+                <span>{{ chip.parent }}</span>
+              </button>
+              <button type="button" class="sb-chip-remove" @click="removeComposerContextPath(chip.path)">×</button>
+            </article>
+          </div>
+
           <textarea
-            v-model="inputMessage"
+            ref="composerRef"
+            :value="inputMessage"
             class="sb-textarea"
-            placeholder="Posez une question sur votre contexte actif..."
+            placeholder="Posez une question. Tapez @ pour ajouter des notes au contexte..."
+            @input="onComposerInput"
+            @keydown="onComposerKeydown"
+            @click="updateMentionTriggerFromComposer"
+            @keyup="updateMentionTriggerFromComposer"
           ></textarea>
+
           <div class="composer-action">
             <span v-if="sending" class="sb-loader" aria-label="Thinking"></span>
             <button v-else type="button" class="send-icon-btn" :disabled="!sessionId || !inputMessage.trim()" @click="onSendMessage">
@@ -601,145 +674,143 @@ watch(
             </button>
           </div>
         </div>
-        <div v-if="loading || sendError" class="actions">
+
+        <div v-if="loading || sendError || mentionInfo" class="actions">
           <span v-if="loading" class="hint">Loading...</span>
+          <span v-if="mentionInfo" class="hint">{{ mentionInfo }}</span>
           <span v-if="sendError" class="sb-error">{{ sendError }}</span>
         </div>
       </footer>
     </section>
-    <div class="sb-splitter" :class="{ active: resizing }" @mousedown="beginResize"></div>
-    <aside class="sb-col sb-right">
-      <div class="sb-right-inner" :style="{ width: `${rightPanelWidth}px` }">
-      <header class="sb-right-head">
-        <h3>Sessions</h3>
-      </header>
-      <SecondBrainSessionsList
-        :sessions="sessionsIndex"
-        :active-session-id="sessionId"
-        :loading="loading"
-        @select="loadSession"
-        @create="onCreateSession"
-        @delete="onDeleteSession"
-      />
-      </div>
-    </aside>
   </div>
 </template>
 
 <style scoped>
 .sb-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 8px auto;
-  gap: 0;
   min-height: 0;
   height: 100%;
-  padding: 10px 10px 10px 0;
+  padding: 10px;
   background: linear-gradient(135deg, #f8fafc, #eef2ff 45%, #f1f5f9);
 }
-.sb-col {
+
+.sb-center {
   min-height: 0;
+  height: 100%;
   border: 1px solid #cbd5e1;
   border-radius: 12px;
   background: #f8fafc;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-}
-.sb-right { padding: 10px; }
-.sb-right-head,
-.sb-center-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-.sb-right-head h3,
-.sb-center-head h2 { margin: 0; }
-.sb-input,
-.sb-textarea,
-.sb-btn {
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  background: #fff;
-  color: #0f172a;
-  font-size: 12px;
-}
-.sb-input { height: 32px; padding: 0 8px; }
-.sb-textarea {
-  width: 100%;
-  min-height: 92px;
-  padding: 10px 44px 10px 10px;
-  resize: vertical;
-  box-sizing: border-box;
-  display: block;
-}
-.sb-btn { height: 32px; padding: 0 10px; }
-.sb-btn.secondary { background: #f8fafc; }
-.sb-center { padding: 10px; gap: 8px; }
-.sb-context-summary { border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px; background: #fff; }
-.cards {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 6px;
-  margin-top: 8px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding-bottom: 2px;
-}
-.card {
-  flex: 0 0 auto;
-  width: 240px;
-  min-width: 240px;
-  max-width: 240px;
-  display: flex;
-  align-items: center;
+  padding: 10px;
   gap: 8px;
-  border: 1px solid #dbeafe;
-  background: #f8fbff;
-  border-radius: 8px;
-  padding: 4px 6px;
 }
-.card .meta { min-width: 0; flex: 1; cursor: pointer; }
-.card strong {
-  display: block;
+
+.sb-center-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.title-wrap {
+  min-width: 0;
+}
+
+.sb-center-head h2 {
+  margin: 0;
+}
+
+.sb-error {
+  margin: 4px 0 0;
+  color: #b91c1c;
   font-size: 12px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
-.card span {
-  display: block;
-  color: #64748b;
-  font-size: 11px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+
+.sb-thread {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
-.card .x { border: 0; background: transparent; font-size: 16px; line-height: 1; color: #64748b; }
-.sb-thread { flex: 1 1 auto; min-height: 0; overflow: auto; border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
-.msg { border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; }
-.msg.user { background: #f8fafc; }
-.msg.assistant { background: #eff6ff; }
-.msg header { display: flex; justify-content: space-between; gap: 8px; }
-.msg pre { white-space: pre-wrap; margin: 8px 0 0; font-size: 12px; }
-.assistant-markdown { margin-top: 8px; font-size: 12px; line-height: 1.5; }
-.assistant-markdown :deep(p) { margin: 0 0 8px; }
-.assistant-markdown :deep(p:last-child) { margin-bottom: 0; }
+
+.msg {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.msg.user {
+  background: #f8fafc;
+}
+
+.msg.assistant {
+  background: #eff6ff;
+}
+
+.msg header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.msg pre {
+  white-space: pre-wrap;
+  margin: 8px 0 0;
+  font-size: 12px;
+}
+
+.assistant-markdown {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.assistant-markdown :deep(p) {
+  margin: 0 0 8px;
+}
+
+.assistant-markdown :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
 .assistant-markdown :deep(h1),
 .assistant-markdown :deep(h2),
 .assistant-markdown :deep(h3),
 .assistant-markdown :deep(h4),
 .assistant-markdown :deep(h5),
-.assistant-markdown :deep(h6) { margin: 10px 0 6px; line-height: 1.3; font-weight: 700; }
+.assistant-markdown :deep(h6) {
+  margin: 10px 0 6px;
+  line-height: 1.3;
+  font-weight: 700;
+}
+
 .assistant-markdown :deep(ul),
-.assistant-markdown :deep(ol) { margin: 6px 0 8px 18px; padding: 0; }
+.assistant-markdown :deep(ol) {
+  margin: 6px 0 8px 18px;
+  padding: 0;
+}
+
 .assistant-markdown :deep(blockquote) {
   margin: 6px 0 8px;
   border-left: 3px solid #cbd5e1;
   padding: 2px 0 2px 10px;
   color: #475569;
 }
+
 .assistant-markdown :deep(code) {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
   background: #e2e8f0;
   border-radius: 4px;
   padding: 1px 4px;
 }
+
 .assistant-markdown :deep(pre) {
   margin: 8px 0;
   background: #e2e8f0;
@@ -748,125 +819,188 @@ watch(
   padding: 8px;
   overflow: auto;
 }
+
 .assistant-markdown :deep(pre code) {
   background: transparent;
   padding: 0;
   border-radius: 0;
 }
-.assistant-markdown :deep(a) { color: #2563eb; text-decoration: underline; }
-.insert { border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; font-size: 11px; padding: 3px 8px; }
-.sb-input-row { display: flex; flex-direction: column; gap: 6px; margin-top: auto; }
-.sb-composer { position: relative; width: 100%; }
-.composer-action {
-  position: absolute;
-  right: 8px;
-  bottom: 8px;
-  width: 28px;
-  height: 28px;
+
+.assistant-markdown :deep(a) {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
+.insert {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 11px;
+  padding: 3px 8px;
+}
+
+.sb-input-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: auto;
+}
+
+.sb-composer {
+  position: relative;
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #fff;
+  padding: 8px;
+}
+
+.sb-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.sb-chip {
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 6px;
+  border: 1px solid #dbeafe;
+  background: #f8fbff;
+  border-radius: 8px;
+  padding: 4px 6px;
 }
+
+.sb-chip-main {
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 0;
+  min-width: 0;
+}
+
+.sb-chip-main strong {
+  display: block;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.sb-chip-main span {
+  display: block;
+  color: #64748b;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.sb-chip-remove {
+  border: 0;
+  background: transparent;
+  font-size: 14px;
+  line-height: 1;
+  color: #64748b;
+}
+
+.sb-textarea {
+  width: 100%;
+  min-height: 92px;
+  padding: 10px 44px 10px 10px;
+  resize: vertical;
+  box-sizing: border-box;
+  display: block;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 12px;
+}
+
+.composer-action {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+}
+
 .send-icon-btn {
   width: 28px;
   height: 28px;
   border: 1px solid #cbd5e1;
   border-radius: 999px;
   background: #fff;
-  color: #334155;
+  color: #0f172a;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
-.send-icon-btn:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
+
 .sb-loader {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   border: 2px solid #93c5fd;
-  border-top-color: #2563eb;
+  border-top-color: #1d4ed8;
   border-radius: 999px;
-  animation: sb-spin 0.75s linear infinite;
-}
-.sb-input-row .actions { display: flex; align-items: center; gap: 10px; }
-.sb-error { color: #b91c1c; font-size: 12px; }
-.hint { color: #64748b; font-size: 12px; }
-.sb-right-inner { width: 360px; min-width: 0; height: 100%; display: flex; flex-direction: column; }
-.sb-splitter {
-  width: 8px;
-  cursor: col-resize;
-  background: linear-gradient(180deg, transparent, #cbd5e1 30%, #cbd5e1 70%, transparent);
-  border-radius: 999px;
-  margin: 12px 0;
-}
-.sb-splitter.active {
-  background: linear-gradient(180deg, transparent, #2563eb 30%, #2563eb 70%, transparent);
+  animation: sb-spin 0.8s linear infinite;
+  display: inline-block;
 }
 
-@media (max-width: 1320px) {
-  .sb-layout {
-    grid-template-columns: 1fr;
-    grid-template-rows: 1fr 340px;
-    gap: 8px;
-    padding: 10px;
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.hint {
+  font-size: 12px;
+  color: #64748b;
+}
+
+@keyframes sb-spin {
+  from {
+    transform: rotate(0deg);
   }
-  .sb-right {
-    padding: 10px;
-  }
-  .sb-right-inner {
-    width: 100% !important;
-  }
-  .sb-splitter {
-    display: none;
+  to {
+    transform: rotate(360deg);
   }
 }
 
-:global(.ide-root.dark) .sb-layout {
-  background: linear-gradient(145deg, #1f232b, #20252f 45%, #252b36);
-}
-:global(.ide-root.dark) .sb-col,
+:global(.ide-root.dark) .sb-center,
 :global(.ide-root.dark) .sb-thread,
-:global(.ide-root.dark) .sb-context-summary,
-:global(.ide-root.dark) .card,
 :global(.ide-root.dark) .msg,
 :global(.ide-root.dark) .insert,
-:global(.ide-root.dark) .send-icon-btn,
-:global(.ide-root.dark) .sb-input,
+:global(.ide-root.dark) .sb-composer,
 :global(.ide-root.dark) .sb-textarea,
-:global(.ide-root.dark) .sb-btn {
-  border-color: #3e4451;
-  background: #21252b;
-  color: #abb2bf;
+:global(.ide-root.dark) .send-icon-btn {
+  border-color: #334155;
+  background: #0f172a;
+  color: #e2e8f0;
 }
-:global(.ide-root.dark) .msg.assistant { background: #2c313c; }
-:global(.ide-root.dark) .msg.user { background: #21252b; }
-:global(.ide-root.dark) .assistant-markdown :deep(blockquote) {
-  border-left-color: #4b5563;
-  color: #9ca3af;
+
+:global(.ide-root.dark) .msg.user {
+  background: #111827;
 }
+
+:global(.ide-root.dark) .msg.assistant {
+  background: #082f49;
+}
+
+:global(.ide-root.dark) .sb-chip {
+  border-color: #1e3a8a;
+  background: #0b1f3a;
+}
+
+:global(.ide-root.dark) .sb-chip-main span,
+:global(.ide-root.dark) .hint {
+  color: #94a3b8;
+}
+
 :global(.ide-root.dark) .assistant-markdown :deep(code),
 :global(.ide-root.dark) .assistant-markdown :deep(pre) {
-  background: #2f3540;
-  border-color: #3e4451;
+  background: #1e293b;
+  border-color: #334155;
 }
-:global(.ide-root.dark) .assistant-markdown :deep(a) { color: #61afef; }
-:global(.ide-root.dark) .card span,
-:global(.ide-root.dark) .hint { color: #94a3b8; }
-:global(.ide-root.dark) .sb-error { color: #e06c75; }
-:global(.ide-root.dark) .sb-loader {
-  border-color: #475569;
-  border-top-color: #61afef;
-}
-:global(.ide-root.dark) .sb-splitter {
-  background: linear-gradient(180deg, transparent, #3e4451 30%, #3e4451 70%, transparent);
-}
-:global(.ide-root.dark) .sb-splitter.active {
-  background: linear-gradient(180deg, transparent, #61afef 30%, #61afef 70%, transparent);
-}
-@keyframes sb-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+
+:global(.ide-root.dark) .assistant-markdown :deep(blockquote) {
+  border-left-color: #475569;
+  color: #cbd5e1;
 }
 </style>

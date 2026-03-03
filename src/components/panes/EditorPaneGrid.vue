@@ -59,9 +59,6 @@ const props = defineProps<{
     allWorkspaceFiles: string[]
     requestedSessionId: string
     requestedSessionNonce: number
-    requestedContextTogglePath: string
-    requestedContextToggleNonce: number
-    contextPaths: string[]
   }
 }>()
 
@@ -89,12 +86,6 @@ const emit = defineEmits<{
   'cosmos-select-node': [nodeId: string]
   'open-note': [path: string]
   'second-brain-context-changed': [paths: string[]]
-  'second-brain-toggle-context': [path: string]
-  'open-second-brain-session': [sessionId: string]
-  'explorer-error': [message: string]
-  'explorer-path-renamed': [payload: { from: string; to: string }]
-  'explorer-request-create': [payload: { parentPath: string; entryKind: 'file' | 'folder' }]
-  'explorer-select': [paths: string[]]
 }>()
 
 // Keep instance refs out of Vue reactivity to avoid render-feedback loops.
@@ -358,12 +349,6 @@ onBeforeUnmount(() => {
         @cosmos-select-node="emit('cosmos-select-node', $event)"
         @open-note="emit('open-note', $event)"
         @second-brain-context-changed="emit('second-brain-context-changed', $event)"
-        @second-brain-toggle-context="emit('second-brain-toggle-context', $event)"
-        @open-second-brain-session="emit('open-second-brain-session', $event)"
-        @explorer-error="emit('explorer-error', $event)"
-        @explorer-path-renamed="emit('explorer-path-renamed', $event)"
-        @explorer-request-create="emit('explorer-request-create', $event)"
-        @explorer-select="emit('explorer-select', $event)"
       />
     </section>
 

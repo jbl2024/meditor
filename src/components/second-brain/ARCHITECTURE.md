@@ -4,17 +4,15 @@
 This folder contains the modular frontend surface for the Second Brain view.
 
 ## Components
-- `SecondBrainView.vue`: top-level three-column layout and orchestration.
-- `SecondBrainContextPanel.vue`: active context controls and note inclusion.
-- `SecondBrainSessionsList.vue`: persisted session history with quick filtering.
-- `SecondBrainDeliberationPanel.vue`: message thread + mode selector + send box.
-- `SecondBrainModeSelector.vue`: isolated mode switch contract.
-- `SecondBrainOutputsPanel.vue`: draft editor and publish actions.
+- `SecondBrainView.vue`: top-level chat surface orchestration.
+- `SecondBrainSessionDropdown.vue`: quick session switch/create/delete from the header.
+- `SecondBrainAtMentionsMenu.vue`: inline `@` suggestion list for context picks.
 
 ## State & Services
 - State is centralized in composables under `src/composables/useSecondBrain*`.
 - Backend calls are isolated in `src/lib/secondBrainApi.ts`.
 - Modes contract is declared in `src/lib/secondBrainModes.ts`.
+- `useSecondBrainAtMentions` resolves inline `@relative/path.md` mentions and extracts context paths before send.
 
 ## Design constraints
 - Keep `App.vue` as integration shell only.

@@ -1,0 +1,155 @@
+import { createApp, nextTick } from 'vue'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import SecondBrainView from './SecondBrainView.vue'
+
+const api = vi.hoisted(() => ({
+  createDeliberationSession: vi.fn(),
+  fetchSecondBrainConfigStatus: vi.fn(),
+  fetchSecondBrainSessions: vi.fn(),
+  loadDeliberationSession: vi.fn(),
+  removeDeliberationSession: vi.fn(),
+  replaceSessionContext: vi.fn(),
+  runDeliberation: vi.fn(),
+  subscribeSecondBrainStream: vi.fn()
+}))
+
+vi.mock('../../lib/secondBrainApi', () => api)
+
+async function flushUi() {
+  await nextTick()
+  await Promise.resolve()
+  await nextTick()
+}
+
+describe('SecondBrainView', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+
+    api.fetchSecondBrainConfigStatus.mockResolvedValue({ configured: true, error: null })
+    api.fetchSecondBrainSessions.mockResolvedValue([
+      {
+        session_id: 's1',
+        title: 'Session One',
+        created_at_ms: 1,
+        updated_at_ms: 2,
+        context_count: 1,
+        target_note_path: '',
+        context_paths: ['seed.md']
+      },
+      {
+        session_id: 's2',
+        title: 'Session Two',
+        created_at_ms: 1,
+        updated_at_ms: 3,
+        context_count: 1,
+        target_note_path: '',
+        context_paths: ['notes/a.md']
+      }
+    ])
+    api.loadDeliberationSession.mockImplementation(async (sessionId: string) => ({
+      session_id: sessionId,
+      title: sessionId === 's2' ? 'Session Two' : 'Session One',
+      provider: 'openai',
+      model: 'gpt-4.1',
+      created_at_ms: 1,
+      updated_at_ms: sessionId === 's2' ? 3 : 2,
+      target_note_path: '',
+      context_items: [{ path: sessionId === 's2' ? 'notes/a.md' : 'seed.md', token_estimate: 12 }],
+      messages: [],
+      draft_content: ''
+    }))
+    api.subscribeSecondBrainStream.mockResolvedValue(() => {})
+    api.runDeliberation.mockResolvedValue({ userMessageId: 'u1', assistantMessageId: 'a1' })
+    api.replaceSessionContext.mockResolvedValue(42)
+    api.createDeliberationSession.mockResolvedValue({ sessionId: 's-new', createdAtMs: 10 })
+    api.removeDeliberationSession.mockResolvedValue(undefined)
+  })
+
+  afterEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  function mountView() {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+
+    const app = createApp(SecondBrainView, {
+      workspacePath: '/vault',
+      allWorkspaceFiles: ['/vault/seed.md', '/vault/notes/a.md', '/vault/readme.txt'],
+      requestedSessionId: '',
+      requestedSessionNonce: 0,
+      onContextChanged: () => {},
+      onOpenNote: () => {}
+    })
+
+    app.mount(root)
+    return { root, app }
+  }
+
+  it('turns selected @ mention into a composer chip', async () => {
+    const mounted = mountView()
+    await flushUi()
+
+    const textarea = mounted.root.querySelector<HTMLTextAreaElement>('.sb-textarea')
+    expect(textarea).toBeTruthy()
+    if (!textarea) return
+
+    textarea.value = '@not'
+    textarea.selectionStart = textarea.value.length
+    textarea.selectionEnd = textarea.value.length
+    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushUi()
+
+    const firstSuggestion = mounted.root.querySelector<HTMLButtonElement>('.sb-at-item')
+    expect(firstSuggestion).toBeTruthy()
+    if (!firstSuggestion) return
+
+    firstSuggestion.click()
+    await flushUi()
+
+    expect(mounted.root.querySelector('.sb-chip')).toBeTruthy()
+    expect(mounted.root.textContent).toContain('a.md')
+    expect(textarea.value).toBe('')
+
+    mounted.app.unmount()
+  })
+
+  it('adds resolved @ mentions to context before send', async () => {
+    const mounted = mountView()
+    await flushUi()
+
+    const textarea = mounted.root.querySelector<HTMLTextAreaElement>('.sb-textarea')
+    const sendBtn = mounted.root.querySelector<HTMLButtonElement>('.send-icon-btn')
+    expect(textarea).toBeTruthy()
+    expect(sendBtn).toBeTruthy()
+    if (!textarea || !sendBtn) return
+
+    textarea.value = 'Look at @notes/a.md please'
+    textarea.selectionStart = textarea.value.length
+    textarea.selectionEnd = textarea.value.length
+    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushUi()
+
+    sendBtn.click()
+    await flushUi()
+
+    expect(api.replaceSessionContext).toHaveBeenCalledWith('s1', ['/vault/seed.md', '/vault/notes/a.md'])
+    expect(api.runDeliberation).toHaveBeenCalledWith({
+      sessionId: 's1',
+      mode: 'freestyle',
+      message: 'Look at @notes/a.md please'
+    })
+
+    mounted.app.unmount()
+  })
+
+  it('renders session dropdown trigger', async () => {
+    const mounted = mountView()
+    await flushUi()
+
+    const trigger = mounted.root.querySelector<HTMLButtonElement>('.sb-session-trigger')
+    expect(trigger).toBeTruthy()
+
+    mounted.app.unmount()
+  })
+})

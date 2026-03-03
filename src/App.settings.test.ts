@@ -109,7 +109,6 @@ vi.mock('./components/EditorRightPane.vue', () => ({ default: defineComponent(()
 vi.mock('./components/explorer/ExplorerTree.vue', () => ({ default: defineComponent(() => () => h('div')) }))
 vi.mock('./components/cosmos/CosmosView.vue', () => ({ default: defineComponent(() => () => h('div')) }))
 vi.mock('./components/second-brain/SecondBrainView.vue', () => ({ default: defineComponent(() => () => h('div')) }))
-vi.mock('./components/second-brain/SecondBrainSessionsView.vue', () => ({ default: defineComponent(() => () => h('div')) }))
 vi.mock('./components/cosmos/CosmosSidebarPanel.vue', () => ({ default: defineComponent(() => () => h('div')) }))
 
 import App from './App.vue'
