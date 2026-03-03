@@ -76,7 +76,7 @@ vi.mock('./lib/api', () => ({
   getWikilinkGraph: vi.fn(async () => ({ nodes: [], edges: [], generated_at_ms: Date.now() }))
 }))
 
-vi.mock('./components/EditorView.vue', () => ({
+vi.mock('./components/panes/EditorPaneGrid.vue', () => ({
   default: defineComponent({
     setup(_, { expose }) {
       expose({
@@ -93,6 +93,14 @@ vi.mock('./components/EditorView.vue', () => ({
         getZoom: () => 1
       })
       return () => h('div', 'editor')
+    }
+  })
+}))
+
+vi.mock('./components/panes/MultiPaneToolbarMenu.vue', () => ({
+  default: defineComponent({
+    setup() {
+      return () => h('button', { type: 'button', 'aria-label': 'Multi-pane layout' }, 'multi-pane')
     }
   })
 }))

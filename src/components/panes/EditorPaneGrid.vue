@@ -1,0 +1,342 @@
+<script setup lang="ts">
+import { computed, onBeforeUnmount, ref } from 'vue'
+import EditorView from '../EditorView.vue'
+import EditorPaneTabs, { type FileEditorStatus } from './EditorPaneTabs.vue'
+import type { MultiPaneLayout, PaneState } from '../../composables/useMultiPaneWorkspaceState'
+import type { WikilinkAnchor } from '../../lib/wikilinks'
+
+export type EditorPaneGridExposed = {
+  saveNow: () => Promise<void>
+  reloadCurrent: () => Promise<void>
+  focusEditor: () => void
+  focusFirstContentBlock: () => Promise<void>
+  revealSnippet: (snippet: string) => Promise<void>
+  revealOutlineHeading: (index: number) => Promise<void>
+  revealAnchor: (anchor: WikilinkAnchor) => Promise<boolean>
+  zoomIn: () => number
+  zoomOut: () => number
+  resetZoom: () => number
+  getZoom: () => number
+}
+
+type EditorViewExposed = EditorPaneGridExposed
+
+const props = defineProps<{
+  layout: MultiPaneLayout
+  getStatus: (path: string) => FileEditorStatus
+  openFile: (path: string) => Promise<string>
+  saveFile: (path: string, text: string, options: { explicit: boolean }) => Promise<{ persisted: boolean }>
+  renameFileFromTitle: (path: string, title: string) => Promise<{ path: string; title: string }>
+  loadLinkTargets: () => Promise<string[]>
+  loadLinkHeadings: (target: string) => Promise<string[]>
+  loadPropertyTypeSchema: () => Promise<Record<string, string>>
+  savePropertyTypeSchema: (schema: Record<string, string>) => Promise<void>
+  openLinkTarget: (target: string) => Promise<boolean>
+}>()
+
+const emit = defineEmits<{
+  'pane-focus': [payload: { paneId: string }]
+  'pane-tab-click': [payload: { paneId: string; path: string }]
+  'pane-tab-close': [payload: { paneId: string; path: string }]
+  'pane-tab-close-others': [payload: { paneId: string; path: string }]
+  'pane-tab-close-all': [payload: { paneId: string }]
+  'pane-request-move-tab': [payload: { paneId: string; direction: 'next' | 'previous' }]
+  status: [payload: { path: string; dirty: boolean; saving: boolean; saveError: string }]
+  'path-renamed': [payload: { from: string; to: string; manual: boolean }]
+  outline: [payload: Array<{ level: 1 | 2 | 3; text: string }>]
+  properties: [payload: { path: string; items: Array<{ key: string; value: string }>; parseErrorCount: number }]
+}>()
+
+// Keep instance refs out of Vue reactivity to avoid render-feedback loops.
+const editorRefs: Record<string, EditorViewExposed | null> = {}
+
+const gridRoot = ref<HTMLElement | null>(null)
+
+const paneList = computed<PaneState[]>(() => {
+  const ids = listPaneIds(props.layout.root)
+  return ids
+    .map((id) => props.layout.panesById[id])
+    .filter((pane): pane is PaneState => Boolean(pane))
+})
+
+const columnSplitRatio = ref(50)
+const rowSplitRatio = ref(50)
+const RESIZER_TRACK_PX = 6
+const MIN_RATIO = 20
+const MAX_RATIO = 80
+
+const dragState = ref<{
+  axis: 'column' | 'row'
+  startClient: number
+  startRatio: number
+} | null>(null)
+
+const hasColumnSplit = computed(() => paneList.value.length >= 2)
+const hasRowSplit = computed(() => paneList.value.length >= 3)
+
+const gridColumns = computed(() => {
+  if (!hasColumnSplit.value) return '1fr'
+  const a = `${columnSplitRatio.value}%`
+  const b = `${100 - columnSplitRatio.value}%`
+  return `${a} ${RESIZER_TRACK_PX}px ${b}`
+})
+
+const gridRows = computed(() => {
+  if (!hasRowSplit.value) return '1fr'
+  const a = `${rowSplitRatio.value}%`
+  const b = `${100 - rowSplitRatio.value}%`
+  return `${a} ${RESIZER_TRACK_PX}px ${b}`
+})
+
+function listPaneIds(node: MultiPaneLayout['root']): string[] {
+  if (node.kind === 'pane') return [node.paneId]
+  return [...listPaneIds(node.a), ...listPaneIds(node.b)]
+}
+
+function paneGridPosition(index: number): { gridColumn: string; gridRow: string } {
+  if (!hasColumnSplit.value && !hasRowSplit.value) {
+    return { gridColumn: '1', gridRow: '1' }
+  }
+  if (hasColumnSplit.value && !hasRowSplit.value) {
+    return {
+      gridColumn: index === 0 ? '1' : '3',
+      gridRow: '1'
+    }
+  }
+
+  const rowTop = index <= 1
+  const colLeft = index % 2 === 0
+  return {
+    gridColumn: colLeft ? '1' : '3',
+    gridRow: rowTop ? '1' : '3'
+  }
+}
+
+function onResizerPointerDown(axis: 'column' | 'row', event: PointerEvent) {
+  event.preventDefault()
+  dragState.value = {
+    axis,
+    startClient: axis === 'column' ? event.clientX : event.clientY,
+    startRatio: axis === 'column' ? columnSplitRatio.value : rowSplitRatio.value
+  }
+  window.addEventListener('pointermove', onResizerPointerMove)
+  window.addEventListener('pointerup', onResizerPointerUp)
+}
+
+function onResizerPointerMove(event: PointerEvent) {
+  const drag = dragState.value
+  if (!drag) return
+  const grid = gridRoot.value
+  if (!grid) return
+  const rect = grid.getBoundingClientRect()
+  const size = drag.axis === 'column'
+    ? Math.max(1, rect.width - RESIZER_TRACK_PX)
+    : Math.max(1, rect.height - RESIZER_TRACK_PX)
+  const delta = (drag.axis === 'column' ? event.clientX : event.clientY) - drag.startClient
+  const deltaRatio = (delta / size) * 100
+  const next = Math.min(MAX_RATIO, Math.max(MIN_RATIO, drag.startRatio + deltaRatio))
+  if (drag.axis === 'column') {
+    columnSplitRatio.value = next
+  } else {
+    rowSplitRatio.value = next
+  }
+}
+
+function onResizerPointerUp() {
+  dragState.value = null
+  window.removeEventListener('pointermove', onResizerPointerMove)
+  window.removeEventListener('pointerup', onResizerPointerUp)
+}
+
+function setEditorRef(paneId: string, instance: unknown) {
+  editorRefs[paneId] = (instance as EditorViewExposed | null) ?? null
+}
+
+function activeEditor(): EditorViewExposed | null {
+  return editorRefs[props.layout.activePaneId] ?? null
+}
+
+function ensureCall<T>(fn: ((editor: EditorViewExposed) => T), fallback: T): T {
+  const editor = activeEditor()
+  if (!editor) return fallback
+  return fn(editor)
+}
+
+async function saveNow() {
+  await ensureCall((editor) => editor.saveNow(), Promise.resolve())
+}
+
+async function reloadCurrent() {
+  await ensureCall((editor) => editor.reloadCurrent(), Promise.resolve())
+}
+
+function focusEditor() {
+  ensureCall((editor) => editor.focusEditor(), undefined)
+}
+
+async function focusFirstContentBlock() {
+  await ensureCall((editor) => editor.focusFirstContentBlock(), Promise.resolve())
+}
+
+async function revealSnippet(snippet: string) {
+  await ensureCall((editor) => editor.revealSnippet(snippet), Promise.resolve())
+}
+
+async function revealOutlineHeading(index: number) {
+  await ensureCall((editor) => editor.revealOutlineHeading(index), Promise.resolve())
+}
+
+async function revealAnchor(anchor: WikilinkAnchor): Promise<boolean> {
+  return await ensureCall((editor) => editor.revealAnchor(anchor), Promise.resolve(false))
+}
+
+function zoomIn() {
+  return ensureCall((editor) => editor.zoomIn(), 1)
+}
+
+function zoomOut() {
+  return ensureCall((editor) => editor.zoomOut(), 1)
+}
+
+function resetZoom() {
+  return ensureCall((editor) => editor.resetZoom(), 1)
+}
+
+function getZoom() {
+  return ensureCall((editor) => editor.getZoom(), 1)
+}
+
+defineExpose<EditorPaneGridExposed>({
+  saveNow,
+  reloadCurrent,
+  focusEditor,
+  focusFirstContentBlock,
+  revealSnippet,
+  revealOutlineHeading,
+  revealAnchor,
+  zoomIn,
+  zoomOut,
+  resetZoom,
+  getZoom
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('pointermove', onResizerPointerMove)
+  window.removeEventListener('pointerup', onResizerPointerUp)
+})
+</script>
+
+<template>
+  <div
+    ref="gridRoot"
+    class="pane-grid"
+    :style="{ gridTemplateColumns: gridColumns, gridTemplateRows: gridRows }"
+  >
+    <section
+      v-for="(pane, index) in paneList"
+      :key="pane.id"
+      class="editor-pane"
+      :class="{ 'editor-pane-active': pane.id === layout.activePaneId }"
+      :style="paneGridPosition(index)"
+      @pointerdown.capture="emit('pane-focus', { paneId: pane.id })"
+      @focusin.capture="emit('pane-focus', { paneId: pane.id })"
+    >
+      <EditorPaneTabs
+        :pane="pane"
+        :is-active-pane="pane.id === layout.activePaneId"
+        :get-status="getStatus"
+        @pane-focus="emit('pane-focus', $event)"
+        @tab-click="emit('pane-tab-click', $event)"
+        @tab-close="emit('pane-tab-close', $event)"
+        @tab-close-others="emit('pane-tab-close-others', $event)"
+        @tab-close-all="emit('pane-tab-close-all', $event)"
+        @request-move-tab="emit('pane-request-move-tab', $event)"
+      />
+
+      <EditorView
+        :ref="(instance: unknown) => setEditorRef(pane.id, instance)"
+        :path="pane.activePath"
+        :openPaths="pane.openTabs.map((tab) => tab.path)"
+        :openFile="openFile"
+        :saveFile="saveFile"
+        :renameFileFromTitle="renameFileFromTitle"
+        :loadLinkTargets="loadLinkTargets"
+        :loadLinkHeadings="loadLinkHeadings"
+        :loadPropertyTypeSchema="loadPropertyTypeSchema"
+        :savePropertyTypeSchema="savePropertyTypeSchema"
+        :openLinkTarget="openLinkTarget"
+        @status="emit('status', $event)"
+        @path-renamed="emit('path-renamed', $event)"
+        @outline="emit('outline', $event)"
+        @properties="emit('properties', $event)"
+      />
+    </section>
+
+    <div
+      v-if="hasColumnSplit"
+      class="pane-resizer pane-resizer-col"
+      :style="{ gridColumn: '2', gridRow: hasRowSplit ? '1 / 4' : '1' }"
+      @pointerdown="onResizerPointerDown('column', $event)"
+    ></div>
+
+    <div
+      v-if="hasRowSplit"
+      class="pane-resizer pane-resizer-row"
+      :style="{ gridColumn: '1 / 4', gridRow: '2' }"
+      @pointerdown="onResizerPointerDown('row', $event)"
+    ></div>
+  </div>
+</template>
+
+<style scoped>
+.pane-grid {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  gap: 0;
+  padding: 6px;
+  box-sizing: border-box;
+}
+
+.editor-pane {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface-bg);
+}
+
+.pane-resizer {
+  position: relative;
+  z-index: 15;
+  background: transparent;
+}
+
+.pane-resizer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--ui-border), transparent 15%);
+}
+
+.pane-resizer-col {
+  cursor: col-resize;
+}
+
+.pane-resizer-row {
+  cursor: row-resize;
+}
+
+.editor-pane-active {
+  border-color: color-mix(in srgb, var(--accent, #4f7a5d) 70%, var(--ui-border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent, #4f7a5d) 35%, transparent);
+}
+
+.editor-pane :deep(.editor-shell) {
+  flex: 1;
+  min-height: 0;
+}
+</style>

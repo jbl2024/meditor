@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 import type { Editor } from '@tiptap/vue-3'
 
-export type PaneId = 'main'
+export type PaneId = string
 
 export type PmSelectionSnapshot = {
   kind: 'pm-selection'
@@ -104,9 +104,9 @@ export function useDocumentEditorSessions(options: UseDocumentEditorSessionsOpti
     next[toPath] = session
     sessionsByPath.value = next
 
-    const active = activePathByPane.value
-    const updatedActive: Record<PaneId, string> = {
-      main: active.main === fromPath ? toPath : active.main
+    const updatedActive: Record<PaneId, string> = {}
+    for (const [paneId, path] of Object.entries(activePathByPane.value)) {
+      updatedActive[paneId] = path === fromPath ? toPath : path
     }
     activePathByPane.value = updatedActive
 
@@ -128,12 +128,13 @@ export function useDocumentEditorSessions(options: UseDocumentEditorSessionsOpti
     delete next[trimmed]
     sessionsByPath.value = next
 
-    if (activePathByPane.value.main === trimmed) {
-      activePathByPane.value = {
-        ...activePathByPane.value,
-        main: ''
+    const nextActive = { ...activePathByPane.value }
+    for (const [paneId, path] of Object.entries(nextActive)) {
+      if (path === trimmed) {
+        nextActive[paneId] = ''
       }
     }
+    activePathByPane.value = nextActive
   }
 
   function closeAll() {

@@ -12,10 +12,10 @@ import {
   MagnifyingGlassIcon,
   MoonIcon,
   ShareIcon,
-  SunIcon,
-  XMarkIcon
+  SunIcon
 } from '@heroicons/vue/24/outline'
-import EditorView from './components/EditorView.vue'
+import EditorPaneGrid, { type EditorPaneGridExposed } from './components/panes/EditorPaneGrid.vue'
+import MultiPaneToolbarMenu from './components/panes/MultiPaneToolbarMenu.vue'
 import EditorRightPane from './components/EditorRightPane.vue'
 import CosmosSidebarPanel from './components/cosmos/CosmosSidebarPanel.vue'
 import CosmosView from './components/cosmos/CosmosView.vue'
@@ -64,31 +64,25 @@ import {
 import { parseSearchSnippet } from './lib/searchSnippets'
 import { applySearchMode, detectSearchMode, type SearchMode } from './lib/searchMode'
 import { shouldBlockGlobalShortcutsFromTarget } from './lib/shortcutTargets'
-import { parseWikilinkTarget, type WikilinkAnchor } from './lib/wikilinks'
+import { parseWikilinkTarget } from './lib/wikilinks'
 import { buildCosmosGraph } from './lib/graphIndex'
 import { useEditorState } from './composables/useEditorState'
 import { useCosmosController } from './composables/useCosmosController'
 import { useFilesystemState } from './composables/useFilesystemState'
 import { useWorkspaceState, type SidebarMode } from './composables/useWorkspaceState'
+import {
+  createInitialLayout,
+  hydrateLayout,
+  serializeLayout,
+  useMultiPaneWorkspaceState
+} from './composables/useMultiPaneWorkspaceState'
 
 type ThemePreference = 'light' | 'dark' | 'system'
 type SearchHit = { path: string; snippet: string; score: number }
 type PropertyPreviewRow = { key: string; value: string }
 type SemanticLinkRow = { path: string; score: number | null; direction: 'incoming' | 'outgoing' }
 
-type EditorViewExposed = {
-  saveNow: () => Promise<void>
-  reloadCurrent: () => Promise<void>
-  focusEditor: () => void
-  focusFirstContentBlock: () => Promise<void>
-  revealSnippet: (snippet: string) => Promise<void>
-  revealOutlineHeading: (index: number) => Promise<void>
-  revealAnchor: (anchor: WikilinkAnchor) => Promise<boolean>
-  zoomIn: () => number
-  zoomOut: () => number
-  resetZoom: () => number
-  getZoom: () => number
-}
+type EditorViewExposed = EditorPaneGridExposed
 
 type ExplorerTreeExposed = {
   revealPathInView: (path: string, options?: { focusTree?: boolean; behavior?: ScrollBehavior }) => Promise<void>
@@ -155,6 +149,7 @@ type IndexActivityRow = {
 const THEME_STORAGE_KEY = 'tomosona.theme.preference'
 const WORKING_FOLDER_STORAGE_KEY = 'tomosona.working-folder.path'
 const EDITOR_ZOOM_STORAGE_KEY = 'tomosona:editor:zoom'
+const MULTI_PANE_STORAGE_KEY = 'tomosona:editor:multi-pane:v1'
 const VIEW_MODE_STORAGE_KEY = 'tomosona:view:active'
 const PREVIOUS_NON_COSMOS_VIEW_MODE_STORAGE_KEY = 'tomosona:view:last-non-cosmos'
 
@@ -182,7 +177,6 @@ const loadingAllFiles = ref(false)
 const editorRef = ref<EditorViewExposed | null>(null)
 const explorerRef = ref<ExplorerTreeExposed | null>(null)
 const cosmosRef = ref<CosmosViewExposed | null>(null)
-const tabScrollRef = ref<HTMLElement | null>(null)
 const overflowMenuRef = ref<HTMLElement | null>(null)
 const backHistoryMenuRef = ref<HTMLElement | null>(null)
 const forwardHistoryMenuRef = ref<HTMLElement | null>(null)
@@ -241,6 +235,18 @@ const secondBrainRequestedContextToggleNonce = ref(0)
 const secondBrainContextPaths = ref<string[]>([])
 const shortcutsFilterQuery = ref('')
 const previousNonCosmosMode = ref<SidebarMode>('explorer')
+const hydratedMultiPane = hydrateLayout(
+  (() => {
+    const raw = window.sessionStorage.getItem(MULTI_PANE_STORAGE_KEY)
+    if (!raw) return null
+    try {
+      return JSON.parse(raw)
+    } catch {
+      return null
+    }
+  })()
+)
+const multiPane = useMultiPaneWorkspaceState(hydratedMultiPane ?? createInitialLayout())
 const wikilinkRewriteQueue: Array<{
   fromPath: string
   toPath: string
@@ -293,71 +299,10 @@ const resolvedTheme = computed<'light' | 'dark'>(() => {
   return themePreference.value
 })
 
-const tabView = computed<TabViewItem[]>(() => {
-  const fileTabs = workspace.openTabs.value.map((tab) => {
-    const status = editorState.getStatus(tab.path)
-    const unsavedVirtual = Boolean(virtualDocs.value[tab.path])
-    return {
-      ...tab,
-      title: fileName(tab.path),
-      dirty: status.dirty || unsavedVirtual,
-      saving: status.saving,
-      saveError: status.saveError,
-      kind: 'file' as const,
-      draggable: true
-    }
-  })
-
-  const specialTabs: TabViewItem[] = []
-  if (cosmosTabOpen.value) {
-    specialTabs.push({
-      path: COSMOS_TAB_PATH,
-      title: 'Cosmos',
-      pinned: true,
-      dirty: false,
-      saving: false,
-      saveError: '',
-      kind: 'cosmos',
-      draggable: false
-    })
-  }
-  if (secondBrainTabOpen.value) {
-    specialTabs.push({
-      path: SECOND_BRAIN_TAB_PATH,
-      title: 'Second Brain',
-      pinned: true,
-      dirty: false,
-      saving: false,
-      saveError: '',
-      kind: 'second-brain',
-      draggable: false
-    })
-  }
-  if (secondBrainSessionsTabOpen.value) {
-    specialTabs.push({
-      path: SECOND_BRAIN_SESSIONS_TAB_PATH,
-      title: 'SB Sessions',
-      pinned: true,
-      dirty: false,
-      saving: false,
-      saveError: '',
-      kind: 'second-brain-sessions',
-      draggable: false
-    })
-  }
-
-  return [...fileTabs, ...specialTabs]
-})
-
-const activeFilePath = computed(() => workspace.activeTabPath.value)
-const activeTabPathForView = computed(() => {
-  if (workspace.sidebarMode.value === 'cosmos') return COSMOS_TAB_PATH
-  if (workspace.sidebarMode.value === 'second-brain') {
-    return secondBrainSurface.value === 'sessions'
-      ? SECOND_BRAIN_SESSIONS_TAB_PATH
-      : SECOND_BRAIN_TAB_PATH
-  }
-  return workspace.activeTabPath.value
+const paneCount = computed(() => Object.keys(multiPane.layout.value.panesById).length)
+const activeFilePath = computed(() => {
+  const activePane = multiPane.layout.value.panesById[multiPane.layout.value.activePaneId]
+  return activePane?.activePath ?? ''
 })
 const activeStatus = computed(() => editorState.getStatus(activeFilePath.value))
 const indexStateLabel = computed(() => {
@@ -501,7 +446,7 @@ const indexErrorCount = computed(() => indexActivityRows.value.filter((row) => r
 const indexSlowCount = computed(() => indexActivityRows.value.filter((row) => (row.durationMs ?? 0) > 1000).length)
 const cosmos = useCosmosController({
   workingFolderPath: filesystem.workingFolderPath,
-  activeTabPath: workspace.activeTabPath,
+  activeTabPath: activeFilePath,
   getWikilinkGraph,
   reindexMarkdownFile,
   readTextFile: async (path: string) => await readTextFile(path),
@@ -543,20 +488,7 @@ type PaletteAction = {
   loadingLabel?: string
 }
 
-const COSMOS_TAB_PATH = '__tomosona_cosmos_view__'
 const SECOND_BRAIN_TAB_PATH = '__tomosona_second_brain_view__'
-const SECOND_BRAIN_SESSIONS_TAB_PATH = '__tomosona_second_brain_sessions_view__'
-
-type TabViewItem = {
-  path: string
-  title: string
-  pinned: boolean
-  dirty: boolean
-  saving: boolean
-  saveError: string
-  kind: 'file' | 'cosmos' | 'second-brain' | 'second-brain-sessions'
-  draggable: boolean
-}
 
 const paletteActionPriority: Record<string, number> = {
   'open-file': 0,
@@ -574,13 +506,24 @@ const paletteActionPriority: Record<string, number> = {
   'create-new-file': 12,
   'close-other-tabs': 13,
   'close-all-tabs': 14,
-  'zoom-in': 15,
-  'zoom-out': 16,
-  'zoom-reset': 17,
-  'theme-light': 18,
-  'theme-dark': 19,
-  'theme-system': 20,
-  'close-workspace': 21
+  'split-pane-right': 15,
+  'split-pane-down': 16,
+  'focus-pane-1': 17,
+  'focus-pane-2': 18,
+  'focus-pane-3': 19,
+  'focus-pane-4': 20,
+  'focus-next-pane': 21,
+  'move-tab-next-pane': 22,
+  'close-active-pane': 23,
+  'join-panes': 24,
+  'reset-pane-layout': 25,
+  'zoom-in': 26,
+  'zoom-out': 27,
+  'zoom-reset': 28,
+  'theme-light': 29,
+  'theme-dark': 30,
+  'theme-system': 31,
+  'close-workspace': 32
 }
 
 const paletteActions = computed<PaletteAction[]>(() => [
@@ -631,6 +574,17 @@ const paletteActions = computed<PaletteAction[]>(() => [
   { id: 'create-new-file', label: 'New Note', run: () => createNewFileFromPalette() },
   { id: 'close-all-tabs', label: 'Close All Tabs', run: () => closeAllTabsFromPalette() },
   { id: 'close-other-tabs', label: 'Close Other Tabs', run: () => closeOtherTabsFromPalette() },
+  { id: 'split-pane-right', label: 'Split Pane Right', run: () => splitPaneFromPalette('row') },
+  { id: 'split-pane-down', label: 'Split Pane Down', run: () => splitPaneFromPalette('column') },
+  { id: 'focus-pane-1', label: 'Focus Pane 1', run: () => focusPaneFromPalette(1) },
+  { id: 'focus-pane-2', label: 'Focus Pane 2', run: () => focusPaneFromPalette(2) },
+  { id: 'focus-pane-3', label: 'Focus Pane 3', run: () => focusPaneFromPalette(3) },
+  { id: 'focus-pane-4', label: 'Focus Pane 4', run: () => focusPaneFromPalette(4) },
+  { id: 'focus-next-pane', label: 'Focus Next Pane', run: () => focusNextPaneFromPalette() },
+  { id: 'move-tab-next-pane', label: 'Move Active Tab to Next Pane', run: () => moveTabToNextPaneFromPalette() },
+  { id: 'close-active-pane', label: 'Close Active Pane', run: () => closeActivePaneFromPalette() },
+  { id: 'join-panes', label: 'Join Panes', run: () => joinPanesFromPalette() },
+  { id: 'reset-pane-layout', label: 'Reset Pane Layout', run: () => resetPaneLayoutFromPalette() },
   { id: 'open-file', label: 'Open File', run: () => (quickOpenQuery.value = '', false) },
   { id: 'reveal-in-explorer', label: 'Reveal in Explorer', run: () => revealActiveInExplorer() }
 ])
@@ -660,6 +614,16 @@ const shortcutSections = computed(() => {
         { keys: `${mod}+E`, action: 'Show explorer' },
         { keys: `${mod}+B`, action: 'Toggle sidebar' },
         { keys: `${mod}+J`, action: 'Toggle right pane' }
+      ]
+    },
+    {
+      title: 'Multi-pane',
+      items: [
+        { keys: `${mod}+\\\\`, action: 'Split pane right' },
+        { keys: `${mod}+Shift+\\\\`, action: 'Split pane down' },
+        { keys: `${mod}+1..4`, action: 'Focus pane 1..4' },
+        { keys: `Alt+Shift+ArrowLeft/Right`, action: 'Move active tab between panes' },
+        { keys: `Palette`, action: 'Join panes' }
       ]
     },
     {
@@ -2171,7 +2135,7 @@ async function openSettingsFromPalette() {
  * Opens Cosmos and selects the active note node when available.
  */
 async function openNoteInCosmosFromPalette() {
-  const activePath = workspace.activeTabPath.value
+  const activePath = activeFilePath.value
   if (!activePath) {
     filesystem.errorMessage.value = 'No active note to open in Cosmos.'
     return false
@@ -2217,7 +2181,8 @@ async function closeWorkspace() {
   indexFinalizeCompleted.value = 0
   indexFinalizeTotal.value = 0
   indexRunMessage.value = ''
-  workspace.closeAllTabs()
+  multiPane.resetToSinglePane()
+  multiPane.closeAllTabsInPane(multiPane.layout.value.activePaneId)
   documentHistory.reset()
   editorState.setActiveOutline([])
   searchHits.value = []
@@ -2309,13 +2274,15 @@ async function loadWorkingFolder(path: string) {
       await cosmos.refreshGraph()
     }
 
-    if (workspace.activeTabPath.value && !workspace.activeTabPath.value.startsWith(canonical)) {
-      workspace.closeAllTabs()
+    if (activeFilePath.value && !activeFilePath.value.startsWith(canonical)) {
+      multiPane.resetToSinglePane()
+      multiPane.closeAllTabsInPane(multiPane.layout.value.activePaneId)
       editorState.setActiveOutline([])
     }
   } catch (err) {
     filesystem.clearWorkspacePath()
-    workspace.closeAllTabs()
+    multiPane.resetToSinglePane()
+    multiPane.closeAllTabsInPane(multiPane.layout.value.activePaneId)
     searchHits.value = []
     window.localStorage.removeItem(WORKING_FOLDER_STORAGE_KEY)
     filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not open working folder.'
@@ -2336,7 +2303,7 @@ function onExplorerSelection(paths: string[]) {
 
 async function ensureActiveTabSavedBeforeSwitch(targetPath: string): Promise<boolean> {
   const target = targetPath.trim()
-  const current = workspace.activeTabPath.value
+  const current = activeFilePath.value
   if (!target || !current || current === target) return true
 
   const status = editorState.getStatus(current)
@@ -2344,7 +2311,7 @@ async function ensureActiveTabSavedBeforeSwitch(targetPath: string): Promise<boo
 
   await editorRef.value?.saveNow()
 
-  const activeAfterSave = workspace.activeTabPath.value || current
+  const activeAfterSave = activeFilePath.value || current
   const statusAfterSave = editorState.getStatus(activeAfterSave)
   if (statusAfterSave.dirty) {
     filesystem.errorMessage.value = statusAfterSave.saveError || 'Could not save current note before switching tabs.'
@@ -2359,7 +2326,7 @@ async function openTabWithAutosave(path: string, options: NavigateOptions = {}):
   if (!target) return false
   const canSwitch = await ensureActiveTabSavedBeforeSwitch(target)
   if (!canSwitch) return false
-  workspace.openTab(target)
+  multiPane.openPathInPane(target)
   exitCosmosForNoteNavigation()
   if (options.recordHistory !== false) {
     documentHistory.record(target)
@@ -2372,7 +2339,7 @@ async function setActiveTabWithAutosave(path: string, options: NavigateOptions =
   if (!target) return false
   const canSwitch = await ensureActiveTabSavedBeforeSwitch(target)
   if (!canSwitch) return false
-  workspace.setActiveTab(target)
+  multiPane.setActivePathInPane(multiPane.layout.value.activePaneId, target)
   exitCosmosForNoteNavigation()
   if (options.recordHistory !== false) {
     documentHistory.record(target)
@@ -2484,7 +2451,7 @@ function applyPathRenameLocally(payload: { from: string; to: string }) {
   const toPath = payload.to
   if (!fromPath || !toPath || fromPath === toPath) return
 
-  workspace.replaceTabPath(fromPath, toPath)
+  multiPane.replacePath(fromPath, toPath)
   documentHistory.replacePath(fromPath, toPath)
   editorState.movePath(fromPath, toPath)
 
@@ -2767,39 +2734,12 @@ async function onSearchResultOpen(hit: SearchHit) {
   await editorRef.value?.revealSnippet(hit.snippet)
 }
 
-async function onTabClick(tab: TabViewItem) {
-  if (tab.kind === 'cosmos') {
-    if (workspace.sidebarMode.value !== 'cosmos') {
-      setSidebarMode('cosmos')
-    }
-    return
-  }
-  if (tab.kind === 'second-brain') {
-    if (workspace.sidebarMode.value !== 'second-brain') {
-      setSidebarMode('second-brain')
-    }
-    secondBrainSurface.value = 'chat'
-    secondBrainTabOpen.value = true
-    recordSecondBrainHistorySnapshot()
-    return
-  }
-  if (tab.kind === 'second-brain-sessions') {
-    if (workspace.sidebarMode.value !== 'second-brain') {
-      setSidebarMode('second-brain')
-    }
-    secondBrainSessionsTabOpen.value = true
-    secondBrainSurface.value = 'sessions'
-    recordSecondBrainHistorySnapshot()
-    return
-  }
-  const opened = await setActiveTabWithAutosave(tab.path)
-  if (!opened) return
-}
-
 async function openNextTabWithAutosave() {
-  const tabs = workspace.openTabs.value
+  const activePane = multiPane.layout.value.panesById[multiPane.layout.value.activePaneId]
+  const tabs = activePane?.openTabs ?? []
   if (!tabs.length) return
-  const currentIndex = workspace.activeTabIndex.value
+  const currentPath = activePane?.activePath ?? ''
+  const currentIndex = tabs.findIndex((tab) => tab.path === currentPath)
   const nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % tabs.length
   const nextPath = tabs[nextIndex]?.path
   if (!nextPath) return
@@ -2812,12 +2752,6 @@ async function onBacklinkOpen(path: string) {
   if (!opened) return
   await nextTick()
   editorRef.value?.focusEditor()
-}
-
-function onTabAuxClick(event: MouseEvent, tab: TabViewItem) {
-  if (event.button !== 1) return
-  event.preventDefault()
-  onTabClose(tab)
 }
 
 function closeCosmosTab() {
@@ -2859,41 +2793,29 @@ function closeSecondBrainSessionsTab() {
   }
 }
 
-function onTabClose(tab: TabViewItem) {
-  if (tab.kind === 'cosmos') {
-    closeCosmosTab()
-    return
-  }
-  if (tab.kind === 'second-brain') {
-    closeSecondBrainTab()
-    return
-  }
-  if (tab.kind === 'second-brain-sessions') {
-    closeSecondBrainSessionsTab()
-    return
-  }
-  workspace.closeTab(tab.path)
-  editorState.clearStatus(tab.path)
+async function onPaneTabClick(payload: { paneId: string; path: string }) {
+  multiPane.setActivePane(payload.paneId)
+  const opened = await setActiveTabWithAutosave(payload.path)
+  if (!opened) return
 }
 
-function onTabDragStart(index: number, event: DragEvent) {
-  event.dataTransfer?.setData('text/tab-index', String(index))
-  event.dataTransfer!.effectAllowed = 'move'
+function onPaneTabClose(payload: { paneId: string; path: string }) {
+  multiPane.closeTabInPane(payload.paneId, payload.path)
+  editorState.clearStatus(payload.path)
 }
 
-function onTabDrop(index: number, event: DragEvent) {
-  const raw = event.dataTransfer?.getData('text/tab-index')
-  if (!raw) return
-  const from = Number.parseInt(raw, 10)
-  if (Number.isNaN(from)) return
-  workspace.moveTab(from, index)
+function onPaneTabCloseOthers(payload: { paneId: string; path: string }) {
+  multiPane.closeOtherTabsInPane(payload.paneId, payload.path)
 }
 
-function scrollActiveTabIntoView() {
-  const container = tabScrollRef.value
-  if (!container) return
-  const activeTab = container.querySelector<HTMLElement>('.tab-item.active')
-  activeTab?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'auto' })
+function onPaneTabCloseAll(payload: { paneId: string }) {
+  const pane = multiPane.layout.value.panesById[payload.paneId]
+  if (!pane) return
+  const paths = pane.openTabs.map((tab) => tab.path)
+  multiPane.closeAllTabsInPane(payload.paneId)
+  for (const path of paths) {
+    editorState.clearStatus(path)
+  }
 }
 
 function onEditorStatus(payload: { path: string; dirty: boolean; saving: boolean; saveError: string }) {
@@ -3027,7 +2949,7 @@ function collectSemanticLinksForPath(path: string, rawGraph: WikilinkGraph | nul
 
 async function refreshBacklinks() {
   const root = filesystem.workingFolderPath.value
-  const path = workspace.activeTabPath.value
+  const path = activeFilePath.value
   if (!root || !path) {
     backlinks.value = []
     semanticLinks.value = []
@@ -3087,7 +3009,7 @@ async function showExplorerForActiveFile(options: { focusTree?: boolean } = {}) 
   setSidebarMode('explorer')
   if (!workspace.sidebarVisible.value) return
   await nextTick()
-  const activePath = workspace.activeTabPath.value
+  const activePath = activeFilePath.value
   if (!activePath) return
   for (let attempt = 0; attempt < 4; attempt += 1) {
     const revealPathInView = explorerRef.value?.revealPathInView
@@ -3141,9 +3063,9 @@ async function submitOpenDateFromModal() {
 }
 
 async function revealActiveInExplorer() {
-  if (!workspace.activeTabPath.value) return false
+  if (!activeFilePath.value) return false
   try {
-    await revealInFileManager(workspace.activeTabPath.value)
+    await revealInFileManager(activeFilePath.value)
     return true
   } catch (err) {
     filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not reveal file.'
@@ -3570,7 +3492,7 @@ async function suggestedNotePathPrefix(): Promise<string> {
     // Fall back to active path below.
   }
 
-  const activePath = workspace.activeTabPath.value
+  const activePath = activeFilePath.value
   if (!activePath) return ''
   return parentPrefixForModal(activePath.replace(/\/[^/]+$/, ''))
 }
@@ -3705,7 +3627,8 @@ async function submitNewFolderFromModal() {
 }
 
 function closeAllTabsFromPalette() {
-  workspace.closeAllTabs()
+  const paneId = multiPane.layout.value.activePaneId
+  multiPane.closeAllTabsInPane(paneId)
   editorState.setActiveOutline([])
   return true
 }
@@ -3777,9 +3700,46 @@ async function rebuildIndexFromOverflow() {
 }
 
 function closeOtherTabsFromPalette() {
-  const active = workspace.activeTabPath.value
+  const paneId = multiPane.layout.value.activePaneId
+  const active = multiPane.layout.value.panesById[paneId]?.activePath ?? ''
   if (!active) return false
-  workspace.closeOtherTabs(active)
+  multiPane.closeOtherTabsInPane(paneId, active)
+  return true
+}
+
+async function splitPaneFromPalette(axis: 'row' | 'column') {
+  const createdPaneId = multiPane.splitPane(multiPane.layout.value.activePaneId, axis)
+  if (!createdPaneId) return false
+  // Some focus events from the previous editor can fire right after split.
+  // Re-apply the new pane focus after DOM update to keep UX deterministic.
+  await nextTick()
+  multiPane.setActivePane(createdPaneId)
+  return true
+}
+
+function focusPaneFromPalette(index: number) {
+  return multiPane.focusPaneByIndex(index)
+}
+
+function focusNextPaneFromPalette() {
+  return multiPane.focusAdjacentPane('next')
+}
+
+function moveTabToNextPaneFromPalette() {
+  return multiPane.moveActiveTabToAdjacentPane('next')
+}
+
+function closeActivePaneFromPalette() {
+  return multiPane.closePane(multiPane.layout.value.activePaneId)
+}
+
+function joinPanesFromPalette() {
+  multiPane.joinAllPanes()
+  return true
+}
+
+function resetPaneLayoutFromPalette() {
+  multiPane.resetToSinglePane()
   return true
 }
 
@@ -4160,7 +4120,43 @@ function onWindowKeydown(event: KeyboardEvent) {
       }
       return
     }
-    workspace.closeCurrentTab()
+    const paneId = multiPane.layout.value.activePaneId
+    const path = multiPane.layout.value.panesById[paneId]?.activePath ?? ''
+    if (path) {
+      multiPane.closeTabInPane(paneId, path)
+      editorState.clearStatus(path)
+    }
+    return
+  }
+
+  if (key === '\\' && !event.shiftKey) {
+    event.preventDefault()
+    void splitPaneFromPalette('row')
+    return
+  }
+
+  if (key === '\\' && event.shiftKey) {
+    event.preventDefault()
+    void splitPaneFromPalette('column')
+    return
+  }
+
+  if (key >= '1' && key <= '4') {
+    event.preventDefault()
+    const index = Number.parseInt(key, 10)
+    void focusPaneFromPalette(index)
+    return
+  }
+
+  if (event.altKey && event.shiftKey && key === 'arrowright') {
+    event.preventDefault()
+    void multiPane.moveActiveTabToAdjacentPane('next')
+    return
+  }
+
+  if (event.altKey && event.shiftKey && key === 'arrowleft') {
+    event.preventDefault()
+    void multiPane.moveActiveTabToAdjacentPane('previous')
     return
   }
 
@@ -4309,7 +4305,7 @@ watch(
 )
 
 watch(
-  () => workspace.activeTabPath.value,
+  () => activeFilePath.value,
   (path) => {
     void refreshActiveFileMetadata(path)
   },
@@ -4317,23 +4313,15 @@ watch(
 )
 
 watch(
-  () => workspace.activeTabPath.value,
-  async () => {
-    await nextTick()
-    scrollActiveTabIntoView()
-  }
+  () => multiPane.layout.value,
+  (layout) => {
+    window.sessionStorage.setItem(MULTI_PANE_STORAGE_KEY, JSON.stringify(serializeLayout(layout)))
+  },
+  { deep: true }
 )
 
 watch(
-  () => tabView.value.length,
-  async () => {
-    await nextTick()
-    scrollActiveTabIntoView()
-  }
-)
-
-watch(
-  () => workspace.activeTabPath.value,
+  () => activeFilePath.value,
   async (path) => {
     if (!path) {
       editorState.setActiveOutline([])
@@ -4350,7 +4338,7 @@ watch(
 )
 
 watch(
-  () => workspace.activeTabPath.value,
+  () => activeFilePath.value,
   () => {
     void refreshBacklinks()
   }
@@ -4383,9 +4371,6 @@ onMounted(() => {
     void loadWorkingFolder(savedFolder)
   }
 
-  void nextTick(() => {
-    scrollActiveTabIntoView()
-  })
 })
 
 onBeforeUnmount(() => {
@@ -4595,40 +4580,6 @@ onBeforeUnmount(() => {
 
       <section class="workspace-column">
         <header class="topbar">
-          <div class="tabs-row">
-            <div ref="tabScrollRef" class="tab-scroll">
-              <div
-                v-for="(tab, index) in tabView"
-                :key="tab.path"
-                role="button"
-                tabindex="0"
-                class="tab-item"
-                :class="{ active: activeTabPathForView === tab.path }"
-                :draggable="tab.draggable"
-                @click="onTabClick(tab)"
-                @auxclick="onTabAuxClick($event, tab)"
-                @keydown.enter.prevent="onTabClick(tab)"
-                @keydown.space.prevent="onTabClick(tab)"
-                @dragstart="tab.draggable ? onTabDragStart(index, $event) : undefined"
-                @dragover.prevent
-                @drop="tab.draggable ? onTabDrop(index, $event) : undefined"
-              >
-                <span class="tab-name">
-                  <ShareIcon v-if="tab.kind === 'cosmos'" class="tab-cosmos-icon" aria-hidden="true" />
-                  <CpuChipIcon v-else-if="tab.kind === 'second-brain'" class="tab-cosmos-icon" aria-hidden="true" />
-                  <CommandLineIcon v-else-if="tab.kind === 'second-brain-sessions'" class="tab-cosmos-icon" aria-hidden="true" />
-                  <span>{{ tab.title }}</span>
-                </span>
-                <span v-if="tab.saving" class="tab-state" title="Saving">~</span>
-                <span v-else-if="tab.dirty" class="tab-state" title="Unsaved">•</span>
-                <button class="tab-close" type="button" @click.stop="onTabClose(tab)">
-                  <XMarkIcon />
-                </button>
-              </div>
-              <div v-if="!tabView.length" class="tab-empty">No open files</div>
-            </div>
-          </div>
-
           <div class="global-actions">
             <div class="nav-actions">
               <div ref="backHistoryMenuRef" class="history-nav-wrap">
@@ -4701,6 +4652,18 @@ onBeforeUnmount(() => {
                   <div v-if="!documentHistory.forwardTargets.value.length" class="history-menu-empty">No forward history</div>
                 </div>
               </div>
+              <MultiPaneToolbarMenu
+                :can-split="paneCount < 4"
+                :pane-count="paneCount"
+                @split-right="splitPaneFromPalette('row')"
+                @split-down="splitPaneFromPalette('column')"
+                @focus-pane="focusPaneFromPalette($event.index)"
+                @focus-next="focusNextPaneFromPalette()"
+                @move-tab-next="moveTabToNextPaneFromPalette()"
+                @close-pane="closeActivePaneFromPalette()"
+                @join-panes="joinPanesFromPalette()"
+                @reset-layout="resetPaneLayoutFromPalette()"
+              />
             </div>
             <button
               type="button"
@@ -4881,11 +4844,11 @@ onBeforeUnmount(() => {
               v-show="workspace.sidebarMode.value === 'second-brain' && secondBrainSurface === 'sessions'"
               @open-session="openSecondBrainSessionFromHistory"
             />
-            <EditorView
+            <EditorPaneGrid
               v-show="workspace.sidebarMode.value !== 'cosmos' && workspace.sidebarMode.value !== 'second-brain'"
               ref="editorRef"
-              :path="activeFilePath"
-              :openPaths="workspace.openTabs.value.map((tab) => tab.path)"
+              :layout="multiPane.layout.value"
+              :get-status="editorState.getStatus"
               :openFile="openFile"
               :saveFile="saveFile"
               :renameFileFromTitle="renameFileFromTitle"
@@ -4894,6 +4857,12 @@ onBeforeUnmount(() => {
               :loadPropertyTypeSchema="loadPropertyTypeSchema"
               :savePropertyTypeSchema="savePropertyTypeSchema"
               :openLinkTarget="openWikilinkTarget"
+              @pane-focus="multiPane.setActivePane($event.paneId)"
+              @pane-tab-click="void onPaneTabClick($event)"
+              @pane-tab-close="onPaneTabClose($event)"
+              @pane-tab-close-others="onPaneTabCloseOthers($event)"
+              @pane-tab-close-all="onPaneTabCloseAll($event)"
+              @pane-request-move-tab="multiPane.moveActiveTabToAdjacentPane($event.direction)"
               @status="onEditorStatus"
               @path-renamed="onEditorPathRenamed"
               @outline="onEditorOutline"

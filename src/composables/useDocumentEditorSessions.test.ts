@@ -39,11 +39,13 @@ describe('useDocumentEditorSessions', () => {
 
     store.ensureSession('old.md')
     store.setActivePath('main', 'old.md')
+    store.setActivePath('secondary', 'old.md')
     store.renamePath('old.md', 'new.md')
 
     expect(store.getSession('old.md')).toBeNull()
     expect(store.getSession('new.md')?.path).toBe('new.md')
     expect(store.getActivePath('main')).toBe('new.md')
+    expect(store.getActivePath('secondary')).toBe('new.md')
   })
 
   it('closes a single path and clears timers', () => {
@@ -93,9 +95,11 @@ describe('useDocumentEditorSessions', () => {
 
     store.ensureSession('active.md')
     store.setActivePath('main', 'active.md')
+    store.setActivePath('secondary', 'active.md')
     store.closePath('active.md')
 
     expect(store.getActivePath('main')).toBe('')
+    expect(store.getActivePath('secondary')).toBe('')
   })
 
   it('throws when ensuring a blank path', () => {

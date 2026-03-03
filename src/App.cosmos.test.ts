@@ -87,9 +87,9 @@ vi.mock('./lib/api', () => ({
   getWikilinkGraph: hoisted.getWikilinkGraph
 }))
 
-vi.mock('./components/EditorView.vue', () => ({
+vi.mock('./components/panes/EditorPaneGrid.vue', () => ({
   default: defineComponent({
-    name: 'EditorViewStub',
+    name: 'EditorPaneGridStub',
     setup(_, { expose }) {
       expose({
         saveNow: async () => {},
@@ -105,6 +105,15 @@ vi.mock('./components/EditorView.vue', () => ({
         getZoom: () => 1
       })
       return () => h('div', { 'data-editor-stub': 'true' }, 'editor')
+    }
+  })
+}))
+
+vi.mock('./components/panes/MultiPaneToolbarMenu.vue', () => ({
+  default: defineComponent({
+    name: 'MultiPaneToolbarMenuStub',
+    setup() {
+      return () => h('button', { type: 'button', 'aria-label': 'Multi-pane layout' }, 'multi-pane')
     }
   })
 }))
@@ -473,9 +482,6 @@ describe('App cosmos integration', () => {
     const hiddenCosmosAfterFileOpen = mounted.root.querySelector<HTMLElement>('[data-cosmos-stub="true"]')
     expect(hiddenCosmosAfterFileOpen).toBeTruthy()
     expect(hiddenCosmosAfterFileOpen?.style.display).toBe('none')
-    const cosmosTab = Array.from(mounted.root.querySelectorAll<HTMLElement>('.tab-item'))
-      .find((item) => item.querySelector('.tab-name')?.textContent?.trim() === 'Cosmos')
-    expect(cosmosTab).toBeTruthy()
 
     mounted.root.querySelector<HTMLButtonElement>('button[aria-label="Cosmos view"]')?.click()
     await flushUi()
@@ -577,7 +583,7 @@ describe('App cosmos integration', () => {
     mounted.app.unmount()
   })
 
-  it('exits cosmos when clicking a file tab', async () => {
+  it('exits cosmos when opening a file via quick open', async () => {
     window.localStorage.setItem('tomosona.working-folder.path', '/vault')
     const mounted = mountApp()
     await flushUi()
@@ -592,13 +598,22 @@ describe('App cosmos integration', () => {
     mounted.root.querySelector<HTMLButtonElement>('.cosmos-node-title-link')?.click()
     await flushUi()
 
-    // Return to cosmos, then click the file tab.
+    // Return to cosmos, then open the file from quick open.
     mounted.root.querySelector<HTMLButtonElement>('button[aria-label="Cosmos view"]')?.click()
     await flushUi()
     await flushUi()
     expect(mounted.root.querySelector('[data-cosmos-stub="true"]')).toBeTruthy()
 
-    mounted.root.querySelector<HTMLElement>('.tab-item')?.click()
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'p', ctrlKey: true, bubbles: true }))
+    await flushUi()
+    const input = mounted.root.querySelector<HTMLInputElement>('[data-quick-open-input="true"]')
+    expect(input).toBeTruthy()
+    if (input) {
+      input.value = 'opened-from-cosmos'
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      await flushUi()
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    }
     await flushUi()
 
     const hiddenCosmosAfterTabClick = mounted.root.querySelector<HTMLElement>('[data-cosmos-stub="true"]')
@@ -609,7 +624,7 @@ describe('App cosmos integration', () => {
     mounted.app.unmount()
   })
 
-  it('shows a cosmos tab when cosmos is active and closes to explorer via tab close', async () => {
+  it('closes cosmos via Escape and returns to explorer', async () => {
     window.localStorage.setItem('tomosona.working-folder.path', '/vault')
     const mounted = mountApp()
     await flushUi()
@@ -619,13 +634,12 @@ describe('App cosmos integration', () => {
     await flushUi()
     await flushUi()
 
-    const cosmosTab = Array.from(mounted.root.querySelectorAll<HTMLElement>('.tab-item'))
-      .find((item) => item.querySelector('.tab-name')?.textContent?.trim() === 'Cosmos')
-    expect(cosmosTab).toBeTruthy()
-    cosmosTab?.querySelector<HTMLButtonElement>('.tab-close')?.click()
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
     await flushUi()
 
-    expect(mounted.root.querySelector('[data-cosmos-stub="true"]')).toBeFalsy()
+    const hiddenCosmosAfterEscape = mounted.root.querySelector<HTMLElement>('[data-cosmos-stub="true"]')
+    expect(hiddenCosmosAfterEscape).toBeTruthy()
+    expect(hiddenCosmosAfterEscape?.style.display).toBe('none')
     expect((mounted.root.textContent ?? '').toLowerCase()).toContain('explorer')
 
     mounted.app.unmount()
