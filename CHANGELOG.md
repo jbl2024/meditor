@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.10.2] - 2026-03-04
+
+### Added
+- feat(panes): auto-create next pane on tab move and add global/current close-all commands (cdc3050)
+
 ## [0.10.1] - 2026-03-03
 
 ### Fixed
