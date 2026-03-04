@@ -309,6 +309,20 @@ fn chunk_markdown(markdown: &str) -> Vec<(String, String)> {
     chunks
 }
 
+/// Adds note identity context to the first chunk to improve semantic grounding.
+///
+/// The context uses workspace-relative path (including file name), for example:
+/// `journal/2026-02-16.md`.
+fn inject_relative_path_context(path_for_db: &str, mut chunks: Vec<(String, String)>) -> Vec<(String, String)> {
+    if path_for_db.trim().is_empty() || chunks.is_empty() {
+        return chunks;
+    }
+    if let Some((_, first_text)) = chunks.first_mut() {
+        *first_text = format!("{path_for_db}\n{first_text}");
+    }
+    chunks
+}
+
 fn chunk_content_hash(anchor: &str, text: &str) -> String {
     let mut hasher = DefaultHasher::new();
     anchor.hash(&mut hasher);
@@ -1130,6 +1144,7 @@ fn reindex_markdown_file_lexical_sync(path: String) -> Result<()> {
     ensure_index_schema(&conn)?;
     let tx = conn.unchecked_transaction()?;
     let path_for_db = normalize_workspace_relative_path(&root, &normalized_path)?;
+    let chunks = inject_relative_path_context(&path_for_db, chunks);
     log_index(&format!("reindex:start path={path_for_db}"));
     let source_key = normalize_note_key(&root, &normalized_path)?;
 
@@ -3212,6 +3227,18 @@ mod tests {
     }
 
     #[test]
+    fn inject_relative_path_context_prefixes_first_chunk_only() {
+        let chunks = vec![
+            ("".to_string(), "first".to_string()),
+            ("section".to_string(), "second".to_string()),
+        ];
+        let contextualized = inject_relative_path_context("journal/2026-02-16.md", chunks);
+        assert_eq!(contextualized.len(), 2);
+        assert_eq!(contextualized[0].1, "journal/2026-02-16.md\nfirst");
+        assert_eq!(contextualized[1].1, "second");
+    }
+
+    #[test]
     fn init_db_uses_new_index_schema_columns() {
         let _guard = workspace_test_guard();
         let workspace = create_temp_workspace("tomosona-schema-test");
@@ -3299,6 +3326,34 @@ mod tests {
         assert!(props_n >= 2);
         assert_eq!(embedding_n, 0);
         assert_eq!(note_embedding_n, 0);
+
+        clear_active_workspace().expect("clear workspace");
+        fs::remove_dir_all(&workspace).expect("cleanup workspace");
+    }
+
+    #[test]
+    fn lexical_reindex_stores_relative_path_in_first_chunk() {
+        let _guard = workspace_test_guard();
+        let workspace = create_temp_workspace("tomosona-lexical-context-test");
+        let root = workspace.to_string_lossy().to_string();
+        let note_path = workspace.join("nested").join("topic.md");
+        fs::create_dir_all(note_path.parent().expect("parent")).expect("create nested");
+        fs::write(&note_path, "# Heading\nline one\nline two").expect("write note");
+
+        set_active_workspace(&root).expect("set workspace");
+        init_db().expect("init db");
+        reindex_markdown_file_lexical_sync(note_path.to_string_lossy().to_string())
+            .expect("lexical reindex");
+
+        let conn = open_db().expect("open db");
+        let first_chunk: String = conn
+            .query_row(
+                "SELECT text FROM chunks WHERE path = 'nested/topic.md' AND chunk_ord = 0",
+                [],
+                |row| row.get(0),
+            )
+            .expect("query first chunk");
+        assert!(first_chunk.starts_with("nested/topic.md\n"));
 
         clear_active_workspace().expect("clear workspace");
         fs::remove_dir_all(&workspace).expect("cleanup workspace");
