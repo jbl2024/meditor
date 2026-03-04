@@ -162,6 +162,70 @@ function sourceTextForTurnInto(node: ProseNode): string {
   return lineText(node) || node.textContent || ''
 }
 
+function isListTypeName(typeName: string): boolean {
+  return typeName === 'bulletList' || typeName === 'orderedList' || typeName === 'taskList'
+}
+
+function listTypeNodeFromTurnIntoType(schema: Schema, type: TurnIntoType): ProseNode['type'] | null {
+  if (type === 'bulletList') return schema.nodes.bulletList ?? null
+  if (type === 'orderedList') return schema.nodes.orderedList ?? null
+  if (type === 'taskList') return schema.nodes.taskList ?? null
+  return null
+}
+
+function listItemTypeNodeForList(schema: Schema, listTypeName: string): ProseNode['type'] | null {
+  if (listTypeName === 'taskList') return schema.nodes.taskItem ?? null
+  if (listTypeName === 'bulletList' || listTypeName === 'orderedList') return schema.nodes.listItem ?? null
+  return null
+}
+
+function findAncestorListEntry(editor: Editor, pos: number): { pos: number; node: ProseNode } | null {
+  const resolved = editor.state.doc.resolve(Math.max(1, Math.min(pos + 1, editor.state.doc.content.size)))
+  for (let depth = resolved.depth; depth >= 0; depth -= 1) {
+    const node = resolved.node(depth)
+    if (!isListTypeName(node.type.name)) continue
+    const before = depth === 0 ? 0 : resolved.before(depth)
+    return { pos: before, node }
+  }
+  return null
+}
+
+function createParagraphFromListItem(schema: Schema, item: ProseNode): ProseNode | null {
+  for (let i = 0; i < item.childCount; i += 1) {
+    const child = item.child(i)
+    if (child.type.name !== 'paragraph') continue
+    return createParagraph(schema, child.textContent ?? '', child.content)
+  }
+  return createParagraph(schema, lineText(item))
+}
+
+function convertListNode(schema: Schema, listNode: ProseNode, type: TurnIntoType): ProseNode | null {
+  const nextListType = listTypeNodeFromTurnIntoType(schema, type)
+  if (!nextListType) return null
+  const nextItemType = listItemTypeNodeForList(schema, nextListType.name)
+  if (!nextItemType) return null
+
+  const convertedItems: ProseNode[] = []
+  listNode.forEach((item) => {
+    if (item.type.name !== 'listItem' && item.type.name !== 'taskItem') return
+    const paragraph = createParagraphFromListItem(schema, item)
+    if (!paragraph) return
+
+    const nestedChildren: ProseNode[] = []
+    item.forEach((child) => {
+      if (child.type.name === 'paragraph') return
+      nestedChildren.push(child)
+    })
+    const attrs = nextItemType.name === 'taskItem'
+      ? { checked: item.type.name === 'taskItem' ? Boolean(item.attrs?.checked) : false }
+      : null
+    convertedItems.push(nextItemType.create(attrs, [paragraph, ...nestedChildren]))
+  })
+
+  if (!convertedItems.length) return null
+  return nextListType.create(null, convertedItems)
+}
+
 function focusNearPos(editor: Editor, pos: number) {
   const { doc } = editor.state
   const max = Math.max(1, doc.content.size)
@@ -286,6 +350,19 @@ export function deleteNode(editor: Editor, target: BlockMenuTarget): boolean {
 export function turnInto(editor: Editor, target: BlockMenuTarget, type: TurnIntoType): boolean {
   const node = editor.state.doc.nodeAt(target.pos)
   if (!node) return false
+
+  if (type === 'bulletList' || type === 'orderedList' || type === 'taskList') {
+    const listAncestor = findAncestorListEntry(editor, target.pos)
+    if (listAncestor) {
+      const convertedList = convertListNode(editor.state.schema, listAncestor.node, type)
+      if (!convertedList) return false
+      const tr = editor.state.tr.replaceWith(listAncestor.pos, listAncestor.pos + listAncestor.node.nodeSize, convertedList)
+      editor.view.dispatch(tr)
+      focusNearPos(editor, listAncestor.pos + 1)
+      return true
+    }
+  }
+
   const replacement = createTurnIntoNode(editor.state.schema, type, node, sourceTextForTurnInto(node))
   if (!replacement) return false
 

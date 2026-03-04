@@ -113,6 +113,20 @@ function createTarget(editor: Editor): BlockMenuTarget {
   }
 }
 
+function createTargetAtPos(editor: Editor, pos: number): BlockMenuTarget {
+  const node = editor.state.doc.nodeAt(pos)
+  if (!node) throw new Error(`No node at pos ${pos}`)
+  return {
+    pos,
+    nodeType: node.type.name,
+    nodeSize: node.nodeSize,
+    canDelete: true,
+    canConvert: true,
+    text: node.textContent ?? '',
+    isVirtualTitle: false
+  }
+}
+
 const editors: Editor[] = []
 
 function createEditor(firstNode: JSONContent): Editor {
@@ -280,6 +294,46 @@ describe('blockMenu turnInto', () => {
     expect(paragraph.child(0).type.name).toBe('wikilink')
     expect(String(paragraph.child(0).attrs.target ?? '')).toBe('Note.md')
     expect(paragraph.child(2).marks.some((mark) => mark.type.name === 'bold')).toBe(true)
+  })
+
+  it('converts a parent bullet list when target is a listItem and keeps wikilinks intact', () => {
+    const editor = createEditor({
+      type: 'bulletList',
+      content: [
+        {
+          type: 'listItem',
+          content: [
+            {
+              type: 'paragraph',
+              content: [
+                { type: 'wikilink', attrs: { target: 'systeme_climatique.md', label: 'Systeme climatique', exists: true } }
+              ]
+            }
+          ]
+        },
+        {
+          type: 'listItem',
+          content: [
+            {
+              type: 'paragraph',
+              content: [
+                { type: 'wikilink', attrs: { target: 'ocean.md', label: 'Ocean', exists: true } }
+              ]
+            }
+          ]
+        }
+      ]
+    })
+
+    expect(turnInto(editor, createTargetAtPos(editor, 1), 'taskList')).toBe(true)
+    const converted = editor.state.doc.child(0)
+    expect(converted.type.name).toBe('taskList')
+    expect(converted.childCount).toBe(2)
+    expect(converted.child(0).type.name).toBe('taskItem')
+    expect(converted.child(0).child(0).child(0).type.name).toBe('wikilink')
+    expect(String(converted.child(0).child(0).child(0).attrs.target ?? '')).toBe('systeme_climatique.md')
+    expect(converted.child(1).type.name).toBe('taskItem')
+    expect(String(converted.child(1).child(0).child(0).attrs.target ?? '')).toBe('ocean.md')
   })
 
   it('converts every source/target pair without dropping non-empty content', () => {
