@@ -263,8 +263,16 @@ export async function writeTextFile(path: string, content: string): Promise<void
   await invoke('write_text_file', { path, content })
 }
 
-export async function reindexMarkdownFile(path: string): Promise<void> {
-  await invoke('reindex_markdown_file', { path })
+export async function reindexMarkdownFileLexical(path: string): Promise<void> {
+  await invoke('reindex_markdown_file_lexical', { path })
+}
+
+export async function reindexMarkdownFileSemantic(path: string): Promise<void> {
+  await invoke('reindex_markdown_file_semantic', { path })
+}
+
+export async function refreshSemanticEdgesCacheNow(): Promise<void> {
+  await invoke('refresh_semantic_edges_cache_now')
 }
 
 export async function removeMarkdownFileFromIndex(path: string): Promise<void> {

@@ -12,8 +12,9 @@ mod workspace_watch;
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 use std::{
-    collections::{HashMap, HashSet, VecDeque},
+    collections::{hash_map::DefaultHasher, HashMap, HashSet, VecDeque},
     fs,
+    hash::{Hash, Hasher},
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -48,6 +49,7 @@ const SEARCH_RESULT_LIMIT: usize = 25;
 const SEMANTIC_TOP_K_PER_NOTE: i64 = 3;
 const SEMANTIC_THRESHOLD: f32 = 0.62;
 const INDEX_LOG_CAPACITY: usize = 400;
+const INDEX_SCHEMA_VERSION: i64 = 2;
 static INDEX_CANCEL_REQUESTED: AtomicBool = AtomicBool::new(false);
 #[cfg(windows)]
 const FILE_ATTRIBUTE_HIDDEN: u32 = 0x2;
@@ -305,6 +307,13 @@ fn chunk_markdown(markdown: &str) -> Vec<(String, String)> {
     }
 
     chunks
+}
+
+fn chunk_content_hash(anchor: &str, text: &str) -> String {
+    let mut hasher = DefaultHasher::new();
+    anchor.hash(&mut hasher);
+    text.hash(&mut hasher);
+    format!("{:016x}", hasher.finish())
 }
 
 fn strip_markdown_extension(path: &Path) -> PathBuf {
@@ -897,22 +906,60 @@ fn rewrite_wikilinks_for_note(
     }
 }
 
-#[tauri::command]
-fn init_db() -> Result<()> {
-    let conn = open_db()?;
-
+fn ensure_index_schema(conn: &Connection) -> Result<()> {
     conn.execute_batch(
-    r#"
+        r#"
     PRAGMA journal_mode = WAL;
     PRAGMA synchronous = NORMAL;
+    CREATE TABLE IF NOT EXISTS internal_meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+  "#,
+    )?;
 
+    let current_version = conn
+        .query_row(
+            "SELECT value FROM internal_meta WHERE key = 'index_schema_version'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .ok()
+        .and_then(|value| value.parse::<i64>().ok())
+        .unwrap_or(0);
+
+    if current_version != INDEX_SCHEMA_VERSION {
+        log_index(&format!(
+            "schema:reset old_version={current_version} new_version={INDEX_SCHEMA_VERSION}"
+        ));
+        conn.execute_batch(
+            r#"
+      DROP TABLE IF EXISTS note_embeddings_vec;
+      DROP TABLE IF EXISTS embeddings;
+      DROP TABLE IF EXISTS chunks_fts;
+      DROP TABLE IF EXISTS chunks;
+      DROP TABLE IF EXISTS note_embeddings;
+      DROP TABLE IF EXISTS note_links;
+      DROP TABLE IF EXISTS note_properties;
+      DROP TABLE IF EXISTS semantic_edges;
+      DELETE FROM internal_meta WHERE key = 'index_schema_version';
+    "#,
+        )?;
+    }
+
+    conn.execute_batch(
+        r#"
     CREATE TABLE IF NOT EXISTS chunks (
       id INTEGER PRIMARY KEY,
       path TEXT NOT NULL,
+      chunk_ord INTEGER NOT NULL DEFAULT 0,
       anchor TEXT NOT NULL DEFAULT '',
       text TEXT NOT NULL,
-      mtime INTEGER NOT NULL DEFAULT 0
+      content_hash TEXT NOT NULL DEFAULT '',
+      mtime INTEGER NOT NULL DEFAULT 0,
+      UNIQUE(path, chunk_ord)
     );
+    CREATE INDEX IF NOT EXISTS idx_chunks_path ON chunks(path);
 
     CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
       path,
@@ -937,6 +984,7 @@ fn init_db() -> Result<()> {
       chunk_id INTEGER PRIMARY KEY,
       model TEXT NOT NULL,
       dim INTEGER NOT NULL,
+      content_hash TEXT NOT NULL DEFAULT '',
       vector BLOB NOT NULL,
       FOREIGN KEY(chunk_id) REFERENCES chunks(id) ON DELETE CASCADE
     );
@@ -1028,19 +1076,23 @@ fn init_db() -> Result<()> {
       updated_at_ms INTEGER NOT NULL DEFAULT 0
     );
   "#,
-  )?;
+    )?;
 
-    // sqlite-vec table is created lazily during reindex once actual embedding
-    // dimension is known for the active model.
+    conn.execute(
+        "INSERT OR REPLACE INTO internal_meta(key, value) VALUES ('index_schema_version', ?1)",
+        params![INDEX_SCHEMA_VERSION.to_string()],
+    )?;
 
     Ok(())
 }
 
-fn reindex_markdown_file_sync(path: String) -> Result<()> {
-    reindex_markdown_file_sync_inner(path, true)
+#[tauri::command]
+fn init_db() -> Result<()> {
+    let conn = open_db()?;
+    ensure_index_schema(&conn)
 }
 
-fn reindex_markdown_file_sync_inner(path: String, refresh_semantic_cache: bool) -> Result<()> {
+fn reindex_markdown_file_lexical_sync(path: String) -> Result<()> {
     let started_at = Instant::now();
     let root = active_workspace_root()?;
     let file_path = normalize_existing_file(&path)?;
@@ -1075,16 +1127,12 @@ fn reindex_markdown_file_sync_inner(path: String, refresh_semantic_cache: bool) 
         });
 
     let conn = open_db()?;
+    ensure_index_schema(&conn)?;
     let tx = conn.unchecked_transaction()?;
-    let root_canonical = root;
-    let path_for_db = normalize_workspace_relative_path(&root_canonical, &normalized_path)?;
+    let path_for_db = normalize_workspace_relative_path(&root, &normalized_path)?;
     log_index(&format!("reindex:start path={path_for_db}"));
-    let source_key = normalize_note_key(&root_canonical, &normalized_path)?;
+    let source_key = normalize_note_key(&root, &normalized_path)?;
 
-    tx.execute(
-        "DELETE FROM chunks WHERE path = ?1",
-        params![path_for_db.clone()],
-    )?;
     tx.execute(
         "DELETE FROM note_links WHERE source_path = ?1",
         params![path_for_db.clone()],
@@ -1094,20 +1142,37 @@ fn reindex_markdown_file_sync_inner(path: String, refresh_semantic_cache: bool) 
         params![path_for_db.clone()],
     )?;
 
-    tx.execute(
-        "DELETE FROM note_embeddings WHERE path = ?1",
-        params![path_for_db.clone()],
-    )?;
-    semantic::try_delete_note_vector(&tx, &path_for_db);
-
-    let mut inserted_chunks: Vec<(i64, String)> = Vec::new();
-    for (anchor, text) in chunks {
+    for (chunk_ord, (anchor, text)) in chunks.into_iter().enumerate() {
+        let chunk_hash = chunk_content_hash(&anchor, &text);
         tx.execute(
-            "INSERT INTO chunks(path, anchor, text, mtime) VALUES (?1, ?2, ?3, ?4)",
-            params![path_for_db, anchor, text, mtime],
+            "INSERT INTO chunks(path, chunk_ord, anchor, text, content_hash, mtime)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             ON CONFLICT(path, chunk_ord) DO UPDATE SET
+               anchor = excluded.anchor,
+               text = excluded.text,
+               content_hash = excluded.content_hash,
+               mtime = excluded.mtime",
+            params![
+                path_for_db,
+                chunk_ord as i64,
+                anchor,
+                text,
+                chunk_hash,
+                mtime
+            ],
         )?;
-        inserted_chunks.push((tx.last_insert_rowid(), text));
     }
+    tx.execute(
+        "DELETE FROM embeddings
+         WHERE chunk_id IN (
+           SELECT id FROM chunks WHERE path = ?1 AND chunk_ord >= ?2
+         )",
+        params![path_for_db.clone(), chunk_count as i64],
+    )?;
+    tx.execute(
+        "DELETE FROM chunks WHERE path = ?1 AND chunk_ord >= ?2",
+        params![path_for_db.clone(), chunk_count as i64],
+    )?;
 
     for target in targets {
         if target == source_key {
@@ -1134,89 +1199,191 @@ fn reindex_markdown_file_sync_inner(path: String, refresh_semantic_cache: bool) 
     )?;
     }
 
-    let chunk_texts: Vec<String> = inserted_chunks
-        .iter()
-        .map(|(_, text)| text.clone())
-        .collect();
-    let embedding_started_at = Instant::now();
-    let mut embedding_status = "skipped".to_string();
-    if !chunk_texts.is_empty() {
-        if let Ok(mut chunk_vectors) = semantic::embed_texts(&chunk_texts) {
-            embedding_status = format!("ok:{} chunks", chunk_vectors.len());
-            for vector in &mut chunk_vectors {
-                semantic::normalize_in_place(vector);
-            }
-            for ((chunk_id, _), vector) in inserted_chunks.iter().zip(chunk_vectors.iter()) {
-                tx.execute(
-                    "INSERT INTO embeddings(chunk_id, model, dim, vector) VALUES (?1, ?2, ?3, ?4)
-                     ON CONFLICT(chunk_id) DO UPDATE SET model=excluded.model, dim=excluded.dim, vector=excluded.vector",
-                    params![
-                        chunk_id,
-                        semantic::embedding_model_name(),
-                        vector.len() as i64,
-                        semantic::vector_to_blob(vector)
-                    ],
-                )?;
-            }
-
-            if let Some(note_vector) = semantic::centroid(&chunk_vectors) {
-                let updated_at_ms = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .map(|value| value.as_millis() as i64)
-                    .unwrap_or(0);
-                tx.execute(
-                    "INSERT INTO note_embeddings(path, model, dim, vector, updated_at_ms) VALUES (?1, ?2, ?3, ?4, ?5)
-                     ON CONFLICT(path) DO UPDATE SET model=excluded.model, dim=excluded.dim, vector=excluded.vector, updated_at_ms=excluded.updated_at_ms",
-                    params![
-                        path_for_db,
-                        semantic::embedding_model_name(),
-                        note_vector.len() as i64,
-                        semantic::vector_to_blob(&note_vector),
-                        updated_at_ms
-                    ],
-                )?;
-                if semantic::try_ensure_vec_table(&tx, note_vector.len()) {
-                    if let Err(err) =
-                        semantic::try_upsert_note_vector(&tx, &path_for_db, &note_vector)
-                    {
-                        log_index(&format!(
-                            "reindex:vec_upsert_failed path={path_for_db} dim={} err={err}",
-                            note_vector.len(),
-                        ));
-                    }
-                } else {
-                    log_index(&format!(
-                        "reindex:vec_table_unavailable path={path_for_db} dim={}",
-                        note_vector.len()
-                    ));
-                }
-            }
-        } else {
-            embedding_status = "failed".to_string();
-        }
-    }
-    let embedding_ms = embedding_started_at.elapsed().as_millis();
-
     tx.commit()?;
     let total_ms = started_at.elapsed().as_millis();
     log_index(&format!(
-        "reindex:done path={path_for_db} chunks={chunk_count} targets={target_count} properties={property_count} embedding={embedding_status} embedding_ms={embedding_ms} total_ms={total_ms}"
+        "reindex:done path={path_for_db} chunks={chunk_count} targets={target_count} properties={property_count} embedding=deferred embedding_ms=0 total_ms={total_ms}"
     ));
-    if refresh_semantic_cache {
-        if let Ok(conn) = open_db() {
-            if let Err(err) = refresh_semantic_edges_cache(&conn, &root_canonical) {
-                log_index(&format!("semantic_edges:refresh_error err={err}"));
-            }
-        }
-    }
     Ok(())
 }
 
 #[tauri::command]
-async fn reindex_markdown_file(path: String) -> Result<()> {
-    tauri::async_runtime::spawn_blocking(move || reindex_markdown_file_sync(path))
+async fn reindex_markdown_file_lexical(path: String) -> Result<()> {
+    tauri::async_runtime::spawn_blocking(move || reindex_markdown_file_lexical_sync(path))
         .await
         .map_err(|_| AppError::OperationFailed)?
+}
+
+fn reindex_markdown_file_semantic_sync(path: String) -> Result<()> {
+    let started_at = Instant::now();
+    let root = active_workspace_root()?;
+    let path_for_db = normalize_workspace_relative_from_input(&root, &path)?;
+    log_index(&format!("semantic:reindex:start path={path_for_db}"));
+
+    let conn = open_db()?;
+    ensure_index_schema(&conn)?;
+    let tx = conn.unchecked_transaction()?;
+    let mut stmt = tx.prepare(
+        r#"
+      SELECT c.id, c.text, c.content_hash, e.model, e.content_hash, e.dim, e.vector
+      FROM chunks c
+      LEFT JOIN embeddings e ON e.chunk_id = c.id
+      WHERE c.path = ?1
+      ORDER BY c.chunk_ord ASC
+    "#,
+    )?;
+    let mut rows = stmt.query(params![path_for_db.clone()])?;
+
+    let model_name = semantic::embedding_model_name();
+    let mut chunk_ids: Vec<i64> = Vec::new();
+    let mut chunk_hashes: Vec<String> = Vec::new();
+    let mut chunk_vectors: Vec<Option<Vec<f32>>> = Vec::new();
+    let mut embed_texts: Vec<String> = Vec::new();
+    let mut embed_positions: Vec<usize> = Vec::new();
+    let mut reused = 0usize;
+    let mut reembedded = 0usize;
+
+    while let Some(row) = rows.next()? {
+        let chunk_id: i64 = row.get(0)?;
+        let chunk_text: String = row.get(1)?;
+        let chunk_hash: String = row.get(2)?;
+        let embedding_model: Option<String> = row.get(3)?;
+        let embedding_hash: Option<String> = row.get(4)?;
+        let embedding_dim: Option<i64> = row.get(5)?;
+        let embedding_blob: Option<Vec<u8>> = row.get(6)?;
+
+        let mut reused_vector: Option<Vec<f32>> = None;
+        if let (Some(model), Some(hash), Some(dim), Some(blob)) =
+            (embedding_model, embedding_hash, embedding_dim, embedding_blob)
+        {
+            if model == model_name && hash == chunk_hash {
+                reused_vector = semantic::blob_to_vector(&blob, dim as usize);
+            }
+        }
+
+        if let Some(mut vector) = reused_vector {
+            semantic::normalize_in_place(&mut vector);
+            reused += 1;
+            chunk_vectors.push(Some(vector));
+        } else {
+            embed_positions.push(chunk_vectors.len());
+            embed_texts.push(chunk_text);
+            chunk_vectors.push(None);
+        }
+
+        chunk_ids.push(chunk_id);
+        chunk_hashes.push(chunk_hash);
+    }
+
+    drop(rows);
+    drop(stmt);
+
+    if !embed_texts.is_empty() {
+        let mut new_vectors = semantic::embed_texts(&embed_texts)
+            .map_err(|err| AppError::InvalidOperation(err.to_string()))?;
+        if new_vectors.len() != embed_positions.len() {
+            return Err(AppError::OperationFailed);
+        }
+
+        for (index, mut vector) in new_vectors.drain(..).enumerate() {
+            semantic::normalize_in_place(&mut vector);
+            let target_pos = embed_positions[index];
+            let chunk_id = chunk_ids[target_pos];
+            let content_hash = chunk_hashes[target_pos].clone();
+            tx.execute(
+                "INSERT INTO embeddings(chunk_id, model, dim, content_hash, vector) VALUES (?1, ?2, ?3, ?4, ?5)
+                 ON CONFLICT(chunk_id) DO UPDATE SET
+                   model=excluded.model,
+                   dim=excluded.dim,
+                   content_hash=excluded.content_hash,
+                   vector=excluded.vector",
+                params![
+                    chunk_id,
+                    model_name.clone(),
+                    vector.len() as i64,
+                    content_hash,
+                    semantic::vector_to_blob(&vector)
+                ],
+            )?;
+            chunk_vectors[target_pos] = Some(vector);
+            reembedded += 1;
+        }
+    }
+
+    let resolved_vectors: Vec<Vec<f32>> = chunk_vectors.into_iter().flatten().collect();
+    if resolved_vectors.is_empty() {
+        tx.execute(
+            "DELETE FROM note_embeddings WHERE path = ?1",
+            params![path_for_db.clone()],
+        )?;
+        semantic::try_delete_note_vector(&tx, &path_for_db);
+    } else if let Some(note_vector) = semantic::centroid(&resolved_vectors) {
+        let updated_at_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|value| value.as_millis() as i64)
+            .unwrap_or(0);
+        tx.execute(
+            "INSERT INTO note_embeddings(path, model, dim, vector, updated_at_ms) VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT(path) DO UPDATE SET model=excluded.model, dim=excluded.dim, vector=excluded.vector, updated_at_ms=excluded.updated_at_ms",
+            params![
+                path_for_db.clone(),
+                model_name,
+                note_vector.len() as i64,
+                semantic::vector_to_blob(&note_vector),
+                updated_at_ms
+            ],
+        )?;
+        if semantic::try_ensure_vec_table(&tx, note_vector.len()) {
+            if let Err(err) = semantic::try_upsert_note_vector(&tx, &path_for_db, &note_vector) {
+                log_index(&format!(
+                    "semantic:reindex:vec_upsert_failed path={path_for_db} dim={} err={err}",
+                    note_vector.len()
+                ));
+                return Err(AppError::OperationFailed);
+            }
+        } else {
+            log_index(&format!(
+                "semantic:reindex:vec_table_unavailable path={path_for_db} dim={}",
+                note_vector.len()
+            ));
+            return Err(AppError::OperationFailed);
+        }
+    }
+
+    tx.commit()?;
+    let total_chunks = chunk_ids.len();
+    log_index(&format!(
+        "semantic:reindex:done path={path_for_db} chunks_total={total_chunks} chunks_reused={reused} chunks_reembedded={reembedded} total_ms={}",
+        started_at.elapsed().as_millis()
+    ));
+    Ok(())
+}
+
+#[tauri::command]
+async fn reindex_markdown_file_semantic(path: String) -> Result<()> {
+    tauri::async_runtime::spawn_blocking(move || reindex_markdown_file_semantic_sync(path))
+        .await
+        .map_err(|_| AppError::OperationFailed)?
+}
+
+fn refresh_semantic_edges_cache_now_sync() -> Result<()> {
+    let root = active_workspace_root()?;
+    let conn = open_db()?;
+    ensure_index_schema(&conn)?;
+    refresh_semantic_edges_cache(&conn, &root)
+}
+
+#[tauri::command]
+async fn refresh_semantic_edges_cache_now() -> Result<()> {
+    tauri::async_runtime::spawn_blocking(refresh_semantic_edges_cache_now_sync)
+        .await
+        .map_err(|_| AppError::OperationFailed)?
+}
+
+pub(crate) fn reindex_markdown_file_now_sync(path: String) -> Result<()> {
+    reindex_markdown_file_lexical_sync(path.clone())?;
+    reindex_markdown_file_semantic_sync(path)?;
+    refresh_semantic_edges_cache_now_sync()
 }
 
 fn remove_markdown_file_from_index_sync(path: String) -> Result<()> {
@@ -1224,6 +1391,7 @@ fn remove_markdown_file_from_index_sync(path: String) -> Result<()> {
     let path_for_db = normalize_workspace_relative_from_input(&root, &path)?;
     let source_key = normalize_note_key(&root, &root.join(&path_for_db))?;
     let conn = open_db()?;
+    ensure_index_schema(&conn)?;
     let tx = conn.unchecked_transaction()?;
     tx.execute(
         "DELETE FROM chunks WHERE path = ?1",
@@ -1679,6 +1847,7 @@ fn rebuild_workspace_index_sync() -> Result<RebuildIndexResult> {
         root_canonical.to_string_lossy()
     ));
     let conn = open_db()?;
+    ensure_index_schema(&conn)?;
 
     let clear_started_at = Instant::now();
     conn.execute_batch(
@@ -1704,6 +1873,7 @@ fn rebuild_workspace_index_sync() -> Result<RebuildIndexResult> {
     ));
     let mut indexed_files = 0usize;
     let mut processed_files = 0usize;
+    let mut semantic_indexed = 0usize;
     let mut canceled = false;
     INDEX_CANCEL_REQUESTED.store(false, Ordering::SeqCst);
     for candidate in markdown_files {
@@ -1720,7 +1890,7 @@ fn rebuild_workspace_index_sync() -> Result<RebuildIndexResult> {
         if ensure_within_root(&root_canonical, &canonical_candidate).is_err() {
             continue;
         }
-        reindex_markdown_file_sync_inner(canonical_candidate.to_string_lossy().to_string(), false)?;
+        reindex_markdown_file_lexical_sync(canonical_candidate.to_string_lossy().to_string())?;
         indexed_files += 1;
         if indexed_files % 25 == 0 || processed_files % 50 == 0 {
             log_index(&format!(
@@ -1730,13 +1900,36 @@ fn rebuild_workspace_index_sync() -> Result<RebuildIndexResult> {
     }
 
     if !canceled {
-        if let Err(err) = refresh_semantic_edges_cache(&conn, &root_canonical) {
+        let markdown_files = list_markdown_files_via_find(&root_canonical)?;
+        for candidate in markdown_files {
+            if INDEX_CANCEL_REQUESTED.load(Ordering::SeqCst) {
+                canceled = true;
+                log_index("rebuild:canceled requested_by_user=true stage=semantic");
+                break;
+            }
+            let canonical_candidate = match fs::canonicalize(&candidate) {
+                Ok(value) => value,
+                Err(_) => continue,
+            };
+            if ensure_within_root(&root_canonical, &canonical_candidate).is_err() {
+                continue;
+            }
+            if reindex_markdown_file_semantic_sync(canonical_candidate.to_string_lossy().to_string())
+                .is_ok()
+            {
+                semantic_indexed += 1;
+            }
+        }
+    }
+
+    if !canceled {
+        if let Err(err) = refresh_semantic_edges_cache_now_sync() {
             log_index(&format!("semantic_edges:refresh_error err={err}"));
         }
     }
 
     log_index(&format!(
-        "rebuild:done indexed={indexed_files} scanned={processed_files} canceled={canceled} total_ms={}",
+        "rebuild:done indexed={indexed_files} semantic_indexed={semantic_indexed} scanned={processed_files} canceled={canceled} total_ms={}",
         rebuild_started_at.elapsed().as_millis()
     ));
     Ok(RebuildIndexResult {
@@ -2590,7 +2783,7 @@ fn update_wikilinks_for_rename(
         }
 
         fs::write(&canonical_candidate, updated_markdown)?;
-        reindex_markdown_file_sync(canonical_candidate.to_string_lossy().to_string())?;
+        reindex_markdown_file_now_sync(canonical_candidate.to_string_lossy().to_string())?;
         changed_files += 1;
     }
 
@@ -2626,7 +2819,9 @@ pub fn run() {
             open_external_url,
             reveal_in_file_manager,
             init_db,
-            reindex_markdown_file,
+            reindex_markdown_file_lexical,
+            reindex_markdown_file_semantic,
+            refresh_semantic_edges_cache_now,
             remove_markdown_file_from_index,
             fts_search,
             rebuild_workspace_index,
@@ -3011,6 +3206,128 @@ mod tests {
             .edges
             .iter()
             .any(|edge| edge.source == "a.md" && edge.target == "notes/nested.md"));
+
+        clear_active_workspace().expect("clear workspace");
+        fs::remove_dir_all(&workspace).expect("cleanup workspace");
+    }
+
+    #[test]
+    fn init_db_uses_new_index_schema_columns() {
+        let _guard = workspace_test_guard();
+        let workspace = create_temp_workspace("tomosona-schema-test");
+        let root = workspace.to_string_lossy().to_string();
+
+        set_active_workspace(&root).expect("set workspace");
+        init_db().expect("init db");
+
+        let conn = open_db().expect("open db");
+        let chunk_columns: Vec<String> = {
+            let mut stmt = conn
+                .prepare("PRAGMA table_info(chunks)")
+                .expect("prepare chunk pragma");
+            let rows = stmt
+                .query_map([], |row| row.get::<_, String>(1))
+                .expect("query chunk pragma");
+            rows.collect::<std::result::Result<Vec<_>, _>>()
+                .expect("collect chunk columns")
+        };
+        assert!(chunk_columns.iter().any(|name| name == "chunk_ord"));
+        assert!(chunk_columns.iter().any(|name| name == "content_hash"));
+
+        let embedding_columns: Vec<String> = {
+            let mut stmt = conn
+                .prepare("PRAGMA table_info(embeddings)")
+                .expect("prepare embedding pragma");
+            let rows = stmt
+                .query_map([], |row| row.get::<_, String>(1))
+                .expect("query embedding pragma");
+            rows.collect::<std::result::Result<Vec<_>, _>>()
+                .expect("collect embedding columns")
+        };
+        assert!(embedding_columns.iter().any(|name| name == "content_hash"));
+
+        clear_active_workspace().expect("clear workspace");
+        fs::remove_dir_all(&workspace).expect("cleanup workspace");
+    }
+
+    #[test]
+    fn lexical_reindex_updates_fts_data_without_embedding_rows() {
+        let _guard = workspace_test_guard();
+        let workspace = create_temp_workspace("tomosona-lexical-only-test");
+        let root = workspace.to_string_lossy().to_string();
+        let note_path = workspace.join("notes.md");
+        fs::write(
+            &note_path,
+            "---\ntags: [dev]\npriority: 2\n---\n# Alpha\nhello world\n[[beta]]",
+        )
+        .expect("write note");
+
+        set_active_workspace(&root).expect("set workspace");
+        init_db().expect("init db");
+        reindex_markdown_file_lexical_sync(note_path.to_string_lossy().to_string())
+            .expect("lexical reindex");
+
+        let conn = open_db().expect("open db");
+        let chunks_n: i64 = conn
+            .query_row("SELECT COUNT(*) FROM chunks WHERE path = 'notes.md'", [], |row| {
+                row.get(0)
+            })
+            .expect("query chunks");
+        let links_n: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM note_links WHERE source_path = 'notes.md'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("query links");
+        let props_n: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM note_properties WHERE path = 'notes.md'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("query properties");
+        let embedding_n: i64 = conn
+            .query_row("SELECT COUNT(*) FROM embeddings", [], |row| row.get(0))
+            .expect("query embeddings");
+        let note_embedding_n: i64 = conn
+            .query_row("SELECT COUNT(*) FROM note_embeddings", [], |row| row.get(0))
+            .expect("query note embeddings");
+
+        assert!(chunks_n > 0);
+        assert_eq!(links_n, 1);
+        assert!(props_n >= 2);
+        assert_eq!(embedding_n, 0);
+        assert_eq!(note_embedding_n, 0);
+
+        clear_active_workspace().expect("clear workspace");
+        fs::remove_dir_all(&workspace).expect("cleanup workspace");
+    }
+
+    #[test]
+    fn semantic_reindex_handles_notes_without_chunks() {
+        let _guard = workspace_test_guard();
+        let workspace = create_temp_workspace("tomosona-semantic-empty-note-test");
+        let root = workspace.to_string_lossy().to_string();
+        let note_path = workspace.join("empty.md");
+        fs::write(&note_path, "   \n\n").expect("write empty note");
+
+        set_active_workspace(&root).expect("set workspace");
+        init_db().expect("init db");
+        reindex_markdown_file_lexical_sync(note_path.to_string_lossy().to_string())
+            .expect("lexical reindex");
+        reindex_markdown_file_semantic_sync(note_path.to_string_lossy().to_string())
+            .expect("semantic reindex");
+
+        let conn = open_db().expect("open db");
+        let note_embedding_n: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM note_embeddings WHERE path = 'empty.md'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("query note embeddings");
+        assert_eq!(note_embedding_n, 0);
 
         clear_active_workspace().expect("clear workspace");
         fs::remove_dir_all(&workspace).expect("cleanup workspace");

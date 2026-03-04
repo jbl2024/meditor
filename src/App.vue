@@ -37,8 +37,10 @@ import {
   rebuildWorkspaceIndex,
   removeMarkdownFileFromIndex,
   renameEntry,
+  refreshSemanticEdgesCacheNow,
   requestIndexCancel,
-  reindexMarkdownFile,
+  reindexMarkdownFileLexical,
+  reindexMarkdownFileSemantic,
   readPropertyTypeSchema,
   readAppSettings,
   revealInFileManager,
@@ -117,6 +119,7 @@ type SecondBrainHistorySnapshot = {
 }
 type IndexRunKind = 'idle' | 'background' | 'rebuild' | 'rename'
 type IndexRunPhase = 'idle' | 'indexing_files' | 'refreshing_views' | 'done' | 'error'
+type SemanticIndexState = 'idle' | 'pending' | 'running' | 'error'
 type IndexLogFilter = 'all' | 'errors' | 'slow'
 type IndexActivityState = 'running' | 'done' | 'error'
 type IndexActivityRow = {
@@ -249,6 +252,11 @@ let reindexWorkerRunning = false
 let reindexGeneration = 0
 const pendingReindexPaths = new Set<string>()
 const pendingReindexCount = ref(0)
+const pendingSemanticReindexAt = new Map<string, number>()
+let semanticReindexTimer: ReturnType<typeof setTimeout> | null = null
+let semanticReindexWorkerRunning = false
+const semanticDebounceMs = 15_000
+const semanticIndexState = ref<SemanticIndexState>('idle')
 const indexRunKind = ref<IndexRunKind>('idle')
 const indexRunPhase = ref<IndexRunPhase>('idle')
 const indexRunCurrentPath = ref('')
@@ -339,11 +347,16 @@ const indexModelStatusLabel = computed(() => {
 const indexStatusBadgeLabel = computed(() => {
   if (indexRunPhase.value === 'error' || filesystem.indexingState.value === 'out_of_sync') return 'Needs attention'
   if (indexRunning.value) return 'Reindexing'
+  if (semanticIndexState.value === 'running') return 'Semantic sync'
+  if (semanticIndexState.value === 'pending') return 'Semantic pending'
+  if (semanticIndexState.value === 'error') return 'Semantic warning'
   return 'Ready'
 })
 const indexStatusBadgeClass = computed(() => {
   if (indexRunPhase.value === 'error' || filesystem.indexingState.value === 'out_of_sync') return 'index-badge-error'
   if (indexRunning.value) return 'index-badge-running'
+  if (semanticIndexState.value === 'error') return 'index-badge-error'
+  if (semanticIndexState.value === 'pending' || semanticIndexState.value === 'running') return 'index-badge-running'
   return 'index-badge-ready'
 })
 const indexProgressTotal = computed(() => {
@@ -374,6 +387,9 @@ const indexProgressPercent = computed(() => {
 const indexProgressSummary = computed(() => {
   if (!indexRunning.value) {
     if (filesystem.indexingState.value === 'out_of_sync') return 'Pending reindex'
+    if (semanticIndexState.value === 'pending') return 'Semantic index pending'
+    if (semanticIndexState.value === 'running') return 'Semantic index syncing'
+    if (semanticIndexState.value === 'error') return 'Semantic index warning'
     return indexRunLastFinishedAt.value ? `Last run ${formatTimestamp(indexRunLastFinishedAt.value)}` : ''
   }
   if (indexRunPhase.value === 'refreshing_views') {
@@ -412,6 +428,13 @@ const indexAlert = computed(() => {
       message: 'Some files are not indexed yet. Run a rebuild to sync search and semantic links.'
     } as const
   }
+  if (semanticIndexState.value === 'error') {
+    return {
+      level: 'warning',
+      title: 'Semantic indexing warning',
+      message: 'Lexical index is up to date, but semantic vectors need attention.'
+    } as const
+  }
   return null
 })
 const indexActivityRows = computed(() => buildIndexActivityRows(indexLogEntries.value))
@@ -428,7 +451,7 @@ const cosmos = useCosmosController({
   workingFolderPath: filesystem.workingFolderPath,
   activeTabPath: activeFilePath,
   getWikilinkGraph,
-  reindexMarkdownFile,
+  reindexMarkdownFile: reindexMarkdownFileLexical,
   readTextFile: async (path: string) => await readTextFile(path),
   ftsSearch,
   buildCosmosGraph
@@ -1101,6 +1124,12 @@ async function stopCurrentIndexOperation() {
     reindexGeneration += 1
     pendingReindexPaths.clear()
     updatePendingReindexCount()
+    pendingSemanticReindexAt.clear()
+    if (semanticReindexTimer) {
+      clearTimeout(semanticReindexTimer)
+      semanticReindexTimer = null
+    }
+    semanticIndexState.value = 'idle'
     reindexWorkerRunning = false
     filesystem.indexingState.value = 'out_of_sync'
     indexRunPhase.value = 'error'
@@ -1150,7 +1179,94 @@ function enqueueMarkdownReindex(path: string) {
   } else {
     indexRunTotal.value = Math.max(indexRunTotal.value, indexRunCompleted.value + pendingReindexCount.value)
   }
+  pendingSemanticReindexAt.set(path, Date.now() + semanticDebounceMs)
+  if (semanticIndexState.value !== 'running') {
+    semanticIndexState.value = 'pending'
+  }
+  scheduleSemanticReindexTimer()
   void runReindexWorker()
+}
+
+function scheduleSemanticReindexTimer() {
+  if (semanticReindexTimer) {
+    clearTimeout(semanticReindexTimer)
+    semanticReindexTimer = null
+  }
+  if (!pendingSemanticReindexAt.size) {
+    if (!semanticReindexWorkerRunning && semanticIndexState.value !== 'error') {
+      semanticIndexState.value = 'idle'
+    }
+    return
+  }
+  const now = Date.now()
+  let nextDue = Number.POSITIVE_INFINITY
+  for (const dueAt of pendingSemanticReindexAt.values()) {
+    nextDue = Math.min(nextDue, dueAt)
+  }
+  const delay = Math.max(20, Math.min(semanticDebounceMs, nextDue - now))
+  semanticReindexTimer = setTimeout(() => {
+    semanticReindexTimer = null
+    void runSemanticReindexWorker()
+  }, delay)
+}
+
+async function runSemanticReindexWorker() {
+  if (semanticReindexWorkerRunning) return
+  if (!filesystem.workingFolderPath.value) return
+  semanticReindexWorkerRunning = true
+  semanticIndexState.value = 'running'
+  try {
+    while (pendingSemanticReindexAt.size > 0) {
+      const now = Date.now()
+      const duePaths = Array.from(pendingSemanticReindexAt.entries())
+        .filter(([, dueAt]) => dueAt <= now)
+        .map(([path]) => path)
+
+      if (!duePaths.length) {
+        semanticIndexState.value = 'pending'
+        scheduleSemanticReindexTimer()
+        return
+      }
+
+      let hadSemanticError = false
+      let updated = 0
+      for (const path of duePaths) {
+        pendingSemanticReindexAt.delete(path)
+        try {
+          await reindexMarkdownFileSemantic(path)
+          updated += 1
+        } catch {
+          hadSemanticError = true
+          console.warn('[index] semantic:file:error', { path })
+        }
+      }
+      if (updated > 0) {
+        try {
+          await refreshSemanticEdgesCacheNow()
+        } catch {
+          hadSemanticError = true
+          console.warn('[index] semantic:refresh:error')
+        }
+      }
+      if (hadSemanticError) {
+        semanticIndexState.value = 'error'
+      } else if (pendingSemanticReindexAt.size > 0) {
+        semanticIndexState.value = 'pending'
+      } else {
+        semanticIndexState.value = 'idle'
+      }
+    }
+  } finally {
+    semanticReindexWorkerRunning = false
+    if (pendingSemanticReindexAt.size > 0) {
+      if (semanticIndexState.value !== 'error') {
+        semanticIndexState.value = 'pending'
+      }
+      scheduleSemanticReindexTimer()
+    } else if (semanticIndexState.value !== 'error') {
+      semanticIndexState.value = 'idle'
+    }
+  }
 }
 
 async function runReindexWorker() {
@@ -1182,7 +1298,7 @@ async function runReindexWorker() {
       indexRunCurrentPath.value = nextPath
       indexRunTotal.value = Math.max(indexRunTotal.value, indexRunCompleted.value + pendingReindexCount.value + 1)
       try {
-        await reindexMarkdownFile(nextPath)
+        await reindexMarkdownFileLexical(nextPath)
       } catch {
         filesystem.indexingState.value = 'out_of_sync'
         indexRunPhase.value = 'error'
@@ -1237,6 +1353,8 @@ async function runReindexWorker() {
 }
 
 function removeMarkdownFromIndexInBackground(path: string) {
+  pendingSemanticReindexAt.delete(path)
+  scheduleSemanticReindexTimer()
   void removeMarkdownFileFromIndex(path).then(() => {
     console.info('[index] background:remove:done', { path })
     if (multiPane.findPaneContainingSurface('cosmos') !== null) {
@@ -2080,6 +2198,12 @@ async function closeWorkspace() {
   reindexGeneration += 1
   pendingReindexPaths.clear()
   updatePendingReindexCount()
+  pendingSemanticReindexAt.clear()
+  if (semanticReindexTimer) {
+    clearTimeout(semanticReindexTimer)
+    semanticReindexTimer = null
+  }
+  semanticIndexState.value = 'idle'
   reindexWorkerRunning = false
   indexRunKind.value = 'idle'
   indexRunPhase.value = 'idle'
@@ -2156,6 +2280,12 @@ async function loadWorkingFolder(path: string) {
     reindexGeneration += 1
     pendingReindexPaths.clear()
     updatePendingReindexCount()
+    pendingSemanticReindexAt.clear()
+    if (semanticReindexTimer) {
+      clearTimeout(semanticReindexTimer)
+      semanticReindexTimer = null
+    }
+    semanticIndexState.value = 'idle'
     reindexWorkerRunning = false
     indexRunKind.value = 'idle'
     indexRunPhase.value = 'idle'
@@ -2418,6 +2548,7 @@ async function maybeRewriteWikilinksForRename(fromPath: string, toPath: string) 
   const shouldRewrite = await promptWikilinkRewritePermission(fromPath, toPath)
   if (!shouldRewrite) return
   filesystem.indexingState.value = 'indexing'
+  semanticIndexState.value = 'running'
   indexRunKind.value = 'rename'
   indexRunPhase.value = 'indexing_files'
   indexRunCurrentPath.value = ''
@@ -2436,10 +2567,12 @@ async function maybeRewriteWikilinksForRename(fromPath: string, toPath: string) 
     await refreshBacklinks()
     indexFinalizeCompleted.value = 1
     filesystem.indexingState.value = 'indexed'
+    semanticIndexState.value = 'idle'
     indexRunPhase.value = 'done'
     indexRunLastFinishedAt.value = Date.now()
   } catch (err) {
     filesystem.indexingState.value = 'out_of_sync'
+    semanticIndexState.value = 'error'
     indexRunPhase.value = 'error'
     indexRunMessage.value = err instanceof Error ? err.message : 'Could not update wikilinks.'
     filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not update wikilinks.'
@@ -3518,6 +3651,12 @@ async function rebuildIndexFromOverflow() {
   reindexGeneration += 1
   pendingReindexPaths.clear()
   updatePendingReindexCount()
+  pendingSemanticReindexAt.clear()
+  if (semanticReindexTimer) {
+    clearTimeout(semanticReindexTimer)
+    semanticReindexTimer = null
+  }
+  semanticIndexState.value = 'running'
   reindexWorkerRunning = false
   indexRunKind.value = 'rebuild'
   indexRunPhase.value = 'indexing_files'
@@ -3534,6 +3673,7 @@ async function rebuildIndexFromOverflow() {
     indexRunCompleted.value = result.indexed_files
     if (result.canceled) {
       filesystem.indexingState.value = 'out_of_sync'
+      semanticIndexState.value = 'error'
       indexRunPhase.value = 'error'
       indexRunMessage.value = 'Rebuild canceled by user.'
       filesystem.notifyInfo('Index rebuild canceled.')
@@ -3552,12 +3692,14 @@ async function rebuildIndexFromOverflow() {
       indexFinalizeCompleted.value = 3
     }
     filesystem.indexingState.value = 'indexed'
+    semanticIndexState.value = 'idle'
     indexRunPhase.value = 'done'
     indexRunLastFinishedAt.value = Date.now()
     console.info('[index] rebuild:done', { indexed: result.indexed_files })
     filesystem.notifySuccess(`Index rebuilt (${result.indexed_files} file${result.indexed_files === 1 ? '' : 's'}).`)
   } catch (err) {
     filesystem.indexingState.value = 'out_of_sync'
+    semanticIndexState.value = 'error'
     indexRunPhase.value = 'error'
     indexRunMessage.value = err instanceof Error ? err.message : 'Could not rebuild index.'
     console.warn('[index] rebuild:error', {
@@ -4237,6 +4379,11 @@ onBeforeUnmount(() => {
     clearTimeout(historyMenuTimer)
     historyMenuTimer = null
   }
+  if (semanticReindexTimer) {
+    clearTimeout(semanticReindexTimer)
+    semanticReindexTimer = null
+  }
+  pendingSemanticReindexAt.clear()
   mediaQuery?.removeEventListener('change', onSystemThemeChanged)
   window.removeEventListener('keydown', onWindowKeydown, true)
   window.removeEventListener('mousedown', onGlobalPointerDown, true)

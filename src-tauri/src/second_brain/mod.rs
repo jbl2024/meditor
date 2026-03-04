@@ -11,7 +11,7 @@ use tauri::{AppHandle, Emitter};
 
 use super::{
     active_workspace_root, normalize_workspace_relative_path, now_ms, open_db,
-    reindex_markdown_file_sync, settings, AppError, Result,
+    reindex_markdown_file_now_sync, settings, AppError, Result,
 };
 
 pub mod config;
@@ -868,7 +868,7 @@ pub fn insert_second_brain_assistant_into_target_note(
         format!("{existing}\n\n---\n\n{assistant_text}")
     };
     fs::write(&target_path, next)?;
-    reindex_markdown_file_sync(target_path.to_string_lossy().to_string())?;
+    reindex_markdown_file_now_sync(target_path.to_string_lossy().to_string())?;
 
     Ok(InsertAssistantIntoTargetResult {
         target_note_path: target_relative,
@@ -1054,7 +1054,7 @@ pub fn publish_second_brain_draft_to_new_note(
 
     fs::write(&target_path, format!("{frontmatter}{draft_content}\n"))?;
     ensure_within(&root, &target_path)?;
-    reindex_markdown_file_sync(target_path.to_string_lossy().to_string())?;
+    reindex_markdown_file_now_sync(target_path.to_string_lossy().to_string())?;
 
     Ok(PublishDraftToNewNoteResult {
         path: target_path.to_string_lossy().to_string(),
@@ -1090,7 +1090,7 @@ pub fn publish_second_brain_draft_to_existing_note(
         format!("{existing}\n\n---\n\n{draft_content}")
     };
     fs::write(&canonical, merged)?;
-    reindex_markdown_file_sync(canonical.to_string_lossy().to_string())?;
+    reindex_markdown_file_now_sync(canonical.to_string_lossy().to_string())?;
 
     Ok(())
 }
