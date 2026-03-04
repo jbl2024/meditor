@@ -18,6 +18,12 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.10.7] - 2026-03-04
+
+### Fixed
+- fix(editor): resolve clipboard test typing error breaking production build (4463013)
+- fix(editor): preserve wikilink targets on copy-paste when clipboard html uses data-target (9b77fc7)
+
 ## [0.10.6] - 2026-03-04
 
 ### Added
