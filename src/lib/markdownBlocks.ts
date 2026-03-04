@@ -294,6 +294,8 @@ function elementToMarkdown(node: Node): string {
   if (tag === 'a') {
     const href = element.getAttribute('href')?.trim() ?? ''
     const wikilinkTarget = (() => {
+      const dataTargetAlias = element.getAttribute('data-target')?.trim()
+      if (dataTargetAlias) return dataTargetAlias
       const dataTarget = element.getAttribute('data-wikilink-target')?.trim()
       if (dataTarget) return dataTarget
       if (href.toLowerCase().startsWith('wikilink:')) {

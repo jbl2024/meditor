@@ -62,6 +62,12 @@ describe('clipboardHtmlToMarkdown', () => {
     const markdown = clipboardHtmlToMarkdown(html)
     expect(markdown).toContain('[[notes/alpha.md|Alpha]]')
   })
+
+  it('preserves wikilink target from data-target anchors copied from editor', () => {
+    const html = '<p><a href="#" data-wikilink="true" data-target="graph/neurone.md" data-label="Neurone">Neurone</a></p>'
+    const markdown = clipboardHtmlToMarkdown(html)
+    expect(markdown).toContain('[[graph/neurone.md|Neurone]]')
+  })
 })
 
 describe('markdownToEditorData tables', () => {
