@@ -18,6 +18,21 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.10.3] - 2026-03-04
+
+### Added
+- feat(index): split lexical/semantic indexing with 15s semantic debounce and hash-based chunk reuse (bc0a336)
+- feat(editor): add inline toolbar wikilink action for selected text (5ba4900)
+- feat(second-brain): add copy feedback state and auto-dismiss toast notifications (87aeb9c)
+
+### Changed
+- test(semantic): add edge-case coverage for vec upsert fallback and embedding JSON serialization (2e55db3)
+- chore(release): add one-liner command output to prepare-release (805fb23)
+
+### Fixed
+- fix(second-brain): keep sessions gear dropdown out of layout flow (a2b9236)
+- fix(second-brain): restore markdown list markers and show copy button only on assistant hover (acfb4ec)
+
 ## [0.10.2] - 2026-03-04
 
 ### Added
