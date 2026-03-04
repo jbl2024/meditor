@@ -545,7 +545,9 @@ function nodesToClipboardMarkdownBlocks(nodes: Node[]): string[] {
       return
     }
 
-    pushIfNotEmpty(inlineNodesToMarkdown(Array.from(element.childNodes)))
+    // Keep inline root nodes (e.g. bare <a>, <strong>) instead of dropping
+    // their own tag semantics by only serializing children.
+    pushIfNotEmpty(inlineNodesToMarkdown([element]))
   })
 
   return blocks

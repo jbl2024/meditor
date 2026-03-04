@@ -73,6 +73,17 @@ describe('markdown paste detection', () => {
     })
   })
 
+  it('prefers html conversion for inline wikilinks copied from editor anchors', () => {
+    const selected = selectSmartPasteMarkdown(
+      'Neurone',
+      '<a href="#" data-wikilink="true" data-target="graph/neurone.md" data-label="Neurone">Neurone</a>'
+    )
+    expect(selected).toEqual({
+      markdown: '[[graph/neurone.md|Neurone]]\n',
+      source: 'html'
+    })
+  })
+
   it('returns null when neither html nor plain has markdown signals', () => {
     const selected = selectSmartPasteMarkdown('just text', '<div><strong>Hello</strong></div>')
     expect(selected).toBeNull()

@@ -94,8 +94,8 @@ export function isZoomResetShortcut(event: Pick<KeyboardEvent, 'key' | 'code'>):
 }
 
 export function looksLikeMarkdown(text: string): boolean {
-  // Detects common markdown starters, e.g. "# h1", "- item", "1. item", "> quote", "```", "[a](b)".
-  return /(^#{1,6}\s)|(^\s*[-*+]\s)|(^\s*[-*+]\s+\[[ xX]?\])|(^\s*\d+\.\s)|(^>\s)|(```)|(\[[^\]]+\]\([^)]+\))/m.test(text)
+  // Detects common markdown starters, e.g. "# h1", "- item", "1. item", "> quote", "```", "[a](b)", "[[note|alias]]".
+  return /(^#{1,6}\s)|(^\s*[-*+]\s)|(^\s*[-*+]\s+\[[ xX]?\])|(^\s*\d+\.\s)|(^>\s)|(```)|(\[[^\]]+\]\([^)]+\))|(\[\[[^\]]+\]\])/m.test(text)
 }
 
 export function isLikelyMarkdownPaste(plain: string, html: string): boolean {
@@ -116,6 +116,7 @@ export function selectSmartPasteMarkdown(
     const normalized = htmlMarkdown.trim()
     const hasBlockSignals =
       /(^#{1,6}\s)|(^\s*[-*+]\s)|(^\s*\d+\.\s)|(^>\s)|(^```)|(^\|.*\|)/m.test(normalized) ||
+      /\[\[[^\]]+\]\]/.test(normalized) ||
       normalized.includes('\n')
     if (hasBlockSignals) {
       return { markdown: htmlMarkdown, source: 'html' }
