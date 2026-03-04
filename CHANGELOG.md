@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.10.8] - 2026-03-04
+
+### Fixed
+- fix(editor): preserve wikilink targets for copy-paste from rendered link selections (2a7e8d1)
+
 ## [0.10.7] - 2026-03-04
 
 ### Fixed
