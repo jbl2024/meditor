@@ -13,6 +13,9 @@ export type TableActionId =
   | 'toggle_header_row'
   | 'toggle_header_col'
   | 'toggle_header_cell'
+  | 'align_col_left'
+  | 'align_col_center'
+  | 'align_col_right'
   | 'delete_table'
 
 export type TableActionGroup = 'rows' | 'columns' | 'header' | 'table'
@@ -35,6 +38,9 @@ export type TableCommandCapabilities = {
   toggleHeaderRow: boolean
   toggleHeaderColumn: boolean
   toggleHeaderCell: boolean
+  alignColumnLeft: boolean
+  alignColumnCenter: boolean
+  alignColumnRight: boolean
   deleteTable: boolean
 }
 
@@ -77,6 +83,24 @@ export function buildTableToolbarActions(
       label: 'Delete column',
       group: 'columns',
       disabled: !capabilities.deleteColumn
+    },
+    {
+      id: 'align_col_left',
+      label: 'Align left',
+      group: 'columns',
+      disabled: !capabilities.alignColumnLeft
+    },
+    {
+      id: 'align_col_center',
+      label: 'Align center',
+      group: 'columns',
+      disabled: !capabilities.alignColumnCenter
+    },
+    {
+      id: 'align_col_right',
+      label: 'Align right',
+      group: 'columns',
+      disabled: !capabilities.alignColumnRight
     },
     {
       id: 'toggle_header_row',

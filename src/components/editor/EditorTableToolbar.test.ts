@@ -23,6 +23,7 @@ function mountHarness(options?: {
 
   const defaultActions: TableToolbarAction[] = options?.actions ?? [
     { id: 'add_row_after', label: 'Add row below', group: 'rows', disabled: false },
+    { id: 'align_col_center', label: 'Align center', group: 'columns', disabled: false },
     { id: 'delete_row', label: 'Delete row', group: 'rows', disabled: true, disabledReason: 'No row' },
     { id: 'delete_table', label: 'Delete table', group: 'table', disabled: false }
   ]
@@ -59,10 +60,12 @@ describe('EditorTableToolbar', () => {
     const deleteRow = harness.root.querySelector('[data-action="delete_row"]') as HTMLButtonElement
 
     addRow.click()
+    ;(harness.root.querySelector('[data-action="align_col_center"]') as HTMLButtonElement).click()
     deleteRow.click()
     await flush()
 
     expect(harness.onSelect).toHaveBeenCalledWith('add_row_after')
+    expect(harness.onSelect).toHaveBeenCalledWith('align_col_center')
     expect(harness.onSelect).not.toHaveBeenCalledWith('delete_row')
     harness.app.unmount()
   })

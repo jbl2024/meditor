@@ -92,6 +92,9 @@ type RichListItem = {
 }
 
 type ListStyle = 'ordered' | 'unordered' | 'checklist'
+type TableAlign = 'left' | 'center' | 'right' | null
+
+const TABLE_WIDTHS_LINE_RE = /^\{widths:\s*([^}]*)\s*\}$/i
 
 function normalizeInput(markdown: string): string {
   return markdown.replace(/\r\n?/g, '\n')
@@ -385,9 +388,15 @@ function markdownFromTable(table: HTMLTableElement): string {
   const padded = rows.map((row) => Array.from({ length: columnCount }, (_, index) => row[index] ?? ''))
   const escapeCell = (value: string) => value.replace(/\|/g, '\\|').replace(/\n/g, '<br>')
   const lineForRow = (row: string[]) => `| ${row.map((cell) => escapeCell(cell)).join(' | ')} |`
+  const alignments = Array.from({ length: columnCount }, (_, index) => {
+    const firstCell = trElements[0]?.children?.item(index) as HTMLElement | null
+    const raw = (firstCell?.style.textAlign || firstCell?.getAttribute('data-align') || '').trim().toLowerCase()
+    if (raw === 'left' || raw === 'center' || raw === 'right') return raw as TableAlign
+    return null
+  })
 
   const header = padded[0]
-  const separator = `| ${Array.from({ length: columnCount }, () => '---').join(' | ')} |`
+  const separator = `| ${alignments.map((align) => tableSeparatorCell(align)).join(' | ')} |`
   const body = padded.slice(1).map(lineForRow)
   return [lineForRow(header), separator, ...body].join('\n')
 }
@@ -652,23 +661,100 @@ function parseTableCells(line: string, options?: { allowEmptyRow?: boolean }): s
   if (!trimmed.startsWith('|') && !trimmed.endsWith('|')) return null
 
   const inner = trimmed.replace(/^\|/, '').replace(/\|$/, '')
-  const cells = inner.split('|').map((cell) => cell.trim().replace(/\\\|/g, '|'))
+  const cells: string[] = []
+  let current = ''
+  let wikilinkDepth = 0
+
+  for (let i = 0; i < inner.length; i += 1) {
+    const ch = inner[i]
+    const next = inner[i + 1] ?? ''
+
+    if (ch === '\\' && next === '|') {
+      current += '|'
+      i += 1
+      continue
+    }
+
+    if (ch === '[' && next === '[') {
+      wikilinkDepth += 1
+      current += '[['
+      i += 1
+      continue
+    }
+
+    if (ch === ']' && next === ']' && wikilinkDepth > 0) {
+      wikilinkDepth -= 1
+      current += ']]'
+      i += 1
+      continue
+    }
+
+    if (ch === '|' && wikilinkDepth === 0) {
+      cells.push(current.trim())
+      current = ''
+      continue
+    }
+
+    current += ch
+  }
+
+  cells.push(current.trim())
   if (!cells.length) return null
   if (!options?.allowEmptyRow && cells.every((cell) => cell.length === 0)) return null
   return cells
 }
 
-function isTableSeparatorLine(line: string, expectedColumns: number): boolean {
+function tableSeparatorCell(align: TableAlign): string {
+  if (align === 'left') return ':---'
+  if (align === 'center') return ':---:'
+  if (align === 'right') return '---:'
+  return '---'
+}
+
+function parseTableSeparatorAlignments(line: string, expectedColumns: number): TableAlign[] | null {
   const cells = parseTableCells(line)
-  if (!cells || cells.length !== expectedColumns) return false
-  return cells.every((cell) => /^:?-{3,}:?$/.test(cell.replace(/\s+/g, '')))
+  if (!cells || cells.length !== expectedColumns) return null
+  const parsed: TableAlign[] = []
+  for (const cell of cells) {
+    const normalized = cell.replace(/\s+/g, '')
+    if (!/^:?-+:?$/.test(normalized)) return null
+    const starts = normalized.startsWith(':')
+    const ends = normalized.endsWith(':')
+    parsed.push(starts && ends ? 'center' : starts ? 'left' : ends ? 'right' : null)
+  }
+  return parsed
+}
+
+function parseTableWidthsLine(line: string, expectedColumns: number): Array<number | null> | null {
+  const match = line.trim().match(TABLE_WIDTHS_LINE_RE)
+  if (!match) return null
+  const raw = match[1] ?? ''
+  const parts = raw.split(',').map((part) => part.trim())
+  if (!parts.length) return null
+  const parsed = Array.from({ length: expectedColumns }, (_, index) => {
+    const token = parts[index] ?? ''
+    if (!token) return null
+    const numeric = Number.parseFloat(token.replace(/%$/, ''))
+    if (!Number.isFinite(numeric) || numeric <= 0) return null
+    return numeric
+  })
+  const defined = parsed.filter((value): value is number => typeof value === 'number')
+  if (!defined.length) return parsed
+
+  const sum = defined.reduce((acc, value) => acc + value, 0)
+  const shouldNormalizeAsWeights = sum > 100 || defined.some((value) => value > 100)
+  if (!shouldNormalizeAsWeights) {
+    return parsed.map((value) => (value === null ? null : Math.max(1, Math.round(value))))
+  }
+
+  return parsed.map((value) => (value === null ? null : Math.max(1, Math.round((value / sum) * 100))))
 }
 
 function isMarkdownTableStart(lines: string[], index: number): boolean {
   if (index + 1 >= lines.length) return false
   const header = parseTableCells(lines[index], { allowEmptyRow: true })
   if (!header || header.length < 2) return false
-  return isTableSeparatorLine(lines[index + 1], header.length)
+  return Boolean(parseTableSeparatorAlignments(lines[index + 1], header.length))
 }
 
 function isBlockStarter(line: string): boolean {
@@ -839,7 +925,8 @@ export function markdownToEditorData(markdown: string): EditorDocument {
     }
 
     if (isMarkdownTableStart(lines, i)) {
-      const header = parseTableCells(lines[i], { allowEmptyRow: true }) ?? []
+      const header = (parseTableCells(lines[i], { allowEmptyRow: true }) ?? []).map((cell) => blockTextToHtml(cell))
+      const align = parseTableSeparatorAlignments(lines[i + 1], header.length) ?? Array.from({ length: header.length }, () => null)
       const rows: string[][] = [header]
       i += 2
 
@@ -849,12 +936,18 @@ export function markdownToEditorData(markdown: string): EditorDocument {
         rows.push(row.map((cell) => blockTextToHtml(cell)))
         i += 1
       }
+      const columnCount = Math.max(2, ...rows.map((row) => row.length))
+      const normalizedAlign = Array.from({ length: columnCount }, (_, index) => align[index] ?? null)
+      const widths = i < lines.length ? parseTableWidthsLine(lines[i], columnCount) : null
+      if (widths) i += 1
 
       blocks.push({
         type: 'table',
         data: {
           withHeadings: true,
-          content: rows
+          content: rows,
+          ...(normalizedAlign.some((item) => item !== null) ? { align: normalizedAlign } : {}),
+          ...(widths && widths.some((item) => item !== null) ? { widths } : {})
         }
       })
       continue
@@ -1055,12 +1148,28 @@ function blockToMarkdown(block: EditorBlock): string {
       const cellToMarkdown = (value: string) => normalizeParagraphMarkdown(value)
       const escapeCell = (value: string) => value.replace(/\|/g, '\\|').replace(/\r\n?/g, '\n').replace(/\n/g, '<br>')
       const rowToLine = (row: string[]) => `| ${row.map((cell) => escapeCell(cellToMarkdown(cell))).join(' | ')} |`
+      const alignRaw = Array.isArray(block.data?.align) ? block.data.align : []
+      const align = Array.from({ length: columnCount }, (_, idx) => {
+        const token = String(alignRaw[idx] ?? '').trim().toLowerCase()
+        if (token === 'left' || token === 'center' || token === 'right') return token as TableAlign
+        return null
+      })
+      const widthsRaw = Array.isArray(block.data?.widths) ? block.data.widths : []
+      const widths = Array.from({ length: columnCount }, (_, idx) => {
+        const numeric = Number.parseInt(String(widthsRaw[idx] ?? ''), 10)
+        if (!Number.isFinite(numeric) || numeric <= 0) return null
+        return Math.max(1, Math.min(100, numeric))
+      })
 
       const normalizedRows = rows.map(pad)
       const header = withHeadings ? normalizedRows[0] : Array.from({ length: columnCount }, () => '')
       const bodyRows = withHeadings ? normalizedRows.slice(1) : normalizedRows
-      const separator = `| ${Array.from({ length: columnCount }, () => '---').join(' | ')} |`
-      return [rowToLine(header), separator, ...bodyRows.map(rowToLine)].join('\n')
+      const separator = `| ${align.map((item) => tableSeparatorCell(item)).join(' | ')} |`
+      const markdownLines = [rowToLine(header), separator, ...bodyRows.map(rowToLine)]
+      if (widths.some((item) => item !== null)) {
+        markdownLines.push(`{widths: ${widths.map((item) => (item === null ? '' : `${item}%`)).join(',')}}`)
+      }
+      return markdownLines.join('\n')
     }
 
     case 'mermaid': {

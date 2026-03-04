@@ -65,6 +65,65 @@ describe('clipboardHtmlToMarkdown', () => {
 })
 
 describe('markdownToEditorData tables', () => {
+  it('parses column alignment markers from separator row', () => {
+    const markdown = `
+| Left Aligned | Center Aligned | Right Aligned |
+| :--- | :---: | ---: |
+| A | B | C |
+`.trim()
+
+    const parsed = markdownToEditorData(markdown)
+    expect(parsed.blocks).toHaveLength(1)
+    expect(parsed.blocks[0]).toEqual({
+      type: 'table',
+      data: {
+        withHeadings: true,
+        align: ['left', 'center', 'right'],
+        content: [
+          ['Left Aligned', 'Center Aligned', 'Right Aligned'],
+          ['A', 'B', 'C']
+        ]
+      }
+    })
+  })
+
+  it('parses optional table widths metadata line', () => {
+    const markdown = `
+| Nom | Age | Ville |
+| --- | :-: | ---: |
+| Alice | 30 | Lyon |
+{widths: 40%,20%,40%}
+`.trim()
+
+    const parsed = markdownToEditorData(markdown)
+    expect(parsed.blocks).toHaveLength(1)
+    expect(parsed.blocks[0]).toEqual({
+      type: 'table',
+      data: {
+        withHeadings: true,
+        align: [null, 'center', 'right'],
+        widths: [40, 20, 40],
+        content: [
+          ['Nom', 'Age', 'Ville'],
+          ['Alice', '30', 'Lyon']
+        ]
+      }
+    })
+  })
+
+  it('normalizes legacy absolute-like widths into percentages', () => {
+    const markdown = `
+| A | B | C |
+| --- | --- | --- |
+| 1 | 2 | 3 |
+{widths: 200,80,150}
+`.trim()
+
+    const parsed = markdownToEditorData(markdown)
+    expect(parsed.blocks).toHaveLength(1)
+    expect((parsed.blocks[0].data as Record<string, unknown>).widths).toEqual([47, 19, 35])
+  })
+
   it('parses tables that have an empty header row', () => {
     const markdown = `
 |  |  |  |
@@ -86,6 +145,44 @@ describe('markdownToEditorData tables', () => {
         ]
       }
     })
+  })
+
+  it('keeps escaped pipes inside a table cell without creating extra columns', () => {
+    const markdown = `
+| A | B | C |  |
+| --- | --- | :---: | --- |
+| [[graph/adaptation.md\\|adaptation]] |  |  |  |
+{widths: 30%,10%,30%,30%}
+`.trim()
+
+    const parsed = markdownToEditorData(markdown)
+    expect(parsed.blocks).toHaveLength(1)
+    expect(parsed.blocks[0].type).toBe('table')
+    const tableData = parsed.blocks[0].data as {
+      align?: Array<'left' | 'center' | 'right' | null>
+      widths?: Array<number | null>
+      content: string[][]
+    }
+    expect(tableData.align).toEqual([null, null, 'center', null])
+    expect(tableData.widths).toEqual([30, 10, 30, 30])
+    expect(tableData.content[0]).toEqual(['A', 'B', 'C', ''])
+    expect(tableData.content[1]).toHaveLength(4)
+    expect(tableData.content[1]?.[0]).toContain('graph/adaptation.md')
+  })
+
+  it('keeps wikilink alias pipes inside a table cell without creating extra columns', () => {
+    const markdown = `
+| A | B | C |
+| --- | --- | --- |
+| [[graph/adaptation.md|adaptation]] | 2 | 3 |
+`.trim()
+
+    const parsed = markdownToEditorData(markdown)
+    expect(parsed.blocks).toHaveLength(1)
+    const tableData = parsed.blocks[0].data as { content: string[][] }
+    expect(tableData.content[1]).toHaveLength(3)
+    expect(tableData.content[1]?.[0]).toContain('data-wikilink-target="graph/adaptation.md"')
+    expect(tableData.content[1]?.[0]).toContain('adaptation')
   })
 
   it('renders inline markdown inside table cells', () => {
@@ -139,6 +236,65 @@ describe('markdownToEditorData tables', () => {
     expect(output).toContain('| A | B | C |')
     expect(output).toContain('| 1 | 2 |  |')
     expect(output).toContain('| x |  |  |')
+  })
+
+  it('serializes alignment markers and widths line when explicit widths exist', () => {
+    const output = editorDataToMarkdown({
+      blocks: [
+        {
+          type: 'table',
+          data: {
+            withHeadings: true,
+            align: ['left', 'center', 'right'],
+            widths: [40, 20, 40],
+            content: [
+              ['A', 'B', 'C'],
+              ['1', '2', '3']
+            ]
+          }
+        }
+      ]
+    })
+
+    expect(output).toContain('| :--- | :---: | ---: |')
+    expect(output).toContain('{widths: 40%,20%,40%}')
+  })
+
+  it('does not serialize widths metadata when no explicit width is provided', () => {
+    const output = editorDataToMarkdown({
+      blocks: [
+        {
+          type: 'table',
+          data: {
+            withHeadings: true,
+            align: ['left', null, 'right'],
+            widths: [null, null, null],
+            content: [
+              ['A', 'B', 'C'],
+              ['1', '2', '3']
+            ]
+          }
+        }
+      ]
+    })
+
+    expect(output).toContain('| :--- | --- | ---: |')
+    expect(output).not.toContain('{widths:')
+  })
+
+  it('keeps align and widths across markdown round-trip', () => {
+    const input = `
+| Left | Center | Right |
+| :--- | :---: | ---: |
+| A | B | C |
+{widths: 40%,20%,40%}
+`.trim()
+
+    const parsed = markdownToEditorData(input)
+    const output = editorDataToMarkdown(parsed)
+    const reparsed = markdownToEditorData(output)
+    expect((reparsed.blocks[0].data as Record<string, unknown>).align).toEqual(['left', 'center', 'right'])
+    expect((reparsed.blocks[0].data as Record<string, unknown>).widths).toEqual([40, 20, 40])
   })
 })
 

@@ -23,6 +23,7 @@ function createEditor(activeTable = true) {
     toggleHeaderRow: vi.fn().mockReturnThis(),
     toggleHeaderColumn: vi.fn().mockReturnThis(),
     toggleHeaderCell: vi.fn().mockReturnThis(),
+    setCellAttribute: vi.fn().mockReturnThis(),
     deleteTable: vi.fn().mockReturnThis(),
     run: vi.fn(() => true)
   }

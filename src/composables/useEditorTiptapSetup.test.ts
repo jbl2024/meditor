@@ -39,9 +39,11 @@ describe('useEditorTiptapSetup', () => {
   it('exposes expected extension contract', () => {
     const { setup } = createSetup()
     const editorOptions = setup.createEditorOptions('a.md') as any
+    const extensionNames = (editorOptions.extensions ?? []).map((extension: { name?: string }) => extension.name)
 
     expect(Array.isArray(editorOptions.extensions)).toBe(true)
     expect(editorOptions.extensions.length).toBeGreaterThan(8)
+    expect(extensionNames).toContain('tableCellAlign')
     expect(typeof editorOptions.editorProps.handleClick).toBe('function')
   })
 

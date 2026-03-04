@@ -106,3 +106,32 @@ describe('toTiptapDoc html block', () => {
     })
   })
 })
+
+describe('toTiptapDoc table metadata', () => {
+  it('maps table align and widths metadata to table cell attrs', () => {
+    const doc = toTiptapDoc([
+      {
+        type: 'table',
+        data: {
+          withHeadings: true,
+          align: ['left', 'center', 'right'],
+          widths: [40, 20, 40],
+          content: [
+            ['Nom', 'Age', 'Ville'],
+            ['Alice', '30', 'Lyon']
+          ]
+        }
+      }
+    ])
+
+    const table = doc.content?.[0] as any
+    const headerRow = table.content[0]
+    const bodyRow = table.content[1]
+    expect(headerRow.content[0].attrs).toEqual({ textAlign: 'left', colwidth: [40] })
+    expect(headerRow.content[1].attrs).toEqual({ textAlign: 'center', colwidth: [20] })
+    expect(headerRow.content[2].attrs).toEqual({ textAlign: 'right', colwidth: [40] })
+    expect(bodyRow.content[0].attrs).toEqual({ textAlign: 'left', colwidth: [40] })
+    expect(bodyRow.content[1].attrs).toEqual({ textAlign: 'center', colwidth: [20] })
+    expect(bodyRow.content[2].attrs).toEqual({ textAlign: 'right', colwidth: [40] })
+  })
+})

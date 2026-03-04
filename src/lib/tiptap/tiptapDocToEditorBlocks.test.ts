@@ -25,3 +25,49 @@ describe('fromTiptapDoc html block', () => {
     ])
   })
 })
+
+describe('fromTiptapDoc table metadata', () => {
+  it('maps table cell attrs back to table align and widths metadata', () => {
+    const blocks = fromTiptapDoc({
+      type: 'doc',
+      content: [
+        {
+          type: 'table',
+          content: [
+            {
+              type: 'tableRow',
+              content: [
+                { type: 'tableHeader', attrs: { textAlign: 'left', colwidth: [400] }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Nom' }] }] },
+                { type: 'tableHeader', attrs: { textAlign: 'center', colwidth: [200] }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Age' }] }] },
+                { type: 'tableHeader', attrs: { textAlign: 'right', colwidth: [400] }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Ville' }] }] }
+              ]
+            },
+            {
+              type: 'tableRow',
+              content: [
+                { type: 'tableCell', attrs: { textAlign: 'left', colwidth: [400] }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Alice' }] }] },
+                { type: 'tableCell', attrs: { textAlign: 'center', colwidth: [200] }, content: [{ type: 'paragraph', content: [{ type: 'text', text: '30' }] }] },
+                { type: 'tableCell', attrs: { textAlign: 'right', colwidth: [400] }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Lyon' }] }] }
+              ]
+            }
+          ]
+        }
+      ]
+    })
+
+    expect(blocks).toEqual([
+      {
+        type: 'table',
+        data: {
+          withHeadings: true,
+          align: ['left', 'center', 'right'],
+          widths: [40, 20, 40],
+          content: [
+            ['Nom', 'Age', 'Ville'],
+            ['Alice', '30', 'Lyon']
+          ]
+        }
+      }
+    ])
+  })
+})

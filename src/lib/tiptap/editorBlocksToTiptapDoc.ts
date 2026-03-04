@@ -5,6 +5,7 @@ import { parseWikilinkTarget } from '../wikilinks'
 import { TIPTAP_NODE_TYPES } from './types'
 
 type TiptapNode = JSONContent
+type TableAlign = 'left' | 'center' | 'right' | null
 
 function marksForElement(element: HTMLElement): Array<{ type: string; attrs?: Record<string, unknown> }> {
   const out: Array<{ type: string; attrs?: Record<string, unknown> }> = []
@@ -195,15 +196,32 @@ function blockToNode(block: EditorBlock): TiptapNode | null {
 
     case 'table': {
       const rows = Array.isArray(data.content) ? data.content : []
+      const alignRaw = Array.isArray(data.align) ? data.align : []
+      const widthsRaw = Array.isArray(data.widths) ? data.widths : []
       const rowNodes: TiptapNode[] = rows.map((row, rowIndex) => {
         const cells = Array.isArray(row) ? row : []
         const cellType = rowIndex === 0 ? 'tableHeader' : 'tableCell'
+        const columnCount = Math.max(cells.length, alignRaw.length, widthsRaw.length)
         return {
           type: 'tableRow',
-          content: cells.map((cell) => ({
-            type: cellType,
-            content: [{ type: 'paragraph', content: inlineNodesFromHtml(String(cell ?? '')) }]
-          }))
+          content: Array.from({ length: columnCount }, (_, colIndex) => {
+            const rawAlign = String(alignRaw[colIndex] ?? '').trim().toLowerCase()
+            const textAlign: TableAlign = rawAlign === 'left' || rawAlign === 'center' || rawAlign === 'right'
+              ? (rawAlign as TableAlign)
+              : null
+            const widthPercent = Number.parseInt(String(widthsRaw[colIndex] ?? ''), 10)
+            const colwidth = Number.isFinite(widthPercent) && widthPercent > 0
+              ? [Math.max(1, widthPercent)]
+              : null
+            return {
+              type: cellType,
+              attrs: {
+                textAlign,
+                colwidth
+              },
+              content: [{ type: 'paragraph', content: inlineNodesFromHtml(String(cells[colIndex] ?? '')) }]
+            }
+          })
         }
       })
       return {

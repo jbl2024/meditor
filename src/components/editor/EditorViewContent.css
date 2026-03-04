@@ -210,15 +210,18 @@
 
 .editor-holder .ProseMirror table {
   width: 100%;
+  max-width: 100%;
+  min-width: 100% !important;
+  width: 100% !important;
   border-collapse: separate;
   border-spacing: 0;
-  margin: 0.8rem 0;
+  margin: 0.36rem 0;
   border: 1px solid rgb(203 213 225);
-  border-radius: 0.65rem;
+  border-radius: 0.52rem;
   overflow: hidden;
   background: rgb(255 255 255 / 0.98);
-  font-size: calc(0.92rem * var(--editor-zoom, 1));
-  line-height: 1.45;
+  font-size: calc(0.78rem * var(--editor-zoom, 1));
+  line-height: 1.26;
   table-layout: fixed;
 }
 
@@ -226,10 +229,11 @@
 .editor-holder .ProseMirror td {
   border-right: 1px solid rgb(226 232 240);
   border-bottom: 1px solid rgb(226 232 240);
-  padding: 0.5rem 0.62rem;
+  padding: 0.22rem 0.32rem;
   vertical-align: top;
+  text-align: left;
   position: relative;
-  min-width: 4rem;
+  min-width: 2.6rem;
   transition: background-color 120ms ease;
 }
 

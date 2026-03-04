@@ -11,6 +11,9 @@ const ALL_ENABLED: TableCommandCapabilities = {
   toggleHeaderRow: true,
   toggleHeaderColumn: true,
   toggleHeaderCell: true,
+  alignColumnLeft: true,
+  alignColumnCenter: true,
+  alignColumnRight: true,
   deleteTable: true
 }
 
@@ -43,5 +46,8 @@ describe('buildTableToolbarActions', () => {
     const actions = buildTableToolbarActions(ALL_ENABLED)
     const groups = Array.from(new Set(actions.map((entry) => entry.group)))
     expect(groups).toEqual(['rows', 'columns', 'header', 'table'])
+    expect(actions.some((entry) => entry.id === 'align_col_left')).toBe(true)
+    expect(actions.some((entry) => entry.id === 'align_col_center')).toBe(true)
+    expect(actions.some((entry) => entry.id === 'align_col_right')).toBe(true)
   })
 })

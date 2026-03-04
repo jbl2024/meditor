@@ -2,6 +2,7 @@ import type { JSONContent } from '@tiptap/vue-3'
 import type { EditorBlock } from '../markdownBlocks'
 import { normalizeCalloutKind } from '../callouts'
 import { TIPTAP_NODE_TYPES } from './types'
+type TableAlign = 'left' | 'center' | 'right' | null
 
 function textFromNode(node: JSONContent | null | undefined): string {
   if (!node) return ''
@@ -136,17 +137,37 @@ function nodeToBlock(node: JSONContent): EditorBlock | null {
     }
 
     case 'table': {
-      const rows = (Array.isArray(node.content) ? node.content : [])
+      const tableRows = (Array.isArray(node.content) ? node.content : [])
         .filter((row) => row.type === 'tableRow')
+      const rows = tableRows
         .map((row) => {
           const cells = Array.isArray(row.content) ? row.content : []
           return cells.map((cell) => inlineHtmlFromNode(cell))
         })
+      const firstRowCells = Array.isArray(tableRows[0]?.content) ? tableRows[0]!.content! : []
+      const align: TableAlign[] = firstRowCells.map((cell) => {
+        const token = String(cell.attrs?.textAlign ?? '').trim().toLowerCase()
+        if (token === 'left' || token === 'center' || token === 'right') return token as TableAlign
+        return null
+      })
+      const widthsPx: Array<number | null> = firstRowCells.map((cell) => {
+        const colwidth = Array.isArray(cell.attrs?.colwidth) ? cell.attrs?.colwidth : null
+        const value = Number.parseInt(String(colwidth?.[0] ?? ''), 10)
+        if (!Number.isFinite(value) || value <= 0) return null
+        return value
+      })
+      const definedWidths = widthsPx.filter((value): value is number => typeof value === 'number')
+      const widthSum = definedWidths.reduce((acc, value) => acc + value, 0)
+      const widths: Array<number | null> = widthSum > 0
+        ? widthsPx.map((value) => (value === null ? null : Math.max(1, Math.round((value / widthSum) * 100))))
+        : widthsPx
       return {
         type: 'table',
         data: {
           withHeadings: true,
-          content: rows
+          content: rows,
+          ...(align.some((item) => item !== null) ? { align } : {}),
+          ...(widths.some((item) => item !== null) ? { widths } : {})
         }
       }
     }

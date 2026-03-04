@@ -73,6 +73,9 @@ export function useEditorTableInteractions(options: UseEditorTableInteractionsOp
       toggleHeaderRow: canRun((chain) => chain.toggleHeaderRow()),
       toggleHeaderColumn: canRun((chain) => chain.toggleHeaderColumn()),
       toggleHeaderCell: canRun((chain) => chain.toggleHeaderCell()),
+      alignColumnLeft: canRun((chain) => chain.setCellAttribute('textAlign', 'left')),
+      alignColumnCenter: canRun((chain) => chain.setCellAttribute('textAlign', 'center')),
+      alignColumnRight: canRun((chain) => chain.setCellAttribute('textAlign', 'right')),
       deleteTable: canRun((chain) => chain.deleteTable())
     }
   }

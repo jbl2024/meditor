@@ -82,8 +82,10 @@ export function useEditorTableGeometry(options: UseEditorTableGeometryOptions) {
     const viewportPadding = 8
     const minMenuHeight = 160
     const preferredMenuHeight = Math.max(220, Math.floor(window.innerHeight * 0.72))
-    const rawViewportLeft = holderRect.left + options.state.tableToolbarLeft.value
-    const rawViewportTop = holderRect.top + options.state.tableToolbarTop.value
+    // `tableToolbarLeft/Top` are holder-content coordinates (already including holder scroll),
+    // so convert back to visible viewport space before positioning the fixed overlay.
+    const rawViewportLeft = holderRect.left + options.state.tableToolbarLeft.value - holderScrollLeft
+    const rawViewportTop = holderRect.top + options.state.tableToolbarTop.value - holderScrollTop
     const availableBelow = Math.max(0, Math.floor(window.innerHeight - rawViewportTop - viewportPadding))
     const availableAbove = Math.max(0, Math.floor(rawViewportTop - viewportPadding))
 

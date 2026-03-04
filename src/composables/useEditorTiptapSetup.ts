@@ -14,6 +14,7 @@ import { HtmlNode } from '../lib/tiptap/extensions/HtmlNode'
 import { WikilinkNode } from '../lib/tiptap/extensions/WikilinkNode'
 import { VirtualTitleGuard } from '../lib/tiptap/extensions/VirtualTitleGuard'
 import { CodeBlockNode } from '../lib/tiptap/extensions/CodeBlockNode'
+import { TableCellAlign } from '../lib/tiptap/extensions/TableCellAlign'
 import { WIKILINK_STATE_KEY, type WikilinkCandidate } from '../lib/tiptap/plugins/wikilinkState'
 import { enterWikilinkEditFromNode } from '../lib/tiptap/extensions/wikilinkCommands'
 
@@ -116,6 +117,7 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
         TableRow,
         TableHeader,
         TableCell,
+        TableCellAlign,
         Placeholder.configure({ placeholder: 'Write here...' }),
         CalloutNode,
         MermaidNode.configure({ confirmReplace: options.requestMermaidReplaceConfirm }),
