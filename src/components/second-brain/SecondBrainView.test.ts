@@ -86,7 +86,20 @@ describe('SecondBrainView', () => {
     return { root, app }
   }
 
-  it('turns selected @ mention into a composer chip', async () => {
+  it('renders persisted context chips from loaded session', async () => {
+    const mounted = mountView()
+    for (let i = 0; i < 8 && mounted.root.querySelectorAll('.sb-chip').length === 0; i += 1) {
+      await flushUi()
+    }
+
+    const chips = Array.from(mounted.root.querySelectorAll('.sb-chip'))
+    expect(chips).toHaveLength(1)
+    expect(mounted.root.textContent).toContain('seed.md')
+
+    mounted.app.unmount()
+  })
+
+  it('turns selected @ mention into a persisted context chip', async () => {
     const mounted = mountView()
     await flushUi()
 
@@ -107,7 +120,8 @@ describe('SecondBrainView', () => {
     firstSuggestion.click()
     await flushUi()
 
-    expect(mounted.root.querySelector('.sb-chip')).toBeTruthy()
+    expect(api.replaceSessionContext).toHaveBeenCalledWith('s1', ['/vault/seed.md', '/vault/notes/a.md'])
+    expect(mounted.root.querySelectorAll('.sb-chip')).toHaveLength(2)
     expect(mounted.root.textContent).toContain('a.md')
     expect(textarea.value).toBe('')
 
@@ -172,6 +186,35 @@ describe('SecondBrainView', () => {
 
     expect(api.createDeliberationSession).not.toHaveBeenCalled()
     expect(mounted.root.textContent).toContain('Current session is empty')
+
+    mounted.app.unmount()
+  })
+
+  it('rolls back mention context chip on immediate sync failure', async () => {
+    api.replaceSessionContext.mockRejectedValueOnce(new Error('context update failed'))
+    const mounted = mountView()
+    await flushUi()
+
+    const textarea = mounted.root.querySelector<HTMLTextAreaElement>('.sb-textarea')
+    expect(textarea).toBeTruthy()
+    if (!textarea) return
+
+    textarea.value = '@not'
+    textarea.selectionStart = textarea.value.length
+    textarea.selectionEnd = textarea.value.length
+    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushUi()
+
+    const firstSuggestion = mounted.root.querySelector<HTMLButtonElement>('.sb-at-item')
+    expect(firstSuggestion).toBeTruthy()
+    if (!firstSuggestion) return
+    firstSuggestion.click()
+    await flushUi()
+
+    expect(api.replaceSessionContext).toHaveBeenCalled()
+    expect(mounted.root.querySelectorAll('.sb-chip')).toHaveLength(1)
+    expect(mounted.root.textContent).toContain('seed.md')
+    expect(mounted.root.textContent).toContain('Could not add notes/a.md to Second Brain context')
 
     mounted.app.unmount()
   })

@@ -11,6 +11,7 @@ defineProps<{
 const emit = defineEmits<{
   'open-note': [path: string]
   'context-changed': [paths: string[]]
+  'session-changed': [sessionId: string]
 }>()
 </script>
 
@@ -23,6 +24,7 @@ const emit = defineEmits<{
       :requested-session-nonce="requestedSessionNonce"
       @open-note="emit('open-note', $event)"
       @context-changed="emit('context-changed', $event)"
+      @session-changed="emit('session-changed', $event)"
     />
   </div>
 </template>

@@ -66,6 +66,7 @@ const emit = defineEmits<{
   'cosmos-select-node': [nodeId: string]
   'open-note': [path: string]
   'second-brain-context-changed': [paths: string[]]
+  'second-brain-session-changed': [sessionId: string]
 }>()
 
 type EditorSurfaceExposed = {
@@ -171,6 +172,7 @@ defineExpose<EditorSurfaceExposed>({
     :requested-session-nonce="secondBrain.requestedSessionNonce"
     @open-note="emit('open-note', $event)"
     @context-changed="emit('second-brain-context-changed', $event)"
+    @session-changed="emit('second-brain-session-changed', $event)"
   />
 
   <div v-else class="surface-placeholder">Open a tab to start.</div>

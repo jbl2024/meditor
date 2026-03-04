@@ -64,6 +64,16 @@ import { applySearchMode, detectSearchMode, type SearchMode } from './lib/search
 import { hasActiveTextSelectionInEditor, shouldBlockGlobalShortcutsFromTarget } from './lib/shortcutTargets'
 import { parseWikilinkTarget } from './lib/wikilinks'
 import { buildCosmosGraph } from './lib/graphIndex'
+import {
+  createDeliberationSession,
+  loadDeliberationSession,
+  replaceSessionContext
+} from './lib/secondBrainApi'
+import {
+  normalizeContextPathsForUpdate,
+  toAbsoluteWorkspacePath,
+  workspaceScopedSecondBrainSessionKey
+} from './lib/secondBrainContextPaths'
 import { useEditorState } from './composables/useEditorState'
 import { useCosmosController } from './composables/useCosmosController'
 import { useFilesystemState } from './composables/useFilesystemState'
@@ -217,7 +227,14 @@ const shortcutsModalVisible = ref(false)
 const indexStatusModalVisible = ref(false)
 const cosmosCommandLoadingVisible = ref(false)
 const cosmosCommandLoadingLabel = ref('Loading graph...')
-const secondBrainRequestedSessionId = ref('')
+const secondBrainRequestedSessionId = ref(
+  (() => {
+    const workspacePath = filesystem.workingFolderPath.value.trim()
+    if (!workspacePath) return ''
+    const storageKey = workspaceScopedSecondBrainSessionKey(workspacePath)
+    return window.localStorage.getItem(storageKey)?.trim() ?? ''
+  })()
+)
 const secondBrainRequestedSessionNonce = ref(0)
 const shortcutsFilterQuery = ref('')
 const previousNonCosmosMode = ref<SidebarMode>('explorer')
@@ -501,32 +518,33 @@ const paletteActionPriority: Record<string, number> = {
   'open-specific-date': 4,
   'open-cosmos-view': 5,
   'open-second-brain-view': 6,
-  'open-settings': 7,
-  'open-note-in-cosmos': 8,
-  'reveal-in-explorer': 9,
-  'show-shortcuts': 10,
-  'create-new-file': 11,
-  'close-other-tabs': 12,
-  'close-all-tabs': 13,
-  'close-all-tabs-current-pane': 14,
-  'split-pane-right': 15,
-  'split-pane-down': 16,
-  'focus-pane-1': 17,
-  'focus-pane-2': 18,
-  'focus-pane-3': 19,
-  'focus-pane-4': 20,
-  'focus-next-pane': 21,
-  'move-tab-next-pane': 22,
-  'close-active-pane': 23,
-  'join-panes': 24,
-  'reset-pane-layout': 25,
-  'zoom-in': 26,
-  'zoom-out': 27,
-  'zoom-reset': 28,
-  'theme-light': 29,
-  'theme-dark': 30,
-  'theme-system': 31,
-  'close-workspace': 32
+  'add-active-note-to-second-brain': 7,
+  'open-settings': 8,
+  'open-note-in-cosmos': 9,
+  'reveal-in-explorer': 10,
+  'show-shortcuts': 11,
+  'create-new-file': 12,
+  'close-other-tabs': 13,
+  'close-all-tabs': 14,
+  'close-all-tabs-current-pane': 15,
+  'split-pane-right': 16,
+  'split-pane-down': 17,
+  'focus-pane-1': 18,
+  'focus-pane-2': 19,
+  'focus-pane-3': 20,
+  'focus-pane-4': 21,
+  'focus-next-pane': 22,
+  'move-tab-next-pane': 23,
+  'close-active-pane': 24,
+  'join-panes': 25,
+  'reset-pane-layout': 26,
+  'zoom-in': 27,
+  'zoom-out': 28,
+  'zoom-reset': 29,
+  'theme-light': 30,
+  'theme-dark': 31,
+  'theme-system': 32,
+  'close-workspace': 33
 }
 
 const paletteActions = computed<PaletteAction[]>(() => [
@@ -542,6 +560,11 @@ const paletteActions = computed<PaletteAction[]>(() => [
     label: 'Open Second Brain View',
     run: () => openSecondBrainViewFromPalette(),
     closeBeforeRun: true
+  },
+  {
+    id: 'add-active-note-to-second-brain',
+    label: 'Add Active Note to Second Brain',
+    run: () => addActiveNoteToSecondBrainFromPalette()
   },
   {
     id: 'open-settings',
@@ -1969,7 +1992,95 @@ async function openSecondBrainViewFromPalette() {
   return true
 }
 
+function persistSecondBrainSessionId(sessionId: string) {
+  const workspacePath = filesystem.workingFolderPath.value.trim()
+  if (!workspacePath) return
+  const storageKey = workspaceScopedSecondBrainSessionKey(workspacePath)
+  const normalized = sessionId.trim()
+  if (!normalized) {
+    window.localStorage.removeItem(storageKey)
+    return
+  }
+  window.localStorage.setItem(storageKey, normalized)
+}
+
+function readPersistedSecondBrainSessionId(workspacePath: string): string {
+  const normalizedPath = workspacePath.trim()
+  if (!normalizedPath) return ''
+  const storageKey = workspaceScopedSecondBrainSessionKey(normalizedPath)
+  return window.localStorage.getItem(storageKey)?.trim() ?? ''
+}
+
+function setSecondBrainSessionId(sessionId: string, options?: { bumpNonce?: boolean }) {
+  const normalized = sessionId.trim()
+  secondBrainRequestedSessionId.value = normalized
+  persistSecondBrainSessionId(normalized)
+  if (options?.bumpNonce) {
+    secondBrainRequestedSessionNonce.value += 1
+  }
+}
+
+async function resolveSecondBrainSessionForPath(seedPath: string): Promise<string> {
+  const workspacePath = filesystem.workingFolderPath.value.trim()
+  const normalizedSeedPath = toAbsoluteWorkspacePath(workspacePath, seedPath)
+  if (!normalizedSeedPath) {
+    throw new Error('Could not resolve active note path for Second Brain.')
+  }
+  const requestedId = secondBrainRequestedSessionId.value.trim()
+  if (requestedId) {
+    try {
+      const existing = await loadDeliberationSession(requestedId)
+      if (existing.session_id.trim()) return existing.session_id.trim()
+    } catch {
+      // Session may have been deleted; create a fresh one for this workspace.
+    }
+  }
+
+  const created = await createDeliberationSession({ contextPaths: [normalizedSeedPath], title: '' })
+  return created.sessionId.trim()
+}
+
+async function ensurePathInSecondBrainSession(sessionId: string, path: string) {
+  const workspacePath = filesystem.workingFolderPath.value.trim()
+  const payload = await loadDeliberationSession(sessionId)
+  const merged = normalizeContextPathsForUpdate(workspacePath, [
+    ...payload.context_items.map((item) => String(item.path ?? '')),
+    path
+  ])
+  await replaceSessionContext(sessionId, merged)
+}
+
+async function addActiveNoteToSecondBrainFromPalette() {
+  if (!filesystem.hasWorkspace.value) {
+    filesystem.errorMessage.value = 'Open a workspace first.'
+    return false
+  }
+
+  const activePath = activeFilePath.value.trim()
+  if (!activePath) {
+    filesystem.errorMessage.value = 'No active note to add to Second Brain.'
+    return false
+  }
+
+  try {
+    const workspacePath = filesystem.workingFolderPath.value.trim()
+    const normalizedActivePath = toAbsoluteWorkspacePath(workspacePath, activePath)
+    const sessionId = await resolveSecondBrainSessionForPath(normalizedActivePath)
+    await ensurePathInSecondBrainSession(sessionId, normalizedActivePath)
+    setSecondBrainSessionId(sessionId, { bumpNonce: true })
+    filesystem.notifySuccess('Active note added to Second Brain context.')
+    return true
+  } catch (err) {
+    filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not update Second Brain context.'
+    return false
+  }
+}
+
 function onSecondBrainContextChanged(_paths: string[]) {}
+
+function onSecondBrainSessionChanged(sessionId: string) {
+  setSecondBrainSessionId(sessionId)
+}
 
 function applySettingsLlmPreset(provider: 'openai' | 'anthropic' | 'custom') {
   settingsLlmProviderPreset.value = provider
@@ -4284,13 +4395,14 @@ watch(quickOpenItemCount, (count) => {
 
 watch(
   () => filesystem.workingFolderPath.value,
-  () => {
+  (workspacePath) => {
     documentHistory.reset()
     allWorkspaceFiles.value = []
     backlinks.value = []
     semanticLinks.value = []
     virtualDocs.value = {}
     activeFileMetadata.value = null
+    setSecondBrainSessionId(readPersistedSecondBrainSessionId(workspacePath), { bumpNonce: true })
   }
 )
 
@@ -4815,6 +4927,7 @@ onBeforeUnmount(() => {
               @pane-request-move-tab="multiPane.moveActiveTabToAdjacentPane($event.direction)"
               @open-note="void openTabWithAutosave($event)"
               @second-brain-context-changed="onSecondBrainContextChanged"
+              @second-brain-session-changed="onSecondBrainSessionChanged"
               @cosmos-query-update="onCosmosQueryUpdate"
               @cosmos-search-enter="onCosmosSearchEnter"
               @cosmos-select-match="onCosmosMatchClick"

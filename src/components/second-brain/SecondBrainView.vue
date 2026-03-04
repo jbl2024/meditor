@@ -13,6 +13,7 @@ import {
 } from '../../lib/secondBrainApi'
 import { sanitizeHtmlForPreview } from '../../lib/htmlSanitizer'
 import { inlineTextToHtml } from '../../lib/markdownBlocks'
+import { normalizeContextPathsForUpdate } from '../../lib/secondBrainContextPaths'
 import type { SecondBrainMessage, SecondBrainSessionSummary } from '../../lib/api'
 import { useSecondBrainAtMentions, type SecondBrainAtMentionItem } from '../../composables/useSecondBrainAtMentions'
 import SecondBrainAtMentionsMenu from './SecondBrainAtMentionsMenu.vue'
@@ -28,6 +29,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'open-note': [path: string]
   'context-changed': [paths: string[]]
+  'session-changed': [sessionId: string]
 }>()
 
 const configError = ref('')
@@ -75,8 +77,8 @@ function toRelativePath(path: string): string {
   return value
 }
 
-const composerContextCards = computed(() =>
-  composerContextPaths.value.map((path) => {
+const contextCards = computed(() =>
+  contextPaths.value.map((path) => {
     const relativePath = toRelativePath(path)
     const parts = relativePath.split('/')
     return {
@@ -102,21 +104,41 @@ function addComposerContextPath(path: string) {
   composerContextPaths.value = Array.from(merged)
 }
 
-function removeComposerContextPath(path: string) {
+async function removeContextPath(path: string) {
+  const previousContextPaths = [...contextPaths.value]
+  const previousComposerPaths = [...composerContextPaths.value]
+  contextPaths.value = contextPaths.value.filter((item) => item !== path)
   composerContextPaths.value = composerContextPaths.value.filter((item) => item !== path)
+  emit('context-changed', contextPaths.value)
+
+  const sync = await syncContextWithBackend()
+  if (!sync.ok) {
+    contextPaths.value = previousContextPaths
+    composerContextPaths.value = previousComposerPaths
+    emit('context-changed', contextPaths.value)
+    mentionInfo.value = `Could not remove ${toRelativePath(path)} from Second Brain context: ${sync.error}`
+    return
+  }
+
+  mentionInfo.value = ''
 }
 
-async function syncContextWithBackend() {
-  if (!sessionId.value) return
+async function syncContextWithBackend(): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!sessionId.value) return { ok: true }
   try {
-    await replaceSessionContext(sessionId.value, contextPaths.value)
+    const normalized = normalizeContextPathsForUpdate(props.workspacePath, contextPaths.value)
+    await replaceSessionContext(sessionId.value, normalized)
+    contextPaths.value = normalized
     const next: Record<string, number> = {}
-    for (const path of contextPaths.value) {
+    for (const path of normalized) {
       next[path] = contextTokenEstimate.value[path] ?? 0
     }
     contextTokenEstimate.value = next
+    return { ok: true }
   } catch (err) {
-    sendError.value = err instanceof Error ? err.message : 'Could not update context.'
+    const message = err instanceof Error ? err.message : 'Could not update context.'
+    sendError.value = message
+    return { ok: false, error: message }
   }
 }
 
@@ -135,6 +157,7 @@ async function ensureSession(seedPath?: string) {
   try {
     const created = await createDeliberationSession({ contextPaths: [seed], title: '' })
     sessionId.value = created.sessionId
+    emit('session-changed', sessionId.value)
     contextPaths.value = [seed]
     contextTokenEstimate.value = { [seed]: Math.max(1, Math.round((seed.length + 400) / 4)) }
     emit('context-changed', contextPaths.value)
@@ -153,6 +176,7 @@ async function loadSession(nextSessionId: string) {
   try {
     const payload = await loadDeliberationSession(nextSessionId)
     sessionId.value = payload.session_id
+    emit('session-changed', sessionId.value)
     sessionTitle.value = payload.title || 'Second Brain Session'
     contextPaths.value = payload.context_items.map((item) => asAbsolute(item.path))
 
@@ -195,6 +219,7 @@ async function onCreateSession() {
   try {
     const created = await createDeliberationSession({ contextPaths: [seed], title: '' })
     sessionId.value = created.sessionId
+    emit('session-changed', sessionId.value)
     sessionTitle.value = 'Second Brain Session'
     contextPaths.value = [seed]
     contextTokenEstimate.value = { [seed]: Math.max(1, Math.round((seed.length + 400) / 4)) }
@@ -223,6 +248,7 @@ async function onDeleteSession(sessionToDelete: string) {
   }
 
   sessionId.value = ''
+  emit('session-changed', '')
   sessionTitle.value = 'Second Brain Session'
   contextPaths.value = []
   contextTokenEstimate.value = {}
@@ -390,12 +416,26 @@ function renderAssistantMarkdown(message: SecondBrainMessage): string {
   return sanitizeHtmlForPreview(html || `<p>${inlineTextToHtml(source)}</p>`)
 }
 
-function applyMentionSuggestion(item: SecondBrainAtMentionItem) {
+async function applyMentionSuggestion(item: SecondBrainAtMentionItem) {
   const trigger = mentions.trigger.value
+  const previousContextPaths = [...contextPaths.value]
+  const previousComposerPaths = [...composerContextPaths.value]
   if (trigger) {
     inputMessage.value = `${inputMessage.value.slice(0, trigger.start)}${inputMessage.value.slice(trigger.end)}`
   }
   addComposerContextPath(item.absolutePath)
+  contextPaths.value = mergeContextPaths([item.absolutePath])
+  emit('context-changed', contextPaths.value)
+
+  const sync = await syncContextWithBackend()
+  if (!sync.ok) {
+    contextPaths.value = previousContextPaths
+    composerContextPaths.value = previousComposerPaths
+    emit('context-changed', contextPaths.value)
+    mentionInfo.value = `Could not add ${toRelativePath(item.absolutePath)} to Second Brain context: ${sync.error}`
+    return
+  }
+
   mentionInfo.value = ''
   mentions.close()
 
@@ -434,7 +474,7 @@ function onComposerKeydown(event: KeyboardEvent) {
     event.preventDefault()
     const next = mentions.suggestions.value[mentions.activeIndex.value]
     if (next) {
-      applyMentionSuggestion(next)
+      void applyMentionSuggestion(next)
     }
     return
   }
@@ -461,7 +501,10 @@ async function onSendMessage() {
   if (mergedMentionPaths.length > 0) {
     contextPaths.value = mergeContextPaths(mergedMentionPaths)
     emit('context-changed', contextPaths.value)
-    await syncContextWithBackend()
+    const sync = await syncContextWithBackend()
+    if (!sync.ok) {
+      mentionInfo.value = `Could not update Second Brain context: ${sync.error}`
+    }
   }
   if (mentionResolution.unresolved.length > 0) {
     mentionInfo.value = `Ignored unresolved mentions: ${mentionResolution.unresolved.map((item) => `@${item}`).join(', ')}`
@@ -716,17 +759,17 @@ watch(
             :open="mentions.isOpen.value"
             :suggestions="mentions.suggestions.value"
             :active-index="mentions.activeIndex.value"
-            @select="applyMentionSuggestion"
+            @select="void applyMentionSuggestion($event)"
             @update:active-index="mentions.setActiveIndex"
           />
 
-          <div v-if="composerContextCards.length" class="sb-chip-row">
-            <article v-for="chip in composerContextCards" :key="chip.path" class="sb-chip">
+          <div v-if="contextCards.length" class="sb-chip-row">
+            <article v-for="chip in contextCards" :key="chip.path" class="sb-chip">
               <button type="button" class="sb-chip-main" @click="openContextNote(chip.path)">
                 <strong>{{ chip.name }}</strong>
                 <span>{{ chip.parent }}</span>
               </button>
-              <button type="button" class="sb-chip-remove" @click="removeComposerContextPath(chip.path)">×</button>
+              <button type="button" class="sb-chip-remove" @click="void removeContextPath(chip.path)">×</button>
             </article>
           </div>
 

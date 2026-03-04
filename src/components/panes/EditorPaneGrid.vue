@@ -86,6 +86,7 @@ const emit = defineEmits<{
   'cosmos-select-node': [nodeId: string]
   'open-note': [path: string]
   'second-brain-context-changed': [paths: string[]]
+  'second-brain-session-changed': [sessionId: string]
 }>()
 
 // Keep instance refs out of Vue reactivity to avoid render-feedback loops.
@@ -349,6 +350,7 @@ onBeforeUnmount(() => {
         @cosmos-select-node="emit('cosmos-select-node', $event)"
         @open-note="emit('open-note', $event)"
         @second-brain-context-changed="emit('second-brain-context-changed', $event)"
+        @second-brain-session-changed="emit('second-brain-session-changed', $event)"
       />
     </section>
 
