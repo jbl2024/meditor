@@ -4,6 +4,50 @@ import { normalizeCalloutKind } from '../callouts'
 import { TIPTAP_NODE_TYPES } from './types'
 type TableAlign = 'left' | 'center' | 'right' | null
 
+function roundPercentagesToHundred(values: number[]): number[] {
+  if (!values.length) return []
+  const floors = values.map((value) => Math.max(1, Math.floor(value)))
+  let total = floors.reduce((acc, value) => acc + value, 0)
+  if (total === 100) return floors
+
+  const remainders = values.map((value, index) => ({ index, fraction: value - Math.floor(value) }))
+  if (total < 100) {
+    remainders.sort((a, b) => b.fraction - a.fraction)
+    let cursor = 0
+    while (total < 100) {
+      floors[remainders[cursor % remainders.length].index] += 1
+      total += 1
+      cursor += 1
+    }
+    return floors
+  }
+
+  remainders.sort((a, b) => a.fraction - b.fraction)
+  let cursor = 0
+  while (total > 100 && remainders.length > 0) {
+    const idx = remainders[cursor % remainders.length].index
+    if (floors[idx] > 1) {
+      floors[idx] -= 1
+      total -= 1
+    }
+    cursor += 1
+    if (cursor > remainders.length * 3) break
+  }
+  return floors
+}
+
+function normalizedPercentagesFromColwidthPx(widthsPx: Array<number | null>): Array<number | null> {
+  const defined = widthsPx.filter((value): value is number => typeof value === 'number' && value > 0)
+  if (!defined.length) return widthsPx
+
+  const fallback = Math.max(1, Math.round(defined.reduce((acc, value) => acc + value, 0) / defined.length))
+  const filled = widthsPx.map((value) => (value === null ? fallback : value))
+  const sum = filled.reduce((acc, value) => acc + value, 0)
+  if (sum <= 0) return widthsPx
+  const scaled = filled.map((value) => (value / sum) * 100)
+  return roundPercentagesToHundred(scaled)
+}
+
 function textFromNode(node: JSONContent | null | undefined): string {
   if (!node) return ''
   if (node.type === 'text') return String(node.text ?? '')
@@ -156,11 +200,7 @@ function nodeToBlock(node: JSONContent): EditorBlock | null {
         if (!Number.isFinite(value) || value <= 0) return null
         return value
       })
-      const definedWidths = widthsPx.filter((value): value is number => typeof value === 'number')
-      const widthSum = definedWidths.reduce((acc, value) => acc + value, 0)
-      const widths: Array<number | null> = widthSum > 0
-        ? widthsPx.map((value) => (value === null ? null : Math.max(1, Math.round((value / widthSum) * 100))))
-        : widthsPx
+      const widths: Array<number | null> = normalizedPercentagesFromColwidthPx(widthsPx)
       return {
         type: 'table',
         data: {

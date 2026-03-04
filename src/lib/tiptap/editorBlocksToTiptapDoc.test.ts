@@ -134,4 +134,26 @@ describe('toTiptapDoc table metadata', () => {
     expect(bodyRow.content[1].attrs).toEqual({ textAlign: 'center', colwidth: [20] })
     expect(bodyRow.content[2].attrs).toEqual({ textAlign: 'right', colwidth: [40] })
   })
+
+  it('fills missing widths metadata to keep stable table column sizing', () => {
+    const doc = toTiptapDoc([
+      {
+        type: 'table',
+        data: {
+          withHeadings: true,
+          widths: [55, 45, null],
+          content: [
+            ['Nom', 'Age', 'Ville'],
+            ['Jerome', '42', 'Lyon']
+          ]
+        }
+      }
+    ])
+
+    const table = doc.content?.[0] as any
+    const headerRow = table.content[0]
+    expect(headerRow.content[0].attrs.colwidth).toEqual([37])
+    expect(headerRow.content[1].attrs.colwidth).toEqual([30])
+    expect(headerRow.content[2].attrs.colwidth).toEqual([33])
+  })
 })

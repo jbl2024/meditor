@@ -70,4 +70,27 @@ describe('fromTiptapDoc table metadata', () => {
       }
     ])
   })
+
+  it('fills missing colwidth values before serializing widths percentages', () => {
+    const blocks = fromTiptapDoc({
+      type: 'doc',
+      content: [
+        {
+          type: 'table',
+          content: [
+            {
+              type: 'tableRow',
+              content: [
+                { type: 'tableHeader', attrs: { colwidth: [220] }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Nom' }] }] },
+                { type: 'tableHeader', attrs: { colwidth: [180] }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Age' }] }] },
+                { type: 'tableHeader', attrs: {}, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Ville' }] }] }
+              ]
+            }
+          ]
+        }
+      ]
+    })
+
+    expect((blocks[0]?.data as Record<string, unknown>).widths).toEqual([37, 30, 33])
+  })
 })
