@@ -51,6 +51,7 @@ const SEMANTIC_THRESHOLD: f32 = 0.62;
 const INDEX_LOG_CAPACITY: usize = 400;
 const INDEX_SCHEMA_VERSION: i64 = 2;
 static INDEX_CANCEL_REQUESTED: AtomicBool = AtomicBool::new(false);
+static SQLITE_VEC_PROBE_LOGGED: OnceLock<()> = OnceLock::new();
 #[cfg(windows)]
 const FILE_ATTRIBUTE_HIDDEN: u32 = 0x2;
 
@@ -195,6 +196,7 @@ pub(crate) fn active_workspace_root() -> Result<PathBuf> {
 
 fn open_db() -> Result<Connection> {
     if !db::init_sqlite_runtime() {
+        log_index("sqlite_runtime:init_failed");
         return Err(AppError::OperationFailed);
     }
     let root = active_workspace_root()?;
@@ -204,6 +206,12 @@ fn open_db() -> Result<Connection> {
     let db_path = db_dir.join(DB_FILE_NAME);
     let conn = Connection::open(db_path)?;
     let _ = conn.busy_timeout(Duration::from_millis(3_000));
+    if SQLITE_VEC_PROBE_LOGGED.set(()).is_ok() {
+        match semantic::probe_vec_runtime(&conn) {
+            Ok(version) => log_index(&format!("sqlite_vec:runtime_ready version={version}")),
+            Err(err) => log_index(&format!("sqlite_vec:runtime_unavailable err={err}")),
+        }
+    }
     Ok(conn)
 }
 
@@ -2808,8 +2816,10 @@ fn update_wikilinks_for_rename(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    if !db::init_sqlite_runtime() {
-        eprintln!("[index] sqlite_runtime:init_failed");
+    if db::init_sqlite_runtime() {
+        log_index("sqlite_runtime:init_ok");
+    } else {
+        log_index("sqlite_runtime:init_failed");
     }
     semantic::set_index_logger(log_index);
     tauri::Builder::default()

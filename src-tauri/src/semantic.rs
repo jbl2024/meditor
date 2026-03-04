@@ -124,6 +124,26 @@ pub fn register_sqlite_vec_auto_extension() -> bool {
     })
 }
 
+/// Probes sqlite-vec availability on a live connection.
+///
+/// It validates both scalar functions (`vec_version`) and the `vec0` module.
+pub fn probe_vec_runtime(conn: &Connection) -> Result<String, String> {
+    let version: String = conn
+        .query_row("SELECT vec_version()", [], |row| row.get(0))
+        .map_err(|err| format!("vec_version_err={err}"))?;
+
+    conn.execute(
+        "CREATE VIRTUAL TABLE temp.__tomosona_vec_probe USING vec0(id INTEGER PRIMARY KEY, embedding FLOAT[1])",
+        [],
+    )
+    .map_err(|err| format!("vec0_module_create_err={err}"))?;
+
+    conn.execute("DROP TABLE temp.__tomosona_vec_probe", [])
+        .map_err(|err| format!("vec0_module_drop_err={err}"))?;
+
+    Ok(version)
+}
+
 fn embed_texts_internal(texts: &[String]) -> Result<Vec<Vec<f32>>, String> {
     if texts.is_empty() {
         return Ok(Vec::new());
