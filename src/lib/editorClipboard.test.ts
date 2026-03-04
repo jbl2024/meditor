@@ -77,7 +77,7 @@ describe('writeSelectionPayloadToClipboard', () => {
   })
 
   it('writes markdown in text/plain for explicit markdown copy', async () => {
-    const write = vi.fn(async () => {})
+    const write = vi.fn<(items: Array<{ data: Record<string, Blob> }>) => Promise<void>>(async () => {})
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: { write, writeText: vi.fn(async () => {}) }
@@ -93,7 +93,7 @@ describe('writeSelectionPayloadToClipboard', () => {
     await writeSelectionPayloadToClipboard(payload, 'markdown')
     expect(write).toHaveBeenCalledTimes(1)
 
-    const [items] = write.mock.calls[0] as [Array<{ data: Record<string, Blob> }>]
+    const items = write.mock.calls[0]?.[0] ?? []
     expect(items).toHaveLength(1)
     const plainBlob = items[0].data['text/plain'] as Blob
     const markdownBlob = items[0].data['text/markdown'] as Blob
