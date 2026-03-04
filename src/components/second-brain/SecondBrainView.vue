@@ -818,7 +818,7 @@ watch(
 .sb-layout {
   min-height: 0;
   height: 100%;
-  padding: 10px;
+  padding: 6px;
   background: linear-gradient(135deg, #f8fafc, #eef2ff 45%, #f1f5f9);
 }
 
@@ -830,8 +830,8 @@ watch(
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  padding: 10px;
-  gap: 8px;
+  padding: 8px;
+  gap: 6px;
 }
 
 .sb-center-head {
@@ -885,16 +885,16 @@ watch(
   border: 1px solid #e2e8f0;
   border-radius: 10px;
   background: #fff;
-  padding: 8px;
+  padding: 6px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .msg {
   border: 1px solid #e2e8f0;
   border-radius: 8px;
-  padding: 8px;
+  padding: 6px;
 }
 
 .msg.user {
@@ -924,7 +924,7 @@ watch(
 }
 
 .assistant-markdown p {
-  margin: 0 0 8px;
+  margin: 0 0 6px;
 }
 
 .assistant-markdown p:last-child {
@@ -937,14 +937,14 @@ watch(
 .assistant-markdown h4,
 .assistant-markdown h5,
 .assistant-markdown h6 {
-  margin: 10px 0 6px;
+  margin: 8px 0 5px;
   line-height: 1.3;
   font-weight: 700;
 }
 
 .assistant-markdown ul,
 .assistant-markdown ol {
-  margin: 6px 0 8px;
+  margin: 5px 0 6px;
   padding-left: 18px;
 }
 
@@ -957,7 +957,7 @@ watch(
 }
 
 .assistant-markdown li {
-  margin: 2px 0;
+  margin: 1px 0;
 }
 
 .assistant-markdown ul ul {
@@ -969,7 +969,7 @@ watch(
 }
 
 .assistant-markdown blockquote {
-  margin: 6px 0 8px;
+  margin: 5px 0 6px;
   border-left: 3px solid #cbd5e1;
   padding: 2px 0 2px 10px;
   color: #475569;
@@ -983,11 +983,11 @@ watch(
 }
 
 .assistant-markdown pre {
-  margin: 8px 0;
+  margin: 6px 0;
   background: #e2e8f0;
   border: 1px solid #cbd5e1;
   border-radius: 8px;
-  padding: 8px;
+  padding: 6px;
   overflow: auto;
 }
 
@@ -1030,7 +1030,7 @@ watch(
 .sb-input-row {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   margin-top: auto;
 }
 
@@ -1040,7 +1040,7 @@ watch(
   border: 1px solid #cbd5e1;
   border-radius: 10px;
   background: #fff;
-  padding: 8px;
+  padding: 6px;
 }
 
 .sb-chip-row {
@@ -1050,8 +1050,8 @@ watch(
   overflow-y: hidden;
   scrollbar-width: thin;
   -webkit-overflow-scrolling: touch;
-  gap: 6px;
-  margin-bottom: 8px;
+  gap: 5px;
+  margin-bottom: 6px;
   padding-bottom: 2px;
 }
 
@@ -1059,11 +1059,11 @@ watch(
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   border: 1px solid #dbeafe;
   background: #f8fbff;
   border-radius: 8px;
-  padding: 4px 6px;
+  padding: 3px 5px;
 }
 
 .sb-chip-main {
@@ -1097,8 +1097,8 @@ watch(
 
 .sb-textarea {
   width: 100%;
-  min-height: 92px;
-  padding: 10px 44px 10px 10px;
+  min-height: 84px;
+  padding: 8px 42px 8px 8px;
   resize: vertical;
   box-sizing: border-box;
   display: block;
@@ -1111,8 +1111,8 @@ watch(
 
 .composer-action {
   position: absolute;
-  right: 16px;
-  bottom: 16px;
+  right: 12px;
+  bottom: 12px;
 }
 
 .send-icon-btn {
