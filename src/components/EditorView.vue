@@ -49,6 +49,11 @@ import { useSlashMenu } from '../composables/useSlashMenu'
 import { type WikilinkCandidate } from '../lib/tiptap/plugins/wikilinkState'
 import { buildWikilinkCandidates } from '../lib/tiptap/wikilinkCandidates'
 import { hasPendingHeavyRender, waitForHeavyRenderIdle } from '../lib/tiptap/renderStabilizer'
+import {
+  extractSelectionClipboardPayload,
+  writeSelectionPayloadToClipboard,
+  type CopyAsFormat
+} from '../lib/editorClipboard'
 import type { BlockMenuTarget, TurnIntoType } from '../lib/tiptap/blockMenu/types'
 import { computeHandleLock, type DragHandleUiState } from '../lib/tiptap/blockMenu/dragHandleState'
 
@@ -728,6 +733,32 @@ function onHolderPaste(event: ClipboardEvent) {
   onEditorPaste(event)
 }
 
+function onHolderCopy(event: ClipboardEvent) {
+  markEditorInteraction()
+  const root = holder.value
+  if (!root) return
+  const payload = extractSelectionClipboardPayload(root)
+  if (!payload) return
+  if (!event.clipboardData) return
+  event.preventDefault()
+  event.stopPropagation()
+  event.clipboardData.setData('text/plain', payload.plain)
+  event.clipboardData.setData('text/html', payload.html)
+  event.clipboardData.setData('text/markdown', payload.markdown)
+}
+
+async function onInlineToolbarCopyAs(format: CopyAsFormat) {
+  const root = holder.value
+  if (!root) return
+  const payload = extractSelectionClipboardPayload(root)
+  if (!payload) return
+  try {
+    await writeSelectionPayloadToClipboard(payload, format)
+  } catch {
+    // Keep UX silent; selection remains available for native copy fallback.
+  }
+}
+
 useEditorPathWatchers({
   path: computed(() => props.path ?? ''),
   openPaths: computed(() => props.openPaths ?? []),
@@ -772,6 +803,7 @@ useEditorPathWatchers({
     holder.value?.addEventListener('keyup', onEditorKeyup, true)
     holder.value?.addEventListener('contextmenu', onHolderContextMenu, true)
     holder.value?.addEventListener('paste', onHolderPaste, true)
+    holder.value?.addEventListener('copy', onHolderCopy, true)
     holder.value?.addEventListener('scroll', onHolderScroll, true)
     window.addEventListener('resize', updateGutterHitboxStyle)
     await nextTick()
@@ -789,6 +821,7 @@ useEditorPathWatchers({
     holder.value?.removeEventListener('keyup', onEditorKeyup, true)
     holder.value?.removeEventListener('contextmenu', onHolderContextMenu, true)
     holder.value?.removeEventListener('paste', onHolderPaste, true)
+    holder.value?.removeEventListener('copy', onHolderCopy, true)
     holder.value?.removeEventListener('scroll', onHolderScroll, true)
     window.removeEventListener('resize', updateGutterHitboxStyle)
     document.removeEventListener('mousedown', onDocumentMouseDown, true)
@@ -980,6 +1013,7 @@ defineExpose({
             @toggle-mark="inlineFormatToolbar.toggleMark"
             @open-link="inlineFormatToolbar.openLinkPopover"
             @wrap-wikilink="inlineFormatToolbar.wrapSelectionWithWikilink"
+            @copy-as="void onInlineToolbarCopyAs($event)"
             @apply-link="inlineFormatToolbar.applyLink"
             @unlink="inlineFormatToolbar.unlinkLink"
             @cancel-link="inlineFormatToolbar.cancelLink"

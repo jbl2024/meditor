@@ -32,6 +32,7 @@ const emit = defineEmits<{
   'toggle-mark': [mark: InlineFormatMark]
   'open-link': []
   'wrap-wikilink': []
+  'copy-as': [format: 'markdown' | 'html' | 'plain']
   'apply-link': []
   unlink: []
   'cancel-link': []
@@ -39,6 +40,7 @@ const emit = defineEmits<{
 }>()
 
 const linkInputEl = ref<HTMLInputElement | null>(null)
+const copyMenuOpen = ref(false)
 
 watch(
   () => props.linkPopoverOpen,
@@ -48,6 +50,13 @@ watch(
       linkInputEl.value?.focus()
       linkInputEl.value?.select()
     })
+  }
+)
+
+watch(
+  () => props.open,
+  (open) => {
+    if (!open) copyMenuOpen.value = false
   }
 )
 
@@ -64,6 +73,11 @@ function onLinkInputKeydown(event: KeyboardEvent) {
     event.preventDefault()
     emit('cancel-link')
   }
+}
+
+function onCopyAs(format: 'markdown' | 'html' | 'plain') {
+  emit('copy-as', format)
+  copyMenuOpen.value = false
 }
 </script>
 
@@ -148,6 +162,50 @@ function onLinkInputKeydown(event: KeyboardEvent) {
     >
       <LinkIcon class="h-4 w-4" />
     </button>
+    <div class="relative">
+      <button
+        type="button"
+        class="inline-flex items-center justify-center rounded-md px-2 py-1 text-xs font-semibold transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 active:translate-y-px active:scale-[0.98] active:bg-slate-200 dark:hover:bg-slate-800 dark:hover:text-slate-100 dark:active:bg-slate-700"
+        data-action="copy-menu-toggle"
+        aria-label="Copy as"
+        title="Copy as"
+        @mousedown.prevent
+        @click="copyMenuOpen = !copyMenuOpen"
+      >
+        ...
+      </button>
+
+      <div
+        v-if="copyMenuOpen"
+        class="absolute right-0 top-full z-40 mt-2 w-40 rounded-md border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+        @mousedown.stop
+      >
+        <button
+          type="button"
+          class="block w-full rounded px-2 py-1 text-left text-xs hover:bg-slate-100 dark:hover:bg-slate-800"
+          data-action="copy-as-markdown"
+          @click="onCopyAs('markdown')"
+        >
+          Copy as Markdown
+        </button>
+        <button
+          type="button"
+          class="block w-full rounded px-2 py-1 text-left text-xs hover:bg-slate-100 dark:hover:bg-slate-800"
+          data-action="copy-as-html"
+          @click="onCopyAs('html')"
+        >
+          Copy as HTML
+        </button>
+        <button
+          type="button"
+          class="block w-full rounded px-2 py-1 text-left text-xs hover:bg-slate-100 dark:hover:bg-slate-800"
+          data-action="copy-as-plain"
+          @click="onCopyAs('plain')"
+        >
+          Copy as Plain text
+        </button>
+      </div>
+    </div>
 
     <div
       v-if="linkPopoverOpen"

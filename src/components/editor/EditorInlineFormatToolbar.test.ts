@@ -20,6 +20,7 @@ function mountHarness(options?: {
   const onToggleMark = vi.fn<(mark: string) => void>()
   const onOpenLink = vi.fn()
   const onWrapWikilink = vi.fn()
+  const onCopyAs = vi.fn<(format: string) => void>()
   const onApplyLink = vi.fn()
   const onUnlink = vi.fn()
   const onCancelLink = vi.fn()
@@ -47,6 +48,7 @@ function mountHarness(options?: {
         onToggleMark,
         onOpenLink,
         onWrapWikilink,
+        onCopyAs,
         onApplyLink,
         onUnlink,
         onCancelLink,
@@ -64,6 +66,7 @@ function mountHarness(options?: {
     onToggleMark,
     onOpenLink,
     onWrapWikilink,
+    onCopyAs,
     onApplyLink,
     onUnlink,
     onCancelLink,
@@ -122,6 +125,21 @@ describe('EditorInlineFormatToolbar', () => {
     expect(harness.onApplyLink).toHaveBeenCalled()
     expect(harness.onCancelLink).toHaveBeenCalled()
     expect(harness.onUnlink).toHaveBeenCalledTimes(1)
+
+    harness.app.unmount()
+  })
+
+  it('opens copy menu and emits explicit copy format', async () => {
+    const harness = mountHarness()
+    await flush()
+
+    ;(harness.root.querySelector('[data-action="copy-menu-toggle"]') as HTMLButtonElement).click()
+    await flush()
+    ;(harness.root.querySelector('[data-action="copy-as-markdown"]') as HTMLButtonElement).click()
+    await flush()
+
+    expect(harness.onCopyAs).toHaveBeenCalledWith('markdown')
+    expect(harness.root.querySelector('[data-action="copy-as-html"]')).toBeNull()
 
     harness.app.unmount()
   })
