@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.10.5] - 2026-03-04
+
+### Fixed
+- fix(index-ui): auto-refresh backlinks and cosmos after delayed semantic batch (39d7c7b)
+
 ## [0.10.4] - 2026-03-04
 
 ### Added
