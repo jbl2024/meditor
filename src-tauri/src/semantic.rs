@@ -15,7 +15,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use directories::BaseDirs;
 use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 use genai::Client;
-use rusqlite::{ffi::sqlite3_auto_extension, params, Connection};
+use rusqlite::{ffi::sqlite3_auto_extension, params, Connection, OptionalExtension};
 use serde::Serialize;
 use sqlite_vec::sqlite3_vec_init;
 
@@ -401,32 +401,48 @@ pub fn vector_to_json(vector: &[f32]) -> String {
 }
 
 /// Ensures the note-level vec virtual table exists when sqlite-vec is available.
-pub fn try_ensure_vec_table(conn: &Connection, dim: usize) -> bool {
-    if let Ok(existing_sql) = conn.query_row(
-        "SELECT sql FROM sqlite_master WHERE type='table' AND name='note_embeddings_vec'",
-        [],
-        |row| row.get::<_, String>(0),
-    ) {
-        let existing_dim = parse_vec_embedding_dim(&existing_sql);
-        if existing_dim != Some(dim)
-            && conn
-                .execute("DROP TABLE IF EXISTS note_embeddings_vec", [])
-                .is_err()
-        {
-            return false;
+pub fn try_ensure_vec_table(conn: &Connection, dim: usize) -> Result<(), String> {
+    let existing_sql = conn
+        .query_row(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='note_embeddings_vec'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|err| format!("schema_lookup_err={err}"))?;
+
+    if let Some(sql) = existing_sql {
+        if parse_vec_embedding_dim(&sql) == Some(dim) {
+            return Ok(());
         }
-        if existing_dim == Some(dim) {
-            return true;
-        }
+        conn.execute("DROP TABLE IF EXISTS note_embeddings_vec", [])
+            .map_err(|err| format!("drop_err={err}; existing_sql={sql}"))?;
     }
 
     conn.execute(
         &format!(
-            "CREATE VIRTUAL TABLE IF NOT EXISTS note_embeddings_vec USING vec0(path TEXT PRIMARY KEY, embedding FLOAT[{dim}])"
+            "CREATE VIRTUAL TABLE note_embeddings_vec USING vec0(path TEXT PRIMARY KEY, embedding FLOAT[{dim}])"
         ),
         [],
     )
-    .is_ok()
+    .map_err(|err| format!("create_err={err}; requested_dim={dim}"))?;
+
+    let created_sql = conn
+        .query_row(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='note_embeddings_vec'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|err| format!("post_create_lookup_err={err}"))?;
+
+    match created_sql {
+        Some(sql) if parse_vec_embedding_dim(&sql) == Some(dim) => Ok(()),
+        Some(sql) => Err(format!(
+            "post_create_dim_mismatch expected_dim={dim} actual_sql={sql}"
+        )),
+        None => Err("post_create_missing_table".to_string()),
+    }
 }
 
 fn parse_vec_embedding_dim(create_sql: &str) -> Option<usize> {
@@ -439,13 +455,23 @@ fn parse_vec_embedding_dim(create_sql: &str) -> Option<usize> {
 
 /// Upserts one note-level vector into vec table.
 pub fn try_upsert_note_vector(conn: &Connection, path: &str, vector: &[f32]) -> Result<(), String> {
-    let payload = vector_to_json(vector);
+    let payload_blob = vector_to_blob(vector);
+    let payload_json = vector_to_json(vector);
     match conn.execute(
-        "INSERT OR REPLACE INTO note_embeddings_vec(path, embedding) VALUES (?1, ?2)",
-        params![path, payload],
+        "INSERT OR REPLACE INTO note_embeddings_vec(path, embedding) VALUES (?1, vec_f32(?2))",
+        params![path, payload_blob.clone()],
     ) {
         Ok(_) => return Ok(()),
         Err(replace_err) => {
+            if replace_err.to_string().contains("no such function: vec_f32") {
+                return conn
+                    .execute(
+                        "INSERT OR REPLACE INTO note_embeddings_vec(path, embedding) VALUES (?1, ?2)",
+                        params![path, payload_json],
+                    )
+                    .map(|_| ())
+                    .map_err(|json_err| format!("replace_err={replace_err}; json_replace_err={json_err}"));
+            }
             conn.execute(
                 "DELETE FROM note_embeddings_vec WHERE path = ?1",
                 params![path],
@@ -457,8 +483,8 @@ pub fn try_upsert_note_vector(conn: &Connection, path: &str, vector: &[f32]) -> 
             })?;
 
             conn.execute(
-                "INSERT INTO note_embeddings_vec(path, embedding) VALUES (?1, ?2)",
-                params![path, payload],
+                "INSERT INTO note_embeddings_vec(path, embedding) VALUES (?1, vec_f32(?2))",
+                params![path, payload_blob],
             )
             .map(|_| ())
             .map_err(|insert_err| {
@@ -592,7 +618,7 @@ mod tests {
 
         let err = try_upsert_note_vector(&conn, "notes/a.md", &[0.1, 0.2]).expect_err("upsert should fail");
         assert!(err.contains("replace_err="));
-        assert!(err.contains("fallback_insert_err="));
+        assert!(err.contains("fallback_insert_err=") || err.contains("json_replace_err="));
     }
 
     #[test]

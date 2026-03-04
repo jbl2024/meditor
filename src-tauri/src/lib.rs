@@ -1348,17 +1348,16 @@ fn reindex_markdown_file_semantic_sync(path: String) -> Result<()> {
                 updated_at_ms
             ],
         )?;
-        if semantic::try_ensure_vec_table(&tx, note_vector.len()) {
-            if let Err(err) = semantic::try_upsert_note_vector(&tx, &path_for_db, &note_vector) {
-                log_index(&format!(
-                    "semantic:reindex:vec_upsert_failed path={path_for_db} dim={} err={err}",
-                    note_vector.len()
-                ));
-                return Err(AppError::OperationFailed);
-            }
-        } else {
+        if let Err(err) = semantic::try_ensure_vec_table(&tx, note_vector.len()) {
             log_index(&format!(
-                "semantic:reindex:vec_table_unavailable path={path_for_db} dim={}",
+                "semantic:reindex:vec_table_unavailable path={path_for_db} dim={} err={err}",
+                note_vector.len()
+            ));
+            return Err(AppError::OperationFailed);
+        }
+        if let Err(err) = semantic::try_upsert_note_vector(&tx, &path_for_db, &note_vector) {
+            log_index(&format!(
+                "semantic:reindex:vec_upsert_failed path={path_for_db} dim={} err={err}",
                 note_vector.len()
             ));
             return Err(AppError::OperationFailed);
