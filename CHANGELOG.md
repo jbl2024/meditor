@@ -18,6 +18,20 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.10.6] - 2026-03-04
+
+### Added
+- feat(editor): add rich copy support and inline "Copy as" menu for markdown/html/plain text (2b596ef)
+- feat(second-brain): add palette command to append active note context with persistent session selection (18de623)
+- feat(table): persist column widths and alignment with compact table layout (0b86b1e)
+
+### Fixed
+- fix(tables): normalize partial column widths across tiptap markdown round-trip (13ea7ce)
+- fix(table-styles): make paragraph typography inherit compact table sizing (a7fcf90)
+- fix(editor): apply shortcut heading quote and wikilink conversion regressions (6d3f43e)
+- fix(index): add sqlite-vec runtime probes and harden vec table/upsert diagnostics (3b5c73e)
+- fix(semantic): harden vec table creation and switch vec upserts to vec_f32 blobs (0ad107e)
+
 ## [0.10.5] - 2026-03-04
 
 ### Fixed
