@@ -253,6 +253,22 @@ describe('App multi-pane', () => {
     mounted.app.unmount()
   })
 
+  it('prevents native window close for Mod+W from input targets', async () => {
+    const mounted = mountApp()
+    await flushUi()
+
+    const input = document.createElement('input')
+    document.body.appendChild(input)
+
+    const event = new KeyboardEvent('keydown', { key: 'w', ctrlKey: true, bubbles: true, cancelable: true })
+    input.dispatchEvent(event)
+
+    expect(event.defaultPrevented).toBe(true)
+
+    input.remove()
+    mounted.app.unmount()
+  })
+
   it('opens explorer file in currently focused pane', async () => {
     const mounted = mountApp()
     await flushUi()

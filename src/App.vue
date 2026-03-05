@@ -3977,14 +3977,28 @@ function onWindowKeydown(event: KeyboardEvent) {
     return
   }
 
+  const isMod = event.metaKey || event.ctrlKey
+  const key = event.key.toLowerCase()
+
+  if (isMod && key === 'w') {
+    event.preventDefault()
+    const paneId = multiPane.layout.value.activePaneId
+    const pane = multiPane.layout.value.panesById[paneId]
+    const tab = pane?.openTabs.find((item) => item.id === pane.activeTabId)
+    if (tab) {
+      multiPane.closeTabInPane(paneId, tab.id)
+      if (tab.type === 'document') {
+        editorState.clearStatus(tab.path)
+      }
+    }
+    return
+  }
+
   if (hasBlockingModalOpen()) return
 
   if (shouldBlockGlobalShortcutsFromTarget(event.target)) return
 
-  const isMod = event.metaKey || event.ctrlKey
   if (!isMod) return
-
-  const key = event.key.toLowerCase()
 
   if (key === 'p' && !event.shiftKey) {
     event.preventDefault()
@@ -4019,20 +4033,6 @@ function onWindowKeydown(event: KeyboardEvent) {
   if (key === 'h' && event.shiftKey) {
     event.preventDefault()
     void openTodayNote()
-    return
-  }
-
-  if (key === 'w') {
-    event.preventDefault()
-    const paneId = multiPane.layout.value.activePaneId
-    const pane = multiPane.layout.value.panesById[paneId]
-    const tab = pane?.openTabs.find((item) => item.id === pane.activeTabId)
-    if (tab) {
-      multiPane.closeTabInPane(paneId, tab.id)
-      if (tab.type === 'document') {
-        editorState.clearStatus(tab.path)
-      }
-    }
     return
   }
 
