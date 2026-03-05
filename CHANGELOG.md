@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.10.14] - 2026-03-05
+
+### Fixed
+- fix(shortcuts): always intercept mod+w to close tab instead of native window close (081ee79)
+
 ## [0.10.13] - 2026-03-05
 
 ### Added
