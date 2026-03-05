@@ -157,6 +157,32 @@ describe('SecondBrainView', () => {
     mounted.app.unmount()
   })
 
+  it('sends message with Ctrl+Enter from composer', async () => {
+    const mounted = mountView()
+    await flushUi()
+
+    const textarea = mounted.root.querySelector<HTMLTextAreaElement>('.sb-textarea')
+    expect(textarea).toBeTruthy()
+    if (!textarea) return
+
+    textarea.value = 'Send via shortcut'
+    textarea.selectionStart = textarea.value.length
+    textarea.selectionEnd = textarea.value.length
+    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushUi()
+
+    textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }))
+    await flushUi()
+
+    expect(api.runDeliberation).toHaveBeenCalledWith({
+      sessionId: 's1',
+      mode: 'freestyle',
+      message: 'Send via shortcut'
+    })
+
+    mounted.app.unmount()
+  })
+
   it('renders session action buttons', async () => {
     const mounted = mountView()
     await flushUi()

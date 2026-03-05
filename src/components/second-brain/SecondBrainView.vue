@@ -456,6 +456,12 @@ function onComposerInput(event: Event) {
 }
 
 function onComposerKeydown(event: KeyboardEvent) {
+  if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+    event.preventDefault()
+    void onSendMessage()
+    return
+  }
+
   if (!mentions.isOpen.value) return
 
   if (event.key === 'ArrowDown') {
