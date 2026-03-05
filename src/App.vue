@@ -5,6 +5,7 @@ import {
   ArrowRightIcon,
   ComputerDesktopIcon,
   CommandLineIcon,
+  Cog8ToothIcon,
   EllipsisHorizontalIcon,
   FolderIcon,
   HomeIcon,
@@ -18,6 +19,7 @@ import EditorPaneGrid, { type EditorPaneGridExposed } from './components/panes/E
 import MultiPaneToolbarMenu from './components/panes/MultiPaneToolbarMenu.vue'
 import EditorRightPane from './components/EditorRightPane.vue'
 import ExplorerTree from './components/explorer/ExplorerTree.vue'
+import SettingsModal from './components/settings/SettingsModal.vue'
 import UiButton from './components/ui/UiButton.vue'
 import { type DocumentHistoryEntry, useDocumentHistory } from './composables/useDocumentHistory'
 import {
@@ -42,22 +44,16 @@ import {
   reindexMarkdownFileLexical,
   reindexMarkdownFileSemantic,
   readPropertyTypeSchema,
-  readAppSettings,
-  discoverCodexModels as discoverCodexModelsApi,
   revealInFileManager,
   setWorkingFolder,
   selectWorkingFolder,
-  type AppSettingsView,
-  type CodexDiscoveredModel,
   type FileMetadata,
   type IndexLogEntry,
   type IndexRuntimeStatus,
-  type SaveAppSettingsPayload,
   type WikilinkGraph,
   type WorkspaceFsChange,
   listenWorkspaceFsChanged,
   updateWikilinksForRename,
-  writeAppSettings,
   writePropertyTypeSchema,
   writeTextFile
 } from './lib/api'
@@ -208,25 +204,6 @@ const openDateModalVisible = ref(false)
 const openDateInput = ref('')
 const openDateModalError = ref('')
 const settingsModalVisible = ref(false)
-const settingsActiveTab = ref<'llm' | 'embeddings'>('llm')
-const settingsConfigPath = ref('~/.tomosona/conf.json')
-const settingsLlmProviderPreset = ref<'openai' | 'anthropic' | 'codex' | 'custom'>('openai')
-const settingsLlmApiKey = ref('')
-const settingsLlmHasStoredApiKey = ref(false)
-const settingsLlmModel = ref('gpt-4.1')
-const settingsLlmBaseUrl = ref('')
-const settingsLlmCustomProvider = ref('openai')
-const settingsLlmLabel = ref('OpenAI Remote')
-const settingsLlmCodexModels = ref<CodexDiscoveredModel[]>([])
-const settingsLlmCodexModelsLoading = ref(false)
-const settingsEmbeddingsMode = ref<'internal' | 'external'>('internal')
-const settingsEmbeddingsProvider = ref<'openai'>('openai')
-const settingsEmbeddingsApiKey = ref('')
-const settingsEmbeddingsHasStoredApiKey = ref(false)
-const settingsEmbeddingsModel = ref('text-embedding-3-small')
-const settingsEmbeddingsBaseUrl = ref('')
-const settingsEmbeddingsLabel = ref('OpenAI Embeddings')
-const settingsModalError = ref('')
 const shortcutsModalVisible = ref(false)
 const indexStatusModalVisible = ref(false)
 const cosmosCommandLoadingVisible = ref(false)
@@ -2086,114 +2063,8 @@ function onSecondBrainSessionChanged(sessionId: string) {
   setSecondBrainSessionId(sessionId)
 }
 
-function applySettingsLlmPreset(provider: 'openai' | 'anthropic' | 'codex' | 'custom') {
-  settingsLlmProviderPreset.value = provider
-  settingsModalError.value = ''
-  if (provider === 'openai') {
-    settingsLlmLabel.value = 'OpenAI Remote'
-    settingsLlmCustomProvider.value = 'openai'
-    settingsLlmModel.value = 'gpt-4.1'
-    settingsLlmBaseUrl.value = ''
-    return
-  }
-  if (provider === 'anthropic') {
-    settingsLlmLabel.value = 'Anthropic Claude'
-    settingsLlmCustomProvider.value = 'anthropic'
-    settingsLlmModel.value = 'claude-3-7-sonnet-latest'
-    settingsLlmBaseUrl.value = ''
-    return
-  }
-  if (provider === 'codex') {
-    settingsLlmLabel.value = 'OpenAI Codex'
-    settingsLlmCustomProvider.value = 'openai-codex'
-    settingsLlmModel.value = 'gpt-5.2-codex'
-    settingsLlmBaseUrl.value = ''
-    if (!settingsLlmCodexModels.value.length && !settingsLlmCodexModelsLoading.value) {
-      void discoverCodexModels()
-    }
-    return
-  }
-  settingsLlmLabel.value = 'Custom LLM'
-  settingsLlmCustomProvider.value = 'openai_compatible'
-  settingsLlmModel.value = ''
-  settingsLlmBaseUrl.value = ''
-}
-
-function applySettingsDefaults() {
-  settingsActiveTab.value = 'llm'
-  settingsConfigPath.value = '~/.tomosona/conf.json'
-  settingsLlmApiKey.value = ''
-  settingsLlmHasStoredApiKey.value = false
-  settingsLlmCodexModels.value = []
-  settingsLlmCodexModelsLoading.value = false
-  applySettingsLlmPreset('openai')
-  settingsEmbeddingsMode.value = 'internal'
-  settingsEmbeddingsProvider.value = 'openai'
-  settingsEmbeddingsLabel.value = 'OpenAI Embeddings'
-  settingsEmbeddingsModel.value = 'text-embedding-3-small'
-  settingsEmbeddingsBaseUrl.value = ''
-  settingsEmbeddingsApiKey.value = ''
-  settingsEmbeddingsHasStoredApiKey.value = false
-  settingsModalError.value = ''
-}
-
-async function discoverCodexModels() {
-  settingsLlmCodexModelsLoading.value = true
-  settingsModalError.value = ''
-  try {
-    const models = await discoverCodexModelsApi()
-    settingsLlmCodexModels.value = models
-    if (models.length && !models.some((item) => item.id === settingsLlmModel.value)) {
-      settingsLlmModel.value = models[0]!.id
-    }
-  } catch (err) {
-    settingsLlmCodexModels.value = []
-    settingsModalError.value = err instanceof Error ? err.message : 'Could not discover Codex models.'
-  } finally {
-    settingsLlmCodexModelsLoading.value = false
-  }
-}
-
-function hydrateSettingsFromConfig(view: AppSettingsView) {
-  settingsConfigPath.value = view.path || settingsConfigPath.value
-  if (view.llm && view.llm.profiles.length > 0) {
-    const active = view.llm.profiles.find((item) => item.id === view.llm!.active_profile) ?? view.llm.profiles[0]
-    const provider = active.provider.trim().toLowerCase()
-    settingsLlmProviderPreset.value = provider === 'openai'
-      ? 'openai'
-      : provider === 'anthropic'
-        ? 'anthropic'
-        : provider === 'openai-codex'
-          ? 'codex'
-        : 'custom'
-    settingsLlmCustomProvider.value = active.provider
-    settingsLlmLabel.value = active.label
-    settingsLlmModel.value = active.model
-    settingsLlmBaseUrl.value = active.base_url ?? ''
-    settingsLlmHasStoredApiKey.value = active.has_api_key
-    settingsLlmApiKey.value = ''
-  }
-  settingsEmbeddingsMode.value = view.embeddings.mode
-  if (view.embeddings.external) {
-    settingsEmbeddingsProvider.value = 'openai'
-    settingsEmbeddingsLabel.value = view.embeddings.external.label
-    settingsEmbeddingsModel.value = view.embeddings.external.model
-    settingsEmbeddingsBaseUrl.value = view.embeddings.external.base_url ?? ''
-    settingsEmbeddingsHasStoredApiKey.value = view.embeddings.external.has_api_key
-    settingsEmbeddingsApiKey.value = ''
-  } else {
-    settingsEmbeddingsProvider.value = 'openai'
-    settingsEmbeddingsLabel.value = 'OpenAI Embeddings'
-    settingsEmbeddingsModel.value = 'text-embedding-3-small'
-    settingsEmbeddingsBaseUrl.value = ''
-    settingsEmbeddingsHasStoredApiKey.value = false
-    settingsEmbeddingsApiKey.value = ''
-  }
-}
-
 function closeSettingsModal() {
   settingsModalVisible.value = false
-  settingsModalError.value = ''
   void nextTick(() => {
     restoreFocusAfterModalClose()
   })
@@ -2201,125 +2072,17 @@ function closeSettingsModal() {
 
 async function openSettingsModal() {
   modalFocusReturnTarget = document.activeElement instanceof HTMLElement ? document.activeElement : null
-  applySettingsDefaults()
-  try {
-    const view = await readAppSettings()
-    hydrateSettingsFromConfig(view)
-    if (settingsLlmProviderPreset.value === 'codex') {
-      void discoverCodexModels()
-    }
-  } catch (err) {
-    settingsModalError.value = err instanceof Error ? err.message : 'Could not read settings.'
-  }
   settingsModalVisible.value = true
   await nextTick()
 }
 
-function buildSaveSettingsPayload(): SaveAppSettingsPayload {
-  const llmProvider = settingsLlmProviderPreset.value === 'openai'
-    ? 'openai'
-    : settingsLlmProviderPreset.value === 'anthropic'
-      ? 'anthropic'
-      : settingsLlmProviderPreset.value === 'codex'
-        ? 'openai-codex'
-      : settingsLlmCustomProvider.value.trim()
-  const llmProfileId = settingsLlmProviderPreset.value === 'custom'
-    ? 'custom-profile'
-    : settingsLlmProviderPreset.value === 'codex'
-      ? 'openai-codex-profile'
-      : `${llmProvider}-profile`
-  const capabilities = {
-    text: true,
-    image_input: settingsLlmProviderPreset.value !== 'custom' && settingsLlmProviderPreset.value !== 'codex',
-    audio_input: false,
-    tool_calling: true,
-    streaming: true
+function onSettingsSaved(result: { path: string; embeddings_changed: boolean }) {
+  filesystem.notifySuccess(`Settings saved at ${result.path}.`)
+  if (result.embeddings_changed) {
+    markIndexOutOfSync()
+    filesystem.notifyInfo('Embedding settings changed. Rebuild index to resync semantic search.')
   }
-  const llmProfile = {
-    id: llmProfileId,
-    label: settingsLlmLabel.value.trim(),
-    provider: llmProvider,
-    model: settingsLlmModel.value.trim(),
-    preserve_existing_api_key: settingsLlmProviderPreset.value !== 'codex'
-      && settingsLlmHasStoredApiKey.value
-      && !settingsLlmApiKey.value.trim(),
-    capabilities,
-    default_mode: 'freestyle',
-    ...(settingsLlmProviderPreset.value !== 'codex' && settingsLlmApiKey.value.trim()
-      ? { api_key: settingsLlmApiKey.value.trim() }
-      : {}),
-    ...(settingsLlmProviderPreset.value !== 'codex' && settingsLlmBaseUrl.value.trim()
-      ? { base_url: settingsLlmBaseUrl.value.trim() }
-      : {})
-  }
-
-  const payload: SaveAppSettingsPayload = {
-    llm: {
-      active_profile: llmProfileId,
-      profiles: [llmProfile]
-    },
-    embeddings: {
-      mode: settingsEmbeddingsMode.value
-    }
-  }
-  if (settingsEmbeddingsMode.value === 'external') {
-    payload.embeddings.external = {
-      id: 'emb-openai-profile',
-      label: settingsEmbeddingsLabel.value.trim() || 'OpenAI Embeddings',
-      provider: settingsEmbeddingsProvider.value,
-      model: settingsEmbeddingsModel.value.trim(),
-      preserve_existing_api_key: settingsEmbeddingsHasStoredApiKey.value && !settingsEmbeddingsApiKey.value.trim(),
-      ...(settingsEmbeddingsApiKey.value.trim() ? { api_key: settingsEmbeddingsApiKey.value.trim() } : {}),
-      ...(settingsEmbeddingsBaseUrl.value.trim() ? { base_url: settingsEmbeddingsBaseUrl.value.trim() } : {})
-    }
-  }
-  return payload
-}
-
-async function submitSettingsModal() {
-  if (!settingsLlmModel.value.trim()) {
-    settingsModalError.value = 'LLM model is required.'
-    return false
-  }
-  if (!settingsLlmLabel.value.trim()) {
-    settingsModalError.value = 'LLM profile label is required.'
-    return false
-  }
-  if (settingsLlmProviderPreset.value === 'custom' && !settingsLlmCustomProvider.value.trim()) {
-    settingsModalError.value = 'Custom LLM provider is required.'
-    return false
-  }
-  if (
-    settingsLlmProviderPreset.value !== 'codex'
-    && !settingsLlmHasStoredApiKey.value
-    && !settingsLlmApiKey.value.trim()
-  ) {
-    settingsModalError.value = 'LLM API key is required.'
-    return false
-  }
-  if (settingsEmbeddingsMode.value === 'external' && !settingsEmbeddingsModel.value.trim()) {
-    settingsModalError.value = 'Embeddings model is required.'
-    return false
-  }
-  if (settingsEmbeddingsMode.value === 'external' && !settingsEmbeddingsHasStoredApiKey.value && !settingsEmbeddingsApiKey.value.trim()) {
-    settingsModalError.value = 'Embeddings API key is required for external mode.'
-    return false
-  }
-  settingsModalError.value = ''
-
-  try {
-    const result = await writeAppSettings(buildSaveSettingsPayload())
-    filesystem.notifySuccess(`Settings saved at ${result.path}.`)
-    if (result.embeddings_changed) {
-      markIndexOutOfSync()
-      filesystem.notifyInfo('Embedding settings changed. Rebuild index to resync semantic search.')
-    }
-    closeSettingsModal()
-    return true
-  } catch (err) {
-    settingsModalError.value = err instanceof Error ? err.message : 'Could not save settings.'
-    return false
-  }
+  closeSettingsModal()
 }
 
 async function openSettingsFromPalette() {
@@ -3980,24 +3743,6 @@ function onOpenDateInputKeydown(event: KeyboardEvent) {
   }
 }
 
-function onSettingsInputKeydown(event: KeyboardEvent) {
-  if (event.metaKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
-    event.stopPropagation()
-    return
-  }
-  if (event.key === 'Escape') {
-    event.preventDefault()
-    event.stopPropagation()
-    closeSettingsModal()
-    return
-  }
-  if (event.key === 'Enter') {
-    event.preventDefault()
-    event.stopPropagation()
-    void submitSettingsModal()
-  }
-}
-
 function activeModalSelector(): string | null {
   if (wikilinkRewritePrompt.value) return '[data-modal="wikilink-rewrite"]'
   if (cosmosCommandLoadingVisible.value) return '[data-modal="cosmos-command-loading"]'
@@ -4835,10 +4580,7 @@ onBeforeUnmount(() => {
                   class="overflow-item"
                   @click="openSettingsFromOverflow"
                 >
-                  <svg class="overflow-item-icon" viewBox="0 0 16 16" aria-hidden="true">
-                    <circle cx="8" cy="8" r="2.2" />
-                    <path d="M8 1.6v2M8 12.4v2M1.6 8h2M12.4 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M12.9 3.1l-1.4 1.4M4.5 11.5l-1.4 1.4" />
-                  </svg>
+                  <Cog8ToothIcon class="overflow-item-icon" />
                   Open Settings
                 </button>
                 <button
@@ -5334,156 +5076,11 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div v-if="settingsModalVisible" class="modal-overlay" @click.self="closeSettingsModal">
-      <div
-        class="modal settings-modal"
-        data-modal="settings"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="settings-title"
-        tabindex="-1"
-      >
-        <h3 id="settings-title" class="confirm-title">Settings</h3>
-        <div class="settings-tabs" role="tablist" aria-label="Settings tabs">
-          <button type="button" class="settings-tab-btn" :class="{ active: settingsActiveTab === 'llm' }" @click="settingsActiveTab = 'llm'">LLM</button>
-          <button type="button" class="settings-tab-btn" :class="{ active: settingsActiveTab === 'embeddings' }" @click="settingsActiveTab = 'embeddings'">Embeddings</button>
-        </div>
-
-        <div v-if="settingsActiveTab === 'llm'" class="settings-tab-panel">
-          <label class="modal-field-label" for="settings-llm-provider">Provider preset</label>
-          <select
-            id="settings-llm-provider"
-            class="tool-input"
-            :value="settingsLlmProviderPreset"
-            @change="applySettingsLlmPreset(($event.target as HTMLSelectElement).value as 'openai' | 'anthropic' | 'codex' | 'custom')"
-          >
-            <option value="openai">OpenAI</option>
-            <option value="anthropic">Anthropic</option>
-            <option value="codex">OpenAI Codex</option>
-            <option value="custom">Custom</option>
-          </select>
-
-          <label class="modal-field-label" for="settings-llm-label">Profile label</label>
-          <input id="settings-llm-label" v-model="settingsLlmLabel" class="tool-input" placeholder="Profile label" @keydown="onSettingsInputKeydown" />
-
-          <label v-if="settingsLlmProviderPreset === 'custom'" class="modal-field-label" for="settings-llm-custom-provider">Custom provider</label>
-          <input
-            v-if="settingsLlmProviderPreset === 'custom'"
-            id="settings-llm-custom-provider"
-            v-model="settingsLlmCustomProvider"
-            class="tool-input"
-            placeholder="openai_compatible"
-            @keydown="onSettingsInputKeydown"
-          />
-
-          <label class="modal-field-label" for="settings-llm-model">Model</label>
-          <div class="settings-model-group">
-            <div class="settings-model-input-row">
-              <input id="settings-llm-model" v-model="settingsLlmModel" class="tool-input" placeholder="Model name" @keydown="onSettingsInputKeydown" />
-              <button
-                v-if="settingsLlmProviderPreset === 'codex'"
-                type="button"
-                class="settings-discover-btn"
-                :disabled="settingsLlmCodexModelsLoading"
-                @click="discoverCodexModels"
-              >
-                {{ settingsLlmCodexModelsLoading ? 'Discovering...' : 'Discover models' }}
-              </button>
-            </div>
-            <select
-              v-if="settingsLlmProviderPreset === 'codex' && settingsLlmCodexModels.length > 0"
-              class="tool-input"
-              :value="settingsLlmModel"
-              @change="settingsLlmModel = ($event.target as HTMLSelectElement).value"
-            >
-              <option
-                v-for="item in settingsLlmCodexModels"
-                :key="item.id"
-                :value="item.id"
-              >
-                {{ item.display_name }} ({{ item.id }})
-              </option>
-            </select>
-          </div>
-          <p v-if="settingsLlmProviderPreset === 'codex'" class="modal-field-hint">
-            Utilise la session Codex CLI (<code>~/.codex/auth.json</code>).
-            Tu peux aussi saisir manuellement n'importe quel model ID.
-          </p>
-
-          <label v-if="settingsLlmProviderPreset !== 'codex'" class="modal-field-label" for="settings-llm-base-url">Base URL (optional)</label>
-          <input
-            v-if="settingsLlmProviderPreset !== 'codex'"
-            id="settings-llm-base-url"
-            v-model="settingsLlmBaseUrl"
-            class="tool-input"
-            placeholder="https://... or http://localhost:11434/v1"
-            @keydown="onSettingsInputKeydown"
-          />
-
-          <label class="modal-field-label" for="settings-llm-apikey">API key</label>
-          <input
-            id="settings-llm-apikey"
-            v-model="settingsLlmApiKey"
-            data-settings-llm-apikey="true"
-            class="tool-input"
-            type="password"
-            :placeholder="settingsLlmProviderPreset === 'codex'
-              ? 'not used for Codex'
-              : settingsLlmHasStoredApiKey
-                ? 'stored key (leave empty to keep)'
-                : 'api key'"
-            :disabled="settingsLlmProviderPreset === 'codex'"
-            @keydown="onSettingsInputKeydown"
-          />
-        </div>
-
-        <div v-else class="settings-tab-panel">
-          <label class="modal-field-label settings-checkbox-row">
-            <input v-model="settingsEmbeddingsMode" type="radio" value="internal" />
-            <span>Internal model (fastembed)</span>
-          </label>
-          <label class="modal-field-label settings-checkbox-row">
-            <input v-model="settingsEmbeddingsMode" type="radio" value="external" />
-            <span>External model (API)</span>
-          </label>
-
-          <template v-if="settingsEmbeddingsMode === 'external'">
-            <label class="modal-field-label" for="settings-emb-provider">Provider</label>
-            <select id="settings-emb-provider" v-model="settingsEmbeddingsProvider" class="tool-input">
-              <option value="openai">OpenAI</option>
-            </select>
-
-            <label class="modal-field-label" for="settings-emb-label">Profile label</label>
-            <input id="settings-emb-label" v-model="settingsEmbeddingsLabel" class="tool-input" placeholder="OpenAI Embeddings" @keydown="onSettingsInputKeydown" />
-
-            <label class="modal-field-label" for="settings-emb-model">Model</label>
-            <input id="settings-emb-model" v-model="settingsEmbeddingsModel" class="tool-input" placeholder="text-embedding-3-small" @keydown="onSettingsInputKeydown" />
-
-            <label class="modal-field-label" for="settings-emb-base-url">Base URL (optional)</label>
-            <input id="settings-emb-base-url" v-model="settingsEmbeddingsBaseUrl" class="tool-input" placeholder="https://..." @keydown="onSettingsInputKeydown" />
-
-            <label class="modal-field-label" for="settings-emb-apikey">API key</label>
-            <input
-              id="settings-emb-apikey"
-              v-model="settingsEmbeddingsApiKey"
-              class="tool-input"
-              type="password"
-              :placeholder="settingsEmbeddingsHasStoredApiKey ? 'stored key (leave empty to keep)' : 'api key'"
-              @keydown="onSettingsInputKeydown"
-            />
-          </template>
-        </div>
-
-        <p v-if="settingsModalError" class="modal-input-error">{{ settingsModalError }}</p>
-        <div class="settings-footer">
-          <p class="settings-config-path"><code>{{ settingsConfigPath }}</code></p>
-          <div class="settings-footer-actions">
-            <button type="button" class="settings-cancel-btn" @click="closeSettingsModal">Cancel</button>
-            <UiButton size="sm" variant="primary" @click="submitSettingsModal">Save</UiButton>
-          </div>
-        </div>
-      </div>
-    </div>
+    <SettingsModal
+      :visible="settingsModalVisible"
+      @cancel="closeSettingsModal"
+      @saved="onSettingsSaved"
+    />
 
     <div v-if="shortcutsModalVisible" class="modal-overlay" @click.self="closeShortcutsModal">
       <div
