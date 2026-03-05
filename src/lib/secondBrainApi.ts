@@ -1,6 +1,7 @@
 import {
   appendMessageToDraft,
   createSecondBrainSession,
+  cancelSecondBrainStream,
   deleteSecondBrainSession,
   publishDraftToExistingNote,
   publishDraftToNewNote,
@@ -95,6 +96,17 @@ export async function runDeliberation(payload: {
     userMessageId: result.user_message_id,
     assistantMessageId: result.assistant_message_id
   }
+}
+
+/** Requests server-side cancellation for an in-flight deliberation stream. */
+export async function cancelDeliberationStream(payload: {
+  sessionId: string
+  messageId?: string | null
+}): Promise<void> {
+  await cancelSecondBrainStream({
+    session_id: payload.sessionId,
+    message_id: payload.messageId ?? undefined
+  })
 }
 
 /**

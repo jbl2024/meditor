@@ -96,7 +96,7 @@ pub async fn run_llm_stream<F>(
     mut on_chunk: F,
 ) -> Result<String, String>
 where
-    F: FnMut(&str),
+    F: FnMut(&str) -> Result<(), String>,
 {
     if is_openai_codex(profile) {
         return run_codex_stream(&profile.model, system_prompt, user_prompt, on_chunk).await;
@@ -125,7 +125,7 @@ where
             Ok(ChatStreamEvent::Chunk(chunk)) => {
                 if !chunk.content.is_empty() {
                     full_text.push_str(&chunk.content);
-                    on_chunk(&chunk.content);
+                    on_chunk(&chunk.content)?;
                 }
             }
             Ok(ChatStreamEvent::End(end)) => {

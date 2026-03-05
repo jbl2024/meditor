@@ -2890,6 +2890,7 @@ pub fn run() {
             second_brain::load_second_brain_session,
             second_brain::delete_second_brain_session,
             second_brain::update_second_brain_context,
+            second_brain::cancel_second_brain_stream,
             second_brain::send_second_brain_message,
             second_brain::set_second_brain_session_target_note,
             second_brain::insert_second_brain_assistant_into_target_note,

@@ -330,7 +330,7 @@ async fn stream_codex_text<F>(
     mut on_chunk: F,
 ) -> Result<String, String>
 where
-    F: FnMut(&str),
+    F: FnMut(&str) -> Result<(), String>,
 {
     let mut stream = response.bytes_stream();
     let mut buffer = String::new();
@@ -364,7 +364,7 @@ where
                     if let Some(delta) = event.get("delta").and_then(Value::as_str) {
                         if !delta.is_empty() {
                             full_text.push_str(delta);
-                            on_chunk(delta);
+                            on_chunk(delta)?;
                         }
                     }
                 }
@@ -391,7 +391,7 @@ pub async fn run_codex(
     system_prompt: &str,
     user_prompt: &str,
 ) -> Result<String, String> {
-    run_codex_stream(model, system_prompt, user_prompt, |_| {}).await
+    run_codex_stream(model, system_prompt, user_prompt, |_| Ok(())).await
 }
 
 pub async fn run_codex_stream<F>(
@@ -401,7 +401,7 @@ pub async fn run_codex_stream<F>(
     on_chunk: F,
 ) -> Result<String, String>
 where
-    F: FnMut(&str),
+    F: FnMut(&str) -> Result<(), String>,
 {
     let (access_token, account_id) = load_credentials()?;
     let body = codex_request_body(model, system_prompt, user_prompt);

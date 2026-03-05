@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import SecondBrainView from './SecondBrainView.vue'
 
 const api = vi.hoisted(() => ({
+  cancelDeliberationStream: vi.fn(),
   createDeliberationSession: vi.fn(),
   fetchSecondBrainConfigStatus: vi.fn(),
   fetchSecondBrainSessions: vi.fn(),
@@ -59,6 +60,7 @@ describe('SecondBrainView', () => {
       draft_content: ''
     }))
     api.subscribeSecondBrainStream.mockResolvedValue(() => {})
+    api.cancelDeliberationStream.mockResolvedValue(undefined)
     api.runDeliberation.mockResolvedValue({ userMessageId: 'u1', assistantMessageId: 'a1' })
     api.replaceSessionContext.mockResolvedValue(42)
     api.createDeliberationSession.mockResolvedValue({ sessionId: 's-new', createdAtMs: 10 })
@@ -285,6 +287,10 @@ describe('SecondBrainView', () => {
     if (!stopBtn) return
     stopBtn.click()
     await flushUi()
+    expect(api.cancelDeliberationStream).toHaveBeenCalledWith({
+      sessionId: 's1',
+      messageId: 'a-stream'
+    })
 
     streamHandlers.get('second-brain://assistant-delta')?.({
       session_id: 's1',

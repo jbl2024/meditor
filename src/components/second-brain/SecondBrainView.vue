@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ClipboardDocumentIcon, PaperAirplaneIcon, PlusIcon } from '@heroicons/vue/24/outline'
 import {
+  cancelDeliberationStream,
   createDeliberationSession,
   fetchSecondBrainConfigStatus,
   fetchSecondBrainSessions,
@@ -45,6 +46,7 @@ const copiedByMessageId = ref<Record<string, boolean>>({})
 const sending = ref(false)
 const requestInFlight = ref(false)
 const sendError = ref('')
+const suppressCancellationError = ref(false)
 const creatingSession = ref(false)
 const sessionsIndex = ref<SecondBrainSessionSummary[]>([])
 const mentionInfo = ref('')
@@ -575,20 +577,37 @@ async function onSendMessage() {
       sessionTitle.value = updated.title
     }
   } catch (err) {
-    sendError.value = err instanceof Error ? err.message : 'Could not send message.'
+    const message = err instanceof Error ? err.message : 'Could not send message.'
+    if (suppressCancellationError.value && /cancel/i.test(message)) {
+      sendError.value = ''
+    } else {
+      sendError.value = message
+    }
   } finally {
     sending.value = false
     requestInFlight.value = false
     activeAssistantStreamMessageId.value = null
+    suppressCancellationError.value = false
   }
 }
 
-function onStopStreaming() {
+async function onStopStreaming() {
   if (!requestInFlight.value || !sending.value) return
   sending.value = false
+  suppressCancellationError.value = true
   const activeId = activeAssistantStreamMessageId.value
   if (activeId) {
     ignoredAssistantMessageIds.add(activeId)
+  }
+  if (!sessionId.value) return
+  try {
+    await cancelDeliberationStream({
+      sessionId: sessionId.value,
+      messageId: activeId
+    })
+  } catch (err) {
+    suppressCancellationError.value = false
+    sendError.value = err instanceof Error ? err.message : 'Could not stop generation.'
   }
 }
 

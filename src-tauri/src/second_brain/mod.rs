@@ -2,7 +2,10 @@ use std::{
     collections::HashSet,
     fs,
     path::{Path, PathBuf},
-    sync::atomic::{AtomicU64, Ordering},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Mutex, OnceLock,
+    },
 };
 
 use rusqlite::params;
@@ -41,6 +44,8 @@ const SB_PROMPT_OVERHEAD_TOKENS: usize = 500;
 const TRUNCATION_MARKER: &str = "\n[CONTENU TRONQUE]\n";
 
 static ID_SEQ: AtomicU64 = AtomicU64::new(1);
+static SB_STREAM_CANCEL_BY_SESSION: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+static SB_STREAM_CANCEL_BY_MESSAGE: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AttachmentMeta {
@@ -96,6 +101,12 @@ pub struct StreamEvent {
     pub chunk: String,
     pub done: bool,
     pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CancelStreamPayload {
+    pub session_id: String,
+    pub message_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -225,6 +236,42 @@ fn normalize_workspace_markdown_relative(path: &str) -> Result<String> {
 fn next_id(prefix: &str) -> String {
     let seq = ID_SEQ.fetch_add(1, Ordering::SeqCst);
     format!("{prefix}-{}-{seq}", now_ms())
+}
+
+fn canceled_sessions_slot() -> &'static Mutex<HashSet<String>> {
+    SB_STREAM_CANCEL_BY_SESSION.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+fn canceled_messages_slot() -> &'static Mutex<HashSet<String>> {
+    SB_STREAM_CANCEL_BY_MESSAGE.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+fn request_stream_cancel(session_id: &str, message_id: Option<&str>) {
+    if let Some(id) = message_id {
+        if !id.trim().is_empty() {
+            if let Ok(mut canceled_messages) = canceled_messages_slot().lock() {
+                canceled_messages.insert(id.to_string());
+            }
+            return;
+        }
+    }
+    if let Ok(mut canceled_sessions) = canceled_sessions_slot().lock() {
+        canceled_sessions.insert(session_id.to_string());
+    }
+}
+
+fn consume_stream_cancel(session_id: &str, message_id: &str) -> bool {
+    if let Ok(mut canceled_messages) = canceled_messages_slot().lock() {
+        if canceled_messages.remove(message_id) {
+            return true;
+        }
+    }
+    if let Ok(mut canceled_sessions) = canceled_sessions_slot().lock() {
+        if canceled_sessions.remove(session_id) {
+            return true;
+        }
+    }
+    false
 }
 
 fn load_context_items(paths: &[String]) -> Result<Vec<ContextItem>> {
@@ -664,6 +711,17 @@ pub fn update_second_brain_context(payload: UpdateContextPayload) -> Result<Upda
 }
 
 #[tauri::command]
+pub fn cancel_second_brain_stream(payload: CancelStreamPayload) -> Result<()> {
+    if payload.session_id.trim().is_empty() {
+        return Err(AppError::InvalidOperation(
+            "Second Brain session not found.".to_string(),
+        ));
+    }
+    request_stream_cancel(&payload.session_id, payload.message_id.as_deref());
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn send_second_brain_message(
     app: AppHandle,
     payload: SendMessagePayload,
@@ -704,6 +762,9 @@ pub async fn send_second_brain_message(
 
     let user_message_id = next_id("sbm-user");
     let assistant_message_id = next_id("sbm-assistant");
+    if consume_stream_cancel(&payload.session_id, &assistant_message_id) {
+        return Err(AppError::InvalidOperation("Generation canceled.".to_string()));
+    }
     let ts = now_ms();
 
     let user_message = MessageRow {
@@ -770,6 +831,9 @@ pub async fn send_second_brain_message(
     let app_for_stream = app.clone();
     let llm_result = if active.capabilities.streaming {
         run_llm_stream(&active, &mode_prompt, &user_prompt, move |chunk| {
+            if consume_stream_cancel(&stream_session_id, &stream_message_id) {
+                return Err("Generation canceled.".to_string());
+            }
             let _ = app_for_stream.emit(
                 "second-brain://assistant-delta",
                 StreamEvent {
@@ -780,6 +844,7 @@ pub async fn send_second_brain_message(
                     error: None,
                 },
             );
+            Ok(())
         })
         .await
     } else {
@@ -802,6 +867,20 @@ pub async fn send_second_brain_message(
             return Err(AppError::InvalidOperation(err));
         }
     };
+
+    if consume_stream_cancel(&payload.session_id, &assistant_message_id) {
+        let _ = app.emit(
+            "second-brain://assistant-error",
+            StreamEvent {
+                session_id: payload.session_id.clone(),
+                message_id: assistant_message_id.clone(),
+                chunk: String::new(),
+                done: true,
+                error: Some("Generation canceled.".to_string()),
+            },
+        );
+        return Err(AppError::InvalidOperation("Generation canceled.".to_string()));
+    }
 
     if !active.capabilities.streaming {
         let _ = app.emit(

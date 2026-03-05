@@ -444,6 +444,13 @@ export async function updateSecondBrainContext(payload: {
   return await invoke('update_second_brain_context', { payload })
 }
 
+export async function cancelSecondBrainStream(payload: {
+  session_id: string
+  message_id?: string
+}): Promise<void> {
+  await invoke('cancel_second_brain_stream', { payload })
+}
+
 export async function sendSecondBrainMessage(payload: {
   session_id: string
   mode: string
