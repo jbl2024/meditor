@@ -66,6 +66,8 @@ export type UseEditorTiptapSetupOptions = {
  * - Dispatch update/selection/transaction callbacks to host ports.
  */
 export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
+  const ISO_DATE_TOKEN_REGEX = /^\d{4}-\d{2}-\d{2}$/
+
   const headingMeta = Extension.create({
     name: 'headingMeta',
     addGlobalAttributes() {
@@ -89,6 +91,26 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
         ? target.parentElement
         : null
     return element?.closest('a') as HTMLAnchorElement | null
+  }
+
+  function readIsoDateTokenAtPos(view: ProseMirrorEditorView, pos: number): string | null {
+    const size = view.state.doc.content.size
+    if (size <= 0) return null
+    const boundedPos = Math.max(0, Math.min(pos, size))
+    const from = Math.max(0, boundedPos - 16)
+    const to = Math.min(size, boundedPos + 16)
+    const nearby = view.state.doc.textBetween(from, to, '\n', '\0')
+    if (!nearby) return null
+    const offset = Math.max(0, Math.min(nearby.length, boundedPos - from))
+    const isDateChar = (value: string) => /[0-9-]/.test(value)
+
+    let start = offset
+    while (start > 0 && isDateChar(nearby[start - 1])) start -= 1
+    let end = offset
+    while (end < nearby.length && isDateChar(nearby[end])) end += 1
+
+    const token = nearby.slice(start, end).trim()
+    return ISO_DATE_TOKEN_REGEX.test(token) ? token : null
   }
 
   function createEditorOptions(path: string) {
@@ -142,7 +164,16 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
         },
         handleClick: (view: ProseMirrorEditorView, pos: number, event: MouseEvent) => {
           const anchor = closestAnchorFromEventTarget(event.target)
-          if (!anchor) return false
+          const modifierPressed = event.metaKey || event.ctrlKey
+          if (!anchor) {
+            if (!modifierPressed) return false
+            const isoDateTarget = readIsoDateTokenAtPos(view, pos)
+            if (!isoDateTarget) return false
+            event.preventDefault()
+            event.stopPropagation()
+            void options.openLinkTargetWithAutosave(isoDateTarget)
+            return true
+          }
 
           const wikilinkTarget = (
             anchor.getAttribute('data-target') ??
@@ -150,7 +181,7 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
             ''
           ).trim()
           if (wikilinkTarget) {
-            if (event.metaKey || event.ctrlKey) {
+            if (modifierPressed) {
               event.preventDefault()
               event.stopPropagation()
               let domPos = 0
@@ -180,7 +211,7 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
           const href = anchor.getAttribute('href')?.trim() ?? ''
           const safe = options.sanitizeExternalHref(href)
           if (!safe) return false
-          if (event.metaKey || event.ctrlKey) {
+          if (modifierPressed) {
             event.preventDefault()
             event.stopPropagation()
             const targetEditor = options.getSessionEditor(path) ?? options.getCurrentEditor()

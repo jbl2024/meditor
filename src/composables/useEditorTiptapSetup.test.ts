@@ -100,4 +100,31 @@ describe('useEditorTiptapSetup', () => {
     expect(openExternalUrl).toHaveBeenCalledWith('https://example.com')
     expect(options.inlineFormatToolbar.openLinkPopover).not.toHaveBeenCalled()
   })
+
+  it('opens ISO date token on modifier click without anchor', () => {
+    const openLinkTargetWithAutosave = vi.fn(async () => {})
+    const { setup } = createSetup({ openLinkTargetWithAutosave })
+    const editorOptions = setup.createEditorOptions('a.md') as any
+
+    const view = {
+      state: {
+        doc: {
+          content: { size: 100 },
+          textBetween: vi.fn(() => 'around 2026-02-23 around')
+        }
+      }
+    } as any
+
+    const textNode = document.createTextNode('2026-02-23')
+    const click = editorOptions.editorProps.handleClick(view, 10, {
+      target: textNode,
+      metaKey: true,
+      ctrlKey: false,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn()
+    })
+
+    expect(click).toBe(true)
+    expect(openLinkTargetWithAutosave).toHaveBeenCalledWith('2026-02-23')
+  })
 })
