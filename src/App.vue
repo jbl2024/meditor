@@ -5393,6 +5393,7 @@ onBeforeUnmount(() => {
 
           <p v-if="settingsLlmProviderPreset === 'codex'" class="modal-field-hint">
             Utilise la session Codex CLI (<code>~/.codex/auth.json</code>).
+            Tu peux aussi saisir manuellement n'importe quel model ID.
           </p>
           <div v-if="settingsLlmProviderPreset === 'codex'" class="settings-codex-discovery">
             <UiButton
