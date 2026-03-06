@@ -1,12 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { FolderIcon, MagnifyingGlassIcon } from '@heroicons/vue/24/outline'
 import EditorPaneGrid, { type EditorPaneGridExposed } from './components/panes/EditorPaneGrid.vue'
 import EditorRightPane from './components/EditorRightPane.vue'
-import ExplorerTree from './components/explorer/ExplorerTree.vue'
+import SidebarSurface from './components/app/SidebarSurface.vue'
 import IndexStatusModal from './components/app/IndexStatusModal.vue'
 import QuickOpenModal from './components/app/QuickOpenModal.vue'
-import SearchSidebarPanel from './components/app/SearchSidebarPanel.vue'
 import ShortcutsModal from './components/app/ShortcutsModal.vue'
 import TopbarNavigationControls from './components/app/TopbarNavigationControls.vue'
 import WikilinkRewriteModal from './components/app/WikilinkRewriteModal.vue'
@@ -3101,79 +3099,36 @@ onBeforeUnmount(() => {
 <template>
   <div class="ide-root" :class="{ dark: resolvedTheme === 'dark', 'macos-overlay': isMacOs }">
     <div class="body-row">
-      <aside class="activity-bar">
-        <button
-          class="activity-btn"
-          :class="{ active: workspace.sidebarMode.value === 'explorer' && workspace.sidebarVisible.value }"
-          type="button"
-          title="Explorer"
-          aria-label="Explorer"
-          @click="setSidebarMode('explorer')"
-        >
-          <FolderIcon class="activity-btn-icon" />
-        </button>
-        <button
-          class="activity-btn"
-          :class="{ active: workspace.sidebarMode.value === 'search' && workspace.sidebarVisible.value }"
-          type="button"
-          title="Search"
-          aria-label="Search"
-          @click="setSidebarMode('search')"
-        >
-          <MagnifyingGlassIcon class="activity-btn-icon" />
-        </button>
-      </aside>
-
-      <aside
-        v-if="workspace.sidebarVisible.value"
-        class="left-sidebar"
-        :style="{ width: `${leftPaneWidth}px` }"
-      >
-        <div class="panel-header">
-          <h2 class="panel-title">{{ workspace.sidebarMode.value }}</h2>
-        </div>
-
-        <div class="panel-body" :class="{ 'panel-body-explorer': workspace.sidebarMode.value === 'explorer' }">
-          <div v-if="workspace.sidebarMode.value === 'explorer'" class="panel-fill">
-            <ExplorerTree
-              v-if="filesystem.hasWorkspace.value"
-              ref="explorerRef"
-              :folder-path="filesystem.workingFolderPath.value"
-              :active-path="activeFilePath"
-              @open="onExplorerOpen"
-              @path-renamed="onExplorerPathRenamed"
-              @request-create="onExplorerRequestCreate"
-              @select="onExplorerSelection"
-              @error="onExplorerError"
-            />
-            <div v-else class="placeholder empty-explorer">
-              <span>No workspace selected.</span>
-              <button type="button" class="inline-link-btn" @click="onSelectWorkingFolder">Open folder</button>
-            </div>
-          </div>
-
-          <SearchSidebarPanel
-            v-else-if="workspace.sidebarMode.value === 'search'"
-            :disabled="!filesystem.hasWorkspace.value"
-            :query="searchQuery"
-            :mode="globalSearchMode"
-            :mode-options="searchModeOptions"
-            :show-search-score="showSearchScore"
-            :has-searched="hasSearched"
-            :search-loading="searchLoading"
-            :grouped-results="groupedSearchResults"
-            :to-relative-path="toRelativePath"
-            :format-search-score="formatSearchScore"
-            :snippet-parts="parseSearchSnippet"
-            @update:query="searchQuery = $event"
-            @enter="runGlobalSearch"
-            @select-mode="onGlobalSearchModeSelect"
-            @open-result="onSearchResultOpen"
-          />
-
-          <div v-else class="placeholder">No panel selected</div>
-        </div>
-      </aside>
+      <SidebarSurface
+        ref="explorerRef"
+        :sidebar-visible="workspace.sidebarVisible.value"
+        :sidebar-mode="workspace.sidebarMode.value"
+        :working-folder-path="filesystem.workingFolderPath.value"
+        :has-workspace="filesystem.hasWorkspace.value"
+        :left-pane-width="leftPaneWidth"
+        :active-file-path="activeFilePath"
+        :search-query="searchQuery"
+        :global-search-mode="globalSearchMode"
+        :search-mode-options="searchModeOptions"
+        :show-search-score="showSearchScore"
+        :has-searched="hasSearched"
+        :search-loading="searchLoading"
+        :grouped-search-results="groupedSearchResults"
+        :to-relative-path="toRelativePath"
+        :format-search-score="formatSearchScore"
+        :parse-search-snippet="parseSearchSnippet"
+        @set-sidebar-mode="setSidebarMode"
+        @explorer-open="onExplorerOpen"
+        @explorer-path-renamed="onExplorerPathRenamed"
+        @explorer-request-create="onExplorerRequestCreate"
+        @explorer-selection="onExplorerSelection"
+        @explorer-error="onExplorerError"
+        @select-working-folder="void onSelectWorkingFolder()"
+        @update-search-query="searchQuery = $event"
+        @run-global-search="runGlobalSearch"
+        @select-global-search-mode="onGlobalSearchModeSelect"
+        @open-search-result="onSearchResultOpen"
+      />
 
       <section class="workspace-column">
         <TopbarNavigationControls
