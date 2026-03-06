@@ -8,9 +8,9 @@ import QuickOpenModal from './components/app/QuickOpenModal.vue'
 import ShortcutsModal from './components/app/ShortcutsModal.vue'
 import TopbarNavigationControls from './components/app/TopbarNavigationControls.vue'
 import WikilinkRewriteModal from './components/app/WikilinkRewriteModal.vue'
+import WorkspaceEntryModals from './components/app/WorkspaceEntryModals.vue'
 import WorkspaceStatusBar from './components/app/WorkspaceStatusBar.vue'
 import SettingsModal from './components/settings/SettingsModal.vue'
-import UiButton from './components/ui/UiButton.vue'
 import { useDocumentHistory } from './composables/useDocumentHistory'
 import {
   backlinksForPath,
@@ -3365,86 +3365,29 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div v-if="newFileModalVisible" class="modal-overlay" @click.self="closeNewFileModal">
-      <div
-        class="modal confirm-modal"
-        data-modal="new-file"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="new-file-title"
-        aria-describedby="new-file-description"
-        tabindex="-1"
-      >
-        <h3 id="new-file-title" class="confirm-title">New Note</h3>
-        <p id="new-file-description" class="confirm-text">Enter a workspace-relative note path. `.md` is added automatically.</p>
-        <input
-          v-model="newFilePathInput"
-          data-new-file-input="true"
-          class="tool-input"
-          placeholder="untitled"
-          @keydown="onNewFileInputKeydown"
-        />
-        <p v-if="newFileModalError" class="modal-input-error">{{ newFileModalError }}</p>
-        <div class="confirm-actions">
-          <UiButton size="sm" variant="ghost" @click="closeNewFileModal">Cancel</UiButton>
-          <UiButton size="sm" @click="submitNewFileFromModal">Create</UiButton>
-        </div>
-      </div>
-    </div>
-
-    <div v-if="newFolderModalVisible" class="modal-overlay" @click.self="closeNewFolderModal">
-      <div
-        class="modal confirm-modal"
-        data-modal="new-folder"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="new-folder-title"
-        aria-describedby="new-folder-description"
-        tabindex="-1"
-      >
-        <h3 id="new-folder-title" class="confirm-title">New Folder</h3>
-        <p id="new-folder-description" class="confirm-text">Enter a workspace-relative folder path.</p>
-        <input
-          v-model="newFolderPathInput"
-          data-new-folder-input="true"
-          class="tool-input"
-          placeholder="new-folder"
-          @keydown="onNewFolderInputKeydown"
-        />
-        <p v-if="newFolderModalError" class="modal-input-error">{{ newFolderModalError }}</p>
-        <div class="confirm-actions">
-          <UiButton size="sm" variant="ghost" @click="closeNewFolderModal">Cancel</UiButton>
-          <UiButton size="sm" @click="submitNewFolderFromModal">Create</UiButton>
-        </div>
-      </div>
-    </div>
-
-    <div v-if="openDateModalVisible" class="modal-overlay" @click.self="closeOpenDateModal">
-      <div
-        class="modal confirm-modal"
-        data-modal="open-date"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="open-date-title"
-        aria-describedby="open-date-description"
-        tabindex="-1"
-      >
-        <h3 id="open-date-title" class="confirm-title">Open Specific Date</h3>
-        <p id="open-date-description" class="confirm-text">Enter a date as `YYYY-MM-DD`.</p>
-        <input
-          v-model="openDateInput"
-          data-open-date-input="true"
-          class="tool-input"
-          placeholder="2026-02-22"
-          @keydown="onOpenDateInputKeydown"
-        />
-        <p v-if="openDateModalError" class="modal-input-error">{{ openDateModalError }}</p>
-        <div class="confirm-actions">
-          <UiButton size="sm" variant="ghost" @click="closeOpenDateModal">Cancel</UiButton>
-          <UiButton size="sm" @click="submitOpenDateFromModal">Open</UiButton>
-        </div>
-      </div>
-    </div>
+    <WorkspaceEntryModals
+      :new-file-visible="newFileModalVisible"
+      :new-file-path-input="newFilePathInput"
+      :new-file-error="newFileModalError"
+      :new-folder-visible="newFolderModalVisible"
+      :new-folder-path-input="newFolderPathInput"
+      :new-folder-error="newFolderModalError"
+      :open-date-visible="openDateModalVisible"
+      :open-date-input="openDateInput"
+      :open-date-error="openDateModalError"
+      @close-new-file="closeNewFileModal"
+      @update-new-file-path="newFilePathInput = $event"
+      @keydown-new-file="onNewFileInputKeydown"
+      @submit-new-file="submitNewFileFromModal"
+      @close-new-folder="closeNewFolderModal"
+      @update-new-folder-path="newFolderPathInput = $event"
+      @keydown-new-folder="onNewFolderInputKeydown"
+      @submit-new-folder="submitNewFolderFromModal"
+      @close-open-date="closeOpenDateModal"
+      @update-open-date="openDateInput = $event"
+      @keydown-open-date="onOpenDateInputKeydown"
+      @submit-open-date="submitOpenDateFromModal"
+    />
 
     <SettingsModal
       :visible="settingsModalVisible"
