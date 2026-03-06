@@ -321,6 +321,7 @@ onBeforeUnmount(() => {
         :ref="(instance: unknown) => setEditorRef(pane.id, instance)"
         :pane-id="pane.id"
         :active-tab="paneActiveTab(pane)"
+        :open-tabs="pane.openTabs"
         :open-document-paths="paneDocumentPaths(pane)"
         :active-document-path="activeDocumentPath"
         :cosmos="cosmos"

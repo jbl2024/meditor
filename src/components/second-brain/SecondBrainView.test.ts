@@ -100,7 +100,7 @@ describe('SecondBrainView', () => {
     document.body.innerHTML = ''
   })
 
-  function mountView() {
+  function mountView(options: { requestedSessionId?: string; requestedSessionNonce?: number } = {}) {
     const root = document.createElement('div')
     document.body.appendChild(root)
     const onOpenNote = vi.fn()
@@ -108,8 +108,8 @@ describe('SecondBrainView', () => {
     const app = createApp(SecondBrainView, {
       workspacePath: '/vault',
       allWorkspaceFiles: ['/vault/seed.md', '/vault/notes/a.md', '/vault/readme.txt'],
-      requestedSessionId: '',
-      requestedSessionNonce: 0,
+      requestedSessionId: options.requestedSessionId ?? '',
+      requestedSessionNonce: options.requestedSessionNonce ?? 0,
       activeNotePath: '/vault/seed.md',
       onContextChanged: () => {},
       onOpenNote
@@ -287,6 +287,57 @@ describe('SecondBrainView', () => {
     await flushUi()
 
     expect(thread.scrollTop).toBe(420)
+
+    mounted.app.unmount()
+  })
+
+  it('scrolls to the bottom when opening a requested session with existing messages', async () => {
+    api.loadDeliberationSession.mockImplementation(async (sessionId: string) => ({
+      session_id: sessionId,
+      title: 'Session Two',
+      provider: 'openai',
+      model: 'gpt-4.1',
+      created_at_ms: 1,
+      updated_at_ms: 3,
+      target_note_path: '',
+      context_items: [{ path: 'notes/a.md', token_estimate: 12 }],
+      messages: [
+        {
+          id: 'u1',
+          role: 'user',
+          mode: 'freestyle',
+          content_md: 'Question',
+          citations_json: '[]',
+          attachments_json: '[]',
+          created_at_ms: 1
+        },
+        {
+          id: 'a1',
+          role: 'assistant',
+          mode: 'freestyle',
+          content_md: 'Answer',
+          citations_json: '[]',
+          attachments_json: '[]',
+          created_at_ms: 2
+        }
+      ],
+      draft_content: ''
+    }))
+
+    const mounted = mountView({ requestedSessionId: 's2', requestedSessionNonce: 1 })
+    const thread = mounted.root.querySelector<HTMLElement>('.sb-thread')
+    expect(thread).toBeTruthy()
+    if (!thread) return
+
+    Object.defineProperty(thread, 'scrollTop', { value: 0, writable: true, configurable: true })
+    Object.defineProperty(thread, 'scrollHeight', { value: 540, configurable: true })
+    thread.scrollTop = 0
+
+    for (let i = 0; i < 8 && thread.scrollTop !== 540; i += 1) {
+      await flushUi()
+    }
+
+    expect(thread.scrollTop).toBe(540)
 
     mounted.app.unmount()
   })

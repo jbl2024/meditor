@@ -248,7 +248,7 @@ async function loadSession(nextSessionId: string) {
   mentionInfo.value = ''
   composerContextPaths.value = []
   try {
-    const payload = await loadDeliberationSession(nextSessionId)
+    const payload = await loadDeliberationSession(nextSessionId.trim())
     sessionId.value = payload.session_id
     emit('session-changed', sessionId.value)
     sessionTitle.value = payload.title || 'Second Brain Session'
@@ -262,6 +262,7 @@ async function loadSession(nextSessionId: string) {
 
     messages.value = payload.messages
     emit('context-changed', contextPaths.value)
+    await scrollThreadToBottom()
   } catch (err) {
     sendError.value = err instanceof Error ? err.message : 'Could not load session.'
   } finally {
@@ -302,6 +303,7 @@ async function onCreateSession() {
     composerContextPaths.value = []
     mentionInfo.value = ''
     emit('context-changed', contextPaths.value)
+    await scrollThreadToBottom()
     await refreshSessionsIndex()
   } finally {
     creatingSession.value = false

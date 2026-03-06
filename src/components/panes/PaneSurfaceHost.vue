@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import EditorView from '../EditorView.vue'
 import CosmosPaneSurface from '../cosmos/CosmosPaneSurface.vue'
 import SecondBrainPaneSurface from '../second-brain/SecondBrainPaneSurface.vue'
@@ -7,9 +7,10 @@ import type { PaneTab } from '../../composables/useMultiPaneWorkspaceState'
 import type { FileEditorStatus } from './EditorPaneTabs.vue'
 import type { WikilinkAnchor } from '../../lib/wikilinks'
 
-defineProps<{
+const props = defineProps<{
   paneId: string
   activeTab: PaneTab | null
+  openTabs: PaneTab[]
   openDocumentPaths: string[]
   getStatus: (path: string) => FileEditorStatus
   openFile: (path: string) => Promise<string>
@@ -88,6 +89,10 @@ type EditorSurfaceExposed = {
 
 const editorSurfaceRef = ref<EditorSurfaceExposed | null>(null)
 const cosmosSurfaceRef = ref<{ resetView: () => void; focusNodeById: (nodeId: string) => boolean } | null>(null)
+const hasCosmosTab = computed(() => props.openTabs.some((tab) => tab.type === 'cosmos'))
+const hasSecondBrainTab = computed(() => props.openTabs.some((tab) => tab.type === 'second-brain-chat'))
+const showCosmosSurface = computed(() => props.activeTab?.type === 'cosmos')
+const showSecondBrainSurface = computed(() => props.activeTab?.type === 'second-brain-chat')
 
 function withEditor<T>(run: (editor: EditorSurfaceExposed) => T, fallback: T): T {
   const editor = editorSurfaceRef.value
@@ -133,7 +138,8 @@ defineExpose<EditorSurfaceExposed>({
   />
 
   <CosmosPaneSurface
-    v-else-if="activeTab?.type === 'cosmos'"
+    v-if="hasCosmosTab"
+    v-show="showCosmosSurface"
     ref="cosmosSurfaceRef"
     :graph="cosmos.graph"
     :loading="cosmos.loading"
@@ -166,7 +172,8 @@ defineExpose<EditorSurfaceExposed>({
   />
 
   <SecondBrainPaneSurface
-    v-else-if="activeTab?.type === 'second-brain-chat'"
+    v-if="hasSecondBrainTab"
+    v-show="showSecondBrainSurface"
     :workspace-path="secondBrain.workspacePath"
     :all-workspace-files="secondBrain.allWorkspaceFiles"
     :requested-session-id="secondBrain.requestedSessionId"
@@ -177,7 +184,7 @@ defineExpose<EditorSurfaceExposed>({
     @session-changed="emit('second-brain-session-changed', $event)"
   />
 
-  <div v-else class="surface-placeholder">Open a tab to start.</div>
+  <div v-if="!activeTab" class="surface-placeholder">Open a tab to start.</div>
 </template>
 
 <style scoped>
