@@ -19,6 +19,16 @@ const emit = defineEmits<{
 }>()
 
 const visibleItems = computed(() => props.items.slice(0, 5))
+const parentPathLabel = computed(() =>
+  new Map(
+    visibleItems.value.map((item) => {
+      const relativePath = props.toRelativePath(item.path)
+      const parts = relativePath.split('/')
+      const parent = parts.slice(0, -1).join('/')
+      return [item.path, parent || '.']
+    })
+  )
+)
 const summaryLabel = computed(() => {
   if (!visibleItems.value.length) return 'No suggestions'
   const recentlyActiveCount = visibleItems.value.filter((item) => item.reasonLabel === 'Recently active').length
@@ -44,7 +54,7 @@ const summaryLabel = computed(() => {
       <article v-for="item in visibleItems" v-else :key="item.path" class="sb-echoes-item">
         <div class="sb-echoes-main">
           <strong>{{ item.title }}</strong>
-          <span>{{ toRelativePath(item.path) }}</span>
+          <span>{{ parentPathLabel.get(item.path) }}</span>
         </div>
         <div class="sb-echoes-meta">
           <span class="sb-echoes-pill">{{ item.reasonLabel }}</span>
