@@ -77,18 +77,18 @@ describe('SecondBrainView', () => {
     api.replaceSessionContext.mockResolvedValue(42)
     api.createDeliberationSession.mockResolvedValue({ sessionId: 's-new', createdAtMs: 10 })
     api.removeDeliberationSession.mockResolvedValue(undefined)
-    apiCore.computeEchoesPack.mockResolvedValue({
-      anchorPath: '/vault/seed.md',
+    apiCore.computeEchoesPack.mockImplementation(async (anchorPath: string) => ({
+      anchorPath,
       generatedAtMs: 1,
       items: [{
-        path: '/vault/notes/a.md',
-        title: 'Echo Note',
+        path: anchorPath === '/vault/notes/a.md' ? '/vault/seed.md' : '/vault/notes/a.md',
+        title: anchorPath === '/vault/notes/a.md' ? 'Seed Echo' : 'Echo Note',
         reasonLabel: 'Semantically related',
         reasonLabels: ['Semantically related'],
         score: 0.8,
         signalSources: ['semantic']
       }]
-    })
+    }))
   })
 
   afterEach(() => {
@@ -98,6 +98,7 @@ describe('SecondBrainView', () => {
   function mountView() {
     const root = document.createElement('div')
     document.body.appendChild(root)
+    const onOpenNote = vi.fn()
 
     const app = createApp(SecondBrainView, {
       workspacePath: '/vault',
@@ -106,11 +107,11 @@ describe('SecondBrainView', () => {
       requestedSessionNonce: 0,
       activeNotePath: '/vault/seed.md',
       onContextChanged: () => {},
-      onOpenNote: () => {}
+      onOpenNote
     })
 
     app.mount(root)
-    return { root, app }
+    return { root, app, onOpenNote }
   }
 
   function deferredPromise<T>() {
@@ -132,6 +133,40 @@ describe('SecondBrainView', () => {
     const chips = Array.from(mounted.root.querySelectorAll('.sb-chip'))
     expect(chips).toHaveLength(1)
     expect(mounted.root.textContent).toContain('seed.md')
+
+    mounted.app.unmount()
+  })
+
+  it('toggles the Echoes anchor from a context chip and keeps open explicit', async () => {
+    const mounted = mountView()
+    for (let i = 0; i < 8 && mounted.root.querySelectorAll('.sb-chip').length === 0; i += 1) {
+      await flushUi()
+    }
+
+    const chipBody = mounted.root.querySelector<HTMLButtonElement>('.sb-chip-main')
+    const chipOpen = mounted.root.querySelector<HTMLButtonElement>('.sb-chip-open')
+    expect(chipBody).toBeTruthy()
+    expect(chipOpen).toBeTruthy()
+    if (!chipBody || !chipOpen) return
+
+    expect(mounted.root.textContent).toContain('Echo Note')
+
+    chipBody.click()
+    await flushUi()
+
+    expect(chipBody.getAttribute('aria-pressed')).toBe('true')
+    expect(mounted.root.textContent).toContain('Echo Note')
+    expect(mounted.onOpenNote).not.toHaveBeenCalled()
+
+    chipBody.click()
+    await flushUi()
+
+    expect(chipBody.getAttribute('aria-pressed')).toBe('false')
+    expect(mounted.root.textContent).not.toContain('Echo Note')
+    expect(mounted.root.textContent).not.toContain('Suggested by Echoes')
+
+    chipOpen.click()
+    expect(mounted.onOpenNote).toHaveBeenCalledWith('/vault/seed.md')
 
     mounted.app.unmount()
   })
@@ -422,6 +457,71 @@ describe('SecondBrainView', () => {
 
     expect(api.replaceSessionContext).toHaveBeenCalledWith('s1', ['/vault/seed.md', '/vault/notes/a.md'])
     expect(mounted.root.textContent).toContain('In context')
+
+    mounted.app.unmount()
+  })
+
+  it('opens an Echoes suggestion only from the explicit action', async () => {
+    const mounted = mountView()
+    for (let index = 0; index < 8 && !mounted.root.textContent?.includes('Echo Note'); index += 1) {
+      await flushUi()
+    }
+
+    const suggestionBody = mounted.root.querySelector<HTMLElement>('.sb-echoes-main')
+    const openButton = mounted.root.querySelector<HTMLButtonElement>('.sb-echoes-open')
+    expect(suggestionBody).toBeTruthy()
+    expect(openButton).toBeTruthy()
+    if (!suggestionBody || !openButton) return
+
+    suggestionBody.click()
+    expect(mounted.onOpenNote).not.toHaveBeenCalled()
+
+    openButton.click()
+    expect(mounted.onOpenNote).toHaveBeenCalledWith('/vault/notes/a.md')
+
+    mounted.app.unmount()
+  })
+
+  it('recomputes Echoes suggestions when toggling another context chip', async () => {
+    api.loadDeliberationSession.mockResolvedValueOnce({
+      session_id: 's1',
+      title: 'Session One',
+      provider: 'openai',
+      model: 'gpt-4.1',
+      created_at_ms: 1,
+      updated_at_ms: 2,
+      target_note_path: '',
+      context_items: [
+        { path: 'seed.md', token_estimate: 12 },
+        { path: 'notes/a.md', token_estimate: 10 }
+      ],
+      messages: [],
+      draft_content: ''
+    })
+
+    const mounted = mountView()
+    for (let i = 0; i < 8 && mounted.root.querySelectorAll('.sb-chip').length < 2; i += 1) {
+      await flushUi()
+    }
+
+    const chipButtons = mounted.root.querySelectorAll<HTMLButtonElement>('.sb-chip-main')
+    expect(chipButtons).toHaveLength(2)
+    expect(mounted.root.textContent).toContain('Echo Note')
+    expect(apiCore.computeEchoesPack).toHaveBeenCalledWith('/vault/seed.md', { limit: 5 })
+
+    chipButtons[1]?.click()
+    await flushUi()
+
+    expect(apiCore.computeEchoesPack).toHaveBeenCalledWith('/vault/notes/a.md', { limit: 5 })
+    expect(mounted.root.textContent).toContain('Seed Echo')
+    expect(chipButtons[1]?.getAttribute('aria-pressed')).toBe('true')
+
+    chipButtons[1]?.click()
+    await flushUi()
+
+    expect(mounted.root.textContent).not.toContain('Seed Echo')
+    expect(chipButtons[1]?.getAttribute('aria-pressed')).toBe('false')
+    expect(mounted.root.textContent).not.toContain('Suggested by Echoes')
 
     mounted.app.unmount()
   })

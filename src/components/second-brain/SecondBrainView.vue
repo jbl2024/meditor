@@ -59,6 +59,8 @@ const copyToast = ref<{ visible: boolean; kind: 'success' | 'error'; message: st
   message: ''
 })
 const composerContextPaths = ref<string[]>([])
+const echoesAnchorMode = ref<'ambient' | 'chip' | 'none'>('ambient')
+const selectedEchoesContextPath = ref('')
 const composerRef = ref<HTMLTextAreaElement | null>(null)
 const threadRef = ref<HTMLElement | null>(null)
 const activeAssistantStreamMessageId = ref<string | null>(null)
@@ -98,11 +100,19 @@ const contextCards = computed(() =>
   })
 )
 const contextPathSet = computed(() => new Set(contextPaths.value))
+const ambientEchoesAnchorPath = computed(() => props.activeNotePath?.trim() || '')
 const echoesAnchorPath = computed(() => {
-  const activeNotePath = props.activeNotePath?.trim() || ''
-  if (activeNotePath) return activeNotePath
-  return contextPaths.value[0]?.trim() || ''
+  if (echoesAnchorMode.value === 'chip') {
+    const selectedPath = selectedEchoesContextPath.value.trim()
+    if (selectedPath && contextPathSet.value.has(selectedPath)) return selectedPath
+    return ''
+  }
+  if (echoesAnchorMode.value === 'ambient') {
+    return ambientEchoesAnchorPath.value
+  }
+  return ''
 })
+const showEchoesPanel = computed(() => echoesAnchorPath.value.trim().length > 0)
 const echoes = useEchoesPack(echoesAnchorPath, { limit: 5 })
 
 function mergeContextPaths(nextPaths: string[]): string[] {
@@ -681,6 +691,17 @@ function openContextNote(path: string) {
   emit('open-note', path)
 }
 
+function toggleEchoesAnchor(path: string) {
+  if (echoesAnchorMode.value === 'chip' && selectedEchoesContextPath.value === path) {
+    selectedEchoesContextPath.value = ''
+    echoesAnchorMode.value = 'none'
+    return
+  }
+
+  selectedEchoesContextPath.value = path
+  echoesAnchorMode.value = 'chip'
+}
+
 async function addEchoesSuggestion(path: string) {
   await addPathToContext(path)
 }
@@ -798,6 +819,25 @@ watch(
     void loadSession(id)
   }
 )
+
+watch(contextPaths, (paths) => {
+  if (!selectedEchoesContextPath.value) return
+  if (!paths.includes(selectedEchoesContextPath.value)) {
+    selectedEchoesContextPath.value = ''
+    echoesAnchorMode.value = ambientEchoesAnchorPath.value ? 'ambient' : 'none'
+  }
+})
+
+watch(
+  () => props.activeNotePath?.trim() || '',
+  (nextPath) => {
+    if (echoesAnchorMode.value !== 'ambient') return
+    if (nextPath) return
+    if (!selectedEchoesContextPath.value) {
+      echoesAnchorMode.value = 'none'
+    }
+  }
+)
 </script>
 
 <template>
@@ -856,15 +896,18 @@ watch(
 
       <footer class="sb-input-row">
         <div class="sb-composer">
-          <SecondBrainEchoesPanel
-            :items="echoes.items.value"
-            :loading="echoes.loading.value"
-            :error="echoes.error.value"
-            :context-path-set="contextPathSet"
-            :to-relative-path="toRelativePath"
-            @open="openContextNote"
-            @add="void addEchoesSuggestion($event)"
-          />
+          <transition name="sb-echoes-panel">
+            <SecondBrainEchoesPanel
+              v-if="showEchoesPanel"
+              :items="echoes.items.value"
+              :loading="echoes.loading.value"
+              :error="echoes.error.value"
+              :context-path-set="contextPathSet"
+              :to-relative-path="toRelativePath"
+              @open="openContextNote"
+              @add="void addEchoesSuggestion($event)"
+            />
+          </transition>
 
           <SecondBrainAtMentionsMenu
             :open="mentions.isOpen.value"
@@ -876,9 +919,25 @@ watch(
 
           <div v-if="contextCards.length" class="sb-chip-row">
             <article v-for="chip in contextCards" :key="chip.path" class="sb-chip">
-              <button type="button" class="sb-chip-main" @click="openContextNote(chip.path)">
+              <button
+                type="button"
+                class="sb-chip-main"
+                :class="{ active: selectedEchoesContextPath === chip.path }"
+                :title="`Use ${chip.name} for Echoes suggestions`"
+                :aria-pressed="selectedEchoesContextPath === chip.path"
+                @click="toggleEchoesAnchor(chip.path)"
+              >
                 <strong>{{ chip.name }}</strong>
                 <span>{{ chip.parent }}</span>
+              </button>
+              <button
+                type="button"
+                class="sb-chip-open"
+                :title="`Open ${chip.name}`"
+                :aria-label="`Open ${chip.name}`"
+                @click="openContextNote(chip.path)"
+              >
+                Open
               </button>
               <button type="button" class="sb-chip-remove" @click="void removeContextPath(chip.path)">×</button>
             </article>
@@ -1190,9 +1249,19 @@ watch(
 .sb-chip-main {
   border: 0;
   background: transparent;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
   text-align: left;
   padding: 0;
-  min-width: 0;
+}
+
+.sb-chip-main.active strong {
+  color: #1d4ed8;
+}
+
+.sb-chip-main.active span {
+  color: #1e40af;
 }
 
 .sb-chip-main strong {
@@ -1206,6 +1275,17 @@ watch(
   color: #64748b;
   font-size: 10px;
   white-space: nowrap;
+}
+
+.sb-chip-open {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #0f172a;
+  border-radius: 999px;
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 600;
+  padding: 4px 8px;
 }
 
 .sb-chip-remove {
@@ -1298,6 +1378,26 @@ watch(
 .sb-toast-fade-leave-to {
   opacity: 0;
   transform: translateY(6px);
+}
+
+.sb-echoes-panel-enter-active,
+.sb-echoes-panel-leave-active {
+  transition: opacity 180ms ease, transform 220ms ease, max-height 220ms ease;
+  overflow: hidden;
+}
+
+.sb-echoes-panel-enter-from,
+.sb-echoes-panel-leave-to {
+  opacity: 0;
+  transform: translateY(8px) scale(0.985);
+  max-height: 0;
+}
+
+.sb-echoes-panel-enter-to,
+.sb-echoes-panel-leave-from {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  max-height: 420px;
 }
 
 @keyframes sb-spin {

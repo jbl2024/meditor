@@ -2,7 +2,7 @@
 /**
  * Presentational Echoes suggestions for Second Brain.
  */
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { EchoesItem } from '../../lib/echoes'
 
 const props = defineProps<{
@@ -19,36 +19,74 @@ const emit = defineEmits<{
 }>()
 
 const visibleItems = computed(() => props.items.slice(0, 5))
+const collapsed = ref(false)
+const summaryLabel = computed(() => {
+  if (!visibleItems.value.length) return 'No suggestions'
+  const recentlyActiveCount = visibleItems.value.filter((item) => item.reasonLabel === 'Recently active').length
+  if (recentlyActiveCount > 0) {
+    return `${visibleItems.value.length} suggestions, ${recentlyActiveCount} recently active`
+  }
+  return `${visibleItems.value.length} suggestions`
+})
+
+watch(
+  () => props.items.length,
+  (nextCount, previousCount) => {
+    if (previousCount === 0 && nextCount > 0) {
+      collapsed.value = false
+    }
+  }
+)
 </script>
 
 <template>
   <section class="sb-echoes">
     <header class="sb-echoes-head">
-      <h3>Suggested by Echoes</h3>
-    </header>
-    <div v-if="loading" class="sb-echoes-state">Loading suggestions...</div>
-    <div v-else-if="error" class="sb-echoes-state">{{ error }}</div>
-    <div v-else-if="!visibleItems.length" class="sb-echoes-state">
-      Echoes will suggest nearby notes when a current note has strong local context.
-    </div>
-    <article v-for="item in visibleItems" v-else :key="item.path" class="sb-echoes-item">
-      <button type="button" class="sb-echoes-main" @click="emit('open', item.path)">
-        <strong>{{ item.title }}</strong>
-        <span>{{ toRelativePath(item.path) }}</span>
+      <button
+        type="button"
+        class="sb-echoes-toggle"
+        :aria-expanded="!collapsed"
+        @click="collapsed = !collapsed"
+      >
+        <span class="sb-echoes-toggle-copy">
+          <h3>Suggested by Echoes</h3>
+          <span class="sb-echoes-summary">{{ summaryLabel }}</span>
+        </span>
+        <span class="sb-echoes-chevron" :class="{ collapsed }" aria-hidden="true">⌃</span>
       </button>
-      <div class="sb-echoes-meta">
-        <span class="sb-echoes-pill">{{ item.reasonLabel }}</span>
-        <button
-          v-if="!contextPathSet.has(item.path)"
-          type="button"
-          class="sb-echoes-action"
-          @click="emit('add', item.path)"
-        >
-          Add
-        </button>
-        <span v-else class="sb-echoes-in-context">In context</span>
+    </header>
+    <div v-if="!collapsed" class="sb-echoes-body">
+      <div v-if="loading" class="sb-echoes-state">Loading suggestions...</div>
+      <div v-else-if="error" class="sb-echoes-state">{{ error }}</div>
+      <div v-else-if="!visibleItems.length" class="sb-echoes-state">
+        Echoes will suggest nearby notes when a current note has strong local context.
       </div>
-    </article>
+      <article v-for="item in visibleItems" v-else :key="item.path" class="sb-echoes-item">
+        <div class="sb-echoes-main">
+          <strong>{{ item.title }}</strong>
+          <span>{{ toRelativePath(item.path) }}</span>
+        </div>
+        <div class="sb-echoes-meta">
+          <span class="sb-echoes-pill">{{ item.reasonLabel }}</span>
+          <button
+            type="button"
+            class="sb-echoes-open"
+            @click="emit('open', item.path)"
+          >
+            Open
+          </button>
+          <button
+            v-if="!contextPathSet.has(item.path)"
+            type="button"
+            class="sb-echoes-action"
+            @click="emit('add', item.path)"
+          >
+            Add
+          </button>
+          <span v-else class="sb-echoes-in-context">In context</span>
+        </div>
+      </article>
+    </div>
   </section>
 </template>
 
@@ -57,14 +95,58 @@ const visibleItems = computed(() => props.items.slice(0, 5))
   border-bottom: 1px solid rgba(148, 163, 184, 0.2);
   padding: 0 0 12px;
   margin: 0 0 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sb-echoes-toggle {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+}
+
+.sb-echoes-toggle-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
 }
 
 .sb-echoes-head h3 {
-  margin: 0 0 8px;
+  margin: 0;
   font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #64748b;
+}
+
+.sb-echoes-summary {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.sb-echoes-chevron {
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1;
+  transition: transform 140ms ease;
+}
+
+.sb-echoes-chevron.collapsed {
+  transform: rotate(180deg);
+}
+
+.sb-echoes-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .sb-echoes-state {
@@ -82,15 +164,10 @@ const visibleItems = computed(() => props.items.slice(0, 5))
 }
 
 .sb-echoes-main {
-  border: 0;
-  background: transparent;
-  text-align: left;
-  padding: 0;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  color: inherit;
 }
 
 .sb-echoes-main strong,
@@ -114,6 +191,7 @@ const visibleItems = computed(() => props.items.slice(0, 5))
 }
 
 .sb-echoes-pill,
+.sb-echoes-open,
 .sb-echoes-in-context,
 .sb-echoes-action {
   border-radius: 999px;
@@ -126,6 +204,12 @@ const visibleItems = computed(() => props.items.slice(0, 5))
 .sb-echoes-pill {
   background: #dbeafe;
   color: #1d4ed8;
+}
+
+.sb-echoes-open {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #0f172a;
 }
 
 .sb-echoes-in-context {
