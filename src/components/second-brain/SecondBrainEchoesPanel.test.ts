@@ -22,7 +22,7 @@ describe('SecondBrainEchoesPanel', () => {
           }],
           loading: false,
           error: '',
-          contextPathSet: new Set<string>(),
+          isInContext: () => false,
           toRelativePath: (path: string) => path.replace('/vault/', ''),
           onOpen,
           onAdd
@@ -56,7 +56,7 @@ describe('SecondBrainEchoesPanel', () => {
           }],
           loading: false,
           error: '',
-          contextPathSet: new Set<string>(),
+          isInContext: () => false,
           toRelativePath: (path: string) => path.replace('/vault/', '')
         })
       }
@@ -84,7 +84,7 @@ describe('SecondBrainEchoesPanel', () => {
           }],
           loading: false,
           error: '',
-          contextPathSet: new Set<string>(['/vault/notes/a.md']),
+          isInContext: (path: string) => path === '/vault/notes/a.md',
           toRelativePath: (path: string) => path
         })
       }

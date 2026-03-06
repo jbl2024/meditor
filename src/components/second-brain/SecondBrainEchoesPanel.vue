@@ -9,7 +9,7 @@ const props = defineProps<{
   items: EchoesItem[]
   loading: boolean
   error: string
-  contextPathSet: Set<string>
+  isInContext: (path: string) => boolean
   toRelativePath: (path: string) => string
 }>()
 
@@ -56,7 +56,7 @@ const summaryLabel = computed(() => {
             Open
           </button>
           <button
-            v-if="!contextPathSet.has(item.path)"
+            v-if="!isInContext(item.path)"
             type="button"
             class="sb-echoes-action"
             @click="emit('add', item.path)"

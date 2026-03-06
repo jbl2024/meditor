@@ -608,4 +608,109 @@ describe('SecondBrainView', () => {
 
     mounted.app.unmount()
   })
+
+  it('deduplicates Echoes suggestions by normalized path and keeps context detection', async () => {
+    api.loadDeliberationSession.mockResolvedValueOnce({
+      session_id: 's1',
+      title: 'Session One',
+      provider: 'openai',
+      model: 'gpt-4.1',
+      created_at_ms: 1,
+      updated_at_ms: 2,
+      target_note_path: '',
+      context_items: [
+        { path: 'seed.md', token_estimate: 12 },
+        { path: 'notes/pi.md', token_estimate: 10 }
+      ],
+      messages: [],
+      draft_content: ''
+    })
+    apiCore.computeEchoesPack.mockImplementation(async (anchorPath: string) => ({
+      anchorPath,
+      generatedAtMs: 1,
+      items: anchorPath === '/vault/seed.md'
+        ? [
+          {
+            path: '/vault/notes/pi.md',
+            title: 'Reunions PI',
+            reasonLabel: 'Backlink',
+            reasonLabels: ['Backlink'],
+            score: 0.9,
+            signalSources: ['backlink']
+          },
+          {
+            path: 'notes/pi.md',
+            title: 'Reunions PI',
+            reasonLabel: 'Backlink',
+            reasonLabels: ['Backlink'],
+            score: 0.8,
+            signalSources: ['backlink']
+          }
+        ]
+        : []
+    }))
+
+    const mounted = mountView()
+    for (let i = 0; i < 8 && mounted.root.querySelectorAll('.sb-chip').length < 2; i += 1) {
+      await flushUi()
+    }
+
+    mounted.root.querySelector<HTMLButtonElement>('.sb-chip-main')?.click()
+    for (let index = 0; index < 8 && !mounted.root.textContent?.includes('Reunions PI'); index += 1) {
+      await flushUi()
+    }
+
+    expect(mounted.root.querySelectorAll('.sb-echoes-item')).toHaveLength(1)
+    expect(mounted.root.textContent).toContain('In context')
+    expect(mounted.root.querySelector('.sb-echoes-action')).toBeNull()
+
+    mounted.app.unmount()
+  })
+
+  it('treats case-variant suggestion paths as the same in-context document', async () => {
+    api.loadDeliberationSession.mockResolvedValueOnce({
+      session_id: 's1',
+      title: 'Session One',
+      provider: 'openai',
+      model: 'gpt-4.1',
+      created_at_ms: 1,
+      updated_at_ms: 2,
+      target_note_path: '',
+      context_items: [
+        { path: 'seed.md', token_estimate: 12 },
+        { path: 'Exécution/Réunions PI.md', token_estimate: 10 }
+      ],
+      messages: [],
+      draft_content: ''
+    })
+    apiCore.computeEchoesPack.mockImplementation(async (anchorPath: string) => ({
+      anchorPath,
+      generatedAtMs: 1,
+      items: anchorPath === '/vault/seed.md'
+        ? [{
+          path: '/vault/exe\u0301cution/re\u0301unions pi.md',
+          title: 'Reunions PI',
+          reasonLabel: 'Backlink',
+          reasonLabels: ['Backlink'],
+          score: 0.9,
+          signalSources: ['backlink']
+        }]
+        : []
+    }))
+
+    const mounted = mountView()
+    for (let i = 0; i < 8 && mounted.root.querySelectorAll('.sb-chip').length < 2; i += 1) {
+      await flushUi()
+    }
+
+    mounted.root.querySelector<HTMLButtonElement>('.sb-chip-main')?.click()
+    for (let index = 0; index < 8 && !mounted.root.textContent?.includes('Reunions PI'); index += 1) {
+      await flushUi()
+    }
+
+    expect(mounted.root.textContent).toContain('In context')
+    expect(mounted.root.querySelector('.sb-echoes-action')).toBeNull()
+
+    mounted.app.unmount()
+  })
 })

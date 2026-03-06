@@ -14,13 +14,14 @@ import {
 } from '../../lib/secondBrainApi'
 import { sanitizeHtmlForPreview } from '../../lib/htmlSanitizer'
 import { inlineTextToHtml } from '../../lib/markdownBlocks'
-import { normalizeContextPathsForUpdate } from '../../lib/secondBrainContextPaths'
+import { normalizeContextPathsForUpdate, toAbsoluteWorkspacePath } from '../../lib/secondBrainContextPaths'
 import type { SecondBrainMessage, SecondBrainSessionSummary } from '../../lib/api'
 import { useEchoesPack } from '../../composables/useEchoesPack'
 import { useSecondBrainAtMentions, type SecondBrainAtMentionItem } from '../../composables/useSecondBrainAtMentions'
 import SecondBrainAtMentionsMenu from './SecondBrainAtMentionsMenu.vue'
 import SecondBrainEchoesPanel from './SecondBrainEchoesPanel.vue'
 import SecondBrainSessionDropdown from './SecondBrainSessionDropdown.vue'
+import type { EchoesItem } from '../../lib/echoes'
 
 const props = defineProps<{
   workspacePath: string
@@ -87,6 +88,22 @@ function toRelativePath(path: string): string {
   return value
 }
 
+function canonicalWorkspaceDocumentKey(path: string): string {
+  const absolute = toAbsoluteWorkspacePath(props.workspacePath, path)
+  const relative = toRelativePath(absolute)
+  return relative
+    .normalize('NFC')
+    .replace(/\\/g, '/')
+    .replace(/^\.?\//, '')
+    .replace(/\/+/g, '/')
+    .trim()
+    .toLocaleLowerCase()
+}
+
+function isPathInContext(path: string): boolean {
+  return contextPathSet.value.has(canonicalWorkspaceDocumentKey(path))
+}
+
 const contextCards = computed(() =>
   contextPaths.value.map((path) => {
     const relativePath = toRelativePath(path)
@@ -98,14 +115,35 @@ const contextCards = computed(() =>
     }
   })
 )
-const contextPathSet = computed(() => new Set(contextPaths.value))
+const contextPathSet = computed(() => new Set(
+  contextPaths.value
+    .map((path) => canonicalWorkspaceDocumentKey(path))
+    .filter(Boolean)
+))
 const echoesAnchorPath = computed(() => {
   const selectedPath = selectedEchoesContextPath.value.trim()
-  if (selectedPath && contextPathSet.value.has(selectedPath)) return selectedPath
+  if (selectedPath && contextPathSet.value.has(canonicalWorkspaceDocumentKey(selectedPath))) return selectedPath
   return ''
 })
 const showEchoesPanel = computed(() => echoesAnchorPath.value.trim().length > 0)
 const echoes = useEchoesPack(echoesAnchorPath, { limit: 5 })
+const echoesItems = computed<EchoesItem[]>(() => {
+  const deduped: EchoesItem[] = []
+  const seen = new Set<string>()
+
+  for (const item of echoes.items.value) {
+    const normalizedPath = toAbsoluteWorkspacePath(props.workspacePath, item.path)
+    const identityKey = canonicalWorkspaceDocumentKey(item.path)
+    if (!normalizedPath || !identityKey || seen.has(identityKey)) continue
+    seen.add(identityKey)
+    deduped.push({
+      ...item,
+      path: normalizedPath
+    })
+  }
+
+  return deduped
+})
 
 function mergeContextPaths(nextPaths: string[]): string[] {
   const merged = new Set(contextPaths.value)
@@ -877,10 +915,10 @@ watch(contextPaths, (paths) => {
           <transition name="sb-echoes-panel">
             <SecondBrainEchoesPanel
               v-if="showEchoesPanel"
-              :items="echoes.items.value"
+              :items="echoesItems"
               :loading="echoes.loading.value"
               :error="echoes.error.value"
-              :context-path-set="contextPathSet"
+              :is-in-context="isPathInContext"
               :to-relative-path="toRelativePath"
               @open="openContextNote"
               @add="void addEchoesSuggestion($event)"
