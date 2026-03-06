@@ -86,27 +86,29 @@ function run(action: () => void) {
   right: 0;
   top: calc(100% + 6px);
   width: 220px;
-  border: 1px solid var(--ui-border);
-  border-radius: 8px;
-  background: var(--surface-bg);
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.18);
-  padding: 0.35rem;
   z-index: 40;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  padding: 6px;
 }
 
 .multi-pane-item {
   width: 100%;
   border: 0;
-  border-radius: 6px;
+  border-radius: 8px;
   text-align: left;
-  padding: 0.4rem 0.5rem;
+  padding: 7px 10px;
   background: transparent;
-  color: var(--text-main);
+  color: #5b6472;
+  font-size: 12px;
   cursor: pointer;
 }
 
 .multi-pane-item:hover:not(:disabled) {
-  background: var(--panel-soft-bg);
+  background: #f1f2f6;
+  color: #1f2937;
 }
 
 .multi-pane-item:disabled {
@@ -116,7 +118,26 @@ function run(action: () => void) {
 
 .multi-pane-divider {
   height: 1px;
-  margin: 0.3rem 0;
-  background: var(--ui-border);
+  margin: 4px 0;
+  background: #e5e7eb;
+}
+
+:global(.ide-root.dark) .multi-pane-dropdown {
+  border-color: #3e4451;
+  background: #21252b;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.3);
+}
+
+:global(.ide-root.dark) .multi-pane-item {
+  color: #c8d0dc;
+}
+
+:global(.ide-root.dark) .multi-pane-item:hover:not(:disabled) {
+  background: #2c313a;
+  color: #d7dce5;
+}
+
+:global(.ide-root.dark) .multi-pane-divider {
+  background: #3e4451;
 }
 </style>
