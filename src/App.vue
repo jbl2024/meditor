@@ -71,6 +71,16 @@ import {
   parseIsoDateInput,
   sanitizeRelativePath
 } from './lib/appShellPaths'
+import {
+  extractHeadingsFromMarkdown,
+  hasForbiddenEntryNameChars,
+  isReservedEntryName,
+  markdownExtensionFromPath,
+  noteTitleFromPath,
+  parentPrefixForModal,
+  resolveExistingWikilinkPath,
+  sanitizeTitleForFileName
+} from './lib/appShellDocuments'
 import { formatDurationMs } from './lib/indexActivity'
 import { useAppIndexingController } from './composables/useAppIndexingController'
 import {
@@ -649,11 +659,6 @@ const forwardHistoryItems = computed(() =>
     label: historyTargetLabel(target.entry)
   }))
 )
-
-const WINDOWS_RESERVED_NAME_RE = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i
-const FORBIDDEN_FILE_CHARS_RE = /[<>:"/\\|?*\u0000-\u001f]/g
-const FORBIDDEN_FILE_NAME_CHARS_RE = /[<>:"\\|?*\u0000-\u001f]/
-const MAX_FILE_STEM_LENGTH = 120
 
 function loadSavedSidebarMode() {
   const saved = window.sessionStorage.getItem(VIEW_MODE_STORAGE_KEY)
@@ -1283,31 +1288,6 @@ async function openFile(path: string) {
   const virtual = virtualDocs.value[path]
   if (virtual) return virtual.content
   return await readTextFile(path)
-}
-
-function noteTitleFromPath(path: string): string {
-  const filename = fileName(path).replace(/\.(md|markdown)$/i, '')
-  return filename || 'Untitled'
-}
-
-function markdownExtensionFromPath(path: string): string {
-  const name = fileName(path)
-  const match = name.match(/\.(md|markdown)$/i)
-  return match ? match[0] : '.md'
-}
-
-function sanitizeTitleForFileName(raw: string): string {
-  const cleaned = raw
-    .replace(FORBIDDEN_FILE_CHARS_RE, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/[. ]+$/g, '')
-
-  const base = cleaned.slice(0, MAX_FILE_STEM_LENGTH).trim()
-  if (!base) return 'Untitled'
-  if (base === '.' || base === '..') return 'Untitled'
-  if (WINDOWS_RESERVED_NAME_RE.test(base)) return `${base}-note`
-  return base
 }
 
 function applyPathRenameLocally(payload: { from: string; to: string }) {
@@ -1977,55 +1957,6 @@ async function onCosmosOpenSelectedNode() {
   await onCosmosOpenNode(selected.path)
 }
 
-function extractHeadingsFromMarkdown(markdown: string): string[] {
-  const lines = markdown.replace(/\r\n?/g, '\n').split('\n')
-  const out: string[] = []
-  const seen = new Set<string>()
-
-  for (const line of lines) {
-    const match = line.match(/^#{1,6}\s+(.+)$/)
-    if (!match) continue
-    const raw = match[1].trim()
-    if (!raw) continue
-    const text = raw
-      .replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, target: string, alias?: string) => (alias ?? target))
-      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-      .replace(/`([^`]+)`/g, '$1')
-      .replace(/\*\*([^*]+)\*\*/g, '$1')
-      .replace(/__([^_]+)__/g, '$1')
-      .replace(/[*_~]/g, '')
-      .trim()
-    if (!text) continue
-    const key = text.toLowerCase()
-    if (seen.has(key)) continue
-    seen.add(key)
-    out.push(text)
-  }
-
-  return out
-}
-
-function resolveExistingWikilinkPath(normalizedTarget: string, markdownFiles: string[]): string | null {
-  const withoutExtension = normalizedTarget.replace(/\.(md|markdown)$/i, '').toLowerCase()
-  const exact = markdownFiles.find((path) => path.replace(/\.(md|markdown)$/i, '').toLowerCase() === withoutExtension)
-  if (exact) return exact
-
-  const basenameMatches = markdownFiles.filter((path) => {
-    const normalized = path.replace(/\.(md|markdown)$/i, '').toLowerCase()
-    const stem = normalized.split('/').pop() ?? normalized
-    return stem === withoutExtension
-  })
-  if (basenameMatches.length === 1) return basenameMatches[0]
-
-  const suffixMatches = markdownFiles.filter((path) => {
-    const normalized = path.replace(/\.(md|markdown)$/i, '').toLowerCase()
-    return normalized.endsWith(`/${withoutExtension}`)
-  })
-  if (suffixMatches.length === 1) return suffixMatches[0]
-
-  return null
-}
-
 async function loadWikilinkHeadings(target: string): Promise<string[]> {
   const root = filesystem.workingFolderPath.value
   if (!root) return []
@@ -2172,17 +2103,6 @@ async function openNewFolderModal(prefill = '') {
   document.querySelector<HTMLInputElement>('[data-new-folder-input=\"true\"]')?.focus()
 }
 
-function parentPrefixForModal(parentPath: string): string {
-  const root = filesystem.workingFolderPath.value
-  if (!root) return ''
-  const normalizedRoot = root.replace(/\\/g, '/').replace(/\/+$/, '')
-  const normalizedParent = parentPath.replace(/\\/g, '/').replace(/\/+$/, '')
-  if (!normalizedParent || normalizedParent === normalizedRoot) return ''
-  if (!normalizedParent.startsWith(`${normalizedRoot}/`)) return ''
-  const relative = normalizedParent.slice(normalizedRoot.length + 1)
-  return relative ? `${relative}/` : ''
-}
-
 async function suggestedNotePathPrefix(): Promise<string> {
   const root = filesystem.workingFolderPath.value
   if (!root) return ''
@@ -2198,7 +2118,7 @@ async function suggestedNotePathPrefix(): Promise<string> {
 
   const activePath = activeFilePath.value
   if (!activePath) return ''
-  return parentPrefixForModal(activePath.replace(/\/[^/]+$/, ''))
+  return parentPrefixForModal(activePath.replace(/\/[^/]+$/, ''), root)
 }
 
 async function ensureParentDirectoriesForRelativePath(relativePath: string): Promise<string> {
@@ -2224,7 +2144,7 @@ async function ensureParentDirectoriesForRelativePath(relativePath: string): Pro
 }
 
 function onExplorerRequestCreate(payload: { parentPath: string; entryKind: 'file' | 'folder' }) {
-  const prefill = parentPrefixForModal(payload.parentPath)
+  const prefill = parentPrefixForModal(payload.parentPath, filesystem.workingFolderPath.value)
   if (payload.entryKind === 'folder') {
     void openNewFolderModal(prefill)
     return
@@ -2250,7 +2170,7 @@ async function submitNewFileFromModal() {
   }
 
   const parts = normalized.split('/').filter(Boolean)
-  if (parts.some((part) => FORBIDDEN_FILE_NAME_CHARS_RE.test(part))) {
+  if (parts.some((part) => hasForbiddenEntryNameChars(part))) {
     newFileModalError.value = 'File names cannot include < > : " \\ | ? *'
     return false
   }
@@ -2261,7 +2181,7 @@ async function submitNewFileFromModal() {
     newFileModalError.value = 'File name is required.'
     return false
   }
-  if (WINDOWS_RESERVED_NAME_RE.test(stem)) {
+  if (isReservedEntryName(stem)) {
     newFileModalError.value = 'That file name is reserved by the OS.'
     return false
   }
@@ -2304,7 +2224,7 @@ async function submitNewFolderFromModal() {
   }
 
   const parts = normalized.split('/').filter(Boolean)
-  if (parts.some((part) => FORBIDDEN_FILE_NAME_CHARS_RE.test(part))) {
+  if (parts.some((part) => hasForbiddenEntryNameChars(part))) {
     newFolderModalError.value = 'Folder names cannot include < > : " \\ | ? *'
     return false
   }
@@ -2314,7 +2234,7 @@ async function submitNewFolderFromModal() {
     newFolderModalError.value = 'Folder name is required.'
     return false
   }
-  if (WINDOWS_RESERVED_NAME_RE.test(name)) {
+  if (isReservedEntryName(name)) {
     newFolderModalError.value = 'That folder name is reserved by the OS.'
     return false
   }
