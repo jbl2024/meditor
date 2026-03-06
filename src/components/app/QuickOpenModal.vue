@@ -83,3 +83,39 @@ const emit = defineEmits<{
     </div>
   </div>
 </template>
+
+<style scoped>
+.modal-list {
+  margin-top: 8px;
+  max-height: 360px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.modal-item {
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  border-radius: 4px;
+  padding: 6px;
+  text-align: left;
+  font-size: 12px;
+}
+
+.modal-item.active {
+  border-color: #93c5fd;
+  background: #dbeafe;
+}
+
+:global(.ide-root.dark) .modal-item {
+  border-color: #3e4451;
+  background: #21252b;
+  color: #abb2bf;
+}
+
+:global(.ide-root.dark) .modal-item.active {
+  border-color: #61afef;
+  background: #2c313a;
+}
+</style>

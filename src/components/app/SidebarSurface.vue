@@ -142,3 +142,160 @@ defineExpose({
     </div>
   </aside>
 </template>
+
+<style scoped>
+.activity-bar {
+  width: 44px;
+  border-right: 1px solid #e5e7eb;
+  background: #f2f4f8;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 8px;
+  gap: 6px;
+}
+
+:global(.ide-root.macos-overlay) .activity-bar {
+  padding-top: 38px;
+}
+
+:global(.ide-root.dark) .activity-bar {
+  border-right-color: #3e4451;
+  background: #21252b;
+}
+
+.activity-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #5b6472;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.activity-btn:hover {
+  background: #f1f2f6;
+  color: #1f2937;
+}
+
+.activity-btn.active {
+  color: #5e6ad2;
+  border-color: #e5e7eb;
+  box-shadow: inset 2px 0 0 #5e6ad2;
+  background: #ffffff;
+}
+
+.activity-btn-icon {
+  width: 14px;
+  height: 14px;
+  stroke-width: 1.6;
+}
+
+:global(.ide-root.dark) .activity-btn {
+  color: #8b93a3;
+}
+
+:global(.ide-root.dark) .activity-btn.active {
+  color: #d7dce5;
+  border-color: #3e4451;
+  background: #282c34;
+}
+
+:global(.ide-root.dark) .activity-btn:hover {
+  background: #2c313a;
+  color: #d7dce5;
+}
+
+.left-sidebar {
+  min-width: 0;
+  min-height: 0;
+  background: #f2f4f8;
+  border-right: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+}
+
+:global(.ide-root.macos-overlay) .left-sidebar {
+  box-sizing: border-box;
+  padding-top: 28px;
+}
+
+:global(.ide-root.dark) .left-sidebar {
+  background: #21252b;
+  border-color: #3e4451;
+}
+
+.panel-header {
+  height: 34px;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0 8px;
+}
+
+:global(.ide-root.dark) .panel-header {
+  border-bottom-color: #3e4451;
+}
+
+.panel-title {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #4b5563;
+}
+
+:global(.ide-root.dark) .panel-title {
+  color: #8b93a3;
+}
+
+.panel-body {
+  flex: 1;
+  min-height: 0;
+  padding: 8px;
+}
+
+.panel-body.panel-body-explorer {
+  padding: 6px 6px 8px;
+}
+
+.panel-fill {
+  height: 100%;
+  min-height: 0;
+}
+
+.empty-explorer {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.inline-link-btn {
+  border: 0;
+  background: transparent;
+  color: #5e6ad2;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.inline-link-btn:hover {
+  color: #2d313a;
+}
+
+:global(.ide-root.dark) .inline-link-btn {
+  color: #61afef;
+}
+
+:global(.ide-root.dark) .inline-link-btn:hover {
+  color: #7ec5ff;
+}
+</style>

@@ -142,3 +142,131 @@ defineExpose({
     </div>
   </div>
 </template>
+
+<style scoped>
+.overflow-wrap {
+  position: relative;
+}
+
+.overflow-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  min-width: 220px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+:global(.ide-root.dark) .overflow-menu {
+  border-color: #3e4451;
+  background: #21252b;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.3);
+}
+
+.overflow-item {
+  border: 0;
+  background: transparent;
+  color: #5b6472;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 7px 10px;
+}
+
+.overflow-item:hover {
+  background: #f1f2f6;
+  color: #1f2937;
+}
+
+.overflow-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.overflow-item.active {
+  background: rgb(94 106 210 / 0.12);
+  color: #5e6ad2;
+  font-weight: 500;
+}
+
+:global(.ide-root.dark) .overflow-item {
+  color: #c8d0dc;
+}
+
+:global(.ide-root.dark) .overflow-item:hover {
+  background: #2c313a;
+  color: #d7dce5;
+}
+
+:global(.ide-root.dark) .overflow-item:disabled {
+  opacity: 0.45;
+}
+
+:global(.ide-root.dark) .overflow-item.active {
+  background: #3e4451;
+  color: #e5e7eb;
+}
+
+.overflow-item-icon {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  flex: 0 0 auto;
+}
+
+.overflow-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+}
+
+.overflow-zoom-state {
+  padding: 2px 10px 4px;
+  font-size: 11px;
+  color: #5b6472;
+}
+
+:global(.ide-root.dark) .overflow-zoom-state {
+  color: #5c6370;
+}
+
+.overflow-divider {
+  height: 1px;
+  background: #e5e7eb;
+  margin: 4px 0;
+}
+
+:global(.ide-root.dark) .overflow-divider {
+  background: #3e4451;
+}
+
+.overflow-label {
+  padding: 2px 10px 4px;
+  font-size: 11px;
+  color: #5b6472;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+:global(.ide-root.dark) .overflow-label {
+  color: #5c6370;
+}
+</style>

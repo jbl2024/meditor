@@ -245,3 +245,115 @@ defineExpose({
     </div>
   </header>
 </template>
+
+<style scoped>
+.topbar {
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f2f4f8;
+}
+
+:global(.ide-root.dark) .topbar {
+  border-bottom-color: #3e4451;
+  background: #21252b;
+}
+
+.global-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  position: relative;
+  margin: 0 auto;
+}
+
+.nav-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 2px;
+  padding-right: 6px;
+  border-right: 1px solid #e5e7eb;
+}
+
+:global(.ide-root.dark) .nav-actions {
+  border-right-color: #3e4451;
+}
+
+.history-nav-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+}
+
+.history-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 90;
+  min-width: 220px;
+  max-width: 320px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+}
+
+:global(.ide-root.dark) .history-menu {
+  border-color: #3e4451;
+  background: #21252b;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.3);
+}
+
+.history-menu-item {
+  border: 0;
+  background: transparent;
+  color: #5b6472;
+  border-radius: 8px;
+  text-align: left;
+  padding: 7px 8px;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.history-menu-item:hover {
+  background: #f1f2f6;
+  color: #2d313a;
+}
+
+:global(.ide-root.dark) .history-menu-item {
+  color: #c8d0dc;
+}
+
+:global(.ide-root.dark) .history-menu-item:hover {
+  background: #2c313a;
+}
+
+.history-menu-empty {
+  padding: 7px 8px;
+  font-size: 12px;
+  color: #5b6472;
+}
+
+:global(.ide-root.dark) .history-menu-empty {
+  color: #8b93a3;
+}
+
+@media (max-width: 980px) {
+  .global-actions {
+    gap: 4px;
+    padding-right: 4px;
+  }
+}
+</style>
