@@ -295,19 +295,11 @@ defineExpose({
 <style scoped>
 .ui-filterable-dropdown {
   position: relative;
-  --ui-dropdown-bg: #ffffff;
-  --ui-dropdown-border: #d1d5db;
-  --ui-dropdown-text: #0f172a;
-  --ui-dropdown-muted: #6b7280;
-  --ui-dropdown-hover: rgba(37, 99, 235, 0.08);
-}
-
-:global(.dark) .ui-filterable-dropdown {
-  --ui-dropdown-bg: rgb(15 23 42);
-  --ui-dropdown-border: rgb(71 85 105);
-  --ui-dropdown-text: rgb(226 232 240);
-  --ui-dropdown-muted: rgb(148 163 184);
-  --ui-dropdown-hover: rgba(59, 130, 246, 0.22);
+  --ui-dropdown-bg: var(--surface-bg);
+  --ui-dropdown-border: var(--border-control);
+  --ui-dropdown-text: var(--text-main);
+  --ui-dropdown-muted: var(--text-dim);
+  --ui-dropdown-hover: var(--accent-soft);
 }
 
 .ui-filterable-dropdown-menu {
@@ -320,7 +312,7 @@ defineExpose({
   background: var(--ui-dropdown-bg);
   border: 1px solid var(--ui-dropdown-border);
   border-radius: 10px;
-  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.2);
+  box-shadow: var(--shadow-dropdown);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -344,8 +336,8 @@ defineExpose({
 
 .ui-filterable-dropdown-filter-input:focus {
   outline: none;
-  border-color: #2563eb;
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.16);
+  border-color: var(--input-focus-border);
+  box-shadow: 0 0 0 2px var(--input-focus-ring);
 }
 
 .ui-filterable-dropdown-list {

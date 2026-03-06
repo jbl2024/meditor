@@ -84,14 +84,14 @@ function onCopyAs(format: 'markdown' | 'html' | 'plain') {
 <template>
   <div
     v-if="open"
-    class="absolute z-30 flex -translate-x-1/2 -translate-y-full items-center gap-1 rounded-md border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+    class="inline-format-toolbar absolute z-30 flex -translate-x-1/2 -translate-y-full items-center gap-1 rounded-md border p-1"
     :style="{ left: `${left}px`, top: `${top}px` }"
   >
     <button
       type="button"
-      class="inline-flex items-center justify-center rounded-md px-2 py-1 text-xs transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 active:translate-y-px active:scale-[0.98] active:bg-slate-200 dark:hover:bg-slate-800 dark:hover:text-slate-100 dark:active:bg-slate-700"
+      class="inline-format-toolbar-btn inline-flex items-center justify-center rounded-md px-2 py-1 text-xs transition-all duration-150 active:translate-y-px active:scale-[0.98]"
       data-action="bold"
-      :class="activeMarks.bold ? 'bg-slate-200 dark:bg-slate-700' : ''"
+      :class="activeMarks.bold ? 'inline-format-toolbar-btn--active' : ''"
       @mousedown.prevent
       @click="emit('toggle-mark', 'bold')"
     >
@@ -99,9 +99,9 @@ function onCopyAs(format: 'markdown' | 'html' | 'plain') {
     </button>
     <button
       type="button"
-      class="inline-flex items-center justify-center rounded-md px-2 py-1 text-xs italic transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 active:translate-y-px active:scale-[0.98] active:bg-slate-200 dark:hover:bg-slate-800 dark:hover:text-slate-100 dark:active:bg-slate-700"
+      class="inline-format-toolbar-btn inline-flex items-center justify-center rounded-md px-2 py-1 text-xs italic transition-all duration-150 active:translate-y-px active:scale-[0.98]"
       data-action="italic"
-      :class="activeMarks.italic ? 'bg-slate-200 dark:bg-slate-700' : ''"
+      :class="activeMarks.italic ? 'inline-format-toolbar-btn--active' : ''"
       @mousedown.prevent
       @click="emit('toggle-mark', 'italic')"
     >
@@ -109,9 +109,9 @@ function onCopyAs(format: 'markdown' | 'html' | 'plain') {
     </button>
     <button
       type="button"
-      class="inline-flex items-center justify-center rounded-md px-2 py-1 text-xs line-through transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 active:translate-y-px active:scale-[0.98] active:bg-slate-200 dark:hover:bg-slate-800 dark:hover:text-slate-100 dark:active:bg-slate-700"
+      class="inline-format-toolbar-btn inline-flex items-center justify-center rounded-md px-2 py-1 text-xs line-through transition-all duration-150 active:translate-y-px active:scale-[0.98]"
       data-action="strike"
-      :class="activeMarks.strike ? 'bg-slate-200 dark:bg-slate-700' : ''"
+      :class="activeMarks.strike ? 'inline-format-toolbar-btn--active' : ''"
       @mousedown.prevent
       @click="emit('toggle-mark', 'strike')"
     >
@@ -119,9 +119,9 @@ function onCopyAs(format: 'markdown' | 'html' | 'plain') {
     </button>
     <button
       type="button"
-      class="inline-flex items-center justify-center rounded-md px-2 py-1 text-xs underline transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 active:translate-y-px active:scale-[0.98] active:bg-slate-200 dark:hover:bg-slate-800 dark:hover:text-slate-100 dark:active:bg-slate-700"
+      class="inline-format-toolbar-btn inline-flex items-center justify-center rounded-md px-2 py-1 text-xs underline transition-all duration-150 active:translate-y-px active:scale-[0.98]"
       data-action="underline"
-      :class="activeMarks.underline ? 'bg-slate-200 dark:bg-slate-700' : ''"
+      :class="activeMarks.underline ? 'inline-format-toolbar-btn--active' : ''"
       @mousedown.prevent
       @click="emit('toggle-mark', 'underline')"
     >
@@ -129,11 +129,11 @@ function onCopyAs(format: 'markdown' | 'html' | 'plain') {
     </button>
     <button
       type="button"
-      class="inline-flex items-center justify-center rounded-md px-2 py-1 text-xs transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 active:translate-y-px active:scale-[0.98] active:bg-slate-200 dark:hover:bg-slate-800 dark:hover:text-slate-100 dark:active:bg-slate-700"
+      class="inline-format-toolbar-btn inline-flex items-center justify-center rounded-md px-2 py-1 text-xs transition-all duration-150 active:translate-y-px active:scale-[0.98]"
       data-action="code"
       aria-label="Code"
       title="Code"
-      :class="activeMarks.code ? 'bg-slate-200 dark:bg-slate-700' : ''"
+      :class="activeMarks.code ? 'inline-format-toolbar-btn--active' : ''"
       @mousedown.prevent
       @click="emit('toggle-mark', 'code')"
     >
@@ -141,7 +141,7 @@ function onCopyAs(format: 'markdown' | 'html' | 'plain') {
     </button>
     <button
       type="button"
-      class="inline-flex items-center justify-center rounded-md px-2 py-1 text-xs font-mono transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 active:translate-y-px active:scale-[0.98] active:bg-slate-200 dark:hover:bg-slate-800 dark:hover:text-slate-100 dark:active:bg-slate-700"
+      class="inline-format-toolbar-btn inline-flex items-center justify-center rounded-md px-2 py-1 text-xs font-mono transition-all duration-150 active:translate-y-px active:scale-[0.98]"
       data-action="wikilink"
       aria-label="Wikilink"
       title="Wikilink"
@@ -152,11 +152,11 @@ function onCopyAs(format: 'markdown' | 'html' | 'plain') {
     </button>
     <button
       type="button"
-      class="inline-flex items-center justify-center rounded-md px-2 py-1 text-xs transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 active:translate-y-px active:scale-[0.98] active:bg-slate-200 dark:hover:bg-slate-800 dark:hover:text-slate-100 dark:active:bg-slate-700"
+      class="inline-format-toolbar-btn inline-flex items-center justify-center rounded-md px-2 py-1 text-xs transition-all duration-150 active:translate-y-px active:scale-[0.98]"
       data-action="link"
       aria-label="Link"
       title="Link"
-      :class="activeMarks.link ? 'bg-slate-200 dark:bg-slate-700' : ''"
+      :class="activeMarks.link ? 'inline-format-toolbar-btn--active' : ''"
       @mousedown.prevent
       @click="emit('open-link')"
     >
@@ -165,7 +165,7 @@ function onCopyAs(format: 'markdown' | 'html' | 'plain') {
     <div class="relative">
       <button
         type="button"
-        class="inline-flex items-center justify-center rounded-md px-2 py-1 text-xs font-semibold transition-all duration-150 hover:bg-slate-100 hover:text-slate-900 active:translate-y-px active:scale-[0.98] active:bg-slate-200 dark:hover:bg-slate-800 dark:hover:text-slate-100 dark:active:bg-slate-700"
+        class="inline-format-toolbar-btn inline-flex items-center justify-center rounded-md px-2 py-1 text-xs font-semibold transition-all duration-150 active:translate-y-px active:scale-[0.98]"
         data-action="copy-menu-toggle"
         aria-label="Copy as"
         title="Copy as"
@@ -177,12 +177,12 @@ function onCopyAs(format: 'markdown' | 'html' | 'plain') {
 
       <div
         v-if="copyMenuOpen"
-        class="absolute right-0 top-full z-40 mt-2 w-40 rounded-md border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+        class="inline-format-toolbar-popover absolute right-0 top-full z-40 mt-2 w-40 rounded-md border p-1"
         @mousedown.stop
       >
         <button
           type="button"
-          class="block w-full rounded px-2 py-1 text-left text-xs hover:bg-slate-100 dark:hover:bg-slate-800"
+          class="inline-format-toolbar-menu-item block w-full rounded px-2 py-1 text-left text-xs"
           data-action="copy-as-markdown"
           @click="onCopyAs('markdown')"
         >
@@ -190,7 +190,7 @@ function onCopyAs(format: 'markdown' | 'html' | 'plain') {
         </button>
         <button
           type="button"
-          class="block w-full rounded px-2 py-1 text-left text-xs hover:bg-slate-100 dark:hover:bg-slate-800"
+          class="inline-format-toolbar-menu-item block w-full rounded px-2 py-1 text-left text-xs"
           data-action="copy-as-html"
           @click="onCopyAs('html')"
         >
@@ -198,7 +198,7 @@ function onCopyAs(format: 'markdown' | 'html' | 'plain') {
         </button>
         <button
           type="button"
-          class="block w-full rounded px-2 py-1 text-left text-xs hover:bg-slate-100 dark:hover:bg-slate-800"
+          class="inline-format-toolbar-menu-item block w-full rounded px-2 py-1 text-left text-xs"
           data-action="copy-as-plain"
           @click="onCopyAs('plain')"
         >
@@ -209,25 +209,75 @@ function onCopyAs(format: 'markdown' | 'html' | 'plain') {
 
     <div
       v-if="linkPopoverOpen"
-      class="absolute left-1/2 top-full z-40 mt-2 w-72 -translate-x-1/2 rounded-md border border-slate-200 bg-white p-2 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+      class="inline-format-toolbar-popover absolute left-1/2 top-full z-40 mt-2 w-72 -translate-x-1/2 rounded-md border p-2"
       @mousedown.stop
     >
       <input
         ref="linkInputEl"
         type="url"
-        class="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:border-slate-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+        class="inline-format-toolbar-input w-full rounded border px-2 py-1 text-xs outline-none"
         placeholder="https://example.com"
         :value="linkValue"
         data-testid="link-input"
         @input="emit('update:linkValue', ($event.target as HTMLInputElement).value)"
         @keydown="onLinkInputKeydown"
       >
-      <p v-if="linkError" class="mt-1 text-[11px] text-rose-600 dark:text-rose-400">{{ linkError }}</p>
+      <p v-if="linkError" class="inline-format-toolbar-error mt-1 text-[11px]">{{ linkError }}</p>
       <div class="mt-2 flex justify-end gap-1">
-        <button type="button" class="px-2 py-1 text-xs" data-action="cancel-link" @click="emit('cancel-link')">Cancel</button>
-        <button type="button" class="px-2 py-1 text-xs" data-action="unlink" @click="emit('unlink')">Remove</button>
-        <button type="button" class="px-2 py-1 text-xs font-semibold" data-action="apply-link" @click="emit('apply-link')">Apply</button>
+        <button type="button" class="inline-format-toolbar-text-btn px-2 py-1 text-xs" data-action="cancel-link" @click="emit('cancel-link')">Cancel</button>
+        <button type="button" class="inline-format-toolbar-text-btn px-2 py-1 text-xs" data-action="unlink" @click="emit('unlink')">Remove</button>
+        <button type="button" class="inline-format-toolbar-text-btn inline-format-toolbar-text-btn--strong px-2 py-1 text-xs font-semibold" data-action="apply-link" @click="emit('apply-link')">Apply</button>
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+.inline-format-toolbar,
+.inline-format-toolbar-popover {
+  border-color: var(--editor-menu-border);
+  background: var(--editor-menu-bg);
+  box-shadow: var(--editor-menu-shadow);
+}
+
+.inline-format-toolbar-btn,
+.inline-format-toolbar-menu-item,
+.inline-format-toolbar-text-btn {
+  color: var(--editor-menu-text);
+}
+
+.inline-format-toolbar-btn:hover,
+.inline-format-toolbar-menu-item:hover,
+.inline-format-toolbar-text-btn:hover {
+  background: var(--editor-menu-hover-bg);
+  color: var(--editor-menu-text-strong);
+}
+
+.inline-format-toolbar-btn:active {
+  background: var(--editor-menu-active-bg);
+}
+
+.inline-format-toolbar-btn--active {
+  background: var(--editor-menu-active-bg);
+  color: var(--editor-menu-text-strong);
+}
+
+.inline-format-toolbar-input {
+  border-color: var(--input-border);
+  background: var(--input-bg);
+  color: var(--input-text);
+}
+
+.inline-format-toolbar-input:focus {
+  border-color: var(--input-focus-border);
+  box-shadow: 0 0 0 2px var(--input-focus-ring);
+}
+
+.inline-format-toolbar-error {
+  color: var(--danger);
+}
+
+.inline-format-toolbar-text-btn--strong {
+  color: var(--accent);
+}
+</style>

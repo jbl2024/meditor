@@ -59,7 +59,7 @@ function checkboxValue(event: Event): boolean {
     <div class="flex min-h-6 items-center justify-between gap-3">
       <button
         type="button"
-        class="inline-flex items-center gap-2 text-sm font-semibold text-[#2d313a] dark:text-slate-100"
+        class="properties-toggle inline-flex items-center gap-2 text-sm font-semibold"
         @click="emit('toggle-visibility')"
       >
         <ChevronRightIcon
@@ -70,15 +70,15 @@ function checkboxValue(event: Event): boolean {
         <span>Properties</span>
         <CircleStackIcon
           v-if="props.hasProperties"
-          class="h-3.5 w-3.5 text-[#5e6ad2] dark:text-[#61afef]"
+          class="properties-accent-icon h-3.5 w-3.5"
           aria-label="Properties available"
         />
       </button>
       <div v-if="props.expanded" class="flex items-center gap-1.5">
         <button
           type="button"
-          class="rounded border border-[#e5e7eb] px-2 py-0.5 text-[11px] text-[#737a87] dark:border-slate-700 dark:text-slate-300"
-          :class="props.mode === 'structured' ? 'bg-white text-[#2d313a] dark:bg-[#2c313a] dark:text-[#d7dce5]' : ''"
+          class="properties-mode-btn rounded border px-2 py-0.5 text-[11px]"
+          :class="props.mode === 'structured' ? 'properties-mode-btn--active' : ''"
           :disabled="!props.canUseStructuredProperties"
           @click="emit('set-mode', 'structured')"
         >
@@ -86,8 +86,8 @@ function checkboxValue(event: Event): boolean {
         </button>
         <button
           type="button"
-          class="rounded border border-[#e5e7eb] px-2 py-0.5 text-[11px] text-[#737a87] dark:border-slate-700 dark:text-slate-300"
-          :class="props.mode === 'raw' ? 'bg-white text-[#2d313a] dark:bg-[#2c313a] dark:text-[#d7dce5]' : ''"
+          class="properties-mode-btn rounded border px-2 py-0.5 text-[11px]"
+          :class="props.mode === 'raw' ? 'properties-mode-btn--active' : ''"
           @click="emit('set-mode', 'raw')"
         >
           Raw YAML
@@ -105,13 +105,13 @@ function checkboxValue(event: Event): boolean {
           >
             <input
               :value="field.key"
-              class="rounded border border-[#e5e7eb] bg-white px-2 py-1 text-xs text-[#2d313a] dark:border-[#3e4451] dark:bg-[#2c313a] dark:text-[#abb2bf]"
+              class="properties-field rounded border px-2 py-1 text-xs"
               placeholder="key"
               @input="emit('property-key-input', { index, value: inputValue($event) })"
             />
             <select
               :value="props.effectiveTypeForField(field)"
-              class="rounded border border-[#e5e7eb] bg-white px-2 py-1 text-xs text-[#737a87] dark:border-[#3e4451] dark:bg-[#2c313a] dark:text-[#abb2bf]"
+              class="properties-field properties-field--muted rounded border px-2 py-1 text-xs"
               :disabled="props.isPropertyTypeLocked(field.key)"
               @change="emit('property-type-change', { index, value: selectValue($event) })"
             >
@@ -126,14 +126,14 @@ function checkboxValue(event: Event): boolean {
               <input
                 v-if="props.effectiveTypeForField(field) === 'text' || props.effectiveTypeForField(field) === 'date'"
                 :value="String(field.value ?? '')"
-                class="w-full rounded border border-[#e5e7eb] bg-white px-2 py-1 text-xs text-[#2d313a] dark:border-[#3e4451] dark:bg-[#2c313a] dark:text-[#abb2bf]"
+                class="properties-field w-full rounded border px-2 py-1 text-xs"
                 :placeholder="props.effectiveTypeForField(field) === 'date' ? 'YYYY-MM-DD' : 'value'"
                 @input="emit('property-value-input', { index, value: inputValue($event) })"
               />
               <input
                 v-else-if="props.effectiveTypeForField(field) === 'number'"
                 :value="String(field.value ?? 0)"
-                class="w-full rounded border border-[#e5e7eb] bg-white px-2 py-1 text-xs text-[#2d313a] dark:border-[#3e4451] dark:bg-[#2c313a] dark:text-[#abb2bf]"
+                class="properties-field w-full rounded border px-2 py-1 text-xs"
                 type="number"
                 @input="emit('property-value-input', { index, value: inputValue($event) })"
               />
@@ -143,7 +143,7 @@ function checkboxValue(event: Event): boolean {
                 :placeholder="props.effectiveTypeForField(field) === 'tags' ? 'add tag' : 'add value'"
                 @update:modelValue="emit('property-tokens-change', { index, tokens: $event })"
               />
-              <label v-else class="inline-flex items-center gap-2 text-xs text-[#737a87] dark:text-slate-200">
+              <label v-else class="properties-checkbox inline-flex items-center gap-2 text-xs">
                 <input
                   type="checkbox"
                   :checked="Boolean(field.value)"
@@ -154,7 +154,7 @@ function checkboxValue(event: Event): boolean {
             </div>
             <button
               type="button"
-              class="rounded border border-[#e5e7eb] bg-white px-2 py-1 text-xs text-[#737a87] hover:bg-[#eff1f5] hover:text-[#2d313a] dark:border-slate-700 dark:bg-[#2c313a] dark:text-slate-300 dark:hover:bg-[#343b47] dark:hover:text-[#d7dce5]"
+              class="properties-remove-btn rounded border px-2 py-1 text-xs"
               @click="emit('remove-property', index)"
             >
               Remove
@@ -172,14 +172,14 @@ function checkboxValue(event: Event): boolean {
 
         <div v-else>
           <textarea
-            class="font-mono min-h-28 w-full rounded border border-[#e5e7eb] bg-white p-2 text-xs text-[#2d313a] dark:border-slate-700 dark:bg-[#21252b] dark:text-[#abb2bf]"
+            class="properties-field properties-textarea font-mono min-h-28 w-full rounded border p-2 text-xs"
             :value="props.activeRawYaml"
             placeholder="title: My note"
             @input="emit('raw-yaml-input', inputValue($event))"
           ></textarea>
         </div>
 
-        <div v-if="props.activeParseErrors.length" class="mt-2 text-xs text-red-600 dark:text-red-400">
+        <div v-if="props.activeParseErrors.length" class="properties-errors mt-2 text-xs">
           <div v-for="(error, index) in props.activeParseErrors" :key="`${error.line}-${index}`">
             Line {{ error.line }}: {{ error.message }}
           </div>
@@ -191,20 +191,60 @@ function checkboxValue(event: Event): boolean {
 
 <style scoped>
 .properties-panel {
-  background: #f9f9fb;
+  background: var(--properties-panel-bg);
 }
 
-.dark .properties-panel {
-  background: #21252b;
+.properties-toggle {
+  color: var(--properties-toggle-text);
 }
 
-.dark .properties-panel input::placeholder,
-.dark .properties-panel textarea::placeholder {
-  color: #8b93a3;
+.properties-accent-icon {
+  color: var(--properties-accent);
+}
+
+.properties-mode-btn {
+  border-color: var(--properties-mode-border);
+  color: var(--properties-mode-text);
+}
+
+.properties-mode-btn--active {
+  background: var(--properties-mode-active-bg);
+  color: var(--properties-mode-active-text);
+}
+
+.properties-field {
+  border-color: var(--properties-field-border);
+  background: var(--properties-field-bg);
+  color: var(--properties-field-text);
+}
+
+.properties-field--muted,
+.properties-checkbox {
+  color: var(--properties-field-muted);
+}
+
+.properties-field::placeholder,
+.properties-textarea::placeholder {
+  color: var(--properties-placeholder);
+}
+
+.properties-remove-btn {
+  border-color: var(--properties-field-border);
+  background: var(--properties-field-bg);
+  color: var(--properties-field-muted);
+}
+
+.properties-remove-btn:hover {
+  background: var(--properties-remove-hover-bg);
+  color: var(--properties-remove-hover-text);
+}
+
+.properties-errors {
+  color: var(--danger);
 }
 
 .property-row :is(input, select, textarea):focus-visible {
-  outline: 2px solid rgb(94 106 210 / 0.3);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 

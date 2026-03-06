@@ -20,12 +20,12 @@ const props = withDefaults(defineProps<{
 
 const variantClass = computed(() => {
   if (props.variant === 'primary') {
-    return 'border-[#003153]/75 bg-[#003153] text-white hover:bg-[#002744] dark:border-[#4a6f95]/75 dark:bg-[#4a6f95] dark:text-slate-950 dark:hover:bg-[#5a82ad]'
+    return 'ui-button--primary'
   }
   if (props.variant === 'ghost') {
-    return 'border-slate-300/90 bg-transparent text-slate-700 hover:border-slate-400 hover:text-slate-900 dark:border-slate-700/70 dark:text-slate-300 dark:hover:border-slate-500 dark:hover:text-slate-100'
+    return 'ui-button--ghost'
   }
-  return 'border-slate-300/90 bg-white/90 text-slate-800 hover:bg-slate-100 dark:border-slate-600/70 dark:bg-slate-800/70 dark:text-slate-100 dark:hover:bg-slate-700/80'
+  return 'ui-button--secondary'
 })
 
 const sizeClass = computed(() => {
@@ -39,7 +39,7 @@ const sizeClass = computed(() => {
     :type="type"
     :disabled="disabled"
     :class="[
-      'inline-flex items-center justify-center gap-2 rounded-xl border font-medium transition duration-150',
+      'ui-button inline-flex items-center justify-center gap-2 rounded-xl border font-medium transition duration-150',
       'disabled:cursor-not-allowed disabled:opacity-45',
       variantClass,
       sizeClass,
@@ -49,3 +49,40 @@ const sizeClass = computed(() => {
     <slot />
   </button>
 </template>
+
+<style scoped>
+.ui-button {
+  border-color: var(--button-secondary-border);
+}
+
+.ui-button--primary {
+  border-color: var(--button-primary-border);
+  background: var(--button-primary-bg);
+  color: var(--button-primary-text);
+}
+
+.ui-button--primary:hover:not(:disabled) {
+  background: var(--button-primary-hover);
+}
+
+.ui-button--secondary {
+  border-color: var(--button-secondary-border);
+  background: var(--button-secondary-bg);
+  color: var(--button-secondary-text);
+}
+
+.ui-button--secondary:hover:not(:disabled) {
+  background: var(--button-secondary-hover);
+}
+
+.ui-button--ghost {
+  border-color: var(--button-ghost-border);
+  background: transparent;
+  color: var(--button-ghost-text);
+}
+
+.ui-button--ghost:hover:not(:disabled) {
+  border-color: var(--button-ghost-hover-border);
+  color: var(--button-ghost-hover-text);
+}
+</style>

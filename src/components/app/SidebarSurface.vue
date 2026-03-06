@@ -146,18 +146,13 @@ defineExpose({
 <style scoped>
 .activity-bar {
   width: 44px;
-  border-right: 1px solid #e5e7eb;
-  background: #f2f4f8;
+  border-right: 1px solid var(--shell-chrome-border);
+  background: var(--shell-chrome-bg);
   display: flex;
   flex-direction: column;
   align-items: center;
   padding-top: 8px;
   gap: 6px;
-}
-
-:global(.ide-root.dark) .activity-bar {
-  border-right-color: #3e4451;
-  background: #21252b;
 }
 
 .activity-btn {
@@ -166,7 +161,7 @@ defineExpose({
   border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
-  color: #5b6472;
+  color: var(--shell-chrome-text);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -174,15 +169,15 @@ defineExpose({
 }
 
 .activity-btn:hover {
-  background: #f1f2f6;
-  color: #1f2937;
+  background: var(--menu-hover-bg);
+  color: var(--shell-chrome-text-strong);
 }
 
 .activity-btn.active {
-  color: #5e6ad2;
-  border-color: #e5e7eb;
-  box-shadow: inset 2px 0 0 #5e6ad2;
-  background: #ffffff;
+  color: var(--menu-active-text);
+  border-color: var(--button-active-border);
+  box-shadow: inset 2px 0 0 var(--explorer-row-indicator);
+  background: var(--button-active-bg);
 }
 
 .activity-btn-icon {
@@ -191,46 +186,22 @@ defineExpose({
   stroke-width: 1.6;
 }
 
-:global(.ide-root.dark) .activity-btn {
-  color: #8b93a3;
-}
-
-:global(.ide-root.dark) .activity-btn.active {
-  color: #d7dce5;
-  border-color: #3e4451;
-  background: #282c34;
-}
-
-:global(.ide-root.dark) .activity-btn:hover {
-  background: #2c313a;
-  color: #d7dce5;
-}
-
 .left-sidebar {
   min-width: 0;
   min-height: 0;
-  background: #f2f4f8;
-  border-right: 1px solid #e5e7eb;
+  background: var(--shell-chrome-bg);
+  border-right: 1px solid var(--shell-chrome-border);
   display: flex;
   flex-direction: column;
 }
 
-:global(.ide-root.dark) .left-sidebar {
-  background: #21252b;
-  border-color: #3e4451;
-}
-
 .panel-header {
   height: 34px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--shell-chrome-border);
   display: flex;
   align-items: center;
   justify-content: flex-start;
   padding: 0 8px;
-}
-
-:global(.ide-root.dark) .panel-header {
-  border-bottom-color: #3e4451;
 }
 
 .panel-title {
@@ -238,11 +209,7 @@ defineExpose({
   font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #4b5563;
-}
-
-:global(.ide-root.dark) .panel-title {
-  color: #8b93a3;
+  color: var(--text-dim);
 }
 
 .panel-body {
@@ -270,7 +237,7 @@ defineExpose({
 .inline-link-btn {
   border: 0;
   background: transparent;
-  color: #5e6ad2;
+  color: var(--accent);
   font-size: 12px;
   font-weight: 500;
   padding: 0;
@@ -279,14 +246,6 @@ defineExpose({
 }
 
 .inline-link-btn:hover {
-  color: #2d313a;
-}
-
-:global(.ide-root.dark) .inline-link-btn {
-  color: #61afef;
-}
-
-:global(.ide-root.dark) .inline-link-btn:hover {
-  color: #7ec5ff;
+  color: var(--accent-hover);
 }
 </style>

@@ -105,19 +105,19 @@ const emit = defineEmits<{
 }
 
 .search-mode-chip {
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--search-chip-border);
   border-radius: 999px;
-  background: #ffffff;
-  color: #475569;
+  background: var(--search-chip-bg);
+  color: var(--search-chip-text);
   padding: 2px 9px;
   font-size: 10px;
   line-height: 1.4;
 }
 
 .search-mode-chip.active {
-  border-color: #2563eb;
-  color: #1d4ed8;
-  background: #dbeafe;
+  border-color: var(--search-chip-active-border);
+  color: var(--search-chip-active-text);
+  background: var(--search-chip-active-bg);
 }
 
 .search-mode-chip:disabled {
@@ -127,28 +127,12 @@ const emit = defineEmits<{
 .search-mode-hint {
   margin: -2px 0 0;
   font-size: 10px;
-  color: #64748b;
+  color: var(--text-dim);
 }
 
 .search-mode-hint code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
   font-size: inherit;
-}
-
-:global(.ide-root.dark) .search-mode-chip {
-  border-color: #475569;
-  color: #cbd5e1;
-  background: #1e293b;
-}
-
-:global(.ide-root.dark) .search-mode-chip.active {
-  border-color: #60a5fa;
-  color: #bfdbfe;
-  background: #1e3a8a;
-}
-
-:global(.ide-root.dark) .search-mode-hint {
-  color: #94a3b8;
 }
 
 .results-list {
@@ -164,35 +148,26 @@ const emit = defineEmits<{
 .result-file {
   margin: 0 0 4px;
   font-size: 11px;
-  color: #5b6472;
+  color: var(--search-result-title);
 }
 
 .result-item {
   width: 100%;
   text-align: left;
-  border: 1px solid #e5e7eb;
-  background: #ffffff;
+  border: 1px solid var(--search-result-border);
+  background: var(--search-result-bg);
   border-radius: 4px;
   padding: 6px;
   margin-bottom: 6px;
   font-size: 12px;
+  color: var(--text-main);
 }
 
 .result-score {
   margin: 0 0 4px;
   font-size: 10px;
-  color: #64748b;
+  color: var(--search-result-score);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
-}
-
-:global(.ide-root.dark) .result-item {
-  border-color: #3e4451;
-  background: #21252b;
-  color: #abb2bf;
-}
-
-:global(.ide-root.dark) .result-score {
-  color: #94a3b8;
 }
 
 .result-snippet :deep(strong) {

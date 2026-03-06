@@ -11,22 +11,22 @@ const props = defineProps<{
 <template>
   <div
     v-if="props.visible"
-    class="pointer-events-none absolute inset-0 z-30 flex items-start justify-center bg-white/75 px-6 py-6 backdrop-blur-[1px] dark:bg-slate-950/75"
+    class="editor-large-doc-overlay pointer-events-none absolute inset-0 z-30 flex items-start justify-center px-6 py-6 backdrop-blur-[1px]"
   >
-    <div class="pointer-events-auto w-full max-w-md rounded-xl border border-slate-200 bg-white/95 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/95">
-      <div class="text-sm font-medium text-slate-800 dark:text-slate-100">Loading large document</div>
-      <div class="mt-1 text-xs text-slate-600 dark:text-slate-300">{{ props.stageLabel }}</div>
-      <div v-if="props.stats" class="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+    <div class="editor-large-doc-panel pointer-events-auto w-full max-w-md rounded-xl border p-4 shadow-sm">
+      <div class="editor-large-doc-title text-sm font-medium">Loading large document</div>
+      <div class="editor-large-doc-copy mt-1 text-xs">{{ props.stageLabel }}</div>
+      <div v-if="props.stats" class="editor-large-doc-meta mt-1 text-[11px]">
         {{ props.stats.lines.toLocaleString() }} lines · {{ props.stats.chars.toLocaleString() }} chars
       </div>
-      <div class="mt-3 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+      <div class="editor-large-doc-track mt-3 h-2 overflow-hidden rounded-full">
         <div
-          class="h-full rounded-full bg-blue-600 transition-[width] duration-200 ease-out dark:bg-blue-500"
+          class="editor-large-doc-fill h-full rounded-full transition-[width] duration-200 ease-out"
           :class="{ 'tomosona-load-indeterminate': props.progressIndeterminate }"
           :style="props.progressIndeterminate ? undefined : { width: `${props.progressPercent}%` }"
         ></div>
       </div>
-      <div class="mt-2 text-right text-[11px] text-slate-600 dark:text-slate-300">
+      <div class="editor-large-doc-copy mt-2 text-right text-[11px]">
         {{ props.progressIndeterminate ? 'Working...' : `${props.progressPercent}%` }}
       </div>
     </div>
@@ -34,9 +34,43 @@ const props = defineProps<{
 </template>
 
 <style scoped>
+.editor-large-doc-overlay {
+  background: var(--editor-overlay-backdrop);
+}
+
+.editor-large-doc-panel {
+  border-color: var(--editor-menu-border);
+  background: var(--editor-overlay-panel);
+}
+
+.editor-large-doc-title {
+  color: var(--text-main);
+}
+
+.editor-large-doc-copy {
+  color: var(--text-soft);
+}
+
+.editor-large-doc-meta {
+  color: var(--text-dim);
+}
+
+.editor-large-doc-track {
+  background: var(--editor-progress-track);
+}
+
+.editor-large-doc-fill {
+  background: var(--editor-progress-fill);
+}
+
 .tomosona-load-indeterminate {
   width: 45%;
-  background-image: linear-gradient(90deg, #2563eb 0%, #3b82f6 50%, #2563eb 100%);
+  background-image: linear-gradient(
+    90deg,
+    var(--editor-progress-fill) 0%,
+    var(--editor-progress-fill-2) 50%,
+    var(--editor-progress-fill) 100%
+  );
   background-size: 200% 100%;
   animation: tomosona-load-slide 1.1s linear infinite;
 }

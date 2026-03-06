@@ -885,12 +885,12 @@ defineExpose({
   <div class="flex h-full min-h-0 flex-col">
     <div
       v-if="!path"
-      class="flex min-h-0 flex-1 items-center justify-center bg-[#f9f9fb] px-8 py-6 text-sm text-[#737a87] dark:bg-slate-950 dark:text-slate-400"
+      class="editor-empty-state flex min-h-0 flex-1 items-center justify-center px-8 py-6 text-sm"
     >
       Open a file to start editing
     </div>
 
-    <div v-else class="editor-shell flex min-h-0 flex-1 flex-col overflow-hidden border-x border-[#e5e7eb] bg-white dark:border-slate-800 dark:bg-[#282c34]">
+    <div v-else class="editor-shell flex min-h-0 flex-1 flex-col overflow-hidden border-x">
       <EditorPropertiesPanel
         :expanded="propertiesExpanded(path)"
         :has-properties="structuredPropertyKeys.length > 0 || activeParseErrors.length > 0"
@@ -935,7 +935,7 @@ defineExpose({
         />
         <div
           ref="holder"
-          class="editor-holder relative h-full min-h-0 overflow-y-auto bg-white px-8 py-6 dark:bg-[#282c34]"
+          class="editor-holder relative h-full min-h-0 overflow-y-auto px-8 py-6"
           :style="editorZoomStyle"
           @mousemove="onEditorMouseMove"
           @mouseleave="onEditorMouseLeave"
@@ -1101,3 +1101,19 @@ defineExpose({
     />
   </div>
 </template>
+
+<style scoped>
+.editor-empty-state {
+  background: var(--app-bg);
+  color: var(--text-dim);
+}
+
+.editor-shell {
+  border-color: var(--border-subtle);
+  background: var(--surface-bg);
+}
+
+.editor-holder {
+  background: var(--surface-bg);
+}
+</style>

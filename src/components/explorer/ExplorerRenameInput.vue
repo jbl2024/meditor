@@ -23,7 +23,7 @@ onMounted(async () => {
 <template>
   <input
     ref="inputRef"
-    class="h-7 w-full rounded-lg border border-slate-300/90 bg-white/95 px-2 text-xs text-slate-900 outline-none focus:border-[#003153]/70 focus:ring-2 focus:ring-[#003153]/20 dark:border-slate-600/70 dark:bg-slate-900/80 dark:text-slate-100 dark:focus:border-[#4a6f95]/70 dark:focus:ring-[#4a6f95]/30"
+    class="explorer-rename-input h-7 w-full rounded-lg border px-2 text-xs outline-none transition"
     :value="props.modelValue"
     @input="emit('update:modelValue', ($event.target as HTMLInputElement).value)"
     @keydown.enter.stop.prevent="emit('confirm')"
@@ -31,3 +31,16 @@ onMounted(async () => {
     @blur="emit('confirm')"
   />
 </template>
+
+<style scoped>
+.explorer-rename-input {
+  border-color: var(--input-border);
+  background: var(--input-bg);
+  color: var(--input-text);
+}
+
+.explorer-rename-input:focus {
+  border-color: var(--input-focus-border);
+  box-shadow: 0 0 0 2px var(--input-focus-ring);
+}
+</style>

@@ -7,6 +7,366 @@
   --font-mono: "JetBrains Mono", "Iosevka", "DejaVu Sans Mono", monospace;
 }
 
+:root {
+  color-scheme: light;
+
+  --color-surface-0: #f9f9fb;
+  --color-surface-1: #ffffff;
+  --color-surface-2: #f2f4f8;
+  --color-surface-3: #fbfcff;
+  --color-surface-4: #eef2f8;
+  --color-overlay-1: rgba(255, 255, 255, 0.9);
+  --color-overlay-2: rgba(255, 255, 255, 0.82);
+  --color-border-1: #e5e7eb;
+  --color-border-2: #cbd5e1;
+  --color-border-3: #d1d5db;
+  --color-text-1: #2d313a;
+  --color-text-2: #5b6472;
+  --color-text-3: #737a87;
+  --color-text-4: #94a3b8;
+  --color-accent-1: #003153;
+  --color-accent-2: #002744;
+  --color-accent-soft: rgba(0, 49, 83, 0.14);
+  --color-accent-focus: rgba(0, 49, 83, 0.2);
+  --color-accent-contrast: #ffffff;
+  --color-danger-1: #dc2626;
+  --color-danger-2: #b91c1c;
+  --color-danger-soft: rgba(220, 38, 38, 0.12);
+  --color-success-1: #166534;
+  --color-warning-1: #b45309;
+  --shadow-panel: 0 18px 50px rgba(148, 163, 184, 0.22);
+  --shadow-overlay: 0 8px 24px rgba(15, 23, 42, 0.12);
+  --shadow-dropdown: 0 14px 32px rgba(15, 23, 42, 0.2);
+
+  --app-bg: var(--color-surface-0);
+  --surface-bg: var(--color-surface-1);
+  --surface-muted: var(--color-surface-2);
+  --surface-raised: var(--color-surface-3);
+  --surface-subtle: var(--color-surface-4);
+  --surface-overlay: var(--color-overlay-1);
+  --surface-panel: var(--color-overlay-2);
+  --text-main: var(--color-text-1);
+  --text-soft: var(--color-text-2);
+  --text-dim: var(--color-text-3);
+  --text-faint: var(--color-text-4);
+  --border-subtle: var(--color-border-1);
+  --border-strong: var(--color-border-2);
+  --border-control: var(--color-border-3);
+  --accent: var(--color-accent-1);
+  --accent-hover: var(--color-accent-2);
+  --accent-soft: var(--color-accent-soft);
+  --accent-contrast: var(--color-accent-contrast);
+  --focus-ring: var(--color-accent-focus);
+  --danger: var(--color-danger-1);
+  --danger-strong: var(--color-danger-2);
+  --danger-soft: var(--color-danger-soft);
+  --success: var(--color-success-1);
+  --warning: var(--color-warning-1);
+
+  --button-primary-border: color-mix(in srgb, var(--accent) 75%, transparent);
+  --button-primary-bg: var(--accent);
+  --button-primary-text: var(--accent-contrast);
+  --button-primary-hover: var(--accent-hover);
+  --button-secondary-border: color-mix(in srgb, var(--border-strong) 78%, transparent);
+  --button-secondary-bg: color-mix(in srgb, var(--surface-bg) 90%, transparent);
+  --button-secondary-text: var(--text-main);
+  --button-secondary-hover: var(--surface-muted);
+  --button-ghost-border: color-mix(in srgb, var(--border-strong) 78%, transparent);
+  --button-ghost-text: var(--text-soft);
+  --button-ghost-hover-border: color-mix(in srgb, var(--border-strong) 95%, var(--text-soft));
+  --button-ghost-hover-text: var(--text-main);
+  --button-active-border: var(--border-subtle);
+  --button-active-bg: var(--surface-bg);
+  --button-active-text: var(--text-main);
+
+  --input-bg: color-mix(in srgb, var(--surface-bg) 95%, transparent);
+  --input-border: color-mix(in srgb, var(--border-strong) 78%, transparent);
+  --input-text: var(--text-main);
+  --input-placeholder: var(--text-faint);
+  --input-focus-border: color-mix(in srgb, var(--accent) 70%, transparent);
+  --input-focus-ring: var(--focus-ring);
+
+  --panel-border: color-mix(in srgb, var(--border-strong) 72%, transparent);
+  --panel-bg: var(--surface-panel);
+  --panel-shadow: var(--shadow-panel);
+
+  --shell-chrome-bg: var(--surface-muted);
+  --shell-chrome-border: var(--border-subtle);
+  --shell-chrome-text: var(--text-soft);
+  --shell-chrome-text-strong: var(--text-main);
+  --shell-command-bg: color-mix(in srgb, var(--surface-bg) 80%, transparent);
+  --shell-command-hover-bg: color-mix(in srgb, var(--surface-bg) 96%, transparent);
+  --shell-command-border: color-mix(in srgb, var(--border-strong) 78%, transparent);
+  --shell-command-shadow: inset 0 1px 0 color-mix(in srgb, white 65%, transparent);
+  --shell-divider: color-mix(in srgb, var(--border-strong) 78%, transparent);
+  --shell-splitter: color-mix(in srgb, var(--border-strong) 88%, transparent);
+  --shell-status-bg: var(--surface-muted);
+  --shell-status-text: var(--text-soft);
+  --shell-status-divider: color-mix(in srgb, var(--border-strong) 88%, transparent);
+
+  --search-chip-bg: var(--surface-bg);
+  --search-chip-border: var(--border-strong);
+  --search-chip-text: var(--text-soft);
+  --search-chip-active-bg: var(--accent-soft);
+  --search-chip-active-border: color-mix(in srgb, var(--accent) 42%, white 58%);
+  --search-chip-active-text: var(--accent);
+  --search-result-bg: var(--surface-bg);
+  --search-result-border: var(--border-subtle);
+  --search-result-title: var(--text-soft);
+  --search-result-score: var(--text-dim);
+
+  --toast-error-border: #fda4af;
+  --toast-error-bg: #fff1f2;
+  --toast-error-text: #9f1239;
+  --toast-success-border: #86efac;
+  --toast-success-bg: #f0fdf4;
+  --toast-success-text: #166534;
+  --toast-info-border: #93c5fd;
+  --toast-info-bg: #eff6ff;
+  --toast-info-text: #1d4ed8;
+
+  --menu-border: var(--border-subtle);
+  --menu-bg: var(--surface-bg);
+  --menu-text: var(--text-soft);
+  --menu-text-strong: var(--text-main);
+  --menu-hover-bg: var(--surface-muted);
+  --menu-active-bg: var(--accent-soft);
+  --menu-active-text: var(--accent);
+  --menu-divider: var(--border-subtle);
+  --menu-shadow: var(--shadow-overlay);
+  --menu-backdrop: rgba(2, 6, 23, 0.45);
+
+  --tab-strip-bg: var(--surface-muted);
+  --tab-border: var(--border-subtle);
+  --tab-bg: color-mix(in srgb, var(--surface-muted) 92%, var(--surface-bg));
+  --tab-text: var(--text-soft);
+  --tab-hover-bg: #e8ecf3;
+  --tab-hover-text: #1f2937;
+  --tab-active-bg: var(--surface-bg);
+  --tab-active-border: var(--border-subtle);
+  --tab-active-text: var(--text-main);
+  --tab-active-bottom: var(--surface-bg);
+
+  --editor-link: #2563eb;
+  --editor-code-bg: rgb(241 245 249);
+  --editor-heading-4: #3f4754;
+  --editor-heading-5: #4b5563;
+  --editor-heading-6: #5b6472;
+  --editor-marker-muted: rgb(100 116 139);
+  --editor-marker-faint: rgb(148 163 184);
+  --editor-checkbox-accent: rgb(37 99 235);
+  --editor-table-bg: rgb(255 255 255 / 0.98);
+  --editor-table-border: rgb(203 213 225);
+  --editor-table-cell-border: rgb(226 232 240);
+  --editor-table-hover: rgb(248 250 252);
+
+  --explorer-row-text: var(--text-soft);
+  --explorer-row-text-strong: var(--text-main);
+  --explorer-row-hover-bg: #eceff6;
+  --explorer-row-hover-text: #111827;
+  --explorer-row-selected-bg: #e6eaf5;
+  --explorer-row-selected-text: #1f2937;
+  --explorer-row-focused-bg: #e9edf7;
+  --explorer-row-active-bg: rgba(94, 106, 210, 0.12);
+  --explorer-row-active-text: #5e6ad2;
+  --explorer-row-indicator: #5e6ad2;
+  --explorer-toolbar-hover-bg: #e9edf5;
+
+  --properties-panel-bg: var(--surface-muted);
+  --properties-toggle-text: var(--text-main);
+  --properties-accent: #5e6ad2;
+  --properties-mode-text: var(--text-dim);
+  --properties-mode-border: var(--border-subtle);
+  --properties-mode-active-bg: var(--surface-bg);
+  --properties-mode-active-text: var(--text-main);
+  --properties-field-bg: var(--surface-bg);
+  --properties-field-border: var(--border-subtle);
+  --properties-field-text: var(--text-main);
+  --properties-field-muted: var(--text-dim);
+  --properties-remove-hover-bg: #eff1f5;
+  --properties-remove-hover-text: var(--text-main);
+  --properties-placeholder: var(--text-dim);
+
+  --editor-menu-bg: var(--surface-bg);
+  --editor-menu-border: var(--border-subtle);
+  --editor-menu-shadow: var(--menu-shadow);
+  --editor-menu-text: var(--text-soft);
+  --editor-menu-text-strong: var(--text-main);
+  --editor-menu-hover-bg: var(--surface-muted);
+  --editor-menu-active-bg: var(--surface-subtle);
+  --editor-menu-disabled: var(--text-faint);
+  --editor-menu-section-border: color-mix(in srgb, var(--border-strong) 72%, transparent);
+  --editor-overlay-backdrop: rgba(255, 255, 255, 0.75);
+  --editor-overlay-panel: rgba(255, 255, 255, 0.95);
+  --editor-progress-track: #e2e8f0;
+  --editor-progress-fill: #2563eb;
+  --editor-progress-fill-2: #3b82f6;
+
+  --modal-backdrop: rgba(2, 6, 23, 0.45);
+  --modal-bg: var(--surface-bg);
+  --modal-border: var(--border-strong);
+  --modal-title: var(--text-main);
+  --modal-copy: var(--text-soft);
+  --modal-placeholder: var(--text-dim);
+  --modal-tab-bg: #f1f5f9;
+  --modal-tab-border: #cbd5e1;
+  --modal-tab-active-bg: #f8fafc;
+  --modal-tab-active-border: #e2e8f0;
+  --modal-tab-active-text: #1e3a8a;
+  --modal-panel-bg: #f8fafc;
+  --modal-panel-border: #e2e8f0;
+  --modal-group-bg: #f1f5f9;
+  --modal-chip-bg: #ffffff;
+  --modal-chip-border: var(--border-strong);
+  --modal-chip-active-bg: #dbeafe;
+  --modal-chip-active-border: #93c5fd;
+  --modal-chip-active-text: #1d4ed8;
+  --modal-muted-btn-bg: #e2e8f0;
+  --modal-muted-btn-hover: #cbd5e1;
+  --modal-disabled-bg: #f1f5f9;
+  --modal-disabled-text: #94a3b8;
+  --modal-danger-text: var(--danger-strong);
+
+  --cosmos-panel-bg: var(--surface-muted);
+  --cosmos-card-bg: var(--surface-subtle);
+  --cosmos-text-primary: var(--text-main);
+  --cosmos-text-secondary: var(--text-soft);
+  --cosmos-text-muted: var(--text-dim);
+  --cosmos-border: var(--border-strong);
+  --cosmos-input-bg: var(--surface-bg);
+  --cosmos-input-text: var(--text-main);
+  --cosmos-button-bg: var(--surface-bg);
+  --cosmos-button-hover: var(--surface-muted);
+  --cosmos-link-accent: var(--accent);
+  --cosmos-chip-bg: color-mix(in srgb, var(--surface-subtle) 82%, var(--surface-raised));
+  --cosmos-preview-bg: color-mix(in srgb, var(--surface-bg) 48%, transparent);
+  --cosmos-error: var(--danger-strong);
+  --cosmos-chip-active-bg: var(--accent-soft);
+
+  --sb-surface: var(--surface-bg);
+  --sb-surface-muted: var(--surface-subtle);
+  --sb-border: var(--border-strong);
+  --sb-text: var(--text-main);
+  --sb-text-soft: var(--text-soft);
+  --sb-text-dim: var(--text-dim);
+  --sb-active-border: var(--accent);
+  --sb-active-bg: var(--accent-soft);
+  --sb-danger-border: color-mix(in srgb, var(--danger) 40%, white 60%);
+  --sb-danger-bg: color-mix(in srgb, var(--danger-soft) 76%, white 24%);
+  --sb-danger-text: var(--danger-strong);
+}
+
+html.dark {
+  color-scheme: dark;
+
+  --color-surface-0: #282c34;
+  --color-surface-1: #282c34;
+  --color-surface-2: #21252b;
+  --color-surface-3: #232a33;
+  --color-surface-4: #2c313a;
+  --color-overlay-1: rgba(40, 44, 52, 0.96);
+  --color-overlay-2: rgba(33, 37, 43, 0.84);
+  --color-border-1: #3e4451;
+  --color-border-2: #4b5263;
+  --color-border-3: #4b5263;
+  --color-text-1: #d7dce5;
+  --color-text-2: #abb2bf;
+  --color-text-3: #8b93a3;
+  --color-text-4: #5c6370;
+  --color-accent-1: #4a6f95;
+  --color-accent-2: #5a82ad;
+  --color-accent-soft: rgba(96, 165, 250, 0.18);
+  --color-accent-focus: rgba(74, 111, 149, 0.3);
+  --color-accent-contrast: #0f172a;
+  --color-danger-1: #ef4444;
+  --color-danger-2: #fecaca;
+  --color-danger-soft: rgba(239, 68, 68, 0.16);
+  --color-success-1: #98c379;
+  --color-warning-1: #e5c07b;
+  --shadow-panel: 0 18px 50px rgba(2, 6, 23, 0.45);
+  --shadow-overlay: 0 12px 28px rgba(0, 0, 0, 0.3);
+  --shadow-dropdown: 0 14px 32px rgba(0, 0, 0, 0.3);
+
+  --shell-command-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  --shell-splitter: #5c6370;
+
+  --search-chip-active-border: #60a5fa;
+
+  --toast-error-border: #e06c75;
+  --toast-error-bg: #3b1e22;
+  --toast-error-text: #e06c75;
+  --toast-success-border: #98c379;
+  --toast-success-bg: #1e3a22;
+  --toast-success-text: #98c379;
+  --toast-info-border: #61afef;
+  --toast-info-bg: #1e2a3a;
+  --toast-info-text: #61afef;
+
+  --tab-hover-bg: var(--color-surface-4);
+  --tab-hover-text: var(--text-main);
+
+  --editor-link: #60a5fa;
+  --editor-code-bg: #2c313a;
+  --editor-heading-4: #c8d0dc;
+  --editor-heading-5: #abb2bf;
+  --editor-heading-6: #8b93a3;
+  --editor-marker-muted: #5c6370;
+  --editor-marker-faint: #8b93a3;
+  --editor-checkbox-accent: #61afef;
+  --editor-table-bg: #282c34;
+  --editor-table-border: #3e4451;
+  --editor-table-cell-border: #4b5263;
+  --editor-table-hover: #2c313a;
+
+  --menu-backdrop: rgba(2, 6, 23, 0.56);
+
+  --explorer-row-hover-bg: #2f3540;
+  --explorer-row-hover-text: #d7dce5;
+  --explorer-row-selected-bg: #2d3440;
+  --explorer-row-selected-text: #d7dce5;
+  --explorer-row-focused-bg: #2f3540;
+  --explorer-row-active-bg: rgba(96, 165, 250, 0.14);
+  --explorer-row-active-text: #ffffff;
+  --explorer-row-indicator: #61afef;
+  --explorer-toolbar-hover-bg: #2c313a;
+
+  --properties-accent: #61afef;
+  --properties-mode-active-bg: #2c313a;
+  --properties-remove-hover-bg: #343b47;
+
+  --editor-overlay-backdrop: rgba(2, 6, 23, 0.75);
+  --editor-overlay-panel: rgba(15, 23, 42, 0.95);
+  --editor-progress-track: #334155;
+  --editor-progress-fill: #3b82f6;
+  --editor-progress-fill-2: #60a5fa;
+
+  --modal-tab-bg: #21252b;
+  --modal-tab-border: #3e4451;
+  --modal-tab-active-bg: #1e3a5f;
+  --modal-tab-active-border: #61afef;
+  --modal-tab-active-text: #dbeafe;
+  --modal-panel-bg: rgba(30, 41, 59, 0.35);
+  --modal-panel-border: #3e4451;
+  --modal-group-bg: rgba(15, 23, 42, 0.45);
+  --modal-chip-bg: #1e293b;
+  --modal-chip-border: #475569;
+  --modal-chip-active-bg: #1e3a8a;
+  --modal-chip-active-border: #60a5fa;
+  --modal-chip-active-text: #bfdbfe;
+  --modal-muted-btn-bg: #2c313a;
+  --modal-muted-btn-hover: #3e4451;
+  --modal-disabled-bg: #21252b;
+  --modal-disabled-text: #7d8595;
+
+  --cosmos-preview-bg: rgb(32 37 43 / 92%);
+  --cosmos-chip-active-bg: rgba(96, 165, 250, 0.14);
+
+  --sb-active-border: #61afef;
+  --sb-danger-border: #5c2b30;
+  --sb-danger-bg: #33252a;
+  --sb-danger-text: #e06c75;
+}
+
 /* EditorJS injects unlayered styles at runtime.
    Keep dark popover overrides unlayered so they win in the cascade. */
 html.dark .ce-popover,
@@ -102,13 +462,8 @@ html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-empty,
   body {
     margin: 0;
     font-family: var(--font-sans);
-    background: #fff;
-    color: #1a1a1a;
-  }
-
-  html.dark body {
-    background: #282c34;
-    color: #abb2bf;
+    background: var(--app-bg);
+    color: var(--text-main);
   }
 
   button,

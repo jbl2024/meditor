@@ -196,7 +196,7 @@ function iconFor(item: BlockMenuActionItem) {
     v-if="props.open"
     ref="rootEl"
     tabindex="-1"
-    class="tomosona-block-menu z-40 w-64 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl outline-none dark:border-slate-700 dark:bg-slate-900"
+    class="tomosona-block-menu z-40 w-64 rounded-xl border p-1.5 outline-none"
     @keydown="onMenuKeydown"
     @mouseleave="closeConvertMenu()"
   >
@@ -207,9 +207,9 @@ function iconFor(item: BlockMenuActionItem) {
       class="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm"
       :class="[
         item.disabled
-          ? 'cursor-not-allowed text-slate-400 dark:text-slate-600'
-          : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800',
-        idx === props.index && !item.disabled && !clearPrimarySelection ? 'bg-slate-100 dark:bg-slate-800' : '',
+          ? 'tomosona-block-menu-item tomosona-block-menu-item--disabled cursor-not-allowed'
+          : 'tomosona-block-menu-item',
+        idx === props.index && !item.disabled && !clearPrimarySelection ? 'tomosona-block-menu-item--active' : '',
       ]"
       @mouseenter="onPrimaryItemHover(idx, Boolean(item.disabled))"
       @mousedown.prevent
@@ -223,7 +223,7 @@ function iconFor(item: BlockMenuActionItem) {
       <button
         ref="convertButtonEl"
         type="button"
-        class="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+        class="tomosona-block-menu-item flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm"
         @mouseenter="openConvertMenu()"
         @mousedown.prevent
         @click.stop.prevent="convertOpen ? closeConvertMenu() : openConvertMenu()"
@@ -236,7 +236,7 @@ function iconFor(item: BlockMenuActionItem) {
       <div
         v-if="convertOpen"
         ref="convertMenuEl"
-        class="absolute top-0 z-50 w-56 max-h-[calc(100vh-16px)] overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-900"
+        class="tomosona-block-menu-submenu absolute top-0 z-50 w-56 max-h-[calc(100vh-16px)] overflow-y-auto rounded-xl border p-1.5"
         :class="convertMenuSide === 'right' ? 'left-full ml-2' : 'right-full mr-2'"
         :style="{ top: `${convertMenuOffsetY}px` }"
       >
@@ -247,8 +247,8 @@ function iconFor(item: BlockMenuActionItem) {
           class="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm"
           :class="
             item.disabled
-              ? 'cursor-not-allowed text-slate-400 dark:text-slate-600'
-              : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
+              ? 'tomosona-block-menu-item tomosona-block-menu-item--disabled cursor-not-allowed'
+              : 'tomosona-block-menu-item'
           "
           @mousedown.prevent
           @click.stop.prevent="!item.disabled && emit('select', item)"
@@ -260,3 +260,30 @@ function iconFor(item: BlockMenuActionItem) {
     </div>
   </div>
 </template>
+
+<style scoped>
+.tomosona-block-menu,
+.tomosona-block-menu-submenu {
+  border-color: var(--editor-menu-border);
+  background: var(--editor-menu-bg);
+  box-shadow: var(--editor-menu-shadow);
+}
+
+.tomosona-block-menu-item {
+  color: var(--editor-menu-text);
+}
+
+.tomosona-block-menu-item:hover {
+  background: var(--editor-menu-hover-bg);
+  color: var(--editor-menu-text-strong);
+}
+
+.tomosona-block-menu-item--active {
+  background: var(--editor-menu-active-bg);
+  color: var(--editor-menu-text-strong);
+}
+
+.tomosona-block-menu-item--disabled {
+  color: var(--editor-menu-disabled);
+}
+</style>

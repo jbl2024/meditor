@@ -97,29 +97,29 @@ function onKeydown(event: KeyboardEvent) {
     v-if="open"
     ref="rootEl"
     tabindex="-1"
-    class="tomosona-table-toolbar z-50 w-[320px] max-h-[72vh] overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl outline-none dark:border-slate-700 dark:bg-slate-900"
+    class="tomosona-table-toolbar z-50 w-[320px] max-h-[72vh] overflow-y-auto rounded-xl border p-1.5 outline-none"
     :style="toolbarStyle"
     @keydown="onKeydown"
   >
-    <div class="mb-1 px-1.5 pt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+    <div class="tomosona-table-toolbar-title mb-1 px-1.5 pt-1 text-[11px] font-semibold uppercase tracking-wide">
       Table actions
-      <span v-if="markdownMode" class="ml-1 font-normal normal-case tracking-normal text-slate-400 dark:text-slate-500">(Markdown mode)</span>
+      <span v-if="markdownMode" class="tomosona-table-toolbar-subtitle ml-1 font-normal normal-case tracking-normal">(Markdown mode)</span>
     </div>
 
     <div
       v-for="section in groupedActions"
       :key="section.group"
-      class="mb-1.5 rounded-lg border border-slate-200/80 p-1 dark:border-slate-700/70"
+      class="tomosona-table-toolbar-section mb-1.5 rounded-lg border p-1"
     >
-      <div class="mb-1 px-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{{ section.label }}</div>
+      <div class="tomosona-table-toolbar-subtitle mb-1 px-1.5 text-[10px] font-semibold uppercase tracking-wide">{{ section.label }}</div>
       <button
         v-for="item in section.items"
         :key="item.id"
         type="button"
         class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs"
         :class="item.disabled
-          ? 'cursor-not-allowed text-slate-400 dark:text-slate-600'
-          : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'"
+          ? 'tomosona-table-toolbar-item tomosona-table-toolbar-item--disabled cursor-not-allowed'
+          : 'tomosona-table-toolbar-item'"
         :data-action="item.id"
         :title="item.disabledReason ?? ''"
         :aria-disabled="item.disabled ? 'true' : 'false'"
@@ -133,3 +133,36 @@ function onKeydown(event: KeyboardEvent) {
     </div>
   </div>
 </template>
+
+<style scoped>
+.tomosona-table-toolbar {
+  border-color: var(--editor-menu-border);
+  background: var(--editor-menu-bg);
+  box-shadow: var(--editor-menu-shadow);
+}
+
+.tomosona-table-toolbar-title {
+  color: var(--text-dim);
+}
+
+.tomosona-table-toolbar-subtitle {
+  color: var(--text-faint);
+}
+
+.tomosona-table-toolbar-section {
+  border-color: var(--editor-menu-section-border);
+}
+
+.tomosona-table-toolbar-item {
+  color: var(--editor-menu-text);
+}
+
+.tomosona-table-toolbar-item:hover {
+  background: var(--editor-menu-hover-bg);
+  color: var(--editor-menu-text-strong);
+}
+
+.tomosona-table-toolbar-item--disabled {
+  color: var(--editor-menu-disabled);
+}
+</style>

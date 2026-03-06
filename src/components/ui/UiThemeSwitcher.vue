@@ -14,7 +14,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="flex items-center gap-1 rounded-xl border border-slate-300/90 bg-white/80 p-1 dark:border-slate-700/80 dark:bg-slate-900/70">
+  <div class="theme-switcher flex items-center gap-1 rounded-xl border p-1">
     <UiButton
       size="sm"
       :variant="modelValue === 'light' ? 'primary' : 'ghost'"
@@ -44,3 +44,11 @@ const emit = defineEmits<{
     </UiButton>
   </div>
 </template>
+
+<style scoped>
+.theme-switcher {
+  border-color: var(--panel-border);
+  background: var(--panel-bg);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--panel-border) 22%, transparent);
+}
+</style>

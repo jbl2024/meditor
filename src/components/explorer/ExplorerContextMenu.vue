@@ -111,7 +111,7 @@ onBeforeUnmount(() => {
   <Teleport to="body">
     <div
       ref="menuRef"
-      class="fixed z-[120] w-60 max-w-[calc(100vw-16px)] rounded-xl border border-slate-300/90 bg-white p-1 shadow-xl dark:border-slate-700/80 dark:bg-slate-900"
+      class="explorer-context-menu fixed z-[120] w-60 max-w-[calc(100vw-16px)] rounded-xl border p-1"
       :style="{ left: `${clampedX}px`, top: `${clampedY}px` }"
       @click.stop
     >
@@ -119,8 +119,8 @@ onBeforeUnmount(() => {
         v-for="item in items"
         :key="item.id"
         type="button"
-        class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs"
-        :class="isDisabled(item.id) ? 'cursor-not-allowed opacity-45' : 'hover:bg-slate-100 dark:hover:bg-slate-800'"
+        class="explorer-context-menu-item flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs"
+        :class="isDisabled(item.id) ? 'cursor-not-allowed opacity-45' : ''"
         :disabled="isDisabled(item.id)"
         @click="onAction(item.id)"
       >
@@ -130,3 +130,20 @@ onBeforeUnmount(() => {
     </div>
   </Teleport>
 </template>
+
+<style scoped>
+.explorer-context-menu {
+  border-color: var(--menu-border);
+  background: var(--menu-bg);
+  box-shadow: var(--menu-shadow);
+}
+
+.explorer-context-menu-item {
+  color: var(--menu-text);
+}
+
+.explorer-context-menu-item:hover:not(:disabled) {
+  background: var(--menu-hover-bg);
+  color: var(--menu-text-strong);
+}
+</style>

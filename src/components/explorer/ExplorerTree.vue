@@ -1067,10 +1067,10 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="flex h-full min-h-0 flex-col gap-2">
-    <div class="flex flex-wrap items-center gap-1 border-b border-[#dfe3ea] pb-1 dark:border-slate-800">
+    <div class="explorer-toolbar flex flex-wrap items-center gap-1 border-b pb-1">
       <button
         type="button"
-        class="inline-flex h-6.5 w-6.5 items-center justify-center rounded-md border border-transparent text-[#5b6472] transition hover:bg-[#e9edf5] hover:text-[#1f2937] disabled:opacity-40 disabled:hover:bg-transparent dark:text-slate-300 dark:hover:bg-slate-800"
+        class="explorer-toolbar-btn inline-flex h-6.5 w-6.5 items-center justify-center rounded-md border border-transparent transition disabled:opacity-40 disabled:hover:bg-transparent"
         title="New note"
         aria-label="New note"
         :disabled="!folderPath"
@@ -1080,7 +1080,7 @@ onBeforeUnmount(() => {
       </button>
       <button
         type="button"
-        class="inline-flex h-6.5 w-6.5 items-center justify-center rounded-md border border-transparent text-[#5b6472] transition hover:bg-[#e9edf5] hover:text-[#1f2937] disabled:opacity-40 disabled:hover:bg-transparent dark:text-slate-300 dark:hover:bg-slate-800"
+        class="explorer-toolbar-btn inline-flex h-6.5 w-6.5 items-center justify-center rounded-md border border-transparent transition disabled:opacity-40 disabled:hover:bg-transparent"
         title="New folder"
         aria-label="New folder"
         :disabled="!folderPath"
@@ -1090,7 +1090,7 @@ onBeforeUnmount(() => {
       </button>
       <button
         type="button"
-        class="inline-flex h-6.5 w-6.5 items-center justify-center rounded-md border border-transparent text-[#5b6472] transition hover:bg-[#e9edf5] hover:text-[#1f2937] disabled:opacity-40 disabled:hover:bg-transparent dark:text-slate-300 dark:hover:bg-slate-800"
+        class="explorer-toolbar-btn inline-flex h-6.5 w-6.5 items-center justify-center rounded-md border border-transparent transition disabled:opacity-40 disabled:hover:bg-transparent"
         title="Expand all folders"
         aria-label="Expand all folders"
         :disabled="!folderPath"
@@ -1100,7 +1100,7 @@ onBeforeUnmount(() => {
       </button>
       <button
         type="button"
-        class="inline-flex h-6.5 w-6.5 items-center justify-center rounded-md border border-transparent text-[#5b6472] transition hover:bg-[#e9edf5] hover:text-[#1f2937] disabled:opacity-40 disabled:hover:bg-transparent dark:text-slate-300 dark:hover:bg-slate-800"
+        class="explorer-toolbar-btn inline-flex h-6.5 w-6.5 items-center justify-center rounded-md border border-transparent transition disabled:opacity-40 disabled:hover:bg-transparent"
         title="Collapse all folders"
         aria-label="Collapse all folders"
         :disabled="!folderPath"
@@ -1110,7 +1110,7 @@ onBeforeUnmount(() => {
       </button>
       <button
         type="button"
-        class="inline-flex h-6.5 w-6.5 items-center justify-center rounded-md border border-transparent text-[#5b6472] transition hover:bg-[#e9edf5] hover:text-[#1f2937] disabled:opacity-40 disabled:hover:bg-transparent dark:text-slate-300 dark:hover:bg-slate-800"
+        class="explorer-toolbar-btn inline-flex h-6.5 w-6.5 items-center justify-center rounded-md border border-transparent transition disabled:opacity-40 disabled:hover:bg-transparent"
         title="Refresh explorer"
         aria-label="Refresh explorer"
         :disabled="!folderPath"
@@ -1128,8 +1128,8 @@ onBeforeUnmount(() => {
       @contextmenu.prevent="onTreeContextMenu"
       @click="clearSelectionIfBackground"
     >
-      <p v-if="!folderPath" class="px-2 py-1 text-xs text-[#5b6472] dark:text-slate-500">Select a working folder to start.</p>
-      <p v-else-if="!visibleRows.length" class="px-2 py-1 text-xs text-[#5b6472] dark:text-slate-500">No files or folders. Use New file or New folder.</p>
+      <p v-if="!folderPath" class="explorer-empty-state px-2 py-1 text-xs">Select a working folder to start.</p>
+      <p v-else-if="!visibleRows.length" class="explorer-empty-state px-2 py-1 text-xs">No files or folders. Use New file or New folder.</p>
 
       <template v-else>
         <ExplorerItem
@@ -1168,10 +1168,10 @@ onBeforeUnmount(() => {
       @action="onContextAction"
     />
 
-    <div v-if="conflictPrompt" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4">
-      <div class="w-full max-w-sm rounded-2xl border border-slate-300/80 bg-white p-4 shadow-xl dark:border-slate-700/80 dark:bg-slate-900">
-        <h3 class="text-sm font-semibold text-slate-900 dark:text-slate-100">{{ conflictPrompt.title }}</h3>
-        <p class="mt-1 text-xs text-slate-600 dark:text-slate-400">{{ conflictPrompt.detail }}</p>
+    <div v-if="conflictPrompt" class="explorer-modal-backdrop fixed inset-0 z-50 flex items-center justify-center px-4">
+      <div class="explorer-modal w-full max-w-sm rounded-2xl border p-4">
+        <h3 class="explorer-modal-title text-sm font-semibold">{{ conflictPrompt.title }}</h3>
+        <p class="explorer-modal-copy mt-1 text-xs">{{ conflictPrompt.detail }}</p>
         <div class="mt-4 flex flex-wrap justify-end gap-2">
           <UiButton size="sm" variant="ghost" @click="closeConflictPrompt">Cancel</UiButton>
           <UiButton size="sm" @click="resolveConflict('rename')">Keep both</UiButton>
@@ -1180,10 +1180,10 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div v-if="confirmPrompt" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4">
-      <div class="w-full max-w-sm rounded-2xl border border-slate-300/80 bg-white p-4 shadow-xl dark:border-slate-700/80 dark:bg-slate-900">
-        <h3 class="text-sm font-semibold text-slate-900 dark:text-slate-100">{{ confirmPrompt.title }}</h3>
-        <p class="mt-1 text-xs text-slate-600 dark:text-slate-400">{{ confirmPrompt.detail }}</p>
+    <div v-if="confirmPrompt" class="explorer-modal-backdrop fixed inset-0 z-50 flex items-center justify-center px-4">
+      <div class="explorer-modal w-full max-w-sm rounded-2xl border p-4">
+        <h3 class="explorer-modal-title text-sm font-semibold">{{ confirmPrompt.title }}</h3>
+        <p class="explorer-modal-copy mt-1 text-xs">{{ confirmPrompt.detail }}</p>
         <div class="mt-4 flex justify-end gap-2">
           <UiButton size="sm" variant="ghost" @click="cancelConfirmPrompt">Cancel</UiButton>
           <UiButton size="sm" variant="primary" @click="confirmPromptAction">Confirm</UiButton>
@@ -1192,3 +1192,40 @@ onBeforeUnmount(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.explorer-toolbar {
+  border-color: color-mix(in srgb, var(--border-strong) 72%, transparent);
+}
+
+.explorer-toolbar-btn {
+  color: var(--text-soft);
+}
+
+.explorer-toolbar-btn:hover:not(:disabled) {
+  background: var(--explorer-toolbar-hover-bg);
+  color: var(--menu-text-strong);
+}
+
+.explorer-empty-state {
+  color: var(--text-dim);
+}
+
+.explorer-modal-backdrop {
+  background: var(--menu-backdrop);
+}
+
+.explorer-modal {
+  border-color: var(--panel-border);
+  background: var(--surface-bg);
+  box-shadow: var(--menu-shadow);
+}
+
+.explorer-modal-title {
+  color: var(--text-main);
+}
+
+.explorer-modal-copy {
+  color: var(--text-dim);
+}
+</style>

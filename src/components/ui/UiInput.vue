@@ -18,11 +18,26 @@ const emit = defineEmits<{
     :value="props.modelValue"
     :placeholder="placeholder"
     :class="[
-      'h-10 w-full rounded-xl border border-slate-300/90 bg-white/95 px-3 text-sm text-slate-900',
-      'outline-none transition focus:border-[#003153]/70 focus:ring-2 focus:ring-[#003153]/20',
-      'placeholder:text-slate-400 dark:border-slate-600/70 dark:bg-slate-900/80 dark:text-slate-100 dark:focus:border-[#4a6f95]/70 dark:focus:ring-[#4a6f95]/30 dark:placeholder:text-slate-500',
+      'ui-input h-10 w-full rounded-xl border px-3 text-sm outline-none transition',
       className
     ]"
     @input="emit('update:modelValue', ($event.target as HTMLInputElement).value)"
   />
 </template>
+
+<style scoped>
+.ui-input {
+  border-color: var(--input-border);
+  background: var(--input-bg);
+  color: var(--input-text);
+}
+
+.ui-input::placeholder {
+  color: var(--input-placeholder);
+}
+
+.ui-input:focus {
+  border-color: var(--input-focus-border);
+  box-shadow: 0 0 0 2px var(--input-focus-ring);
+}
+</style>

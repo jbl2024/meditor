@@ -34,22 +34,16 @@ const emit = defineEmits<{
 <style scoped>
 .status-bar {
   height: 22px;
-  border-top: 1px solid #e5e7eb;
-  background: #f2f4f8;
+  border-top: 1px solid var(--shell-chrome-border);
+  background: var(--shell-status-bg);
   font-size: 11px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
-  color: #4b5563;
+  color: var(--shell-status-text);
   display: flex;
   align-items: center;
   gap: 0;
   padding: 0;
   overflow-x: auto;
-}
-
-:global(.ide-root.dark) .status-bar {
-  border-top-color: #3e4451;
-  background: #21252b;
-  color: #8b93a3;
 }
 
 .status-item {
@@ -89,36 +83,20 @@ const emit = defineEmits<{
 }
 
 .status-dot.status-item-indexing {
-  background: #2563eb;
+  background: var(--editor-progress-fill);
   animation: statusPulse 1.2s ease-in-out infinite;
 }
 
 .status-dot.status-item-indexed {
-  background: #22c55e;
+  background: var(--success);
 }
 
 .status-dot.status-item-out-of-sync {
-  background: #f97316;
-}
-
-:global(.ide-root.dark) .status-dot.status-item-indexing {
-  background: #60a5fa;
-}
-
-:global(.ide-root.dark) .status-dot.status-item-indexed {
-  background: #4ade80;
-}
-
-:global(.ide-root.dark) .status-dot.status-item-out-of-sync {
-  background: #fb923c;
+  background: var(--warning);
 }
 
 .status-item + .status-item {
-  border-left: 1px solid #cbd5e1;
-}
-
-:global(.ide-root.dark) .status-item + .status-item {
-  border-left-color: #3e4451;
+  border-left: 1px solid var(--shell-status-divider);
 }
 
 @keyframes statusPulse {

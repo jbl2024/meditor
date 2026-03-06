@@ -438,34 +438,8 @@ watch(() => props.visible, async (visible) => {
 </template>
 
 <style scoped>
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(2, 6, 23, 0.45);
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding-top: 80px;
-  z-index: 60;
-}
-
-.modal {
-  width: min(760px, calc(100vw - 32px));
-  border: 1px solid #cbd5e1;
-  background: #ffffff;
-  border-radius: 6px;
-  padding: 10px;
-}
-
 .settings-modal {
   width: min(960px, calc(100vw - 32px));
-}
-
-.confirm-title {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 600;
-  color: #0f172a;
 }
 
 .settings-tabs {
@@ -475,68 +449,36 @@ watch(() => props.visible, async (visible) => {
 }
 
 .settings-tab-btn {
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--modal-tab-border);
   border-bottom-color: transparent;
-  background: #f1f5f9;
+  background: var(--modal-tab-bg);
   border-radius: 8px 8px 0 0;
   font-size: 12px;
   padding: 6px 10px;
-  color: #334155;
+  color: var(--text-soft);
 }
 
 .settings-tab-btn.active {
-  border-color: #e2e8f0;
-  border-bottom-color: #f8fafc;
-  background: #f8fafc;
-  color: #1e3a8a;
+  border-color: var(--modal-tab-active-border);
+  border-bottom-color: var(--modal-tab-active-bg);
+  background: var(--modal-tab-active-bg);
+  color: var(--modal-tab-active-text);
   position: relative;
   z-index: 1;
 }
 
 .settings-tab-panel {
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--modal-panel-border);
   border-top: 0;
   border-radius: 0 8px 8px 8px;
   padding: 12px;
-  background: #f8fafc;
+  background: var(--modal-panel-bg);
 }
 
 .settings-checkbox-row {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.tool-input {
-  width: 100%;
-  height: 30px;
-  border: 1px solid #e5e7eb;
-  border-radius: 4px;
-  background: #ffffff;
-  color: #2d313a;
-  padding: 0 8px;
-  font-size: 12px;
-}
-
-.tool-input:disabled {
-  background: #f1f5f9;
-  color: #94a3b8;
-  cursor: not-allowed;
-}
-
-.modal-field-label {
-  display: block;
-  margin: 8px 0 4px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  color: #475569;
-}
-
-.modal-field-hint {
-  margin: 6px 0 10px;
-  font-size: 11px;
-  color: #475569;
 }
 
 .settings-model-group {
@@ -546,7 +488,7 @@ watch(() => props.visible, async (visible) => {
   flex-direction: column;
   gap: 8px;
   border-radius: 8px;
-  background: #f1f5f9;
+  background: var(--modal-group-bg);
 }
 
 .settings-model-input-row {
@@ -561,25 +503,20 @@ watch(() => props.visible, async (visible) => {
   border-radius: 8px;
   padding: 8px 10px;
   font-size: 12px;
-  color: #334155;
-  background: #e2e8f0;
+  color: var(--text-soft);
+  background: var(--modal-muted-btn-bg);
   cursor: pointer;
   white-space: nowrap;
 }
 
 .settings-discover-btn:hover:not(:disabled) {
-  background: #cbd5e1;
+  background: var(--modal-muted-btn-hover);
+  color: var(--text-main);
 }
 
 .settings-discover-btn:disabled {
   opacity: 0.7;
   cursor: not-allowed;
-}
-
-.modal-input-error {
-  margin: 8px 0 0;
-  font-size: 12px;
-  color: #b91c1c;
 }
 
 .settings-footer {
@@ -593,7 +530,7 @@ watch(() => props.visible, async (visible) => {
 .settings-config-path {
   margin: 0;
   font-size: 11px;
-  color: #64748b;
+  color: var(--text-dim);
 }
 
 .settings-footer-actions {
@@ -605,80 +542,13 @@ watch(() => props.visible, async (visible) => {
 .settings-cancel-btn {
   border: 0;
   background: transparent;
-  color: #64748b;
+  color: var(--text-dim);
   font-size: 12px;
   padding: 2px 4px;
   cursor: pointer;
 }
 
 .settings-cancel-btn:hover {
-  color: #334155;
-}
-
-:global(.ide-root.dark) .modal {
-  border-color: #3e4451;
-  background: #282c34;
-}
-
-:global(.ide-root.dark) .confirm-title {
-  color: #e5e7eb;
-}
-
-:global(.ide-root.dark) .settings-tab-btn {
-  border-color: #3e4451;
-  border-bottom-color: transparent;
-  background: #21252b;
-  color: #cbd5e1;
-}
-
-:global(.ide-root.dark) .settings-tab-btn.active {
-  border-color: #61afef;
-  border-bottom-color: rgba(30, 41, 59, 0.35);
-  background: #1e3a5f;
-  color: #dbeafe;
-}
-
-:global(.ide-root.dark) .settings-tab-panel {
-  border-color: #3e4451;
-  background: rgba(30, 41, 59, 0.35);
-}
-
-:global(.ide-root.dark) .tool-input {
-  border-color: #3e4451;
-  background: #282c34;
-  color: #abb2bf;
-}
-
-:global(.ide-root.dark) .tool-input:disabled {
-  background: #21252b;
-  color: #7d8595;
-}
-
-:global(.ide-root.dark) .modal-field-label,
-:global(.ide-root.dark) .modal-field-hint,
-:global(.ide-root.dark) .settings-config-path,
-:global(.ide-root.dark) .settings-cancel-btn {
-  color: #94a3b8;
-}
-
-:global(.ide-root.dark) .settings-cancel-btn:hover {
-  color: #cbd5e1;
-}
-
-:global(.ide-root.dark) .settings-model-group {
-  background: rgba(15, 23, 42, 0.45);
-}
-
-:global(.ide-root.dark) .settings-discover-btn {
-  background: #2c313a;
-  color: #cbd5e1;
-}
-
-:global(.ide-root.dark) .settings-discover-btn:hover:not(:disabled) {
-  background: #3e4451;
-}
-
-:global(.ide-root.dark) .modal-input-error {
-  color: #fda4af;
+  color: var(--text-main);
 }
 </style>

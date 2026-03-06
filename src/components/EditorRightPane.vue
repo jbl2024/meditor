@@ -162,8 +162,8 @@ watch(
 .right-pane {
   min-width: 0;
   min-height: 0;
-  background: #f6f8fb;
-  border-left: 1px solid #e5e7eb;
+  background: var(--surface-muted);
+  border-left: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -171,17 +171,12 @@ watch(
   padding: 12px 10px 14px;
 }
 
-.ide-root.dark .right-pane {
-  background: #1e232b;
-  border-color: #3e4451;
-}
-
 .pane-card {
   position: relative;
   border-radius: 10px;
-  background: #fbfcff;
+  background: var(--surface-raised);
   padding: 10px 8px 8px 10px;
-  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.15);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border-strong) 32%, transparent);
   transition: box-shadow 160ms ease, background-color 160ms ease;
 }
 
@@ -190,16 +185,7 @@ watch(
 }
 
 .pane-card:hover {
-  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.3);
-}
-
-.ide-root.dark .pane-card {
-  background: #232a33;
-  box-shadow: inset 0 0 0 1px rgba(71, 85, 105, 0.35);
-}
-
-.ide-root.dark .pane-card:hover {
-  box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.45);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 34%, transparent);
 }
 
 .section-title {
@@ -208,11 +194,7 @@ watch(
   letter-spacing: 0.11em;
   text-transform: uppercase;
   font-weight: 600;
-  color: #5b6472;
-}
-
-.ide-root.dark .section-title {
-  color: #a8b3c4;
+  color: var(--text-dim);
 }
 
 .pane-item {
@@ -226,7 +208,7 @@ watch(
   margin: 2px 0;
   font-size: 13px;
   line-height: 1.4;
-  color: #2d313a;
+  color: var(--text-main);
   transition: background-color 120ms ease, color 120ms ease;
 }
 
@@ -264,27 +246,13 @@ watch(
 }
 
 .semantic-link-direction {
-  color: #4b5563;
-  background: #e5e7eb;
+  color: var(--text-soft);
+  background: var(--surface-subtle);
 }
 
 .pane-item:hover {
-  background: #eef2f8;
-  color: #1f2937;
-}
-
-.ide-root.dark .pane-item {
-  color: #c8d0dc;
-}
-
-.ide-root.dark .pane-item:hover {
-  background: #2f3845;
-  color: #e2e8f0;
-}
-
-.ide-root.dark .semantic-link-direction {
-  color: #cbd5e1;
-  background: #334155;
+  background: var(--surface-subtle);
+  color: var(--menu-text-strong);
 }
 
 .metadata-grid {
@@ -302,14 +270,14 @@ watch(
 
 .meta-label {
   font-size: 11px;
-  color: #7b8492;
+  color: var(--text-dim);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
 .meta-value {
   font-size: 12px;
-  color: #2d313a;
+  color: var(--text-main);
   font-weight: 500;
   text-align: right;
   white-space: nowrap;
@@ -317,26 +285,13 @@ watch(
   text-overflow: ellipsis;
 }
 
-.ide-root.dark .meta-label {
-  color: #8f9cb0;
-}
-
-.ide-root.dark .meta-value {
-  color: #d7dce5;
-}
-
 .empty-state {
-  color: #8b93a3;
+  color: var(--text-dim);
   font-size: 12px;
   line-height: 1.45;
   padding: 8px;
   border-radius: 8px;
-  background: rgba(148, 163, 184, 0.08);
-}
-
-.ide-root.dark .empty-state {
-  color: #9aa3b2;
-  background: rgba(71, 85, 105, 0.26);
+  background: color-mix(in srgb, var(--border-strong) 18%, transparent);
 }
 
 .section-toggle {
@@ -355,7 +310,7 @@ watch(
   width: 15px;
   height: 15px;
   flex: 0 0 auto;
-  color: #7b8798;
+  color: var(--text-dim);
   transition: transform 140ms ease;
 }
 
@@ -363,7 +318,4 @@ watch(
   transform: rotate(90deg);
 }
 
-.ide-root.dark .section-toggle-chevron {
-  color: #a8b3c4;
-}
 </style>

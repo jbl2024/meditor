@@ -1,5 +1,5 @@
 .editor-holder {
-  --tomosona-link-color: #2563eb;
+  --tomosona-link-color: var(--editor-link);
 }
 
 .editor-content-shell {
@@ -38,10 +38,6 @@
     padding-left: 1rem;
     padding-right: 1rem;
   }
-}
-
-.dark .editor-holder {
-  --tomosona-link-color: #60a5fa;
 }
 
 .editor-holder a.wikilink {
@@ -90,7 +86,7 @@
   font-weight: 560;
   line-height: 1.35;
   margin: 0.62rem 0 0.35rem;
-  color: #3f4754;
+  color: var(--editor-heading-4);
 }
 
 .editor-holder .ProseMirror h5 {
@@ -98,7 +94,7 @@
   font-weight: 540;
   line-height: 1.35;
   margin: 0.5rem 0 0.28rem;
-  color: #4b5563;
+  color: var(--editor-heading-5);
 }
 
 .editor-holder .ProseMirror h6 {
@@ -106,7 +102,7 @@
   font-weight: 520;
   line-height: 1.35;
   margin: 0.45rem 0 0.22rem;
-  color: #5b6472;
+  color: var(--editor-heading-6);
   text-decoration: none;
 }
 
@@ -115,7 +111,7 @@
   padding: 0.06rem 0.38rem;
   font-size: 0.92em;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  background: rgb(241 245 249);
+  background: var(--editor-code-bg);
 }
 
 .editor-holder .ProseMirror ul,
@@ -159,12 +155,12 @@
 
 .editor-holder .ProseMirror ul ul > li::marker,
 .editor-holder .ProseMirror ol ol > li::marker {
-  color: rgb(100 116 139);
+  color: var(--editor-marker-muted);
 }
 
 .editor-holder .ProseMirror ul ul ul > li::marker,
 .editor-holder .ProseMirror ol ol ol > li::marker {
-  color: rgb(148 163 184);
+  color: var(--editor-marker-faint);
 }
 
 .editor-holder .ProseMirror li {
@@ -192,14 +188,8 @@
 .editor-holder .ProseMirror ul[data-type="taskList"] li > label input[type="checkbox"] {
   width: 1.1rem;
   height: 1.1rem;
-  accent-color: rgb(37 99 235);
+  accent-color: var(--editor-checkbox-accent);
   cursor: pointer;
-}
-
-.dark .editor-holder .ProseMirror ul[data-type="taskList"] li > label input[type="checkbox"] {
-  color-scheme: dark;
-  background-color: rgb(30 41 59);
-  border-color: rgb(100 116 139);
 }
 
 .editor-holder .ProseMirror ul[data-type="taskList"] li > div > p {
@@ -216,10 +206,10 @@
   border-collapse: separate;
   border-spacing: 0;
   margin: 0.36rem 0;
-  border: 1px solid rgb(203 213 225);
+  border: 1px solid var(--editor-table-border);
   border-radius: 0.52rem;
   overflow: hidden;
-  background: rgb(255 255 255 / 0.98);
+  background: var(--editor-table-bg);
   font-size: calc(0.82rem * var(--editor-zoom, 1));
   line-height: 1.3;
   table-layout: fixed;
@@ -227,8 +217,8 @@
 
 .editor-holder .ProseMirror th,
 .editor-holder .ProseMirror td {
-  border-right: 1px solid rgb(226 232 240);
-  border-bottom: 1px solid rgb(226 232 240);
+  border-right: 1px solid var(--editor-table-cell-border);
+  border-bottom: 1px solid var(--editor-table-cell-border);
   padding: 0.24rem 0.34rem;
   vertical-align: top;
   text-align: left;
@@ -254,7 +244,7 @@
 }
 
 .editor-holder .ProseMirror tbody tr:hover td {
-  background: rgb(248 250 252);
+  background: var(--editor-table-hover);
 }
 
 .editor-holder .ProseMirror th {

@@ -95,27 +95,18 @@ const emit = defineEmits<{
 }
 
 .modal-item {
-  border: 1px solid #e2e8f0;
-  background: #f8fafc;
+  border: 1px solid var(--modal-chip-border);
+  background: var(--modal-chip-bg);
   border-radius: 4px;
   padding: 6px;
   text-align: left;
   font-size: 12px;
+  color: var(--text-main);
 }
 
 .modal-item.active {
-  border-color: #93c5fd;
-  background: #dbeafe;
-}
-
-:global(.ide-root.dark) .modal-item {
-  border-color: #3e4451;
-  background: #21252b;
-  color: #abb2bf;
-}
-
-:global(.ide-root.dark) .modal-item.active {
-  border-color: #61afef;
-  background: #2c313a;
+  border-color: var(--modal-chip-active-border);
+  background: var(--modal-chip-active-bg);
+  color: var(--modal-chip-active-text);
 }
 </style>
