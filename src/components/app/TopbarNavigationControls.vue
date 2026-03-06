@@ -1,5 +1,12 @@
 <script setup lang="ts">
-import { ArrowLeftIcon, ArrowRightIcon, HomeIcon, ShareIcon, SparklesIcon } from '@heroicons/vue/24/outline'
+import {
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  CommandLineIcon,
+  HomeIcon,
+  ShareIcon,
+  SparklesIcon
+} from '@heroicons/vue/24/outline'
 import { ref, type CSSProperties } from 'vue'
 import MultiPaneToolbarMenu from '../panes/MultiPaneToolbarMenu.vue'
 import WorkspaceOverflowMenu from './WorkspaceOverflowMenu.vue'
@@ -9,8 +16,8 @@ import type { ThemePreference } from '../../composables/useAppTheme'
  * Module: TopbarNavigationControls
  *
  * Purpose:
- * - Render the app-shell top bar with history controls, pane actions, and the
- *   workspace overflow menu.
+ * - Render the app-shell top bar with grouped navigation, a command trigger,
+ *   pane actions, and the workspace overflow menu.
  */
 
 /** Normalized row shape rendered inside back/forward history menus. */
@@ -27,7 +34,9 @@ const props = defineProps<{
   backShortcutLabel: string
   forwardShortcutLabel: string
   homeShortcutLabel: string
+  commandPaletteShortcutLabel: string
   hasWorkspace: boolean
+  sidebarVisible: boolean
   rightPaneVisible: boolean
   historyMenuOpen: 'back' | 'forward' | null
   historyMenuStyle: CSSProperties | Record<string, string>
@@ -58,6 +67,7 @@ const emit = defineEmits<{
   closePane: []
   joinPanes: []
   resetLayout: []
+  toggleSidebar: []
   toggleRightPane: []
   toggleOverflow: []
   openCommandPalette: []
@@ -102,146 +112,194 @@ defineExpose({
 
 <template>
   <header class="topbar">
-    <div class="global-actions">
-      <div class="nav-actions">
-        <div ref="backHistoryMenuRef" class="history-nav-wrap">
+    <div class="topbar-content">
+      <div class="topbar-side topbar-side-left">
+        <div class="toolbar-group toolbar-group-window">
           <button
-            ref="backHistoryButtonRef"
             type="button"
             class="toolbar-icon-btn"
-            :disabled="!canGoBack"
-            :title="`Back (${backShortcutLabel})`"
-            :aria-label="`Back (${backShortcutLabel})`"
-            @click="emit('historyButtonClick', 'back')"
-            @contextmenu.prevent="emit('historyButtonContextMenu', 'back', $event)"
-            @pointerdown="emit('historyButtonPointerDown', 'back', $event)"
-            @pointerup="emit('historyLongPressCancel')"
-            @pointerleave="emit('historyLongPressCancel')"
-            @pointercancel="emit('historyLongPressCancel')"
+            :class="{ active: sidebarVisible }"
+            :title="sidebarVisible ? 'Hide sidebar' : 'Show sidebar'"
+            :aria-label="sidebarVisible ? 'Hide sidebar' : 'Show sidebar'"
+            @click="emit('toggleSidebar')"
           >
-            <ArrowLeftIcon />
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" ry="1.5" />
+              <line x1="5.5" y1="2.5" x2="5.5" y2="13.5" />
+            </svg>
           </button>
-          <div v-if="historyMenuOpen === 'back'" class="history-menu" :style="historyMenuStyle">
+        </div>
+
+        <div class="toolbar-group">
+          <div ref="backHistoryMenuRef" class="history-nav-wrap">
             <button
-              v-for="target in backItems"
-              :key="target.key"
+              ref="backHistoryButtonRef"
               type="button"
-              class="history-menu-item"
-              @click="emit('historyTargetClick', target.index)"
+              class="toolbar-icon-btn"
+              :disabled="!canGoBack"
+              :title="`Back (${backShortcutLabel})`"
+              :aria-label="`Back (${backShortcutLabel})`"
+              @click="emit('historyButtonClick', 'back')"
+              @contextmenu.prevent="emit('historyButtonContextMenu', 'back', $event)"
+              @pointerdown="emit('historyButtonPointerDown', 'back', $event)"
+              @pointerup="emit('historyLongPressCancel')"
+              @pointerleave="emit('historyLongPressCancel')"
+              @pointercancel="emit('historyLongPressCancel')"
             >
-              {{ target.label }}
+              <ArrowLeftIcon />
             </button>
-            <div v-if="!backItems.length" class="history-menu-empty">No back history</div>
+            <div v-if="historyMenuOpen === 'back'" class="history-menu" :style="historyMenuStyle">
+              <button
+                v-for="target in backItems"
+                :key="target.key"
+                type="button"
+                class="history-menu-item"
+                @click="emit('historyTargetClick', target.index)"
+              >
+                {{ target.label }}
+              </button>
+              <div v-if="!backItems.length" class="history-menu-empty">No back history</div>
+            </div>
+          </div>
+
+          <div ref="forwardHistoryMenuRef" class="history-nav-wrap">
+            <button
+              ref="forwardHistoryButtonRef"
+              type="button"
+              class="toolbar-icon-btn"
+              :disabled="!canGoForward"
+              :title="`Forward (${forwardShortcutLabel})`"
+              :aria-label="`Forward (${forwardShortcutLabel})`"
+              @click="emit('historyButtonClick', 'forward')"
+              @contextmenu.prevent="emit('historyButtonContextMenu', 'forward', $event)"
+              @pointerdown="emit('historyButtonPointerDown', 'forward', $event)"
+              @pointerup="emit('historyLongPressCancel')"
+              @pointerleave="emit('historyLongPressCancel')"
+              @pointercancel="emit('historyLongPressCancel')"
+            >
+              <ArrowRightIcon />
+            </button>
+            <div
+              v-if="historyMenuOpen === 'forward'"
+              class="history-menu history-menu-forward"
+              :style="historyMenuStyle"
+            >
+              <button
+                v-for="target in forwardItems"
+                :key="target.key"
+                type="button"
+                class="history-menu-item"
+                @click="emit('historyTargetClick', target.index)"
+              >
+                {{ target.label }}
+              </button>
+              <div v-if="!forwardItems.length" class="history-menu-empty">No forward history</div>
+            </div>
           </div>
         </div>
-        <button
-          type="button"
-          class="toolbar-icon-btn"
-          :disabled="!hasWorkspace"
-          :title="`Home: today note (${homeShortcutLabel})`"
-          :aria-label="`Home: today note (${homeShortcutLabel})`"
-          @click="emit('openToday')"
-        >
-          <HomeIcon />
-        </button>
-        <button
-          type="button"
-          class="toolbar-icon-btn"
-          :disabled="!hasWorkspace"
-          title="Cosmos view"
-          aria-label="Cosmos view"
-          @click="emit('openCosmos')"
-        >
-          <ShareIcon />
-        </button>
-        <button
-          type="button"
-          class="toolbar-icon-btn"
-          :disabled="!hasWorkspace"
-          title="Second Brain"
-          aria-label="Second Brain"
-          @click="emit('openSecondBrain')"
-        >
-          <SparklesIcon />
-        </button>
-        <div ref="forwardHistoryMenuRef" class="history-nav-wrap">
+
+        <div class="toolbar-group toolbar-group-nav-tail">
           <button
-            ref="forwardHistoryButtonRef"
             type="button"
             class="toolbar-icon-btn"
-            :disabled="!canGoForward"
-            :title="`Forward (${forwardShortcutLabel})`"
-            :aria-label="`Forward (${forwardShortcutLabel})`"
-            @click="emit('historyButtonClick', 'forward')"
-            @contextmenu.prevent="emit('historyButtonContextMenu', 'forward', $event)"
-            @pointerdown="emit('historyButtonPointerDown', 'forward', $event)"
-            @pointerup="emit('historyLongPressCancel')"
-            @pointerleave="emit('historyLongPressCancel')"
-            @pointercancel="emit('historyLongPressCancel')"
+            :disabled="!hasWorkspace"
+            :title="`Home: today note (${homeShortcutLabel})`"
+            :aria-label="`Home: today note (${homeShortcutLabel})`"
+            @click="emit('openToday')"
           >
-            <ArrowRightIcon />
+            <HomeIcon />
           </button>
-          <div
-            v-if="historyMenuOpen === 'forward'"
-            class="history-menu history-menu-forward"
-            :style="historyMenuStyle"
-          >
-            <button
-              v-for="target in forwardItems"
-              :key="target.key"
-              type="button"
-              class="history-menu-item"
-              @click="emit('historyTargetClick', target.index)"
-            >
-              {{ target.label }}
-            </button>
-            <div v-if="!forwardItems.length" class="history-menu-empty">No forward history</div>
-          </div>
         </div>
-        <MultiPaneToolbarMenu
-          :can-split="paneCount < 4"
-          :pane-count="paneCount"
-          @split-right="emit('splitRight')"
-          @split-down="emit('splitDown')"
-          @focus-pane="emit('focusPane', $event.index)"
-          @focus-next="emit('focusNext')"
-          @move-tab-next="emit('moveTabNext')"
-          @close-pane="emit('closePane')"
-          @join-panes="emit('joinPanes')"
-          @reset-layout="emit('resetLayout')"
-        />
       </div>
+
       <button
         type="button"
-        class="toolbar-icon-btn"
-        :class="{ active: rightPaneVisible }"
-        :title="rightPaneVisible ? 'Hide right pane' : 'Show right pane'"
-        :aria-label="rightPaneVisible ? 'Hide right pane' : 'Show right pane'"
-        @click="emit('toggleRightPane')"
+        class="command-trigger"
+        :disabled="!hasWorkspace"
+        :title="`Search or type a command (${commandPaletteShortcutLabel})`"
+        :aria-label="`Search or type a command (${commandPaletteShortcutLabel})`"
+        @click="emit('openCommandPalette')"
       >
-        <svg viewBox="0 0 16 16" aria-hidden="true">
-          <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" ry="1.5" />
-          <line x1="10" y1="2.5" x2="10" y2="13.5" />
-        </svg>
+        <span class="command-trigger-copy">
+          <CommandLineIcon class="command-trigger-icon" />
+          <span class="command-trigger-label">Search or type a command...</span>
+        </span>
+        <span class="command-trigger-shortcut">{{ commandPaletteShortcutLabel }}</span>
       </button>
-      <WorkspaceOverflowMenu
-        ref="overflowRef"
-        :open="overflowMenuOpen"
-        :has-workspace="hasWorkspace"
-        :indexing-state="indexingState"
-        :zoom-percent-label="zoomPercentLabel"
-        :theme-preference="themePreference"
-        @toggle="emit('toggleOverflow')"
-        @open-command-palette="emit('openCommandPalette')"
-        @open-shortcuts="emit('openShortcuts')"
-        @open-settings="emit('openSettings')"
-        @rebuild-index="emit('rebuildIndex')"
-        @close-workspace="emit('closeWorkspace')"
-        @zoom-in="emit('zoomIn')"
-        @zoom-out="emit('zoomOut')"
-        @reset-zoom="emit('resetZoom')"
-        @set-theme="emit('setTheme', $event)"
-      />
+
+      <div class="topbar-side topbar-side-right">
+        <div class="toolbar-group">
+          <button
+            type="button"
+            class="toolbar-icon-btn"
+            :disabled="!hasWorkspace"
+            title="Cosmos view"
+            aria-label="Cosmos view"
+            @click="emit('openCosmos')"
+          >
+            <ShareIcon />
+          </button>
+          <button
+            type="button"
+            class="toolbar-icon-btn"
+            :disabled="!hasWorkspace"
+            title="Second Brain"
+            aria-label="Second Brain"
+            @click="emit('openSecondBrain')"
+          >
+            <SparklesIcon />
+          </button>
+        </div>
+
+        <div class="toolbar-group">
+          <MultiPaneToolbarMenu
+            :can-split="paneCount < 4"
+            :pane-count="paneCount"
+            @split-right="emit('splitRight')"
+            @split-down="emit('splitDown')"
+            @focus-pane="emit('focusPane', $event.index)"
+            @focus-next="emit('focusNext')"
+            @move-tab-next="emit('moveTabNext')"
+            @close-pane="emit('closePane')"
+            @join-panes="emit('joinPanes')"
+            @reset-layout="emit('resetLayout')"
+          />
+          <button
+            type="button"
+            class="toolbar-icon-btn"
+            :class="{ active: rightPaneVisible }"
+            :title="rightPaneVisible ? 'Hide right pane' : 'Show right pane'"
+            :aria-label="rightPaneVisible ? 'Hide right pane' : 'Show right pane'"
+            @click="emit('toggleRightPane')"
+          >
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" ry="1.5" />
+              <line x1="10" y1="2.5" x2="10" y2="13.5" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="toolbar-group toolbar-group-overflow">
+          <WorkspaceOverflowMenu
+            ref="overflowRef"
+            :open="overflowMenuOpen"
+            :has-workspace="hasWorkspace"
+            :indexing-state="indexingState"
+            :zoom-percent-label="zoomPercentLabel"
+            :theme-preference="themePreference"
+            @toggle="emit('toggleOverflow')"
+            @open-command-palette="emit('openCommandPalette')"
+            @open-shortcuts="emit('openShortcuts')"
+            @open-settings="emit('openSettings')"
+            @rebuild-index="emit('rebuildIndex')"
+            @close-workspace="emit('closeWorkspace')"
+            @zoom-in="emit('zoomIn')"
+            @zoom-out="emit('zoomOut')"
+            @reset-zoom="emit('resetZoom')"
+            @set-theme="emit('setTheme', $event)"
+          />
+        </div>
+      </div>
     </div>
   </header>
 </template>
@@ -251,7 +309,6 @@ defineExpose({
   height: 42px;
   display: flex;
   align-items: center;
-  justify-content: center;
   border-bottom: 1px solid #e5e7eb;
   background: #f2f4f8;
   flex: 0 0 auto;
@@ -262,30 +319,51 @@ defineExpose({
   background: #21252b;
 }
 
-:global(.ide-root.macos-overlay) .topbar {
+:global(.ide-root.macos-overlay .topbar) {
   box-sizing: border-box;
   min-height: 52px;
 }
 
-.global-actions {
+.topbar-content {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 8px;
-  position: relative;
-  margin: 0 auto;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  padding: 0 12px;
 }
 
-.nav-actions {
+.topbar-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.topbar-side-left {
+  flex: 1 1 0;
+}
+
+.topbar-side-right {
+  flex: 1 1 0;
+  justify-content: flex-end;
+}
+
+.toolbar-group {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  margin-right: 2px;
-  padding-right: 6px;
+  padding-right: 8px;
   border-right: 1px solid #e5e7eb;
 }
 
-:global(.ide-root.dark) .nav-actions {
+.toolbar-group:last-child {
+  padding-right: 0;
+  border-right: 0;
+}
+
+:global(.ide-root.dark) .toolbar-group {
   border-right-color: #3e4451;
 }
 
@@ -294,6 +372,63 @@ defineExpose({
   display: inline-flex;
   align-items: center;
   height: 28px;
+}
+
+.command-trigger {
+  flex: 0 1 440px;
+  min-width: 220px;
+  max-width: 520px;
+  height: 30px;
+  border: 1px solid #d7dce5;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.8);
+  color: #5b6472;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(10px);
+}
+
+.command-trigger:hover:not(:disabled) {
+  border-color: #cbd5e1;
+  background: rgba(255, 255, 255, 0.96);
+  color: #1f2937;
+}
+
+.command-trigger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.command-trigger-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.command-trigger-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.command-trigger-label {
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.command-trigger-shortcut {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 600;
+  color: #8b93a3;
 }
 
 .history-menu {
@@ -356,10 +491,50 @@ defineExpose({
   color: #8b93a3;
 }
 
+:global(.ide-root.dark) .command-trigger {
+  border-color: #3e4451;
+  background: rgba(40, 44, 52, 0.8);
+  color: #c8d0dc;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+:global(.ide-root.dark) .command-trigger:hover:not(:disabled) {
+  border-color: #4b5563;
+  background: rgba(44, 49, 58, 0.96);
+  color: #e5e7eb;
+}
+
+:global(.ide-root.dark) .command-trigger-shortcut {
+  color: #8b93a3;
+}
+
+@media (min-width: 981px) {
+  :global(.ide-root.macos-overlay .topbar-content) {
+    padding-left: 84px;
+  }
+}
+
 @media (max-width: 980px) {
-  .global-actions {
+  .topbar-content {
     gap: 4px;
-    padding-right: 4px;
+    padding: 0 8px;
+  }
+
+  .command-trigger {
+    flex-basis: 280px;
+  }
+}
+
+@media (max-width: 760px) {
+  .command-trigger {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .command-trigger-shortcut,
+  .toolbar-group-window,
+  .toolbar-group-nav-tail {
+    display: none;
   }
 }
 </style>

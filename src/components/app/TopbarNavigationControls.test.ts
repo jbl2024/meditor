@@ -16,7 +16,9 @@ function mountHarness() {
           backShortcutLabel: 'Cmd+[',
           forwardShortcutLabel: 'Cmd+]',
           homeShortcutLabel: 'Cmd+Shift+H',
+          commandPaletteShortcutLabel: 'Cmd+Shift+P',
           hasWorkspace: true,
+          sidebarVisible: true,
           rightPaneVisible: false,
           historyMenuOpen: 'back',
           historyMenuStyle: {},
@@ -32,7 +34,9 @@ function mountHarness() {
           onOpenToday: () => events.push('today'),
           onOpenCosmos: () => events.push('cosmos'),
           onOpenSecondBrain: () => events.push('second-brain'),
+          onToggleSidebar: () => events.push('toggle-sidebar'),
           onToggleRightPane: () => events.push('toggle-right'),
+          onOpenCommandPalette: () => events.push('command-palette'),
           onToggleOverflow: () => events.push('toggle-overflow'),
           onHistoryButtonContextMenu: () => {},
           onHistoryButtonPointerDown: () => {},
@@ -45,7 +49,6 @@ function mountHarness() {
           onClosePane: () => {},
           onJoinPanes: () => {},
           onResetLayout: () => {},
-          onOpenCommandPalette: () => {},
           onOpenShortcuts: () => {},
           onOpenSettings: () => {},
           onRebuildIndex: () => {},
@@ -70,17 +73,21 @@ describe('TopbarNavigationControls', () => {
   it('emits history and primary toolbar actions', () => {
     const mounted = mountHarness()
 
+    mounted.root.querySelector<HTMLButtonElement>('[aria-label="Hide sidebar"]')?.click()
     mounted.root.querySelector<HTMLButtonElement>('[aria-label="Back (Cmd+[)"]')?.click()
     mounted.root.querySelector<HTMLButtonElement>('.history-menu-item')?.click()
     mounted.root.querySelector<HTMLButtonElement>('[aria-label="Home: today note (Cmd+Shift+H)"]')?.click()
+    mounted.root.querySelector<HTMLButtonElement>('[aria-label="Search or type a command (Cmd+Shift+P)"]')?.click()
     mounted.root.querySelector<HTMLButtonElement>('[aria-label="Cosmos view"]')?.click()
     mounted.root.querySelector<HTMLButtonElement>('[aria-label="Second Brain"]')?.click()
     mounted.root.querySelector<HTMLButtonElement>('[aria-label="View options"]')?.click()
 
     expect(mounted.events).toEqual([
+      'toggle-sidebar',
       'history:back',
       'target:1',
       'today',
+      'command-palette',
       'cosmos',
       'second-brain',
       'toggle-overflow'

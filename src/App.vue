@@ -643,6 +643,7 @@ const mediaQuery = typeof window !== 'undefined'
 const backShortcutLabel = computed(() => (isMacOs ? 'Cmd+[' : 'Ctrl+['))
 const forwardShortcutLabel = computed(() => (isMacOs ? 'Cmd+]' : 'Ctrl+]'))
 const homeShortcutLabel = computed(() => (isMacOs ? 'Cmd+Shift+H' : 'Ctrl+Shift+H'))
+const commandPaletteShortcutLabel = computed(() => (isMacOs ? 'Cmd+Shift+P' : 'Ctrl+Shift+P'))
 const zoomPercentLabel = computed(() => `${Math.round(editorZoom.value * 100)}%`)
 const primaryModLabel = computed(() => (isMacOs ? 'Cmd' : 'Ctrl'))
 const backHistoryItems = computed(() =>
@@ -2891,7 +2892,9 @@ onBeforeUnmount(() => {
       :back-shortcut-label="backShortcutLabel"
       :forward-shortcut-label="forwardShortcutLabel"
       :home-shortcut-label="homeShortcutLabel"
+      :command-palette-shortcut-label="commandPaletteShortcutLabel"
       :has-workspace="filesystem.hasWorkspace.value"
+      :sidebar-visible="workspace.sidebarVisible.value"
       :right-pane-visible="workspace.rightPaneVisible.value"
       :history-menu-open="historyMenuOpen"
       :history-menu-style="historyMenuStyle"
@@ -2918,6 +2921,7 @@ onBeforeUnmount(() => {
       @close-pane="closeActivePaneFromPalette()"
       @join-panes="joinPanesFromPalette()"
       @reset-layout="resetPaneLayoutFromPalette()"
+      @toggle-sidebar="workspace.toggleSidebar()"
       @toggle-right-pane="workspace.toggleRightPane()"
       @toggle-overflow="toggleOverflowMenu"
       @open-command-palette="openCommandPalette"
