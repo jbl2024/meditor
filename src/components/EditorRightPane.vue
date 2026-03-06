@@ -10,6 +10,8 @@
  * - Emits user intents (`outline-click`, `backlink-open`) and relies on parent
  *   for navigation and data loading.
  */
+import { computed, ref, watch } from 'vue'
+import { ChevronRightIcon } from '@heroicons/vue/24/outline'
 import type { EchoesItem } from '../lib/echoes'
 import EditorEchoesPanel from './editor/EditorEchoesPanel.vue'
 
@@ -40,6 +42,20 @@ const emit = defineEmits<{
   'outline-click': [payload: { index: number; heading: HeadingNode }]
   'backlink-open': [path: string]
 }>()
+
+const outlineExpanded = ref(false)
+const semanticExpanded = ref(true)
+const backlinksExpanded = ref(true)
+const hasEchoesContent = computed(() => props.echoesItems.length > 0 && !props.echoesLoading && !props.echoesError)
+
+watch(
+  hasEchoesContent,
+  (hasEchoes) => {
+    semanticExpanded.value = !hasEchoes
+    backlinksExpanded.value = !hasEchoes
+  },
+  { immediate: true }
+)
 </script>
 
 <template>
@@ -54,52 +70,72 @@ const emit = defineEmits<{
     />
 
     <section class="pane-card pane-section">
-      <h3 class="section-title">Outline</h3>
-      <div v-if="!props.outline.length" class="empty-state">No headings</div>
-      <button
-        v-for="(heading, idx) in props.outline"
-        :key="`${heading.text}-${idx}`"
-        type="button"
-        class="pane-item outline-row"
-        :style="{ paddingLeft: `${(heading.level - 1) * 12 + 8}px` }"
-        @click="emit('outline-click', { index: idx, heading })"
-      >
-        {{ heading.text }}
-      </button>
-    </section>
-
-    <section class="pane-card pane-section">
-      <h3 class="section-title">Semantic Links</h3>
-      <div v-if="props.semanticLinksLoading" class="empty-state">Loading...</div>
-      <div v-else-if="!props.semanticLinks.length" class="empty-state">No semantic links</div>
-      <button
-        v-for="item in props.semanticLinks"
-        :key="`semantic-${item.path}`"
-        type="button"
-        class="pane-item semantic-link-item"
-        @click="emit('backlink-open', item.path)"
-      >
-        <span class="semantic-link-path">{{ props.toRelativePath(item.path) }}</span>
-        <span class="semantic-link-meta">
-          <span class="semantic-link-direction">{{ item.direction === 'outgoing' ? 'out' : 'in' }}</span>
-          <span v-if="item.score != null" class="semantic-link-score">{{ item.score.toFixed(2) }}</span>
+      <button type="button" class="section-toggle" @click="outlineExpanded = !outlineExpanded">
+        <span class="section-toggle-title">
+          <ChevronRightIcon class="section-toggle-chevron" :class="{ expanded: outlineExpanded }" />
+          <h3 class="section-title">Outline</h3>
         </span>
       </button>
+      <template v-if="outlineExpanded">
+        <div v-if="!props.outline.length" class="empty-state">No headings</div>
+        <button
+          v-for="(heading, idx) in props.outline"
+          :key="`${heading.text}-${idx}`"
+          type="button"
+          class="pane-item outline-row"
+          :style="{ paddingLeft: `${(heading.level - 1) * 12 + 8}px` }"
+          @click="emit('outline-click', { index: idx, heading })"
+        >
+          {{ heading.text }}
+        </button>
+      </template>
     </section>
 
     <section class="pane-card pane-section">
-      <h3 class="section-title">Backlinks</h3>
-      <div v-if="props.backlinksLoading" class="empty-state">Loading...</div>
-      <div v-else-if="!props.backlinks.length" class="empty-state">No backlinks</div>
-      <button
-        v-for="path in props.backlinks"
-        :key="path"
-        type="button"
-        class="pane-item"
-        @click="emit('backlink-open', path)"
-      >
-        {{ props.toRelativePath(path) }}
+      <button type="button" class="section-toggle" @click="semanticExpanded = !semanticExpanded">
+        <span class="section-toggle-title">
+          <ChevronRightIcon class="section-toggle-chevron" :class="{ expanded: semanticExpanded }" />
+          <h3 class="section-title">Semantic Links</h3>
+        </span>
       </button>
+      <template v-if="semanticExpanded">
+        <div v-if="props.semanticLinksLoading" class="empty-state">Loading...</div>
+        <div v-else-if="!props.semanticLinks.length" class="empty-state">No semantic links</div>
+        <button
+          v-for="item in props.semanticLinks"
+          :key="`semantic-${item.path}`"
+          type="button"
+          class="pane-item semantic-link-item"
+          @click="emit('backlink-open', item.path)"
+        >
+          <span class="semantic-link-path">{{ props.toRelativePath(item.path) }}</span>
+          <span class="semantic-link-meta">
+            <span class="semantic-link-direction">{{ item.direction === 'outgoing' ? 'out' : 'in' }}</span>
+          </span>
+        </button>
+      </template>
+    </section>
+
+    <section class="pane-card pane-section">
+      <button type="button" class="section-toggle" @click="backlinksExpanded = !backlinksExpanded">
+        <span class="section-toggle-title">
+          <ChevronRightIcon class="section-toggle-chevron" :class="{ expanded: backlinksExpanded }" />
+          <h3 class="section-title">Backlinks</h3>
+        </span>
+      </button>
+      <template v-if="backlinksExpanded">
+        <div v-if="props.backlinksLoading" class="empty-state">Loading...</div>
+        <div v-else-if="!props.backlinks.length" class="empty-state">No backlinks</div>
+        <button
+          v-for="path in props.backlinks"
+          :key="path"
+          type="button"
+          class="pane-item"
+          @click="emit('backlink-open', path)"
+        >
+          {{ props.toRelativePath(path) }}
+        </button>
+      </template>
     </section>
 
     <section class="pane-card pane-section">
@@ -225,8 +261,7 @@ const emit = defineEmits<{
   flex: 0 0 auto;
 }
 
-.semantic-link-direction,
-.semantic-link-score {
+.semantic-link-direction {
   font-size: 10px;
   line-height: 1;
   border-radius: 999px;
@@ -237,11 +272,6 @@ const emit = defineEmits<{
 .semantic-link-direction {
   color: #4b5563;
   background: #e5e7eb;
-}
-
-.semantic-link-score {
-  color: #1d4ed8;
-  background: #dbeafe;
 }
 
 .pane-item:hover {
@@ -261,11 +291,6 @@ const emit = defineEmits<{
 .ide-root.dark .semantic-link-direction {
   color: #cbd5e1;
   background: #334155;
-}
-
-.ide-root.dark .semantic-link-score {
-  color: #bfdbfe;
-  background: #1e3a8a;
 }
 
 .metadata-grid {
@@ -318,5 +343,37 @@ const emit = defineEmits<{
 .ide-root.dark .empty-state {
   color: #9aa3b2;
   background: rgba(71, 85, 105, 0.26);
+}
+
+.section-toggle {
+  width: 100%;
+  border: 0;
+  padding: 0;
+  margin: 0 0 6px;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.section-toggle-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.section-toggle-chevron {
+  width: 15px;
+  height: 15px;
+  color: #7b8798;
+  transition: transform 140ms ease;
+}
+
+.section-toggle-chevron.expanded {
+  transform: rotate(90deg);
+}
+
+.ide-root.dark .section-toggle-chevron {
+  color: #a8b3c4;
 }
 </style>
