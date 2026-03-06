@@ -53,9 +53,7 @@ import {
   revealInFileManager,
   setWorkingFolder,
   selectWorkingFolder,
-  type FileMetadata,
   type WikilinkGraph,
-  type WorkspaceFsChange,
   listenWorkspaceFsChanged,
   updateWikilinksForRename,
   writePropertyTypeSchema,
@@ -93,6 +91,7 @@ import { formatDurationMs } from './lib/indexActivity'
 import { useAppIndexingController } from './composables/useAppIndexingController'
 import { useAppQuickOpen, type PaletteAction, type QuickOpenResult } from './composables/useAppQuickOpen'
 import { useAppTheme, type ThemePreference } from './composables/useAppTheme'
+import { useAppWorkspaceController } from './composables/useAppWorkspaceController'
 import { useEditorState } from './composables/useEditorState'
 import { useEchoesDiscoverability } from './composables/useEchoesDiscoverability'
 import { useEchoesPack } from './composables/useEchoesPack'
@@ -182,8 +181,6 @@ const quickOpenQuery = ref('')
 const quickOpenActiveIndex = ref(0)
 const leftPaneWidth = ref(290)
 const rightPaneWidth = ref(300)
-const allWorkspaceFiles = ref<string[]>([])
-const loadingAllFiles = ref(false)
 const editorRef = ref<EditorViewExposed | null>(null)
 const explorerRef = ref<ExplorerTreeExposed | null>(null)
 const overflowMenuRef = ref<HTMLElement | null>(null)
@@ -195,7 +192,6 @@ const backlinks = ref<string[]>([])
 const backlinksLoading = ref(false)
 const semanticLinks = ref<SemanticLinkRow[]>([])
 const semanticLinksLoading = ref(false)
-const activeFileMetadata = ref<FileMetadata | null>(null)
 const propertiesPreview = ref<PropertyPreviewRow[]>([])
 const propertyParseErrorCount = ref(0)
 const virtualDocs = ref<Record<string, VirtualDoc>>({})
@@ -244,7 +240,6 @@ const wikilinkRewriteQueue: Array<{
   resolve: (approved: boolean) => void
 }> = []
 let wikilinkRewriteResolver: ((approved: boolean) => void) | null = null
-let activeFileMetadataRequestToken = 0
 const historyMenuOpen = ref<'back' | 'forward' | null>(null)
 const historyMenuStyle = ref<Record<string, string>>({})
 let historyMenuTimer: ReturnType<typeof setTimeout> | null = null
@@ -274,6 +269,57 @@ const cosmos = useCosmosController({
   ftsSearch,
   buildCosmosGraph
 })
+const workspaceController = useAppWorkspaceController({
+  workingFolderPath: filesystem.workingFolderPath,
+  hasWorkspace: filesystem.hasWorkspace,
+  activeFilePath,
+  indexingState: filesystem.indexingState,
+  errorMessage: filesystem.errorMessage,
+  selectedCount: filesystem.selectedCount,
+  storageKey: WORKING_FOLDER_STORAGE_KEY,
+  setWorkspacePath: (path) => filesystem.setWorkspacePath(path),
+  clearWorkspacePath: () => filesystem.clearWorkspacePath(),
+  resetIndexingState: () => indexing.resetIndexingState(),
+  setWorkingFolder,
+  clearWorkingFolder,
+  initDb,
+  readFileMetadata,
+  pathExists,
+  listChildren,
+  listMarkdownFiles,
+  readPropertyTypeSchema,
+  writePropertyTypeSchema,
+  createEntry,
+  writeTextFile,
+  normalizePath,
+  normalizePathKey,
+  isMarkdownPath,
+  isIsoDate,
+  dailyNotePath,
+  enqueueMarkdownReindex: (path) => indexing.enqueueMarkdownReindex(path),
+  removeMarkdownFromIndexInBackground: (path) => indexing.removeMarkdownFromIndexInBackground(path),
+  refreshBacklinks,
+  refreshCosmosGraph: () => cosmos.refreshGraph(),
+  hasCosmosSurface: () => multiPane.findPaneContainingSurface('cosmos') !== null
+})
+const {
+  allWorkspaceFiles,
+  activeFileMetadata,
+  toRelativePath,
+  resetWorkspaceState,
+  upsertWorkspaceFilePath,
+  replaceWorkspaceFilePath,
+  refreshActiveFileMetadata,
+  ensureParentFolders,
+  loadAllFiles,
+  openDailyNote,
+  loadWikilinkTargets,
+  loadPropertyTypeSchema,
+  savePropertyTypeSchema,
+  applyWorkspaceFsChanges,
+  closeWorkspace: closeWorkspaceInternal,
+  loadWorkingFolder: loadWorkingFolderInternal
+} = workspaceController
 const indexing = useAppIndexingController({
   workingFolderPath: filesystem.workingFolderPath,
   hasWorkspace: filesystem.hasWorkspace,
@@ -334,9 +380,7 @@ const {
   closeIndexStatusModal: closeIndexStatusModalInternal,
   onIndexPrimaryAction: onIndexPrimaryActionInternal,
   enqueueMarkdownReindex,
-  removeMarkdownFromIndexInBackground,
   rebuildIndex: rebuildIndexInternal,
-  resetIndexingState,
   dispose: disposeIndexingController
 } = indexing
 
@@ -626,55 +670,6 @@ function resolvedNoteNavigationFallback(): SidebarMode {
   return 'explorer'
 }
 
-function toRelativePath(path: string): string {
-  const root = filesystem.workingFolderPath.value
-  if (!root) return path
-  if (path === root) return '.'
-  if (path.startsWith(`${root}/`)) {
-    return path.slice(root.length + 1)
-  }
-  return path
-}
-
-function upsertWorkspaceFilePath(path: string) {
-  if (!isMarkdownPath(path)) return
-  const normalized = normalizePathKey(path)
-  const exists = allWorkspaceFiles.value.some((item) => normalizePathKey(item) === normalized)
-  if (exists) return
-  allWorkspaceFiles.value = [...allWorkspaceFiles.value, path].sort((a, b) => a.localeCompare(b))
-}
-
-function removeWorkspaceFilePath(path: string) {
-  const normalized = normalizePathKey(path)
-  const normalizedPrefix = `${normalized}/`
-  allWorkspaceFiles.value = allWorkspaceFiles.value.filter((item) => {
-    const candidate = normalizePathKey(item)
-    return candidate !== normalized && !candidate.startsWith(normalizedPrefix)
-  })
-}
-
-function replaceWorkspaceFilePath(oldPath: string, newPath: string) {
-  if (!oldPath || !newPath) return
-  const oldNormalized = normalizePath(oldPath)
-  const newNormalized = normalizePath(newPath)
-  const oldKey = oldNormalized.toLowerCase()
-  const newKey = newNormalized.toLowerCase()
-  if (oldKey === newKey) return
-
-  const next = allWorkspaceFiles.value.map((entry) => {
-    const entryNormalized = normalizePath(entry)
-    const entryKey = entryNormalized.toLowerCase()
-    if (entryKey === oldKey) {
-      return `${newNormalized}${entryNormalized.slice(oldNormalized.length)}`
-    }
-    if (entryKey.startsWith(`${oldKey}/`)) {
-      return `${newNormalized}${entryNormalized.slice(oldNormalized.length)}`
-    }
-    return entry
-  })
-  allWorkspaceFiles.value = Array.from(new Set(next)).sort((a, b) => a.localeCompare(b))
-}
-
 function formatSearchScore(value: number): string {
   if (!Number.isFinite(value)) return '--'
   return value.toFixed(3)
@@ -704,96 +699,6 @@ async function rebuildIndexFromOverflow() {
   closeOverflowMenu()
   await rebuildIndexInternal()
   await loadAllFiles()
-}
-
-function applyWorkspaceFsChanges(changes: WorkspaceFsChange[]) {
-  if (!changes.length) return
-  const activePath = activeFilePath.value
-  const activePathKey = activePath ? normalizePathKey(activePath) : ''
-  let shouldRefreshActiveMetadata = false
-  let shouldRefreshCosmos = false
-  for (const change of changes) {
-    if (change.kind === 'removed' && change.path) {
-      removeWorkspaceFilePath(change.path)
-      if (isMarkdownPath(change.path)) {
-        shouldRefreshCosmos = true
-        removeMarkdownFromIndexInBackground(change.path)
-      }
-      if (activePathKey && normalizePathKey(change.path) === activePathKey) {
-        activeFileMetadata.value = null
-      }
-      continue
-    }
-    if (change.kind === 'renamed') {
-      if (change.old_path && change.new_path) {
-        replaceWorkspaceFilePath(change.old_path, change.new_path)
-        if (isMarkdownPath(change.old_path) || isMarkdownPath(change.new_path)) {
-          shouldRefreshCosmos = true
-          if (isMarkdownPath(change.old_path)) {
-            removeMarkdownFromIndexInBackground(change.old_path)
-          }
-          if (isMarkdownPath(change.new_path)) {
-            enqueueMarkdownReindex(change.new_path)
-          }
-        }
-      } else if (change.old_path) {
-        removeWorkspaceFilePath(change.old_path)
-        if (isMarkdownPath(change.old_path)) {
-          shouldRefreshCosmos = true
-          removeMarkdownFromIndexInBackground(change.old_path)
-        }
-      } else if (!change.is_dir && change.new_path) {
-        upsertWorkspaceFilePath(change.new_path)
-        if (isMarkdownPath(change.new_path)) {
-          shouldRefreshCosmos = true
-          enqueueMarkdownReindex(change.new_path)
-        }
-      }
-      if (
-        activePathKey &&
-        ((change.old_path && normalizePathKey(change.old_path) === activePathKey) ||
-          (change.new_path && normalizePathKey(change.new_path) === activePathKey))
-      ) {
-        shouldRefreshActiveMetadata = true
-      }
-      continue
-    }
-    if ((change.kind === 'created' || change.kind === 'modified') && !change.is_dir && change.path) {
-      upsertWorkspaceFilePath(change.path)
-      if (isMarkdownPath(change.path)) {
-        shouldRefreshCosmos = true
-        enqueueMarkdownReindex(change.path)
-      }
-      if (activePathKey && normalizePathKey(change.path) === activePathKey) {
-        shouldRefreshActiveMetadata = true
-      }
-    }
-  }
-  if (shouldRefreshActiveMetadata && activePath) {
-    void refreshActiveFileMetadata(activePath)
-  }
-  if (shouldRefreshCosmos && multiPane.findPaneContainingSurface('cosmos') !== null) {
-    void cosmos.refreshGraph()
-  }
-}
-
-async function refreshActiveFileMetadata(path: string | null = activeFilePath.value) {
-  const targetPath = path?.trim() || ''
-  const requestToken = ++activeFileMetadataRequestToken
-  if (!targetPath) {
-    activeFileMetadata.value = null
-    return
-  }
-  try {
-    const next = await readFileMetadata(targetPath)
-    if (requestToken === activeFileMetadataRequestToken && activeFilePath.value === targetPath) {
-      activeFileMetadata.value = next
-    }
-  } catch {
-    if (requestToken === activeFileMetadataRequestToken && activeFilePath.value === targetPath) {
-      activeFileMetadata.value = null
-    }
-  }
 }
 
 function isTitleOnlyContent(content: string, titleLine: string): boolean {
@@ -1370,27 +1275,17 @@ async function openNoteInCosmosFromPalette() {
 
 async function closeWorkspace() {
   if (!filesystem.hasWorkspace.value) return
-  resetIndexingState()
   multiPane.resetToSinglePane()
   multiPane.closeAllTabsInPane(multiPane.layout.value.activePaneId)
   documentHistory.reset()
   editorState.setActiveOutline([])
   searchHits.value = []
-  allWorkspaceFiles.value = []
   backlinks.value = []
   backlinksLoading.value = false
   semanticLinks.value = []
   semanticLinksLoading.value = false
   cosmos.clearState()
-  filesystem.selectedCount.value = 0
-  filesystem.clearWorkspacePath()
-  try {
-    await clearWorkingFolder()
-  } catch (err) {
-    filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not close workspace.'
-  }
-  window.localStorage.removeItem(WORKING_FOLDER_STORAGE_KEY)
-  filesystem.indexingState.value = 'indexed'
+  await closeWorkspaceInternal()
   closeOverflowMenu()
 }
 
@@ -1434,35 +1329,23 @@ async function onSelectWorkingFolder() {
 }
 
 async function loadWorkingFolder(path: string) {
-  try {
-    resetIndexingState()
-    const canonical = await setWorkingFolder(path)
-    filesystem.setWorkspacePath(canonical)
-    filesystem.indexingState.value = 'indexing'
-    await initDb()
-    searchHits.value = []
-    allWorkspaceFiles.value = []
-    window.localStorage.setItem(WORKING_FOLDER_STORAGE_KEY, canonical)
-    if (multiPane.findPaneContainingSurface('cosmos') !== null) {
-      await cosmos.refreshGraph()
-    }
-
-    if (activeFilePath.value && !activeFilePath.value.startsWith(canonical)) {
-      multiPane.resetToSinglePane()
-      multiPane.closeAllTabsInPane(multiPane.layout.value.activePaneId)
-      editorState.setActiveOutline([])
-    }
-  } catch (err) {
-    filesystem.clearWorkspacePath()
+  const canonical = await loadWorkingFolderInternal(path)
+  if (!canonical) {
     multiPane.resetToSinglePane()
     multiPane.closeAllTabsInPane(multiPane.layout.value.activePaneId)
     searchHits.value = []
-    window.localStorage.removeItem(WORKING_FOLDER_STORAGE_KEY)
-    filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not open working folder.'
-  } finally {
-    if (filesystem.hasWorkspace.value) {
-      filesystem.indexingState.value = 'indexed'
-    }
+    return
+  }
+
+  searchHits.value = []
+  if (multiPane.findPaneContainingSurface('cosmos') !== null) {
+    await cosmos.refreshGraph()
+  }
+
+  if (activeFilePath.value && !activeFilePath.value.startsWith(canonical)) {
+    multiPane.resetToSinglePane()
+    multiPane.closeAllTabsInPane(multiPane.layout.value.activePaneId)
+    editorState.setActiveOutline([])
   }
 }
 
@@ -1588,25 +1471,6 @@ async function openFile(path: string) {
   const virtual = virtualDocs.value[path]
   if (virtual) return virtual.content
   return await readTextFile(path)
-}
-
-async function ensureParentFolders(filePath: string) {
-  const root = filesystem.workingFolderPath.value
-  if (!root) throw new Error('Working folder is not set.')
-
-  const relative = toRelativePath(filePath)
-  const parts = relative.split('/').filter(Boolean)
-  if (parts.length <= 1) return
-
-  let current = root
-  for (const segment of parts.slice(0, -1)) {
-    const next = `${current}/${segment}`
-    const exists = await pathExists(next)
-    if (!exists) {
-      await createEntry(current, segment, 'folder', 'fail')
-    }
-    current = next
-  }
 }
 
 function noteTitleFromPath(path: string): string {
@@ -2107,35 +1971,8 @@ async function refreshBacklinks() {
   }
 }
 
-async function openDailyNote(date: string) {
-  const root = filesystem.workingFolderPath.value
-  if (!root) {
-    filesystem.errorMessage.value = 'Working folder is not set.'
-    return false
-  }
-  if (!isIsoDate(date)) {
-    filesystem.errorMessage.value = 'Invalid date format. Use YYYY-MM-DD.'
-    return false
-  }
-  const path = dailyNotePath(root, date)
-  let exists = false
-  try {
-    exists = await pathExists(path)
-  } catch {
-    exists = false
-  }
-
-  if (!exists) {
-    await ensureParentFolders(path)
-    await writeTextFile(path, '')
-    upsertWorkspaceFilePath(path)
-  }
-
-  return await openTabWithAutosave(path)
-}
-
 async function openTodayNote() {
-  return await openDailyNote(formatIsoDate(new Date()))
+  return await openDailyNote(formatIsoDate(new Date()), openTabWithAutosave)
 }
 
 async function showExplorerForActiveFile(options: { focusTree?: boolean } = {}) {
@@ -2161,7 +1998,7 @@ async function showExplorerForActiveFile(options: { focusTree?: boolean } = {}) 
 async function openYesterdayNote() {
   const value = new Date()
   value.setDate(value.getDate() - 1)
-  return await openDailyNote(formatIsoDate(value))
+  return await openDailyNote(formatIsoDate(value), openTabWithAutosave)
 }
 
 async function openSpecificDateNote() {
@@ -2189,7 +2026,7 @@ async function submitOpenDateFromModal() {
     openDateModalError.value = 'Invalid date. Use YYYY-MM-DD (example: 2026-02-22).'
     return false
   }
-  const opened = await openDailyNote(isoDate)
+  const opened = await openDailyNote(isoDate, openTabWithAutosave)
   if (!opened) return false
   closeOpenDateModal()
   return true
@@ -2229,7 +2066,7 @@ async function openWikilinkTarget(target: string) {
   }
 
   if (isIsoDate(normalized)) {
-    const opened = await openDailyNote(normalized)
+    const opened = await openDailyNote(normalized, openTabWithAutosave)
     if (!opened) return false
     return await revealAnchor()
   }
@@ -2341,17 +2178,6 @@ async function onCosmosOpenSelectedNode() {
   await onCosmosOpenNode(selected.path)
 }
 
-async function loadWikilinkTargets(): Promise<string[]> {
-  const root = filesystem.workingFolderPath.value
-  if (!root) return []
-  try {
-    return await listMarkdownFiles()
-  } catch (err) {
-    filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not load wikilink targets.'
-    return []
-  }
-}
-
 function extractHeadingsFromMarkdown(markdown: string): string[] {
   const lines = markdown.replace(/\r\n?/g, '\n').split('\n')
   const out: string[] = []
@@ -2424,53 +2250,6 @@ async function loadWikilinkHeadings(target: string): Promise<string[]> {
   }
 }
 
-async function loadPropertyTypeSchema(): Promise<Record<string, string>> {
-  const root = filesystem.workingFolderPath.value
-  if (!root) return {}
-  try {
-    return await readPropertyTypeSchema()
-  } catch (err) {
-    filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not load property types.'
-    return {}
-  }
-}
-
-async function savePropertyTypeSchema(schema: Record<string, string>): Promise<void> {
-  const root = filesystem.workingFolderPath.value
-  if (!root) return
-  await writePropertyTypeSchema(schema)
-}
-
-async function loadAllFiles() {
-  if (!filesystem.workingFolderPath.value || loadingAllFiles.value) return
-  loadingAllFiles.value = true
-
-  try {
-    const files: string[] = []
-    const queue: string[] = [filesystem.workingFolderPath.value]
-
-    while (queue.length > 0) {
-      const dir = queue.shift()!
-      const children = await listChildren(dir)
-      for (const child of children) {
-        if (child.is_dir) {
-          queue.push(child.path)
-          continue
-        }
-        if (child.is_markdown) {
-          files.push(child.path)
-        }
-      }
-    }
-
-    allWorkspaceFiles.value = files.sort((a, b) => a.localeCompare(b))
-  } catch (err) {
-    filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not load file list.'
-  } finally {
-    loadingAllFiles.value = false
-  }
-}
-
 async function openQuickOpen(initialQuery = '') {
   modalFocusReturnTarget = document.activeElement instanceof HTMLElement ? document.activeElement : null
   quickOpenVisible.value = true
@@ -2500,7 +2279,7 @@ async function openQuickResult(item: QuickOpenResult) {
     nextTick(() => editorRef.value?.focusEditor())
     return
   }
-  void openDailyNote(item.date).then((opened) => {
+  void openDailyNote(item.date, openTabWithAutosave).then((opened) => {
     if (opened) closeQuickOpen()
   })
 }
@@ -3352,11 +3131,10 @@ watch(
   () => filesystem.workingFolderPath.value,
   (workspacePath) => {
     documentHistory.reset()
-    allWorkspaceFiles.value = []
+    resetWorkspaceState()
     backlinks.value = []
     semanticLinks.value = []
     virtualDocs.value = {}
-    activeFileMetadata.value = null
     setSecondBrainSessionId(readPersistedSecondBrainSessionId(workspacePath), { bumpNonce: true })
   }
 )
