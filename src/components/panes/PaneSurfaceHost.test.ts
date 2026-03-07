@@ -214,7 +214,7 @@ describe('PaneSurfaceHost', () => {
     app.mount(root)
     await nextTick()
 
-    expect(root.textContent).toContain('Open your Markdown workspace')
+    expect(root.textContent).toContain('Workspace entry')
     expect(root.textContent).toContain('Recent workspaces')
     expect(root.textContent).toContain('vault')
 
