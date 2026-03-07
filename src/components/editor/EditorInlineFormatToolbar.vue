@@ -153,13 +153,14 @@ function onCopyAs(format: 'markdown' | 'html' | 'plain') {
     </button>
     <button
       type="button"
-      class="inline-format-toolbar-btn inline-flex items-center justify-center rounded-md px-2 py-1 text-xs font-semibold transition-all duration-150 active:translate-y-px active:scale-[0.98]"
+      class="inline-format-toolbar-btn inline-format-toolbar-btn--pulse inline-flex items-center justify-center rounded-md px-[10px] py-[8px] text-xs font-semibold transition-all duration-150 active:translate-y-px active:scale-[0.98]"
       data-action="pulse"
+      aria-label="Pulse selection"
       title="Pulse selection"
       @mousedown.prevent
       @click="emit('open-pulse')"
     >
-      Pulse
+      <span class="inline-format-toolbar-pulse-dot" aria-hidden="true"></span>
     </button>
     <button
       type="button"
@@ -251,6 +252,10 @@ function onCopyAs(format: 'markdown' | 'html' | 'plain') {
   box-shadow: var(--editor-menu-shadow);
 }
 
+.inline-format-toolbar {
+  overflow: visible;
+}
+
 .inline-format-toolbar-btn,
 .inline-format-toolbar-menu-item,
 .inline-format-toolbar-text-btn {
@@ -271,6 +276,51 @@ function onCopyAs(format: 'markdown' | 'html' | 'plain') {
 .inline-format-toolbar-btn--active {
   background: var(--editor-menu-active-bg);
   color: var(--editor-menu-text-strong);
+}
+
+.inline-format-toolbar-btn--pulse {
+  background: transparent;
+}
+
+.inline-format-toolbar-btn--pulse:hover {
+  background: var(--editor-menu-hover-bg);
+}
+
+.inline-format-toolbar-pulse-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #22c55e;
+  position: relative;
+  display: inline-block;
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.inline-format-toolbar-pulse-dot::before,
+.inline-format-toolbar-pulse-dot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: #22c55e;
+  animation: inline-format-toolbar-sonar 2.4s ease-out infinite;
+}
+
+.inline-format-toolbar-pulse-dot::after {
+  animation-delay: 0.9s;
+}
+
+@keyframes inline-format-toolbar-sonar {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+
+  100% {
+    transform: scale(3.6);
+    opacity: 0;
+  }
 }
 
 .inline-format-toolbar-input {

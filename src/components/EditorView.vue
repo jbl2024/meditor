@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch, type CSSProperties } from 'vue'
 import { Editor, EditorContent } from '@tiptap/vue-3'
 import { DragHandle as DragHandleVue3 } from '@tiptap/extension-drag-handle-vue-3'
 import type { Middleware, MiddlewareState } from '@floating-ui/dom'
@@ -116,6 +116,7 @@ const pulseActionId = ref<PulseActionId>('rewrite')
 const pulseInstruction = ref('')
 const pulseSelectionRange = ref<{ from: number; to: number } | null>(null)
 const pulseSourceText = ref('')
+const pulseAnchorNonce = ref(0)
 
 
 const lastStableBlockMenuTarget = ref<BlockMenuTarget | null>(null)
@@ -209,6 +210,45 @@ const wikilinkDataSource = useEditorWikilinkDataSource({
 })
 const computedDragLock = computed(() => computeHandleLock(dragHandleUiState.value))
 const debugTargetPos = computed(() => String(dragHandleUiState.value.activeTarget?.pos ?? ''))
+const pulsePanelStyle = computed<CSSProperties>(() => {
+  const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1440
+  const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 900
+  const panelWidth = Math.min(420, Math.max(280, viewportWidth - 32))
+
+  if (!pulseOpen.value) {
+    return {
+      position: 'fixed',
+      right: '24px',
+      bottom: '24px',
+      width: `${panelWidth}px`
+    }
+  }
+
+  if (pulseSourceKind.value !== 'editor_selection' || !holder.value) {
+    return {
+      position: 'fixed',
+      right: '24px',
+      bottom: '24px',
+      width: `${panelWidth}px`
+    }
+  }
+
+  void pulseAnchorNonce.value
+  const holderEl = holder.value
+  const holderRect = holderEl.getBoundingClientRect()
+  const anchorLeft = holderRect.left + inlineFormatToolbar.formatToolbarLeft.value - holderEl.scrollLeft
+  const anchorTop = holderRect.top + inlineFormatToolbar.formatToolbarTop.value - holderEl.scrollTop
+  const clampedLeft = Math.min(Math.max(16, anchorLeft - panelWidth / 2), viewportWidth - panelWidth - 16)
+  const preferredTop = anchorTop + 54
+  const clampedTop = Math.min(Math.max(16, preferredTop), viewportHeight - 320)
+
+  return {
+    position: 'fixed',
+    left: `${clampedLeft}px`,
+    top: `${clampedTop}px`,
+    width: `${panelWidth}px`
+  }
+})
 // Keep template binding reactive when active session editor changes.
 const renderedEditor = computed(() => sessionStore.getActiveSession(MAIN_PANE_ID)?.editor ?? null)
 const blockMenuControls = useBlockMenuControls({
@@ -875,6 +915,7 @@ function openPulseForSelection() {
   pulseActionId.value = 'rewrite'
   pulseSelectionRange.value = { from, to }
   pulseSourceText.value = text
+  pulseAnchorNonce.value += 1
   pulseOpen.value = true
 }
 
@@ -884,6 +925,7 @@ function openPulseForNote() {
   pulseActionId.value = 'synthesize'
   pulseSelectionRange.value = null
   pulseSourceText.value = editor?.getText().trim() ?? ''
+  pulseAnchorNonce.value += 1
   pulseOpen.value = true
 }
 
@@ -896,7 +938,7 @@ async function runPulseFromEditor() {
     source_kind: pulseSourceKind.value,
     action_id: pulseActionId.value,
     instructions: pulseInstruction.value.trim() || undefined,
-    context_paths: [currentPath.value],
+    context_paths: pulseSourceKind.value === 'editor_selection' ? [] : [currentPath.value],
     source_text: sourceText || undefined,
     selection_label: pulseSourceKind.value === 'editor_selection' ? 'Editor selection' : 'Current note'
   })
@@ -952,9 +994,9 @@ function insertPulseBelow() {
 }
 
 function sendPulseContextToSecondBrain() {
-  if (!currentPath.value) return
+  if (!currentPath.value && pulseSourceKind.value !== 'editor_selection') return
   emit('pulse-open-second-brain', {
-    contextPaths: [currentPath.value],
+    contextPaths: pulseSourceKind.value === 'editor_selection' ? [] : [currentPath.value],
     prompt: buildSecondBrainPulsePrompt()
   })
   pulseOpen.value = false
@@ -1214,7 +1256,7 @@ defineExpose({
             @table:close="hideTableToolbar()"
           />
 
-          <div v-if="pulseOpen" ref="pulsePanelWrap" class="editor-pulse-panel-wrap">
+          <div v-if="pulseOpen" ref="pulsePanelWrap" class="editor-pulse-panel-wrap" :style="pulsePanelStyle">
             <PulsePanel
               compact
               :action-id="pulseActionId"
@@ -1290,10 +1332,7 @@ defineExpose({
 }
 
 .editor-pulse-panel-wrap {
-  position: absolute;
-  right: 18px;
-  bottom: 18px;
   z-index: 35;
-  width: min(420px, calc(100vw - 48px));
+  pointer-events: auto;
 }
 </style>
