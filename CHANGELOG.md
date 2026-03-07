@@ -18,6 +18,27 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.13.0] - 2026-03-07
+
+### Added
+- feat(shell): redesign startup splash with tomosona loading console (ab9da38)
+- feat(pulse): add streamed transformation workflows across editor, second brain, and cosmos (141c67c)
+
+### Changed
+- chore(release): update splash version during prepare-version (c2311e3)
+- refactor(pulse): unify action menus with shared filterable dropdowns (181ede5)
+- refactor(editor): use theme token for editor body text color (0927cb5)
+- style(cosmos): tighten pulse card to match sidebar density (1b71d9f)
+- refactor(editor): remove pulse note button from editor chrome (2d129e4)
+- style(pulse): strengthen panel border and shadow separation (901723e)
+- refactor(pulse): replace draft handoff with second-brain prompt presets (a259245)
+
+### Fixed
+- fix(second-brain): hydrate initial pulse prompt on mount (fa770ad)
+- fix(style): dark text in light mode (69ed688)
+- fix(editor): scope pulse to selection and anchor panel to viewport (44eb1c3)
+- fix(second-brain): remove redundant pulse preset feedback (888a84b)
+
 ## [0.12.1] - 2026-03-07
 
 ### Added
