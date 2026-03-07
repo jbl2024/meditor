@@ -108,4 +108,67 @@ describe('EditorView interactions contract', () => {
     document.body.innerHTML = ''
   })
 
+  it('opens inline find with Cmd/Ctrl+F and supports filtering controls', async () => {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+
+    const app = createApp(defineComponent({
+      setup() {
+        return () =>
+          h(EditorView, {
+            path: 'a.md',
+            openPaths: ['a.md'],
+            openFile: async () => '# Title\n\nAlpha alpha ALPHA alphabet',
+            saveFile: async () => ({ persisted: true }),
+            renameFileFromTitle: async (valuePath: string, title: string) => ({ path: valuePath, title }),
+            loadLinkTargets: async () => ['a.md'],
+            loadLinkHeadings: async () => ['H1'],
+            loadPropertyTypeSchema: async () => ({}),
+            savePropertyTypeSchema: async () => {},
+            openLinkTarget: async () => true,
+            onStatus: () => {},
+            onOutline: () => {},
+            onProperties: () => {},
+            onPathRenamed: () => {}
+          })
+      }
+    }))
+
+    app.mount(root)
+    await flushUi()
+
+    const holder = root.querySelector('.editor-holder') as HTMLElement
+    holder.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, bubbles: true }))
+    await flushUi()
+
+    const input = root.querySelector('[data-editor-find-input="true"]') as HTMLInputElement
+    expect(input).toBeTruthy()
+
+    input.value = 'alpha'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushUi()
+
+    expect(root.querySelectorAll('.tomosona-editor-find-match')).toHaveLength(4)
+
+    const buttons = Array.from(root.querySelectorAll('.editor-find-toolbar-btn'))
+    const wholeWordButton = buttons.find((button) => button.textContent?.trim() === 'W') as HTMLButtonElement
+    const caseButton = buttons.find((button) => button.textContent?.trim() === 'Aa') as HTMLButtonElement
+    const nextButton = buttons.find((button) => button.textContent?.trim() === 'Next') as HTMLButtonElement
+
+    wholeWordButton.click()
+    await flushUi()
+    expect(root.querySelectorAll('.tomosona-editor-find-match')).toHaveLength(3)
+
+    caseButton.click()
+    await flushUi()
+    expect(root.querySelectorAll('.tomosona-editor-find-match')).toHaveLength(1)
+
+    nextButton.click()
+    await flushUi()
+    expect(root.querySelector('.editor-find-toolbar-count')?.textContent).toContain('1/1')
+
+    app.unmount()
+    document.body.innerHTML = ''
+  })
+
 })

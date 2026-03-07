@@ -15,6 +15,7 @@ import EditorWikilinkOverlay from './editor/EditorWikilinkOverlay.vue'
 import EditorContextOverlays from './editor/EditorContextOverlays.vue'
 import EditorTableEdgeControls from './editor/EditorTableEdgeControls.vue'
 import EditorInlineFormatToolbar from './editor/EditorInlineFormatToolbar.vue'
+import EditorFindToolbar from './editor/EditorFindToolbar.vue'
 import EditorLargeDocOverlay from './editor/EditorLargeDocOverlay.vue'
 import EditorMermaidReplaceDialog from './editor/EditorMermaidReplaceDialog.vue'
 import PulsePanel from '../../pulse/components/PulsePanel.vue'
@@ -23,6 +24,7 @@ import { useFrontmatterProperties } from '../composables/useFrontmatterPropertie
 import { useEditorZoom } from '../composables/useEditorZoom'
 import { useMermaidReplaceDialog } from '../composables/useMermaidReplaceDialog'
 import { useInlineFormatToolbar } from '../composables/useInlineFormatToolbar'
+import { useEditorFindToolbar } from '../composables/useEditorFindToolbar'
 import { useEditorInputHandlers } from '../composables/useEditorInputHandlers'
 import { useEditorSessionLifecycle } from '../composables/useEditorSessionLifecycle'
 import { useBlockMenuControls } from '../composables/useBlockMenuControls'
@@ -203,6 +205,10 @@ const inlineFormatToolbar = useInlineFormatToolbar({
   holder,
   getEditor: () => editor,
   sanitizeHref: sanitizeExternalHref
+})
+const findToolbar = useEditorFindToolbar({
+  holder,
+  getEditor: () => editor
 })
 const wikilinkDataSource = useEditorWikilinkDataSource({
   loadLinkTargets: props.loadLinkTargets,
@@ -440,6 +446,7 @@ async function renderBlocks(blocks: EditorBlock[]) {
   editor.commands.setContent(doc, { emitUpdate: false })
   suppressOnChange = false
   await nextTick()
+  findToolbar.syncFromEditor()
   if (holder.value) holder.value.scrollTop = rememberedScroll
 }
 
@@ -477,12 +484,20 @@ function onDocumentMouseDown(event: MouseEvent) {
   if (pulseOpen.value) {
     if (pulsePanelWrap.value?.contains(target)) return
     if (target instanceof Element && target.closest('.inline-format-toolbar')) return
+    if (target instanceof Element && target.closest('.editor-find-toolbar')) return
     if (target instanceof Element && target.closest('.ui-filterable-dropdown-menu')) return
     pulseOpen.value = false
   }
 }
 
 function onDocumentKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && findToolbar.open.value) {
+    event.preventDefault()
+    event.stopPropagation()
+    findToolbar.closeToolbar({ focusEditor: true })
+    return
+  }
+
   if (event.key === 'Escape' && pulseOpen.value) {
     pulseOpen.value = false
   }
@@ -550,6 +565,7 @@ function onEditorDocChanged(path: string) {
   setSaveError(path, '')
   scheduleAutosave(path)
   emitOutlineSoon(path)
+  findToolbar.syncFromEditor()
 }
 
 function resetTransientUiState() {
@@ -561,6 +577,7 @@ function resetTransientUiState() {
   lastStableBlockMenuTarget.value = null
   dragHandleUiState.value = { ...dragHandleUiState.value, activeTarget: null }
   inlineFormatToolbar.dismissToolbar()
+  findToolbar.closeToolbar()
   hideTableToolbarAnchor()
   wikilinkDataSource.resetCache()
 }
@@ -570,6 +587,7 @@ function setActiveSession(path: string) {
   const session = getSession(path)
   editor = session?.editor ?? null
   blockHandleControls.resetLockState()
+  findToolbar.syncFromEditor()
 }
 
 const wikilinkOverlay = useEditorWikilinkOverlayState({
@@ -790,6 +808,12 @@ function onHolderPointerDownMarkInteraction() {
 
 function onHolderKeydown(event: KeyboardEvent) {
   markEditorInteraction()
+  if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === 'f') {
+    event.preventDefault()
+    event.stopPropagation()
+    findToolbar.openToolbar()
+    return
+  }
   onEditorKeydown(event)
 }
 
@@ -1268,6 +1292,7 @@ defineExpose({
               }"
             />
           </div>
+
         </div>
 
         <EditorLargeDocOverlay
@@ -1276,6 +1301,22 @@ defineExpose({
           :progress-percent="loadProgressPercent"
           :progress-indeterminate="loadProgressIndeterminate"
           :stats="loadDocumentStats"
+        />
+
+        <EditorFindToolbar
+          :open="findToolbar.open.value"
+          :query="findToolbar.query.value"
+          :case-sensitive="findToolbar.caseSensitive.value"
+          :whole-word="findToolbar.wholeWord.value"
+          :active-match="findToolbar.activeMatch.value"
+          :match-count="findToolbar.matchCount.value"
+          @input-ready="findToolbar.inputEl.value = $event"
+          @update:query="findToolbar.onQueryInput($event)"
+          @toggle-case-sensitive="findToolbar.onCaseSensitiveToggle()"
+          @toggle-whole-word="findToolbar.onWholeWordToggle()"
+          @prev="findToolbar.prevMatch()"
+          @next="findToolbar.nextMatch()"
+          @close="findToolbar.closeToolbar({ focusEditor: true })"
         />
       </div>
     </div>

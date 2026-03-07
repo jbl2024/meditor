@@ -15,6 +15,7 @@ import { WikilinkNode } from '../lib/tiptap/extensions/WikilinkNode'
 import { VirtualTitleGuard } from '../lib/tiptap/extensions/VirtualTitleGuard'
 import { CodeBlockNode } from '../lib/tiptap/extensions/CodeBlockNode'
 import { TableCellAlign } from '../lib/tiptap/extensions/TableCellAlign'
+import { EditorFindExtension } from '../lib/tiptap/extensions/EditorFind'
 import { WIKILINK_STATE_KEY, type WikilinkCandidate } from '../lib/tiptap/plugins/wikilinkState'
 import { enterWikilinkEditFromNode } from '../lib/tiptap/extensions/wikilinkCommands'
 
@@ -176,6 +177,7 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
         QuoteNode,
         HtmlNode,
         CodeBlockNode,
+        EditorFindExtension,
         WikilinkNode.configure({
           getCandidates: (query: string) => options.getWikilinkCandidates(query),
           onNavigate: (target: string) => options.openLinkTargetWithAutosave(target),
