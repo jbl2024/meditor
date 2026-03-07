@@ -18,6 +18,12 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.14.2] - 2026-03-07
+
+### Fixed
+- fix(explorer): smooth-scroll only when revealing hidden files (4775ee6)
+- fix(explorer): avoid scrolling visible active files (566e50c)
+
 ## [0.14.1] - 2026-03-07
 
 ### Added
