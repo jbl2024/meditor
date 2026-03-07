@@ -340,11 +340,11 @@ function openPulseInSecondBrain() {
 .cosmos-pulse-card {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  border: 1px solid var(--ui-border);
-  border-radius: 12px;
-  background: var(--surface-raised, var(--surface-bg));
-  padding: 12px;
+  gap: 8px;
+  border: 1px solid var(--cosmos-border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--cosmos-card-bg) 82%, var(--cosmos-panel-bg));
+  padding: 10px;
 }
 
 .cosmos-pulse-head {
@@ -358,56 +358,65 @@ function openPulseInSecondBrain() {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--cosmos-text-primary);
 }
 
 .cosmos-pulse-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 5px;
 }
 
 .cosmos-pulse-chip,
 .cosmos-pulse-send,
 .cosmos-pulse-textarea {
-  border: 1px solid var(--ui-border);
-  border-radius: 10px;
-  background: var(--surface-bg);
-  color: var(--text-primary);
+  border: 1px solid var(--cosmos-border);
+  border-radius: 8px;
+  background: var(--cosmos-input-bg);
+  color: var(--cosmos-text-primary);
 }
 
 .cosmos-pulse-chip,
 .cosmos-pulse-send {
-  padding: 7px 10px;
+  padding: 5px 9px;
+  font-size: 11px;
+  line-height: 1.2;
 }
 
 .cosmos-pulse-chip.active {
-  border-color: color-mix(in srgb, var(--accent, #4f7a5d) 55%, var(--ui-border));
-  background: color-mix(in srgb, var(--accent, #4f7a5d) 18%, var(--surface-bg));
-  color: var(--accent-contrast, var(--text-primary));
+  border-color: var(--cosmos-link-accent);
+  background: var(--cosmos-chip-active-bg);
+  color: var(--cosmos-link-accent);
 }
 
 .cosmos-pulse-send {
-  background: color-mix(in srgb, var(--accent, #4f7a5d) 16%, var(--surface-bg));
+  background: var(--cosmos-input-bg);
+  color: var(--cosmos-text-secondary);
+  white-space: nowrap;
 }
 
 .cosmos-pulse-help {
   margin: 0;
-  font-size: 12px;
-  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--cosmos-text-muted);
 }
 
 .cosmos-pulse-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  font-size: 12px;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--cosmos-text-secondary);
 }
 
 .cosmos-pulse-textarea {
-  min-height: 88px;
+  min-height: 72px;
   width: 100%;
-  padding: 8px 10px;
+  padding: 7px 9px;
+  font-size: 11px;
   resize: vertical;
 }
 
