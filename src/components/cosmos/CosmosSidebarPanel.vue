@@ -7,11 +7,9 @@
  */
 import { computed, nextTick, ref } from 'vue'
 import type { CosmosGraphNode } from '../../lib/graphIndex'
-import { XMarkIcon, MapPinIcon } from '@heroicons/vue/24/outline'
+import { XMarkIcon, MapPinIcon, SparklesIcon } from '@heroicons/vue/24/outline'
 import { applySearchMode, detectSearchMode, type SearchMode } from '../../lib/searchMode'
-import PulsePanel from '../PulsePanel.vue'
-import { usePulseTransformation } from '../../composables/usePulseTransformation'
-import { PULSE_ACTIONS_BY_SOURCE, type PulseApplyMode } from '../../lib/pulse'
+import { PULSE_ACTIONS_BY_SOURCE } from '../../lib/pulse'
 import type { PulseActionId } from '../../lib/api'
 
 type GraphSummary = {
@@ -51,9 +49,12 @@ const emit = defineEmits<{
 }>()
 
 const searchInputEl = ref<HTMLInputElement | null>(null)
-const pulse = usePulseTransformation()
 const pulseActionId = ref<PulseActionId>('synthesize')
 const pulseInstruction = ref('')
+const pulseActions = computed(() => PULSE_ACTIONS_BY_SOURCE.cosmos_focus)
+const activePulseAction = computed(
+  () => pulseActions.value.find((item) => item.id === pulseActionId.value) ?? pulseActions.value[0]
+)
 const activeSearchMode = computed<SearchMode>(() => detectSearchMode(props.query))
 const searchModeOptions: Array<{ mode: SearchMode; label: string }> = [
   { mode: 'hybrid', label: 'Hybrid' },
@@ -107,22 +108,8 @@ const pulseContextPaths = computed(() => {
   return Array.from(paths)
 })
 
-async function runPulseFromCosmos() {
+function openPulseInSecondBrain() {
   if (!props.selectedNode) return
-  await pulse.run({
-    source_kind: 'cosmos_focus',
-    action_id: pulseActionId.value,
-    instructions: pulseInstruction.value.trim() || undefined,
-    context_paths: pulseContextPaths.value,
-    source_text: props.preview.trim() || undefined,
-    selection_label: props.selectedNode.displayLabel || props.selectedNode.label,
-    cosmos_selected_node_id: props.selectedNode.id,
-    cosmos_neighbor_paths: pulseContextPaths.value.filter((path) => path !== props.selectedNode?.path)
-  })
-}
-
-function onPulseApply(mode: PulseApplyMode) {
-  if (mode !== 'send_to_second_brain' || !props.selectedNode) return
   const pulsePrompts: Partial<Record<PulseActionId, string>> = {
     synthesize: 'Synthesize the selected graph context into a concise, structured summary. Highlight key themes and uncertainties.',
     outline: 'Turn the selected graph context into a clear outline with sections and logical progression.',
@@ -132,9 +119,11 @@ function onPulseApply(mode: PulseApplyMode) {
   }
   const basePrompt = pulsePrompts[pulseActionId.value] ?? 'Transform the selected graph context into a useful written output.'
   const guidance = pulseInstruction.value.trim()
+  const sourceText = props.preview.trim()
+  const quotedSource = sourceText ? `\n\nSelected note preview:\n"""\n${sourceText}\n"""` : ''
   emit('pulse-open-second-brain', {
     contextPaths: pulseContextPaths.value,
-    prompt: guidance ? `${basePrompt}\n\nAdditional guidance: ${guidance}` : basePrompt
+    prompt: guidance ? `${basePrompt}\n\nAdditional guidance: ${guidance}${quotedSource}` : `${basePrompt}${quotedSource}`
   })
 }
 </script>
@@ -271,25 +260,49 @@ function onPulseApply(mode: PulseApplyMode) {
         </div>
       </div>
 
-      <PulsePanel
-        v-if="selectedNode"
-        title="Pulse"
-        source-label="Transform the selected node and visible neighborhood into a usable output."
-        :action-id="pulseActionId"
-        :actions="PULSE_ACTIONS_BY_SOURCE.cosmos_focus"
-        :instruction="pulseInstruction"
-        :preview-markdown="pulse.previewMarkdown.value"
-        :provenance-paths="pulse.provenancePaths.value"
-        :running="pulse.running.value"
-        :error="pulse.error.value"
-        :apply-modes="['send_to_second_brain']"
-        @update:action-id="(value) => { pulseActionId = value as PulseActionId }"
-        @update:instruction="(value) => { pulseInstruction = value }"
-        @run="void runPulseFromCosmos()"
-        @cancel="void pulse.cancel()"
-        @close="pulse.reset()"
-        @apply="onPulseApply"
-      />
+      <section v-if="selectedNode" class="cosmos-pulse-card">
+        <div class="cosmos-pulse-head">
+          <div class="cosmos-pulse-title">
+            <SparklesIcon class="h-4 w-4" />
+            <span>Pulse</span>
+          </div>
+          <button
+            type="button"
+            class="cosmos-pulse-send"
+            :disabled="!pulseContextPaths.length"
+            @click="openPulseInSecondBrain"
+          >
+            Open in Second Brain
+          </button>
+        </div>
+
+        <div class="cosmos-pulse-actions">
+          <button
+            v-for="action in pulseActions"
+            :key="action.id"
+            type="button"
+            class="cosmos-pulse-chip"
+            :class="{ active: pulseActionId === action.id }"
+            @click="pulseActionId = action.id"
+          >
+            {{ action.label }}
+          </button>
+        </div>
+
+        <p class="cosmos-pulse-help">
+          {{ activePulseAction?.description }}
+        </p>
+
+        <label class="cosmos-pulse-field">
+          <span>Instruction</span>
+          <textarea
+            :value="pulseInstruction"
+            class="cosmos-pulse-textarea"
+            placeholder="Optional guidance for Pulse..."
+            @input="pulseInstruction = ($event.target as HTMLTextAreaElement).value"
+          ></textarea>
+        </label>
+      </section>
     </div>
   </section>
 </template>
@@ -322,6 +335,80 @@ function onPulseApply(mode: PulseApplyMode) {
   flex-direction: column;
   gap: 8px;
   padding: 0 4px 8px;
+}
+
+.cosmos-pulse-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--ui-border);
+  border-radius: 12px;
+  background: var(--surface-raised, var(--surface-bg));
+  padding: 12px;
+}
+
+.cosmos-pulse-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cosmos-pulse-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+}
+
+.cosmos-pulse-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cosmos-pulse-chip,
+.cosmos-pulse-send,
+.cosmos-pulse-textarea {
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  background: var(--surface-bg);
+  color: var(--text-primary);
+}
+
+.cosmos-pulse-chip,
+.cosmos-pulse-send {
+  padding: 7px 10px;
+}
+
+.cosmos-pulse-chip.active {
+  border-color: color-mix(in srgb, var(--accent, #4f7a5d) 55%, var(--ui-border));
+  background: color-mix(in srgb, var(--accent, #4f7a5d) 18%, var(--surface-bg));
+  color: var(--accent-contrast, var(--text-primary));
+}
+
+.cosmos-pulse-send {
+  background: color-mix(in srgb, var(--accent, #4f7a5d) 16%, var(--surface-bg));
+}
+
+.cosmos-pulse-help {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.cosmos-pulse-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.cosmos-pulse-textarea {
+  min-height: 88px;
+  width: 100%;
+  padding: 8px 10px;
+  resize: vertical;
 }
 
 .cosmos-focus-controls {

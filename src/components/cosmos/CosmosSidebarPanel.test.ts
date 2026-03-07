@@ -1,5 +1,5 @@
 import { createApp, defineComponent, h, nextTick, ref } from 'vue'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import CosmosSidebarPanel from './CosmosSidebarPanel.vue'
 import type { CosmosGraphNode } from '../../lib/graphIndex'
 
@@ -291,6 +291,66 @@ describe('CosmosSidebarPanel', () => {
     hybridChip?.click()
     await flushUi()
     expect(query.value).toBe('concept map')
+
+    app.unmount()
+  })
+
+  it('opens Pulse in Second Brain with a preset prompt', async () => {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+    const onPulseOpenSecondBrain = vi.fn()
+
+    const Harness = defineComponent({
+      setup() {
+        return () =>
+          h(CosmosSidebarPanel, {
+            summary: { nodes: 2, edges: 1 },
+            query: '',
+            matches: [],
+            focusMode: false,
+            focusDepth: 1,
+            showSemanticEdges: true,
+            selectedNode: nodeA,
+            selectedLinkCount: 1,
+            preview: '# A\nline',
+            previewLoading: false,
+            previewError: '',
+            outgoingNodes: [nodeB],
+            incomingNodes: [],
+            loading: false,
+            onPulseOpenSecondBrain
+          })
+      }
+    })
+
+    const app = createApp(Harness)
+    app.mount(root)
+    await flushUi()
+
+    const outlineChip = Array.from(root.querySelectorAll<HTMLButtonElement>('.cosmos-pulse-chip'))
+      .find((button) => button.textContent?.includes('Outline'))
+    outlineChip?.click()
+    await flushUi()
+
+    const textarea = root.querySelector<HTMLTextAreaElement>('.cosmos-pulse-textarea')
+    expect(textarea).toBeTruthy()
+    if (textarea) {
+      textarea.value = 'Keep it short.'
+      textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    }
+    await flushUi()
+
+    root.querySelector<HTMLButtonElement>('.cosmos-pulse-send')?.click()
+
+    expect(onPulseOpenSecondBrain).toHaveBeenCalledTimes(1)
+    expect(onPulseOpenSecondBrain).toHaveBeenCalledWith({
+      contextPaths: ['graph/a.md', 'graph/b.md'],
+      prompt: expect.stringContaining('Turn the selected graph context into a clear outline')
+    })
+    expect(onPulseOpenSecondBrain).toHaveBeenCalledWith({
+      contextPaths: ['graph/a.md', 'graph/b.md'],
+      prompt: expect.stringContaining('Additional guidance: Keep it short.')
+    })
 
     app.unmount()
   })

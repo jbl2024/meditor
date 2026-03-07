@@ -110,6 +110,7 @@ const loadDocumentStats = ref<{ chars: number; lines: number } | null>(null)
 const LARGE_DOC_THRESHOLD = 40_000
 const pulse = usePulseTransformation()
 const pulseOpen = ref(false)
+const pulsePanelWrap = ref<HTMLDivElement | null>(null)
 const pulseSourceKind = ref<'editor_selection' | 'editor_note'>('editor_selection')
 const pulseActionId = ref<PulseActionId>('rewrite')
 const pulseInstruction = ref('')
@@ -431,6 +432,18 @@ function onDocumentMouseDown(event: MouseEvent) {
     if (tableToolbarFloatingEl.value?.contains(target)) return
     if (target instanceof Element && target.closest('.tomosona-table-control')) return
     hideTableToolbar()
+  }
+
+  if (pulseOpen.value) {
+    if (pulsePanelWrap.value?.contains(target)) return
+    if (target instanceof Element && target.closest('.inline-format-toolbar')) return
+    pulseOpen.value = false
+  }
+}
+
+function onDocumentKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && pulseOpen.value) {
+    pulseOpen.value = false
   }
 }
 
@@ -822,6 +835,7 @@ useEditorPathWatchers({
     holder.value?.addEventListener('copy', onHolderCopy, true)
     holder.value?.addEventListener('scroll', onHolderScroll, true)
     window.addEventListener('resize', updateGutterHitboxStyle)
+    document.addEventListener('keydown', onDocumentKeydown, true)
     await nextTick()
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
     updateGutterHitboxStyle()
@@ -841,6 +855,7 @@ useEditorPathWatchers({
     holder.value?.removeEventListener('scroll', onHolderScroll, true)
     window.removeEventListener('resize', updateGutterHitboxStyle)
     document.removeEventListener('mousedown', onDocumentMouseDown, true)
+    document.removeEventListener('keydown', onDocumentKeydown, true)
     sessionStore.closeAll()
     editor = null
   }
@@ -885,6 +900,12 @@ async function runPulseFromEditor() {
     source_text: sourceText || undefined,
     selection_label: pulseSourceKind.value === 'editor_selection' ? 'Editor selection' : 'Current note'
   })
+}
+
+async function quickRunPulseFromEditor(actionId: PulseActionId) {
+  pulseActionId.value = actionId
+  await nextTick()
+  await runPulseFromEditor()
 }
 
 function buildSecondBrainPulsePrompt(): string {
@@ -1193,10 +1214,9 @@ defineExpose({
             @table:close="hideTableToolbar()"
           />
 
-          <div v-if="pulseOpen" class="editor-pulse-panel-wrap">
+          <div v-if="pulseOpen" ref="pulsePanelWrap" class="editor-pulse-panel-wrap">
             <PulsePanel
-              title="Pulse"
-              :source-label="pulseSourceKind === 'editor_selection' ? 'Transform the current editor selection.' : 'Transform the current note.'"
+              compact
               :action-id="pulseActionId"
               :actions="PULSE_ACTIONS_BY_SOURCE[pulseSourceKind]"
               :instruction="pulseInstruction"
@@ -1207,6 +1227,7 @@ defineExpose({
               :apply-modes="pulseSourceKind === 'editor_selection' ? ['replace_selection', 'insert_below', 'send_to_second_brain'] : ['insert_below', 'send_to_second_brain']"
               @update:action-id="(value) => { pulseActionId = value as PulseActionId }"
               @update:instruction="(value) => { pulseInstruction = value }"
+              @quick-run="void quickRunPulseFromEditor($event as PulseActionId)"
               @run="void runPulseFromEditor()"
               @cancel="void pulse.cancel()"
               @close="pulseOpen = false"
