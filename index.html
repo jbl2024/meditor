@@ -4,10 +4,532 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/tomosona.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tauri + Vue + Typescript App</title>
+    <title>Tomosona</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --startup-bg: #f7f8f5;
+        --startup-bg-accent: #eef2ee;
+        --startup-panel: rgba(249, 250, 247, 0.88);
+        --startup-border: rgba(95, 124, 132, 0.18);
+        --startup-text: #2f413c;
+        --startup-text-strong: #22312d;
+        --startup-muted: #6e8c93;
+        --startup-dim: #d7dfda;
+        --startup-green: #69837c;
+        --startup-green-soft: #9bb2a6;
+        --startup-green-fade: #a2b9a5;
+        --startup-blue: #5f7c84;
+        --startup-blue-soft: #6b8ea1;
+        --startup-blue-fade: #6e8c93;
+        --startup-wash: rgba(107, 142, 161, 0.08);
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background:
+          radial-gradient(circle at top left, rgba(162, 185, 165, 0.2), transparent 28%),
+          radial-gradient(circle at 80% 10%, rgba(107, 142, 161, 0.16), transparent 24%),
+          linear-gradient(180deg, var(--startup-bg-accent), var(--startup-bg));
+      }
+
+      body {
+        font-family: inherit;
+      }
+
+      #app {
+        min-height: 100vh;
+      }
+
+      #startup-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background:
+          radial-gradient(circle at 15% 20%, rgba(155, 178, 166, 0.14), transparent 24%),
+          radial-gradient(circle at 82% 14%, rgba(107, 142, 161, 0.12), transparent 24%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(237, 242, 238, 0.92));
+        transition: opacity 220ms ease, visibility 220ms ease;
+      }
+
+      #startup-splash.is-hidden {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+      }
+
+      .startup-wrap {
+        width: min(420px, calc(100vw - 48px));
+        font-family:
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+      }
+
+      .startup-brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 18px;
+      }
+
+      .startup-brand img {
+        width: 36px;
+        height: 36px;
+      }
+
+      .startup-brand-title {
+        color: var(--startup-text-strong);
+        font-size: 26px;
+        font-weight: 650;
+        letter-spacing: -0.03em;
+      }
+
+      .startup-brand-title span {
+        color: var(--startup-blue);
+      }
+
+      .startup-brand-meta {
+        margin-top: 2px;
+        color: var(--startup-muted);
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .startup-card {
+        border: 1px solid var(--startup-border);
+        border-radius: 14px;
+        padding: 22px 20px 18px;
+        background: var(--startup-panel);
+        box-shadow:
+          0 18px 42px rgba(107, 142, 161, 0.1),
+          inset 0 1px 0 rgba(255, 255, 255, 0.72);
+        backdrop-filter: blur(12px);
+      }
+
+      .startup-kicker {
+        margin: 0 0 8px;
+        color: var(--startup-muted);
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .startup-title {
+        margin: 0;
+        color: var(--startup-text-strong);
+        font-size: clamp(30px, 5vw, 36px);
+        font-weight: 700;
+        line-height: 1.05;
+        letter-spacing: -0.03em;
+      }
+
+      .startup-module {
+        margin-top: 16px;
+      }
+
+      .startup-module-slot {
+        height: 28px;
+        overflow: hidden;
+      }
+
+      .startup-module-track {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        transform: translateY(0);
+      }
+
+      .startup-module-item {
+        height: 30px;
+        line-height: 30px;
+        font-size: 18px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        color: rgba(47, 65, 60, 0.28);
+        white-space: nowrap;
+      }
+
+      .startup-module-item.is-active {
+        color: var(--startup-text-strong);
+      }
+
+      .startup-status {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 10px;
+        min-height: 16px;
+      }
+
+      .startup-status-dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 999px;
+        background: var(--startup-green);
+        animation: startup-blink 1s steps(1) infinite;
+      }
+
+      .startup-status-text {
+        color: var(--startup-muted);
+        font-size: 10px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .startup-progress-wrap {
+        margin-top: 18px;
+      }
+
+      .startup-progress-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+      }
+
+      .startup-progress-label {
+        color: var(--startup-muted);
+        font-size: 10px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+      }
+
+      .startup-progress-pct {
+        color: var(--startup-blue);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .startup-progress {
+        display: flex;
+        gap: 3px;
+        height: 5px;
+      }
+
+      .startup-progress-seg {
+        flex: 1;
+        background: var(--startup-dim);
+        transition: background 140ms ease, transform 180ms ease, box-shadow 180ms ease;
+      }
+
+      .startup-progress-seg.is-filled {
+        background: var(--startup-green);
+        box-shadow: 0 0 10px rgba(105, 131, 124, 0.2);
+      }
+
+      .startup-progress-seg.is-pop {
+        transform: scaleY(2.2);
+        background: var(--startup-blue-soft);
+      }
+
+      .startup-checklist {
+        margin: 16px 0 0;
+        padding: 0;
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .startup-check {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        border: 1px solid transparent;
+        border-radius: 10px;
+        padding: 7px 10px;
+        transition: background 180ms ease, border-color 180ms ease;
+      }
+
+      .startup-check.is-active {
+        border-color: rgba(95, 124, 132, 0.28);
+        background: rgba(107, 142, 161, 0.08);
+      }
+
+      .startup-check.is-done {
+        border-color: rgba(105, 131, 124, 0.18);
+        background: rgba(155, 178, 166, 0.12);
+      }
+
+      .startup-check-icon {
+        width: 14px;
+        height: 14px;
+        border: 1px solid var(--startup-muted);
+        border-radius: 999px;
+        display: grid;
+        place-items: center;
+        font-size: 8px;
+        color: transparent;
+        flex-shrink: 0;
+      }
+
+      .startup-check.is-active .startup-check-icon {
+        border-top-color: var(--startup-blue);
+        border-right-color: transparent;
+        border-bottom-color: transparent;
+        border-left-color: transparent;
+        animation: startup-spin 0.8s linear infinite;
+      }
+
+      .startup-check.is-done .startup-check-icon {
+        border-color: var(--startup-green);
+        background: var(--startup-green);
+        color: #f7f8f5;
+        animation: startup-ping 0.28s ease;
+      }
+
+      .startup-check-name {
+        flex: 1;
+        color: var(--startup-muted);
+        font-size: 13px;
+      }
+
+      .startup-check.is-active .startup-check-name {
+        color: var(--startup-blue);
+      }
+
+      .startup-check.is-done .startup-check-name {
+        color: var(--startup-text);
+      }
+
+      .startup-check-tag {
+        color: var(--startup-muted);
+        font-size: 9px;
+        letter-spacing: 0.08em;
+      }
+
+      .startup-check.is-done .startup-check-tag {
+        color: var(--startup-green);
+      }
+
+      .startup-tagline {
+        min-height: 16px;
+        margin-top: 14px;
+        color: var(--startup-muted);
+        font-size: 12px;
+        letter-spacing: 0.02em;
+        text-align: center;
+      }
+
+      @keyframes startup-blink {
+        0%, 100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0;
+        }
+      }
+
+      @keyframes startup-spin {
+        from {
+          transform: rotate(0deg);
+        }
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      @keyframes startup-ping {
+        0% {
+          transform: scale(0.6);
+        }
+        65% {
+          transform: scale(1.25);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+
+      @media (max-width: 640px) {
+        #startup-splash {
+          padding: 18px;
+        }
+
+        .startup-wrap {
+          width: min(100%, calc(100vw - 36px));
+        }
+
+        .startup-title {
+          font-size: 28px;
+        }
+
+        .startup-module-item {
+          font-size: 17px;
+        }
+      }
+    </style>
   </head>
   <body>
+    <div id="startup-splash" aria-hidden="true">
+      <div class="startup-wrap">
+        <div class="startup-brand">
+          <img src="/meditor.svg" alt="" />
+          <div>
+            <div class="startup-brand-title">tomo<span>sona</span></div>
+            <div class="startup-brand-meta">v0.12.1</div>
+          </div>
+        </div>
+
+        <div class="startup-card">
+          <p class="startup-kicker">Starting up</p>
+          <h1 class="startup-title">Loading...</h1>
+
+          <section class="startup-module" aria-live="polite">
+            <div class="startup-module-slot">
+              <div class="startup-module-track" id="startup-module-track"></div>
+            </div>
+            <div class="startup-status">
+              <div class="startup-status-dot" id="startup-status-dot"></div>
+              <div class="startup-status-text" id="startup-status-text">Opening workspace shell</div>
+            </div>
+          </section>
+
+          <section class="startup-progress-wrap" aria-hidden="true">
+            <div class="startup-progress-header">
+              <span class="startup-progress-label">Modules</span>
+              <span class="startup-progress-pct" id="startup-progress-pct">0%</span>
+            </div>
+            <div class="startup-progress" id="startup-progress"></div>
+          </section>
+
+          <ol class="startup-checklist" id="startup-checklist"></ol>
+          <div class="startup-tagline" id="startup-tagline">Preparing notes, graph, and tools</div>
+        </div>
+      </div>
+    </div>
     <div id="app"></div>
+    <script>
+      (() => {
+        const MODULES = [
+          { name: 'editor', status: 'loading markdown engine...', tag: 'core' },
+          { name: 'cosmos', status: 'wiring graph surfaces...', tag: 'graph' },
+          { name: 'second brain', status: 'preparing context bridge...', tag: 'llm' },
+          { name: 'pulse', status: 'warming prompt pipeline...', tag: 'sync' },
+          { name: 'echoes', status: 'assembling semantic trails...', tag: 'index' }
+        ];
+        const NOISE = ['loading', 'warmup', 'cache', 'shell', 'notes'];
+        const SEGMENT_COUNT = 30;
+        const moduleTrack = document.getElementById('startup-module-track');
+        const statusEl = document.getElementById('startup-status-text');
+        const progressEl = document.getElementById('startup-progress');
+        const progressPctEl = document.getElementById('startup-progress-pct');
+        const checklistEl = document.getElementById('startup-checklist');
+        const taglineEl = document.getElementById('startup-tagline');
+        let index = 0;
+        let currentSegments = 0;
+
+        for (let i = 0; i < SEGMENT_COUNT; i += 1) {
+          const seg = document.createElement('div');
+          seg.className = 'startup-progress-seg';
+          seg.id = `startup-progress-seg-${i}`;
+          progressEl?.appendChild(seg);
+        }
+
+        MODULES.forEach((module, moduleIndex) => {
+          const item = document.createElement('li');
+          item.className = 'startup-check';
+          item.id = `startup-check-${moduleIndex}`;
+          item.innerHTML = `
+            <span class="startup-check-icon">✓</span>
+            <span class="startup-check-name">${module.name}</span>
+            <span class="startup-check-tag">${module.tag}</span>
+          `;
+          checklistEl?.appendChild(item);
+        });
+
+        function buildModuleTrack(targetName) {
+          if (!moduleTrack) return 0;
+          moduleTrack.innerHTML = '';
+          const noiseCount = 4;
+          for (let i = 0; i < noiseCount; i += 1) {
+            const item = document.createElement('div');
+            item.className = 'startup-module-item';
+            item.textContent = NOISE[Math.floor(Math.random() * NOISE.length)];
+            moduleTrack.appendChild(item);
+          }
+          const active = document.createElement('div');
+          active.className = 'startup-module-item is-active';
+          active.textContent = targetName;
+          moduleTrack.appendChild(active);
+          return noiseCount;
+        }
+
+        function animateModuleTrack(targetName) {
+          const noiseCount = buildModuleTrack(targetName);
+          if (!moduleTrack) return;
+          const itemHeight = 32;
+          const target = -(noiseCount * itemHeight);
+          moduleTrack.animate(
+            [
+              { transform: 'translateY(0px)' },
+              { transform: `translateY(${target}px)` }
+            ],
+            {
+              duration: 360,
+              easing: 'cubic-bezier(.2,.8,.2,1)',
+              fill: 'forwards'
+            }
+          );
+          moduleTrack.style.transform = `translateY(${target}px)`;
+        }
+
+        function fillProgressTo(targetIndex) {
+          for (let i = currentSegments; i < targetIndex; i += 1) {
+            const seg = document.getElementById(`startup-progress-seg-${i}`);
+            if (!seg) continue;
+            seg.classList.add('is-filled', 'is-pop');
+            window.setTimeout(() => seg.classList.remove('is-pop'), 220);
+          }
+          currentSegments = targetIndex;
+          const pct = Math.round((targetIndex / SEGMENT_COUNT) * 100);
+          if (progressPctEl) progressPctEl.textContent = `${pct}%`;
+        }
+
+        function updateChecklist(activeIndex) {
+          MODULES.forEach((_, moduleIndex) => {
+            const item = document.getElementById(`startup-check-${moduleIndex}`);
+            if (!item) return;
+            item.classList.toggle('is-active', moduleIndex === activeIndex);
+            item.classList.toggle('is-done', moduleIndex < activeIndex);
+          });
+        }
+
+        window.__TOMOSONA_HIDE_SPLASH__ = () => {
+          const splash = document.getElementById('startup-splash');
+          if (!splash) return;
+          splash.classList.add('is-hidden');
+          window.setTimeout(() => splash.remove(), 260);
+        };
+
+        const tick = () => {
+          const module = MODULES[index];
+          if (!module) return;
+          if (statusEl) statusEl.textContent = module.status;
+          animateModuleTrack(module.name);
+          updateChecklist(index);
+          const targetSegments = Math.round(((index + 1) / MODULES.length) * SEGMENT_COUNT);
+          fillProgressTo(targetSegments);
+          if (taglineEl) {
+            taglineEl.textContent = index === MODULES.length - 1
+              ? 'Almost ready'
+              : 'Preparing notes, graph, and tools';
+          }
+          index = (index + 1) % MODULES.length;
+        };
+
+        tick();
+        window.__TOMOSONA_SPLASH_TIMER__ = window.setInterval(tick, 700);
+      })();
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
