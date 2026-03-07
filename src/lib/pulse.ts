@@ -1,4 +1,4 @@
-import type { PulseActionId, PulseSourceKind } from './api'
+import type { PulseActionId, PulseSourceKind } from './apiTypes'
 
 export type PulseActionSpec = {
   id: PulseActionId

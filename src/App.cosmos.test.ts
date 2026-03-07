@@ -225,7 +225,7 @@ describe('App pane-native surfaces', () => {
       await vi.advanceTimersByTimeAsync(0)
       await nextTick()
 
-      const api = await import('./lib/api')
+      const api = await import('./lib/indexApi')
       const refreshSemanticEdgesMock = vi.mocked(api.refreshSemanticEdgesCacheNow)
       const semanticReindexMock = vi.mocked(api.reindexMarkdownFileSemantic)
       const baselineGraphCalls = hoisted.getWikilinkGraph.mock.calls.length

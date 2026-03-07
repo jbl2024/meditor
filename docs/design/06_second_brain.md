@@ -16,7 +16,7 @@ Pulse note:
   - `useSecondBrainSessions`,
   - `useSecondBrainDeliberation`,
   - `useSecondBrainDraft`.
-- API layer in `src/lib/secondBrainApi.ts` and type-safe wrappers in `src/lib/api.ts`.
+- API layer in `src/lib/secondBrainApi.ts`, with transport-only IPC wrappers in `src/lib/secondBrainIpcApi.ts` and shared types in `src/lib/apiTypes.ts`.
 
 ## UX model
 - Sessions are switched from a header dropdown inside the chat view.

@@ -4,7 +4,7 @@ import {
   buildCosmosGraph,
   selectHubNodes
 } from './graphIndex'
-import type { WikilinkGraph } from './api'
+import type { WikilinkGraph } from './apiTypes'
 
 function sampleGraph(): WikilinkGraph {
   return {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseMessageCitations } from './secondBrainApi'
-import type { SecondBrainMessage } from './api'
+import type { SecondBrainMessage } from './apiTypes'
 
 function message(citationsJson: string): SecondBrainMessage {
   return {

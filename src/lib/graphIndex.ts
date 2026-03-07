@@ -4,7 +4,7 @@
  * This module converts the raw wikilink graph payload into a deterministic,
  * UI-oriented structure for rendering and interaction decisions.
  */
-import type { WikilinkGraph, WikilinkGraphEdge, WikilinkGraphNode } from './api'
+import type { WikilinkGraph, WikilinkGraphEdge, WikilinkGraphNode } from './apiTypes'
 
 export type CosmosGraphNode = WikilinkGraphNode & {
   cluster: number

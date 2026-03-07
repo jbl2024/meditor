@@ -1,4 +1,4 @@
-import type { IndexLogEntry } from './api'
+import type { IndexLogEntry } from './apiTypes'
 import { normalizeDatePart, splitRelativePath } from './appShellPaths'
 
 /**
