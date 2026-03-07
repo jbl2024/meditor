@@ -7,7 +7,7 @@ describe('UiFilterableDropdown', () => {
     document.body.innerHTML = ''
   })
 
-  function mountHarness(options?: { showFilter?: boolean }) {
+  function mountHarness(options?: { showFilter?: boolean; menuMode?: 'overlay' | 'inline' | 'portal' }) {
     const root = document.createElement('div')
     document.body.appendChild(root)
 
@@ -32,6 +32,7 @@ describe('UiFilterableDropdown', () => {
               query: query.value,
               activeIndex: activeIndex.value,
               showFilter: options?.showFilter ?? true,
+              menuMode: options?.menuMode ?? 'overlay',
               onOpenChange: (value: boolean) => {
                 open.value = value
               },
@@ -128,6 +129,27 @@ describe('UiFilterableDropdown', () => {
 
     const listbox = ctx.root.querySelector('[role=\"listbox\"]')
     expect(listbox).toBeTruthy()
+
+    ctx.app.unmount()
+  })
+
+  it('supports inline menu rendering for clipped containers', async () => {
+    const ctx = mountHarness({ menuMode: 'inline' })
+    await nextTick()
+
+    const menu = ctx.root.querySelector('.ui-filterable-dropdown-menu')
+    expect(menu?.classList.contains('ui-filterable-dropdown-menu--inline')).toBe(true)
+    expect(menu?.classList.contains('ui-filterable-dropdown-menu--overlay')).toBe(false)
+
+    ctx.app.unmount()
+  })
+
+  it('supports portal menu rendering for floating overlays', async () => {
+    const ctx = mountHarness({ menuMode: 'portal' })
+    await nextTick()
+
+    const menu = document.body.querySelector('.ui-filterable-dropdown-menu')
+    expect(menu?.classList.contains('ui-filterable-dropdown-menu--portal')).toBe(true)
 
     ctx.app.unmount()
   })

@@ -64,6 +64,8 @@ function submitCustomKey() {
       :model-value="open"
       :query="query"
       :active-index="activeIndex"
+      menu-mode="portal"
+      menu-class="property-add-dropdown-menu"
       filter-placeholder="Search properties..."
       :show-filter="true"
       :max-height="220"
@@ -111,22 +113,16 @@ function submitCustomKey() {
 
 <style>
 .property-add-dropdown {
-  position: relative;
   display: inline-flex;
 }
 
-.property-add-dropdown .dropdown-panel {
-  position: absolute;
-  top: calc(100% + 0.25rem);
-  left: 0;
-  z-index: 30;
+.property-add-dropdown :deep(.ui-filterable-dropdown) {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
 }
 
-.property-add-dropdown :deep(.ui-filterable-dropdown-menu) {
-  position: absolute;
-  top: calc(100% + 0.25rem);
-  left: 0;
-  z-index: 30;
+.property-add-dropdown-menu {
   width: 16rem;
   border: 1px solid var(--menu-border);
   border-radius: var(--radius-md);
@@ -144,7 +140,7 @@ function submitCustomKey() {
   color: var(--button-secondary-text);
 }
 
-.property-add-dropdown .dropdown-item {
+.property-add-dropdown-menu .dropdown-item {
   display: flex;
   width: 100%;
   flex-direction: column;
@@ -155,21 +151,20 @@ function submitCustomKey() {
   padding: 0.375rem 0.5rem;
   background: transparent;
   text-align: left;
-  cursor: pointer;
   color: var(--menu-text-strong);
 }
 
-.property-add-dropdown .dropdown-item small {
+.property-add-dropdown-menu .dropdown-item small {
   font-size: var(--font-size-xs);
   color: var(--text-dim);
 }
 
-.property-add-dropdown .dropdown-custom-row {
+.property-add-dropdown-menu .dropdown-custom-row {
   display: flex;
   gap: 0.375rem;
 }
 
-.property-add-dropdown .dropdown-custom-input {
+.property-add-dropdown-menu .dropdown-custom-input {
   min-width: 0;
   flex: 1;
   border: 1px solid var(--input-border);
@@ -181,7 +176,7 @@ function submitCustomKey() {
   color: var(--input-text);
 }
 
-.property-add-dropdown .dropdown-custom-btn {
+.property-add-dropdown-menu .dropdown-custom-btn {
   border: 1px solid var(--button-secondary-border);
   border-radius: var(--radius-sm);
   padding: 0.25rem 0.5rem;

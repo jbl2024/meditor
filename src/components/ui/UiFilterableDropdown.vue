@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type CSSProperties } from 'vue'
 import {
   useFilterableListbox,
   type FilterableItemBase
@@ -35,6 +35,8 @@ const props = withDefaults(defineProps<{
   closeOnOutside?: boolean
   closeOnSelect?: boolean
   autoFocusOnOpen?: boolean
+  menuMode?: 'overlay' | 'inline' | 'portal'
+  menuClass?: string
   matcher?: (item: FilterableDropdownItem, query: string) => boolean
 }>(), {
   filterPlaceholder: 'Filter...',
@@ -43,7 +45,8 @@ const props = withDefaults(defineProps<{
   maxHeight: 260,
   closeOnOutside: true,
   closeOnSelect: true,
-  autoFocusOnOpen: true
+  autoFocusOnOpen: true,
+  menuMode: 'overlay'
 })
 
 const emit = defineEmits<{
@@ -57,11 +60,15 @@ const rootRef = ref<HTMLElement | null>(null)
 const menuEl = ref<HTMLElement | null>(null)
 const inputRef = ref<HTMLInputElement | null>(null)
 const listRef = ref<HTMLElement | null>(null)
+const portalMenuStyle = ref<CSSProperties>({})
 
 const listboxId = `tomosona-filterable-listbox-${Math.random().toString(36).slice(2)}`
 const itemsRef = computed(() => props.items)
 const maxHeightPx = computed(() =>
   typeof props.maxHeight === 'number' ? `${props.maxHeight}px` : props.maxHeight
+)
+const computedMenuStyle = computed<CSSProperties>(() =>
+  props.menuMode === 'portal' ? portalMenuStyle.value : {}
 )
 
 const api = useFilterableListbox({
@@ -105,6 +112,9 @@ watch(() => props.activeIndex, (value) => {
 watch(() => api.open.value, (value) => {
   if (value !== props.modelValue) emit('open-change', value)
   if (!value) return
+  if (props.menuMode === 'portal') {
+    void nextTick(() => updatePortalPosition())
+  }
   if (!props.autoFocusOnOpen) return
   void nextTick(() => {
     if (props.showFilter) {
@@ -151,6 +161,7 @@ function closeFromOutside(event: MouseEvent) {
   if (!root) return
   const target = event.target as Node | null
   if (target && root.contains(target)) return
+  if (target && menuEl.value?.contains(target)) return
   api.closeMenu()
 }
 
@@ -196,12 +207,38 @@ function onOptionClick(index: number) {
   api.selectIndex(index)
 }
 
+function updatePortalPosition() {
+  if (props.menuMode !== 'portal') return
+  const root = rootRef.value
+  if (!root) return
+  const rect = root.getBoundingClientRect()
+  portalMenuStyle.value = {
+    position: 'fixed',
+    top: `${rect.bottom + 6}px`,
+    left: `${rect.left}px`,
+    minWidth: `${Math.max(rect.width, 240)}px`,
+    maxWidth: 'min(420px, calc(100vw - 24px))'
+  }
+}
+
+function onViewportChange() {
+  if (!api.open.value) return
+  updatePortalPosition()
+}
+
 onMounted(() => {
   document.addEventListener('mousedown', closeFromOutside)
+  window.addEventListener('resize', onViewportChange)
+  window.addEventListener('scroll', onViewportChange, true)
+  if (api.open.value) {
+    void nextTick(() => updatePortalPosition())
+  }
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('mousedown', closeFromOutside)
+  window.removeEventListener('resize', onViewportChange)
+  window.removeEventListener('scroll', onViewportChange, true)
 })
 
 defineExpose({
@@ -223,72 +260,83 @@ defineExpose({
       :filtered-items="api.filteredItems.value"
     />
 
-    <div
-      v-if="api.open.value"
-      ref="menuEl"
-      class="ui-filterable-dropdown-menu"
-      tabindex="-1"
-      @keydown="onMenuKeydown"
-    >
-      <div v-if="props.showFilter" class="ui-filterable-dropdown-filter">
-        <input
-          ref="inputRef"
-          :value="api.query.value"
-          type="text"
-          class="ui-filterable-dropdown-filter-input"
-          :placeholder="props.filterPlaceholder"
-          role="combobox"
-          :aria-expanded="api.open.value ? 'true' : 'false'"
-          :aria-controls="listboxId"
-          :aria-activedescendant="api.activeItemId.value ?? undefined"
-          @input="api.query.value = ($event.target as HTMLInputElement | null)?.value ?? ''"
-          @keydown="onFilterKeydown"
-        />
-      </div>
-
+    <Teleport to="body" :disabled="props.menuMode !== 'portal'">
       <div
-        :id="listboxId"
-        ref="listRef"
-        class="ui-filterable-dropdown-list"
-        role="listbox"
-        :style="{ maxHeight: maxHeightPx }"
+        v-if="api.open.value"
+        ref="menuEl"
+        class="ui-filterable-dropdown-menu"
+        :class="[
+          props.menuClass,
+          {
+          'ui-filterable-dropdown-menu--overlay': props.menuMode === 'overlay',
+          'ui-filterable-dropdown-menu--inline': props.menuMode === 'inline',
+          'ui-filterable-dropdown-menu--portal': props.menuMode === 'portal'
+          }
+        ]"
+        :style="computedMenuStyle"
+        tabindex="-1"
+        @keydown="onMenuKeydown"
       >
-        <template v-if="api.filteredItems.value.length">
-          <button
-            v-for="(item, index) in api.filteredItems.value"
-            :id="item.id"
-            :key="item.id"
-            type="button"
-            class="ui-filterable-dropdown-option"
-            role="option"
-            :aria-selected="api.activeIndex.value === index ? 'true' : 'false'"
-            :data-active="api.activeIndex.value === index ? 'true' : 'false'"
-            @mouseenter="onOptionMouseEnter(index)"
-            @mousedown.prevent
-            @click.stop.prevent="onOptionClick(index)"
-          >
-            <slot
-              name="item"
-              :item="item"
-              :index="index"
-              :active="api.activeIndex.value === index"
-              :select="() => onOptionClick(index)"
+        <div v-if="props.showFilter" class="ui-filterable-dropdown-filter">
+          <input
+            ref="inputRef"
+            :value="api.query.value"
+            type="text"
+            class="ui-filterable-dropdown-filter-input"
+            :placeholder="props.filterPlaceholder"
+            role="combobox"
+            :aria-expanded="api.open.value ? 'true' : 'false'"
+            :aria-controls="listboxId"
+            :aria-activedescendant="api.activeItemId.value ?? undefined"
+            @input="api.query.value = ($event.target as HTMLInputElement | null)?.value ?? ''"
+            @keydown="onFilterKeydown"
+          />
+        </div>
+
+        <div
+          :id="listboxId"
+          ref="listRef"
+          class="ui-filterable-dropdown-list"
+          role="listbox"
+          :style="{ maxHeight: maxHeightPx }"
+        >
+          <template v-if="api.filteredItems.value.length">
+            <button
+              v-for="(item, index) in api.filteredItems.value"
+              :id="item.id"
+              :key="item.id"
+              type="button"
+              class="ui-filterable-dropdown-option"
+              role="option"
+              :aria-selected="api.activeIndex.value === index ? 'true' : 'false'"
+              :data-active="api.activeIndex.value === index ? 'true' : 'false'"
+              @mouseenter="onOptionMouseEnter(index)"
+              @mousedown.prevent
+              @click.stop.prevent="onOptionClick(index)"
             >
-              <span>{{ item.label }}</span>
+              <slot
+                name="item"
+                :item="item"
+                :index="index"
+                :active="api.activeIndex.value === index"
+                :select="() => onOptionClick(index)"
+              >
+                <span>{{ item.label }}</span>
+              </slot>
+            </button>
+          </template>
+          <div v-else class="ui-filterable-dropdown-empty">
+            <slot name="empty" :query="api.query.value">
+              No matches
             </slot>
-          </button>
-        </template>
-        <div v-else class="ui-filterable-dropdown-empty">
-          <slot name="empty" :query="api.query.value">
-            No matches
-          </slot>
+          </div>
+        </div>
+
+        <div v-if="$slots.footer" class="ui-filterable-dropdown-footer">
+          <slot name="footer" />
         </div>
       </div>
-
-      <div v-if="$slots.footer" class="ui-filterable-dropdown-footer">
-        <slot name="footer" />
-      </div>
-    </div>
+    </Teleport>
   </div>
 </template>
 
@@ -303,19 +351,36 @@ defineExpose({
 }
 
 .ui-filterable-dropdown-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
+  --ui-dropdown-bg: var(--surface-bg);
+  --ui-dropdown-border: var(--border-control);
+  --ui-dropdown-text: var(--text-main);
+  --ui-dropdown-muted: var(--text-dim);
+  --ui-dropdown-hover: var(--accent-soft);
   z-index: 60;
   min-width: 240px;
   max-width: min(420px, calc(100vw - 24px));
-  background: var(--ui-dropdown-bg);
-  border: 1px solid var(--ui-dropdown-border);
+  background: var(--ui-dropdown-bg, var(--surface-bg));
+  border: 1px solid var(--ui-dropdown-border, var(--border-control));
   border-radius: 10px;
   box-shadow: var(--shadow-dropdown);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.ui-filterable-dropdown-menu--overlay {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+}
+
+.ui-filterable-dropdown-menu--inline {
+  position: static;
+  margin-top: 6px;
+}
+
+.ui-filterable-dropdown-menu--portal {
+  z-index: 80;
 }
 
 .ui-filterable-dropdown-filter {
@@ -325,10 +390,10 @@ defineExpose({
 
 .ui-filterable-dropdown-filter-input {
   width: 100%;
-  background: var(--ui-dropdown-bg);
-  border: 1px solid var(--ui-dropdown-border);
+  background: var(--ui-dropdown-bg, var(--surface-bg));
+  border: 1px solid var(--ui-dropdown-border, var(--border-control));
   border-radius: 8px;
-  color: var(--ui-dropdown-text);
+  color: var(--ui-dropdown-text, var(--text-main));
   font-size: 12px;
   line-height: 1.2;
   padding: 7px 10px;
@@ -347,7 +412,7 @@ defineExpose({
 .ui-filterable-dropdown-option {
   background: transparent;
   border: none;
-  color: var(--ui-dropdown-text);
+  color: var(--ui-dropdown-text, var(--text-main));
   cursor: pointer;
   display: block;
   font-size: 12px;
@@ -360,17 +425,17 @@ defineExpose({
 
 .ui-filterable-dropdown-option:hover,
 .ui-filterable-dropdown-option[data-active='true'] {
-  background: var(--ui-dropdown-hover);
+  background: var(--ui-dropdown-hover, var(--accent-soft));
 }
 
 .ui-filterable-dropdown-empty {
-  color: var(--ui-dropdown-muted);
+  color: var(--ui-dropdown-muted, var(--text-dim));
   font-size: 12px;
   padding: 10px 12px;
 }
 
 .ui-filterable-dropdown-footer {
-  border-top: 1px solid var(--ui-dropdown-border);
+  border-top: 1px solid var(--ui-dropdown-border, var(--border-control));
   padding: 8px;
 }
 </style>
