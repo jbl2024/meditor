@@ -696,7 +696,6 @@ async function runPulseFromSecondBrain() {
   }
   const basePrompt = pulsePrompts[pulseActionId.value] ?? 'Transform the current context into a useful written output.'
   inputMessage.value = nextInstruction ? `${basePrompt}\n\nAdditional guidance: ${nextInstruction}` : basePrompt
-  mentionInfo.value = `${activePulseAction.value?.label || 'Pulse'} preset loaded into the composer.`
   void nextTick(() => composerRef.value?.focus())
 }
 
