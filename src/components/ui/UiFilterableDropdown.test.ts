@@ -153,4 +153,52 @@ describe('UiFilterableDropdown', () => {
 
     ctx.app.unmount()
   })
+
+  it('repositions portal menu to stay within viewport bounds', async () => {
+    const ctx = mountHarness({ menuMode: 'portal' })
+    await nextTick()
+
+    const dropdownRoot = ctx.root.querySelector('.ui-filterable-dropdown') as HTMLElement
+    const menu = document.body.querySelector('.ui-filterable-dropdown-menu') as HTMLElement
+    expect(dropdownRoot).toBeTruthy()
+    expect(menu).toBeTruthy()
+
+    Object.defineProperty(window, 'innerWidth', { value: 320, configurable: true })
+    Object.defineProperty(window, 'innerHeight', { value: 300, configurable: true })
+    dropdownRoot.getBoundingClientRect = () => ({
+      x: 260,
+      y: 250,
+      top: 250,
+      left: 260,
+      right: 340,
+      bottom: 278,
+      width: 80,
+      height: 28,
+      toJSON: () => ({})
+    } as DOMRect)
+    Object.defineProperty(menu, 'offsetWidth', { value: 260, configurable: true })
+    Object.defineProperty(menu, 'offsetHeight', { value: 180, configurable: true })
+
+    window.dispatchEvent(new Event('resize'))
+    await nextTick()
+
+    expect(menu.style.left).toBe('48px')
+    expect(menu.style.top).toBe('64px')
+
+    ctx.app.unmount()
+  })
+
+  it('renders group labels when items declare groups', async () => {
+    const ctx = mountHarness()
+    ctx.items.value = [
+      { id: 'alpha', label: 'Alpha', group: 'Text' },
+      { id: 'beta', label: 'Beta', group: 'Relations' }
+    ]
+    await nextTick()
+
+    const groups = Array.from(ctx.root.querySelectorAll('.ui-filterable-dropdown-group')).map((node) => node.textContent?.trim())
+    expect(groups).toEqual(['Text', 'Relations'])
+
+    ctx.app.unmount()
+  })
 })

@@ -18,7 +18,8 @@ import { normalizeContextPathsForUpdate, toAbsoluteWorkspacePath } from '../../l
 import type { PulseActionId, SecondBrainMessage, SecondBrainSessionSummary } from '../../lib/api'
 import { useEchoesPack } from '../../composables/useEchoesPack'
 import { useSecondBrainAtMentions, type SecondBrainAtMentionItem } from '../../composables/useSecondBrainAtMentions'
-import { PULSE_ACTIONS_BY_SOURCE } from '../../lib/pulse'
+import { PULSE_ACTIONS_BY_SOURCE, getPulseDropdownItems } from '../../lib/pulse'
+import UiFilterableDropdown, { type FilterableDropdownItem } from '../ui/UiFilterableDropdown.vue'
 import SecondBrainAtMentionsMenu from './SecondBrainAtMentionsMenu.vue'
 import SecondBrainEchoesPanel from './SecondBrainEchoesPanel.vue'
 import SecondBrainSessionDropdown from './SecondBrainSessionDropdown.vue'
@@ -68,6 +69,9 @@ const composerRef = ref<HTMLTextAreaElement | null>(null)
 const threadRef = ref<HTMLElement | null>(null)
 const activeAssistantStreamMessageId = ref<string | null>(null)
 const pulseActionId = ref<PulseActionId>('synthesize')
+const pulseDropdownOpen = ref(false)
+const pulseDropdownQuery = ref('')
+const pulseDropdownActiveIndex = ref(0)
 const streamUnsubscribers: Array<() => void> = []
 const ignoredAssistantMessageIds = new Set<string>()
 let copyToastTimer: ReturnType<typeof setTimeout> | null = null
@@ -132,6 +136,7 @@ const echoesAnchorPath = computed(() => {
 const showEchoesPanel = computed(() => echoesAnchorPath.value.trim().length > 0)
 const echoes = useEchoesPack(echoesAnchorPath, { limit: 5 })
 const pulseActions = computed(() => PULSE_ACTIONS_BY_SOURCE.second_brain_context)
+const pulseDropdownItems = computed(() => getPulseDropdownItems('second_brain_context', { grouped: true }))
 const activePulseAction = computed(
   () => pulseActions.value.find((item) => item.id === pulseActionId.value) ?? pulseActions.value[0]
 )
@@ -690,9 +695,15 @@ async function runPulseFromSecondBrain() {
   }
   const nextInstruction = inputMessage.value.trim()
   const pulsePrompts: Partial<Record<PulseActionId, string>> = {
+    rewrite: 'Rewrite the current context into a clearer version while preserving meaning.',
+    condense: 'Condense the current context into a shorter version that keeps the key information.',
+    expand: 'Expand the current context into a fuller draft with clearer structure and supporting detail.',
+    change_tone: 'Rewrite the current context in a different tone while keeping the substance intact.',
     synthesize: 'Synthesize the current context into a concise, structured summary. Highlight key themes and uncertainties.',
     outline: 'Turn the current context into a clear outline with sections and logical progression.',
-    brief: 'Draft a working brief from the current context, including objective, key points, and open questions.'
+    brief: 'Draft a working brief from the current context, including objective, key points, and open questions.',
+    extract_themes: 'Extract the dominant themes from the current context and explain how they relate.',
+    identify_tensions: 'Identify tensions, contradictions, or open questions in the current context.'
   }
   const basePrompt = pulsePrompts[pulseActionId.value] ?? 'Transform the current context into a useful written output.'
   inputMessage.value = nextInstruction ? `${basePrompt}\n\nAdditional guidance: ${nextInstruction}` : basePrompt
@@ -702,6 +713,15 @@ async function runPulseFromSecondBrain() {
 async function onPulseAction(actionId: PulseActionId) {
   pulseActionId.value = actionId
   await runPulseFromSecondBrain()
+}
+
+function pulseDropdownMatcher(item: FilterableDropdownItem, query: string): boolean {
+  const aliases = Array.isArray(item.aliases) ? item.aliases.map((entry) => String(entry).toLowerCase()) : []
+  return aliases.some((token) => token.includes(query))
+}
+
+function onPulseDropdownSelect(item: FilterableDropdownItem) {
+  void onPulseAction(item.id as PulseActionId)
 }
 
 async function onCopyAssistantMessage(message: SecondBrainMessage) {
@@ -974,19 +994,34 @@ watch(contextPaths, (paths) => {
               <SparklesIcon class="h-4 w-4" />
               <span>Pulse</span>
             </div>
-            <div class="sb-pulse-actions">
-              <button
-                v-for="action in pulseActions"
-                :key="action.id"
-                type="button"
-                class="sb-pulse-chip"
-                :class="{ active: pulseActionId === action.id }"
-                :disabled="!contextPaths.length || requestInFlight"
-                @click="void onPulseAction(action.id)"
-              >
-                {{ action.label }}
-              </button>
-            </div>
+            <UiFilterableDropdown
+              class="sb-pulse-dropdown"
+              :items="pulseDropdownItems"
+              :model-value="pulseDropdownOpen"
+              :query="pulseDropdownQuery"
+              :active-index="pulseDropdownActiveIndex"
+              :matcher="pulseDropdownMatcher"
+              :show-filter="true"
+              :close-on-select="true"
+              :menu-mode="'portal'"
+              :disabled="!contextPaths.length || requestInFlight"
+              filter-placeholder="Filter Pulse actions..."
+              @open-change="pulseDropdownOpen = $event"
+              @query-change="pulseDropdownQuery = $event"
+              @active-index-change="pulseDropdownActiveIndex = $event"
+              @select="onPulseDropdownSelect($event)"
+            >
+              <template #trigger="{ toggleMenu }">
+                <button
+                  type="button"
+                  class="sb-pulse-trigger"
+                  :disabled="!contextPaths.length || requestInFlight"
+                  @click="toggleMenu"
+                >
+                  {{ activePulseAction?.label || 'Choose action' }}
+                </button>
+              </template>
+            </UiFilterableDropdown>
           </div>
 
           <SecondBrainAtMentionsMenu
@@ -1327,26 +1362,26 @@ watch(contextPaths, (paths) => {
   color: var(--sb-text);
 }
 
-.sb-pulse-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.sb-pulse-chip {
+.sb-pulse-trigger {
   border: 1px solid var(--sb-button-border);
   background: var(--sb-button-bg);
   color: var(--sb-button-text);
-  border-radius: 999px;
-  font-size: 11px;
+  border-radius: 10px;
+  font-size: 12px;
   font-weight: 600;
-  padding: 6px 10px;
+  padding: 7px 10px;
 }
 
-.sb-pulse-chip.active {
-  border-color: color-mix(in srgb, var(--accent, #4f7a5d) 55%, var(--sb-button-border));
-  background: color-mix(in srgb, var(--accent, #4f7a5d) 18%, var(--sb-button-bg));
-  color: var(--sb-active-text);
+.sb-pulse-dropdown {
+  min-width: 0;
+}
+
+.sb-pulse-dropdown :deep(.ui-filterable-dropdown-menu) {
+  --ui-dropdown-bg: var(--sb-input-bg);
+  --ui-dropdown-border: var(--sb-border);
+  --ui-dropdown-text: var(--sb-text);
+  --ui-dropdown-muted: var(--sb-text-dim);
+  --ui-dropdown-hover: var(--sb-assistant-bg);
 }
 
 .sb-chip-row {

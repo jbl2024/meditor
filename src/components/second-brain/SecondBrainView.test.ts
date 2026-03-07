@@ -163,6 +163,30 @@ describe('SecondBrainView', () => {
     mounted.app.unmount()
   })
 
+  it('loads a grouped Pulse preset into the composer from the dropdown', async () => {
+    const mounted = mountView()
+    let trigger: HTMLButtonElement | null = null
+    for (let i = 0; i < 8; i += 1) {
+      await flushUi()
+      trigger = mounted.root.querySelector<HTMLButtonElement>('.sb-pulse-trigger')
+      if (trigger && !trigger.disabled) break
+    }
+    expect(trigger).toBeTruthy()
+    trigger?.click()
+    await flushUi()
+
+    const tensionsOption = Array.from(document.body.querySelectorAll<HTMLButtonElement>('.ui-filterable-dropdown-option'))
+      .find((button) => button.textContent?.includes('Identify tensions'))
+    expect(tensionsOption).toBeTruthy()
+    tensionsOption?.click()
+    await flushUi()
+
+    const textarea = mounted.root.querySelector<HTMLTextAreaElement>('.sb-textarea')
+    expect(textarea?.value).toContain('Identify tensions, contradictions, or open questions in the current context.')
+
+    mounted.app.unmount()
+  })
+
   it('toggles the Echoes anchor from a context chip and keeps open explicit', async () => {
     const mounted = mountView()
     for (let i = 0; i < 8 && mounted.root.querySelectorAll('.sb-chip').length === 0; i += 1) {

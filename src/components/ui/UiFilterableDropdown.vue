@@ -23,6 +23,11 @@ import {
  */
 export type FilterableDropdownItem = FilterableItemBase & Record<string, unknown>
 
+type GroupedDropdownSection = {
+  group: string
+  items: Array<{ item: FilterableDropdownItem; index: number }>
+}
+
 const props = withDefaults(defineProps<{
   items: FilterableDropdownItem[]
   modelValue: boolean
@@ -70,6 +75,28 @@ const maxHeightPx = computed(() =>
 const computedMenuStyle = computed<CSSProperties>(() =>
   props.menuMode === 'portal' ? portalMenuStyle.value : {}
 )
+const groupedFilteredItems = computed<GroupedDropdownSection[]>(() => {
+  const sections: GroupedDropdownSection[] = []
+  const byGroup = new Map<string, GroupedDropdownSection>()
+
+  api.filteredItems.value.forEach((item, index) => {
+    const rawGroup = typeof item.group === 'string' ? item.group.trim() : ''
+    const group = rawGroup || ''
+    const existing = byGroup.get(group)
+    if (existing) {
+      existing.items.push({ item, index })
+      return
+    }
+    const section: GroupedDropdownSection = {
+      group,
+      items: [{ item, index }]
+    }
+    byGroup.set(group, section)
+    sections.push(section)
+  })
+
+  return sections
+})
 
 const api = useFilterableListbox({
   items: itemsRef,
@@ -212,12 +239,26 @@ function updatePortalPosition() {
   const root = rootRef.value
   if (!root) return
   const rect = root.getBoundingClientRect()
+  const viewportWidth = window.innerWidth
+  const viewportHeight = window.innerHeight
+  const gutter = 12
+  const verticalGap = 6
+  const menuWidth = Math.min(Math.max(rect.width, menuEl.value?.offsetWidth ?? 240, 240), viewportWidth - gutter * 2)
+  const menuHeight = menuEl.value?.offsetHeight ?? 320
+  const availableBelow = viewportHeight - rect.bottom - gutter
+  const availableAbove = rect.top - gutter
+  const openAbove = availableBelow < menuHeight && availableAbove > availableBelow
+  const left = Math.min(Math.max(gutter, rect.left), viewportWidth - menuWidth - gutter)
+  const top = openAbove
+    ? Math.max(gutter, rect.top - menuHeight - verticalGap)
+    : Math.min(viewportHeight - menuHeight - gutter, rect.bottom + verticalGap)
   portalMenuStyle.value = {
     position: 'fixed',
-    top: `${rect.bottom + 6}px`,
-    left: `${rect.left}px`,
-    minWidth: `${Math.max(rect.width, 240)}px`,
-    maxWidth: 'min(420px, calc(100vw - 24px))'
+    top: `${top}px`,
+    left: `${left}px`,
+    width: `${menuWidth}px`,
+    minWidth: `${menuWidth}px`,
+    maxWidth: `${menuWidth}px`
   }
 }
 
@@ -301,29 +342,34 @@ defineExpose({
           :style="{ maxHeight: maxHeightPx }"
         >
           <template v-if="api.filteredItems.value.length">
-            <button
-              v-for="(item, index) in api.filteredItems.value"
-              :id="item.id"
-              :key="item.id"
-              type="button"
-              class="ui-filterable-dropdown-option"
-              role="option"
-              :aria-selected="api.activeIndex.value === index ? 'true' : 'false'"
-              :data-active="api.activeIndex.value === index ? 'true' : 'false'"
-              @mouseenter="onOptionMouseEnter(index)"
-              @mousedown.prevent
-              @click.stop.prevent="onOptionClick(index)"
-            >
-              <slot
-                name="item"
-                :item="item"
-                :index="index"
-                :active="api.activeIndex.value === index"
-                :select="() => onOptionClick(index)"
+            <template v-for="section in groupedFilteredItems" :key="section.group || '__ungrouped__'">
+              <div v-if="section.group" class="ui-filterable-dropdown-group">
+                {{ section.group }}
+              </div>
+              <button
+                v-for="entry in section.items"
+                :id="entry.item.id"
+                :key="entry.item.id"
+                type="button"
+                class="ui-filterable-dropdown-option"
+                role="option"
+                :aria-selected="api.activeIndex.value === entry.index ? 'true' : 'false'"
+                :data-active="api.activeIndex.value === entry.index ? 'true' : 'false'"
+                @mouseenter="onOptionMouseEnter(entry.index)"
+                @mousedown.prevent
+                @click.stop.prevent="onOptionClick(entry.index)"
               >
-                <span>{{ item.label }}</span>
-              </slot>
-            </button>
+                <slot
+                  name="item"
+                  :item="entry.item"
+                  :index="entry.index"
+                  :active="api.activeIndex.value === entry.index"
+                  :select="() => onOptionClick(entry.index)"
+                >
+                  <span>{{ entry.item.label }}</span>
+                </slot>
+              </button>
+            </template>
           </template>
           <div v-else class="ui-filterable-dropdown-empty">
             <slot name="empty" :query="api.query.value">
@@ -426,6 +472,15 @@ defineExpose({
 .ui-filterable-dropdown-option:hover,
 .ui-filterable-dropdown-option[data-active='true'] {
   background: var(--ui-dropdown-hover, var(--accent-soft));
+}
+
+.ui-filterable-dropdown-group {
+  color: var(--ui-dropdown-muted, var(--text-dim));
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 8px 12px 4px;
+  text-transform: uppercase;
 }
 
 .ui-filterable-dropdown-empty {

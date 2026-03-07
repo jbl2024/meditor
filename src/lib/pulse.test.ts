@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { PULSE_ACTIONS_BY_SOURCE, PULSE_APPLY_LABELS } from './pulse'
+import { PULSE_ACTIONS_BY_SOURCE, PULSE_APPLY_LABELS, getPulseDropdownItems } from './pulse'
 
 describe('pulse contracts', () => {
   it('defines actions for every supported source kind', () => {
@@ -13,5 +13,12 @@ describe('pulse contracts', () => {
     expect(PULSE_APPLY_LABELS.replace_selection).toBe('Replace selection')
     expect(PULSE_APPLY_LABELS.send_to_second_brain).toBe('Send to Second Brain')
     expect(PULSE_APPLY_LABELS.append_to_draft).toBe('Append to draft')
+  })
+
+  it('builds grouped dropdown items for second brain', () => {
+    const items = getPulseDropdownItems('second_brain_context', { grouped: true })
+    expect(items.some((item) => item.group === 'Text' && item.id === 'rewrite')).toBe(true)
+    expect(items.some((item) => item.group === 'Relations' && item.id === 'identify_tensions')).toBe(true)
+    expect(items.find((item) => item.id === 'outline')?.aliases).toContain('plan')
   })
 })

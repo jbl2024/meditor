@@ -477,6 +477,7 @@ function onDocumentMouseDown(event: MouseEvent) {
   if (pulseOpen.value) {
     if (pulsePanelWrap.value?.contains(target)) return
     if (target instanceof Element && target.closest('.inline-format-toolbar')) return
+    if (target instanceof Element && target.closest('.ui-filterable-dropdown-menu')) return
     pulseOpen.value = false
   }
 }

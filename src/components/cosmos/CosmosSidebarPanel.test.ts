@@ -327,9 +327,12 @@ describe('CosmosSidebarPanel', () => {
     app.mount(root)
     await flushUi()
 
-    const outlineChip = Array.from(root.querySelectorAll<HTMLButtonElement>('.cosmos-pulse-chip'))
+    root.querySelector<HTMLButtonElement>('.cosmos-pulse-trigger')?.click()
+    await flushUi()
+
+    const outlineOption = Array.from(document.body.querySelectorAll<HTMLButtonElement>('.ui-filterable-dropdown-option'))
       .find((button) => button.textContent?.includes('Outline'))
-    outlineChip?.click()
+    outlineOption?.click()
     await flushUi()
 
     const textarea = root.querySelector<HTMLTextAreaElement>('.cosmos-pulse-textarea')

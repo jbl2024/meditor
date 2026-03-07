@@ -9,8 +9,9 @@ import { computed, nextTick, ref } from 'vue'
 import type { CosmosGraphNode } from '../../lib/graphIndex'
 import { XMarkIcon, MapPinIcon, SparklesIcon } from '@heroicons/vue/24/outline'
 import { applySearchMode, detectSearchMode, type SearchMode } from '../../lib/searchMode'
-import { PULSE_ACTIONS_BY_SOURCE } from '../../lib/pulse'
+import { PULSE_ACTIONS_BY_SOURCE, getPulseDropdownItems } from '../../lib/pulse'
 import type { PulseActionId } from '../../lib/api'
+import UiFilterableDropdown, { type FilterableDropdownItem } from '../ui/UiFilterableDropdown.vue'
 
 type GraphSummary = {
   nodes: number
@@ -51,7 +52,11 @@ const emit = defineEmits<{
 const searchInputEl = ref<HTMLInputElement | null>(null)
 const pulseActionId = ref<PulseActionId>('synthesize')
 const pulseInstruction = ref('')
+const pulseDropdownOpen = ref(false)
+const pulseDropdownQuery = ref('')
+const pulseDropdownActiveIndex = ref(0)
 const pulseActions = computed(() => PULSE_ACTIONS_BY_SOURCE.cosmos_focus)
+const pulseDropdownItems = computed(() => getPulseDropdownItems('cosmos_focus'))
 const activePulseAction = computed(
   () => pulseActions.value.find((item) => item.id === pulseActionId.value) ?? pulseActions.value[0]
 )
@@ -125,6 +130,15 @@ function openPulseInSecondBrain() {
     contextPaths: pulseContextPaths.value,
     prompt: guidance ? `${basePrompt}\n\nAdditional guidance: ${guidance}${quotedSource}` : `${basePrompt}${quotedSource}`
   })
+}
+
+function pulseDropdownMatcher(item: FilterableDropdownItem, query: string): boolean {
+  const aliases = Array.isArray(item.aliases) ? item.aliases.map((entry) => String(entry).toLowerCase()) : []
+  return aliases.some((token) => token.includes(query))
+}
+
+function onPulseDropdownSelect(item: FilterableDropdownItem) {
+  pulseActionId.value = item.id as PulseActionId
 }
 </script>
 
@@ -266,6 +280,33 @@ function openPulseInSecondBrain() {
             <SparklesIcon class="h-4 w-4" />
             <span>Pulse</span>
           </div>
+          <UiFilterableDropdown
+            class="cosmos-pulse-dropdown"
+            :items="pulseDropdownItems"
+            :model-value="pulseDropdownOpen"
+            :query="pulseDropdownQuery"
+            :active-index="pulseDropdownActiveIndex"
+            :matcher="pulseDropdownMatcher"
+            :show-filter="true"
+            :close-on-select="true"
+            :menu-mode="'portal'"
+            filter-placeholder="Filter Pulse actions..."
+            @open-change="pulseDropdownOpen = $event"
+            @query-change="pulseDropdownQuery = $event"
+            @active-index-change="pulseDropdownActiveIndex = $event"
+            @select="onPulseDropdownSelect($event)"
+          >
+            <template #trigger="{ toggleMenu }">
+              <button
+                type="button"
+                class="cosmos-pulse-trigger"
+                :disabled="!pulseContextPaths.length"
+                @click="toggleMenu"
+              >
+                {{ activePulseAction?.label || 'Choose action' }}
+              </button>
+            </template>
+          </UiFilterableDropdown>
           <button
             type="button"
             class="cosmos-pulse-send"
@@ -273,19 +314,6 @@ function openPulseInSecondBrain() {
             @click="openPulseInSecondBrain"
           >
             Open in Second Brain
-          </button>
-        </div>
-
-        <div class="cosmos-pulse-actions">
-          <button
-            v-for="action in pulseActions"
-            :key="action.id"
-            type="button"
-            class="cosmos-pulse-chip"
-            :class="{ active: pulseActionId === action.id }"
-            @click="pulseActionId = action.id"
-          >
-            {{ action.label }}
           </button>
         </div>
 
@@ -363,13 +391,7 @@ function openPulseInSecondBrain() {
   color: var(--cosmos-text-primary);
 }
 
-.cosmos-pulse-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-
-.cosmos-pulse-chip,
+.cosmos-pulse-trigger,
 .cosmos-pulse-send,
 .cosmos-pulse-textarea {
   border: 1px solid var(--cosmos-border);
@@ -378,23 +400,29 @@ function openPulseInSecondBrain() {
   color: var(--cosmos-text-primary);
 }
 
-.cosmos-pulse-chip,
+.cosmos-pulse-trigger,
 .cosmos-pulse-send {
   padding: 5px 9px;
   font-size: 11px;
   line-height: 1.2;
 }
 
-.cosmos-pulse-chip.active {
-  border-color: var(--cosmos-link-accent);
-  background: var(--cosmos-chip-active-bg);
-  color: var(--cosmos-link-accent);
-}
-
 .cosmos-pulse-send {
   background: var(--cosmos-input-bg);
   color: var(--cosmos-text-secondary);
   white-space: nowrap;
+}
+
+.cosmos-pulse-dropdown {
+  min-width: 0;
+}
+
+.cosmos-pulse-dropdown :deep(.ui-filterable-dropdown-menu) {
+  --ui-dropdown-bg: var(--cosmos-input-bg);
+  --ui-dropdown-border: var(--cosmos-border);
+  --ui-dropdown-text: var(--cosmos-text-primary);
+  --ui-dropdown-muted: var(--cosmos-text-muted);
+  --ui-dropdown-hover: var(--cosmos-chip-active-bg);
 }
 
 .cosmos-pulse-help {

@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { PulseActionSpec, PulseApplyMode } from '../lib/pulse'
 import { PULSE_APPLY_LABELS } from '../lib/pulse'
-import { ArrowsRightLeftIcon, ArrowsPointingOutIcon, SparklesIcon, ScissorsIcon } from '@heroicons/vue/24/outline'
+import { ChevronDownIcon } from '@heroicons/vue/24/outline'
+import UiFilterableDropdown, { type FilterableDropdownItem } from './ui/UiFilterableDropdown.vue'
 
 const props = defineProps<{
   title?: string
@@ -31,18 +32,27 @@ const emit = defineEmits<{
 const canRun = computed(() => Boolean(props.actionId))
 const hasPreview = computed(() => props.previewMarkdown.trim().length > 0)
 const activeAction = computed(() => props.actions.find((item) => item.id === props.actionId) ?? props.actions[0])
+const compactMenuOpen = ref(false)
+const compactQuery = ref('')
+const compactActiveIndex = ref(0)
+const compactItems = computed<FilterableDropdownItem[]>(() =>
+  props.actions.map((action) => ({
+    id: action.id,
+    label: action.label,
+    description: action.description,
+    aliases: [action.label, action.description, ...action.keywords]
+  }))
+)
 
-const COMPACT_ACTION_ICONS = {
-  rewrite: SparklesIcon,
-  condense: ScissorsIcon,
-  expand: ArrowsPointingOutIcon,
-  change_tone: ArrowsRightLeftIcon,
-  synthesize: SparklesIcon,
-  outline: ArrowsRightLeftIcon,
-  brief: ArrowsPointingOutIcon,
-  extract_themes: SparklesIcon,
-  identify_tensions: ArrowsRightLeftIcon
-} as const
+function compactMatcher(item: FilterableDropdownItem, query: string): boolean {
+  const tokens = Array.isArray(item.aliases) ? item.aliases.map((entry) => String(entry).toLowerCase()) : []
+  return tokens.some((token) => token.includes(query))
+}
+
+function onCompactSelect(item: FilterableDropdownItem) {
+  emit('update:actionId', item.id)
+  emit('quick-run', item.id)
+}
 </script>
 
 <template>
@@ -56,20 +66,34 @@ const COMPACT_ACTION_ICONS = {
     </header>
 
     <div v-if="compact" class="pulse-compact-bar">
-      <div class="pulse-compact-actions">
-        <button
-          v-for="action in actions"
-          :key="action.id"
-          type="button"
-          class="pulse-chip-btn"
-          :class="{ active: actionId === action.id }"
-          :title="action.description"
-          @click="emit('quick-run', action.id)"
-        >
-          <component :is="COMPACT_ACTION_ICONS[action.id]" class="h-4 w-4" />
-          <span>{{ action.label }}</span>
-        </button>
-      </div>
+      <UiFilterableDropdown
+        class="pulse-compact-dropdown"
+        :items="compactItems"
+        :model-value="compactMenuOpen"
+        :query="compactQuery"
+        :active-index="compactActiveIndex"
+        :matcher="compactMatcher"
+        :show-filter="true"
+        :close-on-select="true"
+        :menu-mode="'portal'"
+        filter-placeholder="Filter Pulse actions..."
+        @open-change="compactMenuOpen = $event"
+        @query-change="compactQuery = $event"
+        @active-index-change="compactActiveIndex = $event"
+        @select="onCompactSelect($event)"
+      >
+        <template #trigger="{ toggleMenu, activeItem }">
+          <button
+            type="button"
+            class="pulse-compact-trigger"
+            :title="activeAction?.description"
+            @click="toggleMenu"
+          >
+            <span>{{ activeItem?.label || activeAction?.label || 'Action' }}</span>
+            <ChevronDownIcon class="h-4 w-4" />
+          </button>
+        </template>
+      </UiFilterableDropdown>
 
       <input
         class="pulse-input"
@@ -221,30 +245,31 @@ const COMPACT_ACTION_ICONS = {
   gap: 8px;
 }
 
-.pulse-compact-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.pulse-chip-btn {
+.pulse-compact-trigger {
   display: inline-flex;
   align-items: center;
+  justify-content: space-between;
   gap: 6px;
+  min-width: 148px;
   padding: 7px 10px;
   font-size: 12px;
-}
-
-.pulse-chip-btn.active {
-  border-color: color-mix(in srgb, var(--accent, #4f7a5d) 55%, var(--ui-border));
-  background: color-mix(in srgb, var(--accent, #4f7a5d) 18%, var(--surface-bg));
-  color: var(--accent-contrast, var(--text-primary));
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  background: var(--surface-bg);
+  color: var(--text-primary);
+  text-align: left;
 }
 
 .pulse-input {
   flex: 1 1 160px;
   min-width: 0;
   padding: 8px 10px;
+}
+
+.pulse-compact-dropdown :deep(.ui-filterable-dropdown-menu) {
+  --ui-dropdown-bg: var(--surface-bg);
+  --ui-dropdown-border: var(--ui-border);
+  --ui-dropdown-hover: color-mix(in srgb, var(--accent, #4f7a5d) 12%, var(--surface-bg));
 }
 
 .pulse-field {
