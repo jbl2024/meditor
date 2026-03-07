@@ -18,6 +18,20 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.14.0] - 2026-03-07
+
+### Changed
+- refactor(structure): finish shared and app file organization (836abd5)
+- refactor(structure): move pulse into a dedicated domain (e538cbf)
+- refactor(frontend): organize src by app, domains, and shared layers (de1ea78)
+- refactor(frontend): reorganize shared api and feature domains (6e8fe57)
+- refactor(frontend): remove deprecated api facade (69f8604)
+- refactor(frontend): unify workspace paths and split ipc modules (f8c59a0)
+
+### Fixed
+- fix(ci): prefetch and cache tauri appimage bundler tools (1a8eddd)
+- fix(pulse): align panel controls with cosmos styles (595ad9a)
+
 ## [0.13.0] - 2026-03-07
 
 ### Added
