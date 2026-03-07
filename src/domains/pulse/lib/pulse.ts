@@ -1,5 +1,12 @@
-import type { PulseActionId, PulseSourceKind } from '../shared/api/apiTypes'
+/**
+ * Canonical Pulse action catalog used by editor, cosmos, and second-brain surfaces.
+ *
+ * This module stays intentionally pure: it defines static action metadata and
+ * small derivation helpers, but it does not call IPC or manage UI state.
+ */
+import type { PulseActionId, PulseSourceKind } from '../../../shared/api/apiTypes'
 
+/** Declares a Pulse action and the surfaces where it is available. */
 export type PulseActionSpec = {
   id: PulseActionId
   label: string
@@ -9,13 +16,16 @@ export type PulseActionSpec = {
   available_in: PulseSourceKind[]
 }
 
+/** Lists the supported ways a Pulse result can be applied by the UI. */
 export type PulseApplyMode = 'replace_selection' | 'insert_below' | 'send_to_second_brain' | 'append_to_draft' | 'replace_draft'
 
+/** Dropdown-ready Pulse action with optional grouping and search aliases. */
 export type PulseDropdownItem = PulseActionSpec & {
   group?: string
   aliases: string[]
 }
 
+/** Complete catalog of Pulse actions supported by the frontend. */
 export const PULSE_ACTIONS: PulseActionSpec[] = [
   {
     id: 'rewrite',
@@ -91,6 +101,7 @@ export const PULSE_ACTIONS: PulseActionSpec[] = [
   }
 ]
 
+/** Fast lookup of Pulse actions by source surface. */
 export const PULSE_ACTIONS_BY_SOURCE: Record<PulseSourceKind, PulseActionSpec[]> = {
   editor_selection: PULSE_ACTIONS.filter((item) => item.available_in.includes('editor_selection')),
   editor_note: PULSE_ACTIONS.filter((item) => item.available_in.includes('editor_note')),
@@ -102,6 +113,12 @@ function pulseFamilyLabel(family: PulseActionSpec['family']): string {
   return family === 'text' ? 'Text' : 'Relations'
 }
 
+/**
+ * Builds dropdown items for the given Pulse surface.
+ *
+ * When `grouped` is enabled, items expose a stable group label matching the
+ * action family so menus can render grouped sections without extra mapping.
+ */
 export function getPulseDropdownItems(sourceKind: PulseSourceKind, options?: { grouped?: boolean }): PulseDropdownItem[] {
   return PULSE_ACTIONS_BY_SOURCE[sourceKind].map((item) => ({
     ...item,
@@ -110,6 +127,7 @@ export function getPulseDropdownItems(sourceKind: PulseSourceKind, options?: { g
   }))
 }
 
+/** Human-readable labels for every Pulse apply mode exposed in the UI. */
 export const PULSE_APPLY_LABELS: Record<PulseApplyMode, string> = {
   replace_selection: 'Replace selection',
   insert_below: 'Insert below',

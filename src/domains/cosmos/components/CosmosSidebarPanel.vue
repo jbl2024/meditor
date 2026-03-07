@@ -9,7 +9,7 @@ import { computed, nextTick, ref } from 'vue'
 import type { CosmosGraphNode } from '../lib/graphIndex'
 import { XMarkIcon, MapPinIcon, SparklesIcon } from '@heroicons/vue/24/outline'
 import { applySearchMode, detectSearchMode, type SearchMode } from '../../../shared/lib/searchMode'
-import { PULSE_ACTIONS_BY_SOURCE, getPulseDropdownItems } from '../../../lib/pulse'
+import { PULSE_ACTIONS_BY_SOURCE, getPulseDropdownItems } from '../../pulse/lib/pulse'
 import type { PulseActionId } from '../../../shared/api/apiTypes'
 import UiFilterableDropdown, { type FilterableDropdownItem } from '../../../shared/components/ui/UiFilterableDropdown.vue'
 

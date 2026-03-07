@@ -18,7 +18,7 @@ import { normalizeContextPathsForUpdate, toAbsoluteWorkspacePath } from '../lib/
 import type { PulseActionId, SecondBrainMessage, SecondBrainSessionSummary } from '../../../shared/api/apiTypes'
 import { useEchoesPack } from '../../echoes/composables/useEchoesPack'
 import { useSecondBrainAtMentions, type SecondBrainAtMentionItem } from '../composables/useSecondBrainAtMentions'
-import { PULSE_ACTIONS_BY_SOURCE, getPulseDropdownItems } from '../../../lib/pulse'
+import { PULSE_ACTIONS_BY_SOURCE, getPulseDropdownItems } from '../../pulse/lib/pulse'
 import UiFilterableDropdown, { type FilterableDropdownItem } from '../../../shared/components/ui/UiFilterableDropdown.vue'
 import SecondBrainAtMentionsMenu from './SecondBrainAtMentionsMenu.vue'
 import SecondBrainEchoesPanel from './SecondBrainEchoesPanel.vue'
