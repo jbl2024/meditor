@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue'
 
-export type SidebarMode = 'explorer' | 'search'
+export type SidebarMode = 'explorer' | 'favorites' | 'search'
 
 export type WorkspaceTab = {
   path: string

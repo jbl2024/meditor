@@ -1,37 +1,44 @@
 import { createApp, defineComponent, h, nextTick } from 'vue'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
-const secondBrainApi = vi.hoisted(() => ({
-  createDeliberationSession: vi.fn(),
-  loadDeliberationSession: vi.fn(),
-  replaceSessionContext: vi.fn()
-}))
-
-vi.mock('./domains/second-brain/lib/secondBrainApi', () => ({
-  createDeliberationSession: secondBrainApi.createDeliberationSession,
-  fetchSecondBrainConfigStatus: vi.fn(async () => ({ configured: true, error: null })),
-  fetchSecondBrainSessions: vi.fn(async () => []),
-  loadDeliberationSession: secondBrainApi.loadDeliberationSession,
-  removeDeliberationSession: vi.fn(async () => {}),
-  replaceSessionContext: secondBrainApi.replaceSessionContext,
-  runDeliberation: vi.fn(async () => ({ userMessageId: 'u1', assistantMessageId: 'a1' })),
-  subscribeSecondBrainStream: vi.fn(async () => () => {})
-}))
+const hoisted = vi.hoisted(() => {
+  const favoritesState: Array<{ path: string; added_at_ms: number; exists: boolean }> = []
+  return {
+    favoritesState,
+    listFavorites: vi.fn(async () => [...favoritesState]),
+    addFavorite: vi.fn(async (path: string) => {
+      const relative = path.replace('/vault/', '')
+      if (!favoritesState.some((item) => item.path === relative)) {
+        favoritesState.push({ path: relative, added_at_ms: 1, exists: true })
+      }
+      return favoritesState.find((item) => item.path === relative)!
+    }),
+    removeFavorite: vi.fn(async (path: string) => {
+      const relative = path.replace('/vault/', '')
+      const index = favoritesState.findIndex((item) => item.path === relative)
+      if (index >= 0) favoritesState.splice(index, 1)
+    }),
+    renameFavorite: vi.fn(async (oldPath: string, newPath: string) => {
+      const oldRelative = oldPath.replace('/vault/', '')
+      const newRelative = newPath.replace('/vault/', '')
+      const existing = favoritesState.find((item) => item.path === oldRelative)
+      if (existing) existing.path = newRelative
+    })
+  }
+})
 
 vi.mock('./shared/api/workspaceApi', () => ({
   selectWorkingFolder: vi.fn(async () => null),
   clearWorkingFolder: vi.fn(async () => {}),
   setWorkingFolder: vi.fn(async (path: string) => path),
-  listChildren: vi.fn(async () => []),
+  listChildren: vi.fn(async (path: string) => path === '/vault'
+    ? [{ path: '/vault/a.md', is_dir: false, is_markdown: true, has_children: false }]
+    : []),
   listMarkdownFiles: vi.fn(async () => ['/vault/a.md']),
-  pathExists: vi.fn(async () => true),
+  pathExists: vi.fn(async (path: string) => path === '/vault/a.md'),
   readTextFile: vi.fn(async () => '# A'),
   readFileMetadata: vi.fn(async () => ({ created_at_ms: null, updated_at_ms: null })),
   writeTextFile: vi.fn(async () => {}),
-  reindexMarkdownFileLexical: vi.fn(async () => {}),
-  reindexMarkdownFileSemantic: vi.fn(async () => {}),
-  refreshSemanticEdgesCacheNow: vi.fn(async () => {}),
-  removeMarkdownFileFromIndex: vi.fn(async () => {}),
   createEntry: vi.fn(async (parent: string, name: string) => `${parent}/${name}`),
   renameEntry: vi.fn(async (path: string, name: string) => path.replace(/[^/]+$/, name)),
   duplicateEntry: vi.fn(async (path: string) => `${path}.copy`),
@@ -81,16 +88,15 @@ vi.mock('./shared/api/settingsApi', () => ({
 }))
 
 vi.mock('./shared/api/favoritesApi', () => ({
-  listFavorites: vi.fn(async () => []),
-  addFavorite: vi.fn(async (path: string) => ({ path, added_at_ms: 1, exists: true })),
-  removeFavorite: vi.fn(async () => {}),
-  renameFavorite: vi.fn(async () => {})
+  listFavorites: hoisted.listFavorites,
+  addFavorite: hoisted.addFavorite,
+  removeFavorite: hoisted.removeFavorite,
+  renameFavorite: hoisted.renameFavorite
 }))
 
 vi.mock('./app/components/panes/EditorPaneGrid.vue', () => ({
   default: defineComponent({
-    name: 'EditorPaneGridStub',
-    setup(_, { expose, emit }) {
+    setup(_, { expose }) {
       expose({
         saveNow: async () => {},
         reloadCurrent: async () => {},
@@ -104,26 +110,24 @@ vi.mock('./app/components/panes/EditorPaneGrid.vue', () => ({
         resetZoom: () => 1,
         getZoom: () => 1
       })
-      void nextTick(() => {
-        emit('open-note', '/vault/a.md')
-      })
-      return () => h('div', { 'data-pane-grid-stub': 'true' })
+      return () => h('div', 'editor')
     }
   })
 }))
+
 vi.mock('./app/components/panes/MultiPaneToolbarMenu.vue', () => ({
   default: defineComponent({
-    name: 'MultiPaneToolbarMenuStub',
     setup() {
-      return () => h('div')
+      return () => h('button', { type: 'button' }, 'multi-pane')
     }
   })
 }))
+
 vi.mock('./domains/editor/components/EditorRightPane.vue', () => ({ default: defineComponent(() => () => h('div')) }))
 vi.mock('./domains/explorer/components/ExplorerTree.vue', () => ({ default: defineComponent(() => () => h('div')) }))
 vi.mock('./domains/cosmos/components/CosmosView.vue', () => ({ default: defineComponent(() => () => h('div')) }))
-vi.mock('./domains/cosmos/components/CosmosSidebarPanel.vue', () => ({ default: defineComponent(() => () => h('div')) }))
 vi.mock('./domains/second-brain/components/SecondBrainView.vue', () => ({ default: defineComponent(() => () => h('div')) }))
+vi.mock('./domains/cosmos/components/CosmosSidebarPanel.vue', () => ({ default: defineComponent(() => () => h('div')) }))
 
 import App from './app/App.vue'
 
@@ -153,69 +157,60 @@ function mountApp() {
   }
   const root = document.createElement('div')
   document.body.appendChild(root)
+  window.localStorage.setItem('tomosona.working-folder.path', '/vault')
   const app = createApp(App)
   app.mount(root)
   return { app, root }
 }
 
-async function runPaletteAction(root: HTMLElement, query: string) {
-  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'P', ctrlKey: true, shiftKey: true, bubbles: true }))
-  await flushUi()
-  const input = root.querySelector<HTMLInputElement>('[data-quick-open-input="true"]')
-  if (!input) throw new Error('quick open input missing')
-  input.value = query
-  input.dispatchEvent(new Event('input', { bubbles: true }))
-  await flushUi()
-  const actionButton = root.querySelector<HTMLButtonElement>('.quick-open .modal-list .modal-item')
-  if (!actionButton) throw new Error('quick open action item missing')
-  actionButton.click()
-  await flushUi()
-}
-
-describe('App second-brain add-active-note command', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    window.localStorage.clear()
-    window.sessionStorage.clear()
-    window.localStorage.setItem('tomosona.working-folder.path', '/vault')
-
-    secondBrainApi.createDeliberationSession.mockResolvedValue({ sessionId: 's-new', createdAtMs: 1 })
-    secondBrainApi.loadDeliberationSession.mockResolvedValue({
-      session_id: 's-new',
-      context_items: []
-    })
-    secondBrainApi.replaceSessionContext.mockResolvedValue(12)
-  })
-
+describe('App favorites', () => {
   afterEach(() => {
     document.body.innerHTML = ''
+    window.localStorage.clear()
+    window.sessionStorage.clear()
+    hoisted.favoritesState.splice(0, hoisted.favoritesState.length)
+    vi.clearAllMocks()
   })
 
-  it('normalizes relative session context paths into absolute paths on update', async () => {
-    window.localStorage.setItem('tomosona:second-brain:last-session-id:%2Fvault', 's1')
-    secondBrainApi.loadDeliberationSession
-      .mockResolvedValueOnce({ session_id: 's1', context_items: [{ path: 'seed.md' }] })
-      .mockResolvedValueOnce({ session_id: 's1', context_items: [{ path: 'seed.md' }] })
-
-    const mounted = mountApp()
+  it('adds the active note from the command palette and removes missing favorites from the sidebar', async () => {
+    let mounted = mountApp()
     await flushUi()
-    await runPaletteAction(mounted.root, '>add active note to second brain')
 
-    expect(secondBrainApi.createDeliberationSession).not.toHaveBeenCalled()
-    expect(secondBrainApi.replaceSessionContext).toHaveBeenCalledWith('s1', ['/vault/seed.md', '/vault/a.md'])
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'P', ctrlKey: true, bubbles: true }))
+    await flushUi()
+    const quickOpenInput = mounted.root.querySelector<HTMLInputElement>('[data-quick-open-input="true"]')
+    if (!quickOpenInput) throw new Error('Expected quick open input')
+    quickOpenInput.value = 'a'
+    quickOpenInput.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushUi()
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    await flushUi()
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'P', ctrlKey: true, shiftKey: true, bubbles: true }))
+    await flushUi()
+    const paletteInput = mounted.root.querySelector<HTMLInputElement>('[data-quick-open-input="true"]')
+    if (!paletteInput) throw new Error('Expected command palette input')
+    paletteInput.value = '>add active note to favorites'
+    paletteInput.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushUi()
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    await flushUi()
+
+    mounted.root.querySelector<HTMLButtonElement>('[aria-label="Favorites"]')?.click()
+    await flushUi()
+    expect(mounted.root.textContent).toContain('a.md')
+
     mounted.app.unmount()
-  })
-
-  it('creates a session when no persisted session exists', async () => {
-    const mounted = mountApp()
+    hoisted.favoritesState[0].exists = false
+    mounted = mountApp()
     await flushUi()
-    await runPaletteAction(mounted.root, '>add active note to second brain')
+    expect(mounted.root.textContent).toContain('Missing')
+    mounted.root.querySelector<HTMLButtonElement>('.favorites-row-remove')?.click()
+    await flushUi()
 
-    expect(secondBrainApi.createDeliberationSession).toHaveBeenCalledWith({
-      contextPaths: ['/vault/a.md'],
-      title: ''
-    })
-    expect(secondBrainApi.replaceSessionContext).toHaveBeenCalledWith('s-new', ['/vault/a.md'])
+    expect(hoisted.removeFavorite).toHaveBeenCalled()
+    expect(mounted.root.querySelector('.favorites-row')).toBeNull()
+
     mounted.app.unmount()
   })
 })

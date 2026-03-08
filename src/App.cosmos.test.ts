@@ -99,6 +99,13 @@ vi.mock('./shared/api/settingsApi', () => ({
   discoverCodexModels: vi.fn(async () => [])
 }))
 
+vi.mock('./shared/api/favoritesApi', () => ({
+  listFavorites: vi.fn(async () => []),
+  addFavorite: vi.fn(async (path: string) => ({ path, added_at_ms: 1, exists: true })),
+  removeFavorite: vi.fn(async () => {}),
+  renameFavorite: vi.fn(async () => {})
+}))
+
 vi.mock('./app/components/panes/EditorPaneGrid.vue', () => ({
   default: defineComponent({
     name: 'EditorPaneGridStub',

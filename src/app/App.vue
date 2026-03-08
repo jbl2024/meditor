@@ -30,6 +30,12 @@ import {
   listenWorkspaceFsChanged
 } from '../shared/api/workspaceApi'
 import {
+  addFavorite,
+  listFavorites,
+  removeFavorite,
+  renameFavorite,
+} from '../shared/api/favoritesApi'
+import {
   backlinksForPath,
   ftsSearch,
   getWikilinkGraph,
@@ -46,7 +52,7 @@ import {
   updateWikilinksForRename,
   writePropertyTypeSchema
 } from '../shared/api/indexApi'
-import type { WikilinkGraph } from '../shared/api/apiTypes'
+import type { WikilinkGraph, WorkspaceFsChange } from '../shared/api/apiTypes'
 import { parseSearchSnippet } from '../shared/lib/searchSnippets'
 import { applySearchMode, detectSearchMode, type SearchMode } from '../shared/lib/searchMode'
 import { hasActiveTextSelectionInEditor, shouldBlockGlobalShortcutsFromTarget } from '../shared/lib/shortcutTargets'
@@ -115,6 +121,7 @@ import { useEchoesPack } from '../domains/echoes/composables/useEchoesPack'
 import { useCosmosController } from '../domains/cosmos/composables/useCosmosController'
 import { useFilesystemState } from './composables/useFilesystemState'
 import { useWorkspaceState, type SidebarMode } from './composables/useWorkspaceState'
+import { useFavoritesController } from '../domains/favorites/composables/useFavoritesController'
 import {
   createInitialLayout,
   hydrateLayout,
@@ -330,6 +337,13 @@ const {
   closeWorkspace: closeWorkspaceInternal,
   loadWorkingFolder: loadWorkingFolderInternal
 } = workspaceController
+const favorites = useFavoritesController({
+  workingFolderPath: filesystem.workingFolderPath,
+  listFavorites,
+  addFavorite,
+  removeFavorite,
+  renameFavorite
+})
 const indexing = useAppIndexingController({
   workingFolderPath: filesystem.workingFolderPath,
   hasWorkspace: filesystem.hasWorkspace,
@@ -464,38 +478,41 @@ const paletteActionPriority: Record<string, number> = {
   'open-file': 0,
   'open-workspace': 1,
   'open-home-view': 2,
-  'open-today': 3,
-  'open-yesterday': 4,
-  'open-specific-date': 5,
-  'open-cosmos-view': 6,
-  'open-second-brain-view': 7,
-  'add-active-note-to-second-brain': 8,
-  'open-settings': 9,
-  'open-note-in-cosmos': 10,
-  'reveal-in-explorer': 11,
-  'show-shortcuts': 12,
-  'create-new-file': 13,
-  'close-other-tabs': 14,
-  'close-all-tabs': 15,
-  'close-all-tabs-current-pane': 16,
-  'split-pane-right': 17,
-  'split-pane-down': 18,
-  'focus-pane-1': 19,
-  'focus-pane-2': 20,
-  'focus-pane-3': 21,
-  'focus-pane-4': 22,
-  'focus-next-pane': 23,
-  'move-tab-next-pane': 24,
-  'close-active-pane': 25,
-  'join-panes': 26,
-  'reset-pane-layout': 27,
-  'zoom-in': 28,
-  'zoom-out': 29,
-  'zoom-reset': 30,
-  'theme-light': 31,
-  'theme-dark': 32,
-  'theme-system': 33,
-  'close-workspace': 34
+  'open-favorites': 3,
+  'open-today': 4,
+  'open-yesterday': 5,
+  'open-specific-date': 6,
+  'open-cosmos-view': 7,
+  'open-second-brain-view': 8,
+  'add-active-note-to-second-brain': 9,
+  'add-active-note-to-favorites': 10,
+  'remove-active-note-from-favorites': 11,
+  'open-settings': 12,
+  'open-note-in-cosmos': 13,
+  'reveal-in-explorer': 14,
+  'show-shortcuts': 15,
+  'create-new-file': 16,
+  'close-other-tabs': 17,
+  'close-all-tabs': 18,
+  'close-all-tabs-current-pane': 19,
+  'split-pane-right': 20,
+  'split-pane-down': 21,
+  'focus-pane-1': 22,
+  'focus-pane-2': 23,
+  'focus-pane-3': 24,
+  'focus-pane-4': 25,
+  'focus-next-pane': 26,
+  'move-tab-next-pane': 27,
+  'close-active-pane': 28,
+  'join-panes': 29,
+  'reset-pane-layout': 30,
+  'zoom-in': 31,
+  'zoom-out': 32,
+  'zoom-reset': 33,
+  'theme-light': 34,
+  'theme-dark': 35,
+  'theme-system': 36,
+  'close-workspace': 37
 }
 
 const paletteActions = computed<PaletteAction[]>(() => [
@@ -503,6 +520,12 @@ const paletteActions = computed<PaletteAction[]>(() => [
     id: 'open-home-view',
     label: 'Open Home',
     run: () => openHomeViewFromPalette(),
+    closeBeforeRun: true
+  },
+  {
+    id: 'open-favorites',
+    label: 'Open Favorites',
+    run: () => openFavoritesPanelFromPalette(),
     closeBeforeRun: true
   },
   {
@@ -523,6 +546,24 @@ const paletteActions = computed<PaletteAction[]>(() => [
     label: 'Add Active Note to Second Brain',
     run: () => addActiveNoteToSecondBrainFromPalette()
   },
+  ...(
+    activeFilePath.value && isMarkdownPath(activeFilePath.value) && !favorites.isFavorite(activeFilePath.value)
+      ? [{
+          id: 'add-active-note-to-favorites',
+          label: 'Add Active Note to Favorites',
+          run: () => addActiveNoteToFavoritesFromPalette()
+        } satisfies PaletteAction]
+      : []
+  ),
+  ...(
+    activeFilePath.value && isMarkdownPath(activeFilePath.value) && favorites.isFavorite(activeFilePath.value)
+      ? [{
+          id: 'remove-active-note-from-favorites',
+          label: 'Remove Active Note from Favorites',
+          run: () => removeActiveNoteFromFavoritesFromPalette()
+        } satisfies PaletteAction]
+      : []
+  ),
   {
     id: 'open-settings',
     label: 'Open Settings',
@@ -718,11 +759,11 @@ const forwardHistoryItems = computed(() =>
 
 function loadSavedSidebarMode() {
   const saved = window.sessionStorage.getItem(VIEW_MODE_STORAGE_KEY)
-  if (saved === 'explorer' || saved === 'search') {
+  if (saved === 'explorer' || saved === 'favorites' || saved === 'search') {
     workspace.sidebarMode.value = saved
   }
   const savedPrevious = window.sessionStorage.getItem(PREVIOUS_NON_COSMOS_VIEW_MODE_STORAGE_KEY)
-  if (savedPrevious === 'explorer' || savedPrevious === 'search') {
+  if (savedPrevious === 'explorer' || savedPrevious === 'favorites' || savedPrevious === 'search') {
     previousNonCosmosMode.value = savedPrevious
   }
 }
@@ -737,7 +778,7 @@ function persistPreviousNonCosmosMode() {
 
 function resolvedNoteNavigationFallback(): SidebarMode {
   const current = previousNonCosmosMode.value
-  if (current === 'search' || current === 'explorer') return current
+  if (current === 'search' || current === 'favorites' || current === 'explorer') return current
   return 'explorer'
 }
 
@@ -1313,6 +1354,60 @@ async function addActiveNoteToSecondBrainFromPalette() {
   return await addActiveNoteToSecondBrain()
 }
 
+async function openFavoritesPanelFromPalette() {
+  closeOverflowMenu()
+  workspace.setSidebarMode('favorites')
+  previousNonCosmosMode.value = 'favorites'
+  persistPreviousNonCosmosMode()
+  persistSidebarMode()
+  return true
+}
+
+async function addActiveNoteToFavoritesFromPalette() {
+  const path = activeFilePath.value
+  if (!path || !isMarkdownPath(path)) return false
+  try {
+    await favorites.addFavorite(path)
+    filesystem.notifySuccess(`Added ${toRelativePath(path)} to favorites.`)
+    return true
+  } catch (err) {
+    filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not add favorite.'
+    return false
+  }
+}
+
+async function removeActiveNoteFromFavoritesFromPalette() {
+  const path = activeFilePath.value
+  if (!path || !favorites.isFavorite(path)) return false
+  try {
+    await favorites.removeFavorite(path)
+    filesystem.notifySuccess(`Removed ${toRelativePath(path)} from favorites.`)
+    return true
+  } catch (err) {
+    filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not remove favorite.'
+    return false
+  }
+}
+
+async function removeFavoriteFromList(path: string) {
+  try {
+    await favorites.removeFavorite(path)
+    filesystem.notifySuccess(`Removed ${toRelativePath(path)} from favorites.`)
+  } catch (err) {
+    filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not remove favorite.'
+  }
+}
+
+async function toggleActiveNoteFavoriteFromRightPane() {
+  const path = activeFilePath.value
+  if (!path || !isMarkdownPath(path)) return
+  if (favorites.isFavorite(path)) {
+    await removeActiveNoteFromFavoritesFromPalette()
+    return
+  }
+  await addActiveNoteToFavoritesFromPalette()
+}
+
 function closeSettingsModal() {
   settingsModalVisible.value = false
   void nextTick(() => {
@@ -1386,6 +1481,7 @@ async function closeWorkspace() {
   backlinksLoading.value = false
   semanticLinks.value = []
   semanticLinksLoading.value = false
+  favorites.reset()
   cosmos.clearState()
   recentNotes.value = []
   recentNotesCacheKey = ''
@@ -1578,6 +1674,7 @@ async function loadWorkingFolder(path: string) {
     multiPane.resetToSinglePane()
     multiPane.closeAllTabsInPane(multiPane.layout.value.activePaneId)
     searchHits.value = []
+    favorites.reset()
     return
   }
 
@@ -1585,6 +1682,11 @@ async function loadWorkingFolder(path: string) {
   searchHits.value = []
   invalidateRecentNotes()
   await loadAllFiles()
+  try {
+    await favorites.loadFavorites()
+  } catch (err) {
+    filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not load favorites.'
+  }
   if (multiPane.findPaneContainingSurface('cosmos') !== null) {
     await cosmos.refreshGraph()
   }
@@ -1604,9 +1706,24 @@ function onExplorerSelection(paths: string[]) {
   filesystem.selectedCount.value = paths.length
 }
 
+function onExplorerPathsDeleted(paths: string[]) {
+  for (const path of paths) {
+    favorites.markFavoriteMissing(path)
+  }
+}
+
 async function onExplorerOpen(path: string) {
   const opened = await openTabWithAutosave(path)
   if (!opened) return
+}
+
+function syncFavoritesForWorkspaceChanges(changes: WorkspaceFsChange[]) {
+  for (const change of changes) {
+    if (change.kind !== 'renamed' || !change.old_path || !change.new_path) continue
+    void favorites.renameFavorite(change.old_path, change.new_path).catch((err) => {
+      filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not update favorite.'
+    })
+  }
 }
 
 async function openFile(path: string) {
@@ -1724,11 +1841,17 @@ async function maybeRewriteWikilinksForRename(fromPath: string, toPath: string) 
 
 function onEditorPathRenamed(payload: { from: string; to: string; manual: boolean }) {
   applyPathRenameLocally(payload)
+  void favorites.renameFavorite(payload.from, payload.to).catch((err) => {
+    filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not update favorite.'
+  })
   void maybeRewriteWikilinksForRename(payload.from, payload.to)
 }
 
 function onExplorerPathRenamed(payload: { from: string; to: string }) {
   applyPathRenameLocally(payload)
+  void favorites.renameFavorite(payload.from, payload.to).catch((err) => {
+    filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not update favorite.'
+  })
   void maybeRewriteWikilinksForRename(payload.from, payload.to)
 }
 
@@ -1982,7 +2105,7 @@ async function onOutlineHeadingClick(payload: { index: number; heading: { level:
 }
 
 function setSidebarMode(mode: SidebarMode) {
-  const target = mode === 'search' ? 'search' : 'explorer'
+  const target = mode === 'search' ? 'search' : mode === 'favorites' ? 'favorites' : 'explorer'
   const current = workspace.sidebarMode.value
 
   if (current === target) {
@@ -2006,6 +2129,10 @@ function openSearchPanel() {
   nextTick(() => {
     document.querySelector<HTMLInputElement>('[data-search-input=\"true\"]')?.focus()
   })
+}
+
+async function openFavoriteFromSidebar(path: string) {
+  await openTabWithAutosave(path)
 }
 
 function collectSemanticLinksForPath(path: string, rawGraph: WikilinkGraph | null): SemanticLinkRow[] {
@@ -3222,6 +3349,8 @@ onMounted(() => {
     if (!root) return
     if (normalizePath(payload.root).toLowerCase() !== normalizePath(root).toLowerCase()) return
     applyWorkspaceFsChanges(payload.changes)
+    favorites.applyWorkspaceFsChanges(payload.changes)
+    syncFavoritesForWorkspaceChanges(payload.changes)
     if (payload.changes.some((change) => change.kind === 'modified' || change.kind === 'created' || change.kind === 'removed' || change.kind === 'renamed')) {
       invalidateRecentNotes()
     }
@@ -3326,6 +3455,8 @@ onBeforeUnmount(() => {
         :has-workspace="filesystem.hasWorkspace.value"
         :left-pane-width="leftPaneWidth"
         :active-file-path="activeFilePath"
+        :favorite-items="favorites.items.value"
+        :favorites-loading="favorites.loading.value"
         :search-query="searchQuery"
         :global-search-mode="globalSearchMode"
         :search-mode-options="searchModeOptions"
@@ -3339,9 +3470,12 @@ onBeforeUnmount(() => {
         @set-sidebar-mode="setSidebarMode"
         @explorer-open="onExplorerOpen"
         @explorer-path-renamed="onExplorerPathRenamed"
+        @explorer-paths-deleted="onExplorerPathsDeleted"
         @explorer-request-create="onExplorerRequestCreate"
         @explorer-selection="onExplorerSelection"
         @explorer-error="onExplorerError"
+        @favorites-open="openFavoriteFromSidebar"
+        @favorites-remove="removeFavoriteFromList"
         @select-working-folder="void onSelectWorkingFolder()"
         @update-search-query="searchQuery = $event"
         @run-global-search="runGlobalSearch"
@@ -3452,6 +3586,9 @@ onBeforeUnmount(() => {
           <EditorRightPane
             v-if="workspace.rightPaneVisible.value"
             :width="rightPaneWidth"
+            :active-note-path="activeFilePath"
+            :can-toggle-favorite="Boolean(activeFilePath && isMarkdownPath(activeFilePath))"
+            :is-favorite="Boolean(activeFilePath && favorites.isFavorite(activeFilePath))"
             :echoes-items="noteEchoes.items.value"
             :echoes-loading="noteEchoes.loading.value"
             :echoes-error="noteEchoes.error.value"
@@ -3465,6 +3602,7 @@ onBeforeUnmount(() => {
             :properties-preview="propertiesPreview"
             :property-parse-error-count="propertyParseErrorCount"
             :to-relative-path="toRelativePath"
+            @toggle-favorite="void toggleActiveNoteFavoriteFromRightPane()"
             @echoes-open="void onBacklinkOpen($event)"
             @outline-click="void onOutlineHeadingClick($event)"
             @backlink-open="void onBacklinkOpen($event)"

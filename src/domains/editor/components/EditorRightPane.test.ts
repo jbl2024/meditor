@@ -8,11 +8,15 @@ describe('EditorRightPane', () => {
     document.body.appendChild(root)
     const onOutlineClick = vi.fn()
     const onBacklinkOpen = vi.fn()
+    const onToggleFavorite = vi.fn()
 
     const app = createApp(defineComponent({
       setup() {
         return () => h(EditorRightPane, {
           width: 320,
+          activeNotePath: '/wk/notes/a.md',
+          canToggleFavorite: true,
+          isFavorite: true,
           echoesItems: [{
             path: '/wk/notes/e.md',
             title: 'Echo',
@@ -33,6 +37,7 @@ describe('EditorRightPane', () => {
           propertiesPreview: [{ key: 'tags', value: 'doc' }],
           propertyParseErrorCount: 0,
           toRelativePath: (path: string) => path.replace('/wk/', ''),
+          onToggleFavorite,
           onOutlineClick,
           onBacklinkOpen
         })
@@ -41,13 +46,18 @@ describe('EditorRightPane', () => {
 
     app.mount(root)
     const sectionTitles = Array.from(root.querySelectorAll('.section-title')).map((el) => el.textContent?.trim())
-    expect(sectionTitles[0]).toBe('Echoes')
+    expect(sectionTitles[0]).toBe('Active Note')
+    expect(sectionTitles[1]).toBe('Echoes')
     expect(root.querySelectorAll('.section-toggle')).toHaveLength(3)
     expect(root.querySelectorAll('.section-toggle-chevron')).toHaveLength(3)
+    expect(root.querySelector('.favorite-toggle-btn--active')).toBeTruthy()
     expect(root.textContent).not.toContain('0.88')
     expect(root.querySelectorAll('.echoes-item')).toHaveLength(1)
     const buttons = Array.from(root.querySelectorAll('.pane-item')) as HTMLButtonElement[]
     expect(buttons.length).toBe(0)
+
+    ;(root.querySelector('.favorite-toggle-btn') as HTMLButtonElement).click()
+    expect(onToggleFavorite).toHaveBeenCalledTimes(1)
 
     ;(root.querySelector('.echoes-item') as HTMLButtonElement).click()
     expect(root.textContent).toContain('Relevant notes around what you\'re working on now.')

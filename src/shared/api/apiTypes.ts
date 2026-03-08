@@ -40,6 +40,12 @@ export type FileMetadata = {
   updated_at_ms: number | null
 }
 
+export type FavoriteEntry = {
+  path: string
+  added_at_ms: number
+  exists: boolean
+}
+
 export type IndexRuntimeStatus = {
   model_name: string
   model_state: string

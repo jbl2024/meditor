@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { FolderIcon, MagnifyingGlassIcon } from '@heroicons/vue/24/outline'
+import { FolderIcon, MagnifyingGlassIcon, StarIcon } from '@heroicons/vue/24/outline'
 import { computed, ref } from 'vue'
 import SearchSidebarPanel from './SearchSidebarPanel.vue'
 import ExplorerTree from '../../../domains/explorer/components/ExplorerTree.vue'
+import FavoritesListPanel from '../../../domains/favorites/components/FavoritesListPanel.vue'
 import type { SearchMode } from '../../../shared/lib/searchMode'
+import type { FavoriteEntry } from '../../../shared/api/apiTypes'
 
 /**
  * Module: SidebarSurface
@@ -19,11 +21,13 @@ type SearchResultGroup = { path: string; items: SearchHit[] }
 /** Props required to render the app shell sidebar and its two panel modes. */
 const props = defineProps<{
   sidebarVisible: boolean
-  sidebarMode: 'explorer' | 'search'
+  sidebarMode: 'explorer' | 'favorites' | 'search'
   workingFolderPath: string
   hasWorkspace: boolean
   leftPaneWidth: number
   activeFilePath: string
+  favoriteItems: FavoriteEntry[]
+  favoritesLoading: boolean
   searchQuery: string
   globalSearchMode: SearchMode
   searchModeOptions: Array<{ mode: SearchMode; label: string }>
@@ -38,12 +42,15 @@ const props = defineProps<{
 
 /** Events emitted by sidebar controls so the parent shell remains the only state owner. */
 const emit = defineEmits<{
-  setSidebarMode: [mode: 'explorer' | 'search']
+  setSidebarMode: [mode: 'explorer' | 'favorites' | 'search']
   explorerOpen: [path: string]
   explorerPathRenamed: [payload: { from: string; to: string }]
+  explorerPathsDeleted: [paths: string[]]
   explorerRequestCreate: [payload: { parentPath: string; entryKind: 'file' | 'folder' }]
   explorerSelection: [paths: string[]]
   explorerError: [message: string]
+  favoritesOpen: [path: string]
+  favoritesRemove: [path: string]
   selectWorkingFolder: []
   updateSearchQuery: [value: string]
   runGlobalSearch: []
@@ -81,6 +88,16 @@ defineExpose({
     </button>
     <button
       class="activity-btn"
+      :class="{ active: sidebarMode === 'favorites' && sidebarVisible }"
+      type="button"
+      title="Favorites"
+      aria-label="Favorites"
+      @click="emit('setSidebarMode', 'favorites')"
+    >
+      <StarIcon class="activity-btn-icon" />
+    </button>
+    <button
+      class="activity-btn"
       :class="{ active: sidebarMode === 'search' && sidebarVisible }"
       type="button"
       title="Search"
@@ -109,6 +126,7 @@ defineExpose({
           :active-path="activeFilePath"
           @open="emit('explorerOpen', $event)"
           @path-renamed="emit('explorerPathRenamed', $event)"
+          @paths-deleted="emit('explorerPathsDeleted', $event)"
           @request-create="emit('explorerRequestCreate', $event)"
           @select="emit('explorerSelection', $event)"
           @error="emit('explorerError', $event)"
@@ -118,6 +136,16 @@ defineExpose({
           <button type="button" class="inline-link-btn" @click="emit('selectWorkingFolder')">Open folder</button>
         </div>
       </div>
+
+      <FavoritesListPanel
+        v-else-if="sidebarMode === 'favorites'"
+        :items="favoriteItems"
+        :active-path="activeFilePath"
+        :loading="favoritesLoading"
+        :to-relative-path="toRelativePath"
+        @open="emit('favoritesOpen', $event)"
+        @remove="emit('favoritesRemove', $event)"
+      />
 
       <SearchSidebarPanel
         v-else-if="sidebarMode === 'search'"

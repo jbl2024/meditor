@@ -3,6 +3,7 @@
 
 mod db;
 mod echoes;
+mod favorites;
 mod fs_ops;
 mod second_brain;
 mod semantic;
@@ -64,7 +65,7 @@ struct IndexLogEntry {
 
 static INDEX_LOGS: OnceLock<Mutex<VecDeque<IndexLogEntry>>> = OnceLock::new();
 
-fn now_ms() -> u64 {
+pub(crate) fn now_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|value| value.as_millis() as u64)
@@ -369,7 +370,7 @@ fn normalize_note_key(root: &Path, path: &Path) -> Result<String> {
     Ok(normalize_key_text(&key))
 }
 
-fn normalize_workspace_relative_path(root: &Path, path: &Path) -> Result<String> {
+pub(crate) fn normalize_workspace_relative_path(root: &Path, path: &Path) -> Result<String> {
     let relative = path.strip_prefix(root).map_err(|_| AppError::InvalidPath)?;
     Ok(relative.to_string_lossy().replace('\\', "/"))
 }
@@ -451,7 +452,7 @@ fn note_link_target(root: &Path, path: &Path) -> Result<String> {
     Ok(target)
 }
 
-fn normalize_workspace_path(root: &Path, raw: &str) -> Result<PathBuf> {
+pub(crate) fn normalize_workspace_path(root: &Path, raw: &str) -> Result<PathBuf> {
     let mut path = PathBuf::from(raw);
     if path.as_os_str().is_empty() {
         return Err(AppError::InvalidPath);
@@ -476,7 +477,7 @@ fn normalize_workspace_path(root: &Path, raw: &str) -> Result<PathBuf> {
     Ok(path)
 }
 
-fn normalize_workspace_relative_from_input(root: &Path, raw: &str) -> Result<String> {
+pub(crate) fn normalize_workspace_relative_from_input(root: &Path, raw: &str) -> Result<String> {
     let mut path = PathBuf::from(raw);
     if path.as_os_str().is_empty() {
         return Err(AppError::InvalidPath);
@@ -2881,6 +2882,10 @@ pub fn run() {
             get_wikilink_graph,
             read_property_type_schema,
             write_property_type_schema,
+            favorites::list_favorites,
+            favorites::add_favorite,
+            favorites::remove_favorite,
+            favorites::rename_favorite,
             echoes::compute_echoes_pack,
             settings::read_app_settings,
             settings::write_app_settings,

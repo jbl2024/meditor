@@ -11,7 +11,8 @@
  *   for navigation and data loading.
  */
 import { computed, ref, watch } from 'vue'
-import { ChevronRightIcon } from '@heroicons/vue/24/outline'
+import { ChevronRightIcon, StarIcon as StarOutlineIcon } from '@heroicons/vue/24/outline'
+import { StarIcon as StarSolidIcon } from '@heroicons/vue/24/solid'
 import type { EchoesItem } from '../../echoes/lib/echoes'
 import EditorEchoesPanel from './editor/EditorEchoesPanel.vue'
 
@@ -22,6 +23,9 @@ type SemanticLinkRow = { path: string; score: number | null; direction: 'incomin
 
 const props = defineProps<{
   width: number
+  activeNotePath: string
+  canToggleFavorite: boolean
+  isFavorite: boolean
   echoesItems: EchoesItem[]
   echoesLoading: boolean
   echoesError: string
@@ -38,6 +42,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
+  'toggle-favorite': []
   'echoes-open': [path: string]
   'outline-click': [payload: { index: number; heading: HeadingNode }]
   'backlink-open': [path: string]
@@ -60,6 +65,29 @@ watch(
 
 <template>
   <aside class="right-pane" :style="{ width: `${props.width}px` }">
+    <section class="pane-card pane-toolbar">
+      <div class="pane-toolbar-row">
+        <div class="pane-toolbar-copy">
+          <h3 class="section-title pane-toolbar-title">Active Note</h3>
+          <p class="pane-toolbar-path" :title="props.activeNotePath || 'No active note'">
+            {{ props.activeNotePath ? props.toRelativePath(props.activeNotePath) : 'No active note' }}
+          </p>
+        </div>
+        <button
+          type="button"
+          class="favorite-toggle-btn"
+          :class="{ 'favorite-toggle-btn--active': props.isFavorite }"
+          :disabled="!props.canToggleFavorite"
+          :title="props.isFavorite ? 'Remove from Favorites' : 'Add to Favorites'"
+          :aria-label="props.isFavorite ? 'Remove from Favorites' : 'Add to Favorites'"
+          @click="emit('toggle-favorite')"
+        >
+          <StarSolidIcon v-if="props.isFavorite" />
+          <StarOutlineIcon v-else />
+        </button>
+      </div>
+    </section>
+
     <EditorEchoesPanel
       :items="props.echoesItems"
       :loading="props.echoesLoading"
@@ -188,6 +216,37 @@ watch(
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 34%, transparent);
 }
 
+.pane-toolbar {
+  padding: 10px;
+}
+
+.pane-toolbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pane-toolbar-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pane-toolbar-title {
+  margin-bottom: 0;
+}
+
+.pane-toolbar-path {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-main);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .section-title {
   margin: 2px 0 6px;
   font-size: 11px;
@@ -195,6 +254,52 @@ watch(
   text-transform: uppercase;
   font-weight: 600;
   color: var(--text-dim);
+}
+
+.favorite-toggle-btn {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-soft);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease,
+    box-shadow 140ms ease,
+    transform 90ms ease;
+}
+
+.favorite-toggle-btn:hover:not(:disabled) {
+  background: var(--surface-subtle);
+  color: var(--menu-text-strong);
+}
+
+.favorite-toggle-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.favorite-toggle-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.favorite-toggle-btn--active {
+  color: #e0a100;
+}
+
+.favorite-toggle-btn--active:hover:not(:disabled) {
+  color: #c88700;
+}
+
+.favorite-toggle-btn :deep(svg) {
+  width: 14px;
+  height: 14px;
 }
 
 .pane-item {

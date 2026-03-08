@@ -43,6 +43,7 @@ const emit = defineEmits<{
   select: [paths: string[]]
   error: [message: string]
   'path-renamed': [payload: { from: string; to: string }]
+  'paths-deleted': [paths: string[]]
   'request-create': [payload: { parentPath: string; entryKind: EntryKind }]
   'toggle-context': [path: string]
 }>()
@@ -501,10 +502,12 @@ function requestDelete(paths: string[]) {
 
 async function executeDelete(paths: string[]) {
   if (!props.folderPath || !paths.length) return
+  const deletedPaths: string[] = []
 
   for (const path of paths) {
     try {
       await trashEntry(path)
+      deletedPaths.push(path)
     } catch (err) {
       emitError(errorMessage(err) ?? 'Delete failed.')
     }
@@ -513,6 +516,9 @@ async function executeDelete(paths: string[]) {
   selectionManager.clearSelection()
   focusedPath.value = ''
   emit('select', [])
+  if (deletedPaths.length) {
+    emit('paths-deleted', deletedPaths)
+  }
   await refreshLoadedDirs()
 }
 
