@@ -1074,30 +1074,6 @@ defineExpose({
     </div>
 
     <div v-else class="editor-shell flex min-h-0 flex-1 flex-col overflow-hidden border-x">
-      <EditorPropertiesPanel
-        :expanded="propertiesExpanded(path)"
-        :has-properties="structuredPropertyKeys.length > 0 || activeParseErrors.length > 0"
-        :mode="propertyEditorMode"
-        :can-use-structured-properties="canUseStructuredProperties"
-        :structured-property-fields="structuredPropertyFields"
-        :structured-property-keys="structuredPropertyKeys"
-        :active-raw-yaml="activeRawYaml"
-        :active-parse-errors="activeParseErrors"
-        :core-property-options="CORE_PROPERTY_OPTIONS"
-        :effective-type-for-field="effectiveTypeForField"
-        :is-property-type-locked="isPropertyTypeLocked"
-        @toggle-visibility="togglePropertiesVisibility"
-        @set-mode="propertyEditorMode = $event"
-        @property-key-input="void onPropertyKeyInput($event.index, $event.value)"
-        @property-type-change="void onPropertyTypeChange($event.index, $event.value)"
-        @property-value-input="onPropertyValueInput($event.index, $event.value)"
-        @property-checkbox-input="onPropertyCheckboxInput($event.index, $event.checked)"
-        @property-tokens-change="onPropertyTokensChange($event.index, $event.tokens)"
-        @remove-property="removePropertyField($event)"
-        @add-property="addPropertyField($event)"
-        @raw-yaml-input="onRawYamlInput($event)"
-      />
-
       <div
         class="relative min-h-0 flex-1 overflow-hidden"
         :data-drag-lock="computedDragLock ? 'true' : 'false'"
@@ -1124,23 +1100,49 @@ defineExpose({
           @mouseleave="onEditorMouseLeave"
           @click="dismissSlashMenu(); closeWikilinkMenu(); closeBlockMenu()"
         >
-          <div ref="contentShell" class="editor-content-shell">
-            <div
-              v-for="sessionPath in renderPaths"
-              :key="`editor-pane:${sessionPath}`"
-              class="editor-session-pane"
-              :data-session-path="sessionPath"
-              :data-active="isActiveMountedPath(sessionPath) ? 'true' : 'false'"
-              :aria-hidden="isActiveMountedPath(sessionPath) ? undefined : 'true'"
-              :tabindex="isActiveMountedPath(sessionPath) ? undefined : -1"
-              :inert="isActiveMountedPath(sessionPath) ? undefined : true"
-              v-show="isActiveMountedPath(sessionPath)"
-            >
-              <EditorContent
-                v-if="renderedEditorsByPath[sessionPath]"
-                :key="`editor-content:${sessionPath}`"
-                :editor="renderedEditorsByPath[sessionPath]!"
-              />
+          <div class="editor-note-chrome">
+            <EditorPropertiesPanel
+              :expanded="propertiesExpanded(path)"
+              :has-properties="structuredPropertyKeys.length > 0 || activeParseErrors.length > 0"
+              :mode="propertyEditorMode"
+              :can-use-structured-properties="canUseStructuredProperties"
+              :structured-property-fields="structuredPropertyFields"
+              :structured-property-keys="structuredPropertyKeys"
+              :active-raw-yaml="activeRawYaml"
+              :active-parse-errors="activeParseErrors"
+              :core-property-options="CORE_PROPERTY_OPTIONS"
+              :effective-type-for-field="effectiveTypeForField"
+              :is-property-type-locked="isPropertyTypeLocked"
+              @toggle-visibility="togglePropertiesVisibility"
+              @set-mode="propertyEditorMode = $event"
+              @property-key-input="void onPropertyKeyInput($event.index, $event.value)"
+              @property-type-change="void onPropertyTypeChange($event.index, $event.value)"
+              @property-value-input="onPropertyValueInput($event.index, $event.value)"
+              @property-checkbox-input="onPropertyCheckboxInput($event.index, $event.checked)"
+              @property-tokens-change="onPropertyTokensChange($event.index, $event.tokens)"
+              @remove-property="removePropertyField($event)"
+              @add-property="addPropertyField($event)"
+              @raw-yaml-input="onRawYamlInput($event)"
+            />
+
+            <div ref="contentShell" class="editor-content-shell">
+              <div
+                v-for="sessionPath in renderPaths"
+                :key="`editor-pane:${sessionPath}`"
+                class="editor-session-pane"
+                :data-session-path="sessionPath"
+                :data-active="isActiveMountedPath(sessionPath) ? 'true' : 'false'"
+                :aria-hidden="isActiveMountedPath(sessionPath) ? undefined : 'true'"
+                :tabindex="isActiveMountedPath(sessionPath) ? undefined : -1"
+                :inert="isActiveMountedPath(sessionPath) ? undefined : true"
+                v-show="isActiveMountedPath(sessionPath)"
+              >
+                <EditorContent
+                  v-if="renderedEditorsByPath[sessionPath]"
+                  :key="`editor-content:${sessionPath}`"
+                  :editor="renderedEditorsByPath[sessionPath]!"
+                />
+              </div>
             </div>
           </div>
           <!-- Invariant: interactive overlays/drag-handle stay bound to active editor only. -->
@@ -1343,6 +1345,11 @@ defineExpose({
 
 .editor-holder {
   background: var(--surface-bg);
+}
+
+.editor-note-chrome {
+  max-width: 800px;
+  margin: 0 auto;
 }
 
 .editor-pulse-panel-wrap {

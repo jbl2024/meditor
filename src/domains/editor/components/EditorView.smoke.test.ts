@@ -80,6 +80,8 @@ describe('EditorView smoke wiring', () => {
     await nextTick()
 
     expect(root.querySelector('.editor-holder')).toBeTruthy()
+    expect(root.querySelector('.editor-holder .properties-panel')).toBeTruthy()
+    expect(root.querySelector('.editor-shell > .properties-panel')).toBeFalsy()
 
     app.unmount()
   })

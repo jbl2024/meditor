@@ -53,31 +53,29 @@ function checkboxValue(event: Event): boolean {
 </script>
 
 <template>
-  <section
-    class="properties-panel mx-6 mb-2 mt-3 rounded-lg px-4 py-2.5"
-  >
-    <div class="flex min-h-6 items-center justify-between gap-3">
+  <section class="properties-panel">
+    <div class="properties-row">
       <button
         type="button"
-        class="properties-toggle inline-flex items-center gap-2 text-sm font-semibold"
+        class="properties-toggle inline-flex items-center gap-1.5"
         @click="emit('toggle-visibility')"
       >
         <ChevronRightIcon
-          class="h-4 w-4 shrink-0 transition-transform duration-150"
+          class="h-3.5 w-3.5 shrink-0 transition-transform duration-150"
           :class="props.expanded ? 'rotate-90' : 'rotate-0'"
           aria-hidden="true"
         />
-        <span>Properties</span>
+        <span class="properties-toggle-label">Properties</span>
         <CircleStackIcon
           v-if="props.hasProperties"
-          class="properties-accent-icon h-3.5 w-3.5"
+          class="properties-accent-icon h-3 w-3"
           aria-label="Properties available"
         />
       </button>
       <div v-if="props.expanded" class="flex items-center gap-1.5">
         <button
           type="button"
-          class="properties-mode-btn rounded border px-2 py-0.5 text-[11px]"
+          class="properties-mode-btn rounded border px-1.5 py-0.5 text-[10px]"
           :class="props.mode === 'structured' ? 'properties-mode-btn--active' : ''"
           :disabled="!props.canUseStructuredProperties"
           @click="emit('set-mode', 'structured')"
@@ -86,7 +84,7 @@ function checkboxValue(event: Event): boolean {
         </button>
         <button
           type="button"
-          class="properties-mode-btn rounded border px-2 py-0.5 text-[11px]"
+          class="properties-mode-btn rounded border px-1.5 py-0.5 text-[10px]"
           :class="props.mode === 'raw' ? 'properties-mode-btn--active' : ''"
           @click="emit('set-mode', 'raw')"
         >
@@ -96,7 +94,7 @@ function checkboxValue(event: Event): boolean {
     </div>
 
     <Transition name="properties-content">
-      <div v-if="props.expanded" class="mt-2 properties-content-wrap">
+      <div v-if="props.expanded" class="properties-content-wrap">
         <div v-if="props.mode === 'structured'" class="space-y-2">
           <div
             v-for="(field, index) in props.structuredPropertyFields"
@@ -191,20 +189,45 @@ function checkboxValue(event: Event): boolean {
 
 <style scoped>
 .properties-panel {
-  background: var(--properties-panel-bg);
+  margin: 0 0 0.7rem;
+  padding: 0 2rem 0.85rem 3.5rem;
+  background: transparent;
+  border-bottom: 1px solid color-mix(in srgb, var(--properties-panel-bg) 42%, transparent);
+}
+
+.properties-row {
+  min-height: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
 }
 
 .properties-toggle {
+  color: color-mix(in srgb, var(--properties-toggle-text) 62%, transparent);
+  transition: color 140ms ease;
+}
+
+.properties-toggle:hover {
   color: var(--properties-toggle-text);
+}
+
+.properties-toggle-label {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
 }
 
 .properties-accent-icon {
   color: var(--properties-accent);
+  opacity: 0.82;
 }
 
 .properties-mode-btn {
   border-color: var(--properties-mode-border);
   color: var(--properties-mode-text);
+  line-height: 1.1;
+  background: transparent;
 }
 
 .properties-mode-btn--active {
@@ -250,6 +273,7 @@ function checkboxValue(event: Event): boolean {
 
 .properties-content-wrap {
   overflow: hidden;
+  margin-top: 0.65rem;
 }
 
 .properties-content-enter-active,
@@ -275,6 +299,13 @@ function checkboxValue(event: Event): boolean {
   .properties-content-enter-active,
   .properties-content-leave-active {
     transition: none;
+  }
+}
+
+@media (max-width: 840px) {
+  .properties-panel {
+    padding-right: 1rem;
+    padding-left: 1rem;
   }
 }
 </style>

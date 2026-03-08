@@ -59,6 +59,57 @@ describe('EditorView interactions contract', () => {
     document.body.innerHTML = ''
   })
 
+  it('keeps a compact properties row inside the editor flow and expands it on demand', async () => {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+
+    const propertiesEvents = vi.fn()
+
+    const app = createApp(defineComponent({
+      setup() {
+        return () =>
+          h(EditorView, {
+            path: 'a.md',
+            openPaths: ['a.md'],
+            openFile: async () => '# Title\n\nBody',
+            saveFile: async () => ({ persisted: true }),
+            renameFileFromTitle: async (valuePath: string, title: string) => ({ path: valuePath, title }),
+            loadLinkTargets: async () => ['a.md'],
+            loadLinkHeadings: async () => ['H1'],
+            loadPropertyTypeSchema: async () => ({}),
+            savePropertyTypeSchema: async () => {},
+            openLinkTarget: async () => true,
+            onStatus: () => {},
+            onOutline: () => {},
+            onProperties: propertiesEvents,
+            onPathRenamed: () => {}
+          })
+      }
+    }))
+
+    app.mount(root)
+    await flushUi()
+
+    const holder = root.querySelector('.editor-holder') as HTMLElement
+    const panel = root.querySelector('.editor-holder .properties-panel') as HTMLElement
+    expect(panel).toBeTruthy()
+    expect(holder.contains(panel)).toBe(true)
+    expect(panel.textContent).toContain('Properties')
+
+    expect(root.querySelector('.properties-content-wrap')).toBeFalsy()
+
+    const toggle = root.querySelector('.properties-toggle') as HTMLButtonElement
+    toggle.click()
+    await flushUi()
+
+    expect(root.querySelector('.properties-content-wrap')).toBeTruthy()
+    expect(root.textContent).toContain('Structured')
+    expect(propertiesEvents).toHaveBeenCalled()
+
+    app.unmount()
+    document.body.innerHTML = ''
+  })
+
   it('keeps interaction surface tied to active mounted editor during tab switches', async () => {
     const root = document.createElement('div')
     document.body.appendChild(root)
