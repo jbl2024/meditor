@@ -18,6 +18,21 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.14.4] - 2026-03-08
+
+### Added
+- feat(pulse): redesign editor pulse flow with preview-first UX (7d08144)
+
+### Changed
+- style(editor): strengthen visible properties hint when populated (31dcf68)
+- refactor(editor): move title and properties out of tiptap body (5a44649)
+- refactor(editor): inline properties panel into editor flow (79d63e0)
+- docs(readme): rewrite README with current features and dev setup (eeb01ab)
+
+### Fixed
+- fix(app): prevent editor scroll jump when closing quick open (73a761a)
+- fix(navigation): use Alt+Arrow history shortcuts on non-macOS (a047dbf)
+
 ## [0.14.3] - 2026-03-07
 
 ### Changed
