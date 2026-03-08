@@ -53,7 +53,14 @@ function checkboxValue(event: Event): boolean {
 </script>
 
 <template>
-  <section class="properties-panel">
+  <section
+    class="properties-panel"
+    :class="{
+      'properties-panel--expanded': props.expanded,
+      'properties-panel--populated': props.hasProperties,
+      'properties-panel--empty': !props.hasProperties
+    }"
+  >
     <div class="properties-row">
       <button
         type="button"
@@ -189,9 +196,10 @@ function checkboxValue(event: Event): boolean {
 
 <style scoped>
 .properties-panel {
-  margin: 0 0 1.15rem;
+  margin: 0 0 0.38rem;
   padding: 0;
   background: transparent;
+  transition: opacity 140ms ease;
 }
 
 .properties-row {
@@ -200,11 +208,34 @@ function checkboxValue(event: Event): boolean {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
+  opacity: 0.4;
+  transition: opacity 140ms ease;
+}
+
+.properties-panel--empty .properties-row {
+  opacity: 0.14;
+}
+
+.properties-panel--populated .properties-row {
+  opacity: 0.56;
+}
+
+.properties-panel:is(:hover, :focus-within) .properties-row,
+.properties-panel--expanded .properties-row {
+  opacity: 1;
 }
 
 .properties-toggle {
-  color: color-mix(in srgb, var(--properties-toggle-text) 42%, transparent);
+  color: color-mix(in srgb, var(--properties-toggle-text) 34%, transparent);
   transition: color 140ms ease;
+}
+
+.properties-panel--populated .properties-toggle {
+  color: color-mix(in srgb, var(--properties-toggle-text) 54%, transparent);
+}
+
+.properties-panel--empty .properties-toggle {
+  color: color-mix(in srgb, var(--properties-toggle-text) 22%, transparent);
 }
 
 .properties-toggle:hover {
@@ -220,6 +251,10 @@ function checkboxValue(event: Event): boolean {
 .properties-accent-icon {
   color: var(--properties-accent);
   opacity: 0.65;
+}
+
+.properties-panel--populated .properties-accent-icon {
+  opacity: 0.82;
 }
 
 .properties-mode-btn {
@@ -272,7 +307,7 @@ function checkboxValue(event: Event): boolean {
 
 .properties-content-wrap {
   overflow: hidden;
-  margin-top: 0.5rem;
+  margin-top: 0.35rem;
   padding: 0.5rem 0 0 1rem;
   border-left: 2px solid color-mix(in srgb, var(--properties-field-border) 82%, transparent);
 }

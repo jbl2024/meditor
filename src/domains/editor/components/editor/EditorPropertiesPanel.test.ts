@@ -41,8 +41,41 @@ describe('EditorPropertiesPanel', () => {
     await flushUi()
 
     expect(root.querySelector('.properties-panel')).toBeTruthy()
+    expect(root.querySelector('.properties-panel')?.classList.contains('properties-panel--populated')).toBe(true)
     expect(root.querySelector('.properties-content-wrap')).toBeFalsy()
     expect(root.innerHTML).not.toContain('absolute')
+
+    app.unmount()
+  })
+
+  it('marks empty state separately so it can stay almost invisible until hover', async () => {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+
+    const app = createApp(defineComponent({
+      setup() {
+        return () => h(EditorPropertiesPanel, {
+          expanded: false,
+          hasProperties: false,
+          mode: 'structured',
+          canUseStructuredProperties: true,
+          structuredPropertyFields: [],
+          structuredPropertyKeys: [],
+          activeRawYaml: '',
+          activeParseErrors: [],
+          corePropertyOptions: [],
+          effectiveTypeForField: (): PropertyType => 'text',
+          isPropertyTypeLocked: () => false
+        })
+      }
+    }))
+
+    app.mount(root)
+    await flushUi()
+
+    const panel = root.querySelector('.properties-panel')
+    expect(panel?.classList.contains('properties-panel--empty')).toBe(true)
+    expect(panel?.classList.contains('properties-panel--expanded')).toBe(false)
 
     app.unmount()
   })

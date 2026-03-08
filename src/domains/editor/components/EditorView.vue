@@ -1363,7 +1363,7 @@ defineExpose({
 }
 
 .editor-header-shell {
-  margin: 0 0 1.75rem;
+  margin: 0;
 }
 
 .editor-pulse-panel-wrap {

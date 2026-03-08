@@ -87,7 +87,7 @@ function onKeydown(event: KeyboardEvent) {
   font-size: calc(var(--editor-heading-1-size) * var(--editor-zoom, 1));
   font-weight: 580;
   line-height: 1.35;
-  margin: 0 0 0.45rem;
+  margin: 0 0 0.38rem;
   color: var(--text-main);
   outline: none;
 }
