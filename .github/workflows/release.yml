@@ -131,7 +131,7 @@ jobs:
 
       # ⬇️ upload uniquement les vrais bundles
       - name: Upload binaries only
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bundle-${{ matrix.build_id }}
           path: |
