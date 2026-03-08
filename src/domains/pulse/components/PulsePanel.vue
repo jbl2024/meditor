@@ -72,10 +72,6 @@ const helperText = computed(() => {
   if (panelState.value === 'result') return 'Review the result, then choose how to apply it.'
   return 'Will transform only the selected text. Nothing changes until you apply.'
 })
-const sourceSummary = computed(() => {
-  return props.sourceLabel ?? ''
-})
-
 function compactMatcher(item: FilterableDropdownItem, query: string): boolean {
   const tokens = Array.isArray(item.aliases) ? item.aliases.map((entry) => String(entry).toLowerCase()) : []
   return tokens.some((token) => token.includes(query))
