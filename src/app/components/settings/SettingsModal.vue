@@ -319,6 +319,7 @@ watch(() => props.visible, async (visible) => {
                   <UiSelect
                     id="settings-llm-provider"
                     :model-value="settingsLlmProviderPreset"
+                    size="sm"
                     @update:model-value="applySettingsLlmPreset($event as 'openai' | 'anthropic' | 'codex' | 'custom')"
                   >
                     <option value="openai">OpenAI</option>
@@ -396,6 +397,7 @@ watch(() => props.visible, async (visible) => {
                         <UiSelect
                           id="settings-llm-codex-model"
                           :model-value="settingsLlmModel"
+                          size="sm"
                           @update:model-value="settingsLlmModel = $event"
                         >
                           <option v-for="item in settingsLlmCodexModels" :key="item.id" :value="item.id">
@@ -476,7 +478,7 @@ watch(() => props.visible, async (visible) => {
               <template v-if="settingsEmbeddingsMode === 'external'">
                 <UiField for-id="settings-emb-provider" label="Provider">
                   <template #default>
-                    <UiSelect id="settings-emb-provider" v-model="settingsEmbeddingsProvider">
+                    <UiSelect id="settings-emb-provider" v-model="settingsEmbeddingsProvider" size="sm">
                       <option value="openai">OpenAI</option>
                     </UiSelect>
                   </template>
@@ -689,11 +691,6 @@ watch(() => props.visible, async (visible) => {
 
 .settings-model-input {
   min-width: 0;
-}
-
-.settings-panel :deep(.ui-select) {
-  height: 2.45rem;
-  font-size: 0.9rem;
 }
 
 .settings-model-actions {

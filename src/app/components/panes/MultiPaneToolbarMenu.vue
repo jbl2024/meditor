@@ -43,9 +43,11 @@ function run(action: () => void) {
 <template>
   <div class="multi-pane-menu" @keydown.esc.stop="close">
     <UiIconButton
+      class-name="toolbar-icon-btn"
       aria-label="Multi-pane layout"
       title="Multi-pane layout"
       :aria-expanded="open"
+      :active="open"
       @click="toggle"
     >
       <Squares2X2Icon />

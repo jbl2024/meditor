@@ -1,10 +1,14 @@
 <script setup lang="ts">
+export type UiSelectSize = 'sm' | 'md' | 'lg'
+
 withDefaults(defineProps<{
   modelValue: string
+  size?: UiSelectSize
   invalid?: boolean
   disabled?: boolean
   className?: string
 }>(), {
+  size: 'md',
   invalid: false,
   disabled: false,
   className: ''
@@ -20,7 +24,16 @@ const emit = defineEmits<{
     :value="modelValue"
     :disabled="disabled"
     :aria-invalid="invalid ? 'true' : undefined"
-    :class="['ui-select h-9 w-full border px-3 text-sm outline-none transition', { 'ui-select--invalid': invalid }, className]"
+    :class="[
+      'ui-select w-full border px-3 outline-none transition',
+      {
+        'h-8 text-xs': size === 'sm',
+        'h-9 text-sm': size === 'md',
+        'h-11 text-sm': size === 'lg',
+        'ui-select--invalid': invalid
+      },
+      className
+    ]"
     @change="emit('update:modelValue', ($event.target as HTMLSelectElement).value)"
   >
     <slot />

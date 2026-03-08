@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { BeakerIcon, Cog8ToothIcon, CommandLineIcon, ComputerDesktopIcon, MoonIcon, SunIcon } from '@heroicons/vue/24/outline'
+import { Bars3Icon, BeakerIcon, Cog8ToothIcon, CommandLineIcon, ComputerDesktopIcon, MoonIcon, SunIcon } from '@heroicons/vue/24/outline'
 import { computed, ref } from 'vue'
 import type { ThemePreference } from '../../composables/useAppTheme'
 import UiIconButton from '../../../shared/components/ui/UiIconButton.vue'
@@ -57,16 +57,14 @@ defineExpose({
 <template>
   <div ref="wrapRef" class="overflow-wrap">
     <UiIconButton
+      class-name="toolbar-icon-btn"
       aria-label="View options"
       title="View options"
       :aria-expanded="open"
+      :active="open"
       @click="emit('toggle')"
     >
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <circle cx="5" cy="12" r="1.8" />
-        <circle cx="12" cy="12" r="1.8" />
-        <circle cx="19" cy="12" r="1.8" />
-      </svg>
+      <Bars3Icon />
     </UiIconButton>
     <UiMenu v-if="open" class-name="overflow-menu">
       <UiMenuList>
