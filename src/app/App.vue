@@ -1081,48 +1081,70 @@ async function openHomeHistorySnapshot(_snapshot: HomeHistorySnapshot): Promise<
   return true
 }
 
-const navigation = useAppNavigationController({
+const navigationWorkspacePort = {
   hasWorkspace: filesystem.hasWorkspace,
-  activeFilePath,
   allWorkspaceFiles,
-  setErrorMessage: (message) => {
+  setErrorMessage: (message: string) => {
     filesystem.errorMessage.value = message
   },
   toRelativePath,
-  ensureAllFilesLoaded: loadAllFiles,
+  ensureAllFilesLoaded: loadAllFiles
+}
+
+const navigationEditorPort = {
+  activeFilePath,
   saveActiveDocument: async () => {
     await editorRef.value?.saveNow()
   },
   focusEditor: () => {
     editorRef.value?.focusEditor()
   },
-  getDocumentStatus: (path) => editorState.getStatus(path),
+  getDocumentStatus: (path: string) => editorState.getStatus(path)
+}
+
+const navigationPanePort = {
   getActiveTab: () => multiPane.getActiveTab(),
-  getActiveDocumentPath: (paneId) => multiPane.getActiveDocumentPath(paneId),
+  getActiveDocumentPath: (paneId?: string) => multiPane.getActiveDocumentPath(paneId),
   getActivePaneId: () => multiPane.layout.value.activePaneId,
   getPaneOrder: () => multiPane.paneOrder.value,
-  getDocumentPathsForPane: (paneId) => documentPathsForPane(paneId),
-  openPathInPane: (path, paneId) => multiPane.openPathInPane(path, paneId),
-  revealDocumentInPane: (path, paneId) => multiPane.revealDocumentInPane(path, paneId),
-  setActivePathInPane: (paneId, path) => multiPane.setActivePathInPane(paneId, path),
-  openSurfaceInPane: (type, paneId) => multiPane.openSurfaceInPane(type, paneId),
-  findPaneContainingSurface: (type) => multiPane.findPaneContainingSurface(type),
+  getDocumentPathsForPane: (paneId: string) => documentPathsForPane(paneId),
+  openPathInPane: (path: string, paneId?: string) => multiPane.openPathInPane(path, paneId),
+  revealDocumentInPane: (path: string, paneId?: string) => multiPane.revealDocumentInPane(path, paneId),
+  setActivePathInPane: (paneId: string, path: string) => multiPane.setActivePathInPane(paneId, path),
+  openSurfaceInPane: (type: 'home' | 'cosmos' | 'second-brain-chat', paneId?: string) => multiPane.openSurfaceInPane(type, paneId),
+  findPaneContainingSurface: (type: 'home' | 'cosmos' | 'second-brain-chat') => multiPane.findPaneContainingSurface(type)
+}
+
+const navigationHistoryPort = {
   documentHistory,
-  readCosmosHistorySnapshot,
-  currentCosmosHistorySnapshot,
-  cosmosSnapshotStateKey,
-  cosmosHistoryLabel,
-  applyCosmosHistorySnapshot,
-  readHomeHistorySnapshot,
-  currentHomeHistorySnapshot,
-  homeSnapshotStateKey,
-  homeHistoryLabel,
-  openHomeHistorySnapshot,
-  readSecondBrainHistorySnapshot,
-  currentSecondBrainHistorySnapshot,
-  secondBrainSnapshotStateKey,
-  secondBrainHistoryLabel,
-  openSecondBrainHistorySnapshot
+  cosmos: {
+    read: readCosmosHistorySnapshot,
+    current: currentCosmosHistorySnapshot,
+    stateKey: cosmosSnapshotStateKey,
+    label: cosmosHistoryLabel,
+    apply: applyCosmosHistorySnapshot
+  },
+  home: {
+    read: readHomeHistorySnapshot,
+    current: currentHomeHistorySnapshot,
+    stateKey: homeSnapshotStateKey,
+    label: homeHistoryLabel,
+    open: openHomeHistorySnapshot
+  },
+  secondBrain: {
+    read: readSecondBrainHistorySnapshot,
+    current: currentSecondBrainHistorySnapshot,
+    stateKey: secondBrainSnapshotStateKey,
+    label: secondBrainHistoryLabel,
+    open: openSecondBrainHistorySnapshot
+  }
+}
+
+const navigation = useAppNavigationController({
+  workspacePort: navigationWorkspacePort,
+  editorPort: navigationEditorPort,
+  panePort: navigationPanePort,
+  historyPort: navigationHistoryPort
 })
 const {
   isApplyingHistoryNavigation,

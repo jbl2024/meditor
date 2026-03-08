@@ -3,68 +3,91 @@ import { describe, expect, it, vi, afterEach } from 'vitest'
 import { useDocumentHistory } from '../../domains/editor/composables/useDocumentHistory'
 import { useAppNavigationController } from './useAppNavigationController'
 
-function createController() {
+function createController(options: { saveClearsDirty?: boolean } = {}) {
   const activeFilePath = ref('/vault/a.md')
   const allWorkspaceFiles = ref<string[]>([])
   const dirty = ref(false)
   const activePaneId = ref('pane-a')
   const opened: Array<{ path: string; paneId?: string; reveal: boolean }> = []
   let activeTabType = 'document'
+  const setErrorMessage = vi.fn()
+  const focusEditor = vi.fn()
+  const ensureAllFilesLoaded = vi.fn(async () => {
+    allWorkspaceFiles.value = ['/vault/a.md']
+  })
+  const saveActiveDocument = vi.fn(async () => {
+    if (options.saveClearsDirty !== false) {
+      dirty.value = false
+    }
+  })
+  const applyCosmosHistorySnapshot = vi.fn(async () => true)
+  const openSecondBrainHistorySnapshot = vi.fn(async () => true)
+  const openHomeHistorySnapshot = vi.fn(async () => true)
 
   const documentHistory = useDocumentHistory()
   const controller = useAppNavigationController({
-    hasWorkspace: ref(true),
-    activeFilePath,
-    allWorkspaceFiles,
-    setErrorMessage: vi.fn(),
-    toRelativePath: (path) => path.replace('/vault/', ''),
-    ensureAllFilesLoaded: vi.fn(async () => {
-      allWorkspaceFiles.value = ['/vault/a.md']
-    }),
-    saveActiveDocument: vi.fn(async () => {
-      dirty.value = false
-    }),
-    focusEditor: vi.fn(),
-    getDocumentStatus: () => ({ dirty: dirty.value, saveError: '' }),
-    getActiveTab: () => ({ type: activeTabType }),
-    getActiveDocumentPath: () => activeFilePath.value,
-    getActivePaneId: () => activePaneId.value,
-    getPaneOrder: () => ['pane-a', 'pane-b'],
-    getDocumentPathsForPane: (paneId) => (paneId === 'pane-a' ? ['/vault/a.md', '/vault/b.md'] : ['/vault/c.md']),
-    openPathInPane: (path, paneId) => {
-      opened.push({ path, paneId, reveal: false })
-      activeFilePath.value = path
+    workspacePort: {
+      hasWorkspace: ref(true),
+      allWorkspaceFiles,
+      setErrorMessage,
+      toRelativePath: (path) => path.replace('/vault/', ''),
+      ensureAllFilesLoaded
     },
-    revealDocumentInPane: (path, paneId) => {
-      opened.push({ path, paneId, reveal: true })
-      activeFilePath.value = path
+    editorPort: {
+      activeFilePath,
+      saveActiveDocument,
+      focusEditor,
+      getDocumentStatus: () => ({ dirty: dirty.value, saveError: '' })
     },
-    setActivePathInPane: (_paneId, path) => {
-      activeFilePath.value = path
+    panePort: {
+      getActiveTab: () => ({ type: activeTabType }),
+      getActiveDocumentPath: () => activeFilePath.value,
+      getActivePaneId: () => activePaneId.value,
+      getPaneOrder: () => ['pane-a', 'pane-b'],
+      getDocumentPathsForPane: (paneId) => (paneId === 'pane-a' ? ['/vault/a.md', '/vault/b.md'] : ['/vault/c.md']),
+      openPathInPane: (path, paneId) => {
+        opened.push({ path, paneId, reveal: false })
+        activeFilePath.value = path
+      },
+      revealDocumentInPane: (path, paneId) => {
+        opened.push({ path, paneId, reveal: true })
+        activeFilePath.value = path
+      },
+      setActivePathInPane: (_paneId, path) => {
+        activeFilePath.value = path
+      },
+      openSurfaceInPane: vi.fn(),
+      findPaneContainingSurface: (type) => (type === 'second-brain-chat' ? 'pane-b' : null)
     },
-    openSurfaceInPane: vi.fn(),
-    findPaneContainingSurface: (type) => (type === 'second-brain-chat' ? 'pane-b' : null),
-    documentHistory,
-    readCosmosHistorySnapshot: (payload) => payload as never,
-    currentCosmosHistorySnapshot: () => ({
-      query: 'graph',
-      selectedNodeId: 'node-1',
-      focusMode: false,
-      focusDepth: 2
-    }),
-    cosmosSnapshotStateKey: (snapshot) => JSON.stringify(snapshot),
-    cosmosHistoryLabel: (snapshot) => `Cosmos: ${snapshot.query}`,
-    applyCosmosHistorySnapshot: vi.fn(async () => true),
-    readSecondBrainHistorySnapshot: (payload) => payload as never,
-    currentSecondBrainHistorySnapshot: () => ({ surface: 'chat' }),
-    secondBrainSnapshotStateKey: (snapshot) => snapshot.surface,
-    secondBrainHistoryLabel: () => 'Second Brain',
-    openSecondBrainHistorySnapshot: vi.fn(async () => true),
-    readHomeHistorySnapshot: (payload) => payload as never,
-    currentHomeHistorySnapshot: () => ({ surface: 'hub' }),
-    homeSnapshotStateKey: (snapshot) => snapshot.surface,
-    homeHistoryLabel: () => 'Home',
-    openHomeHistorySnapshot: vi.fn(async () => true)
+    historyPort: {
+      documentHistory,
+      cosmos: {
+        read: (payload) => payload as never,
+        current: () => ({
+          query: 'graph',
+          selectedNodeId: 'node-1',
+          focusMode: false,
+          focusDepth: 2
+        }),
+        stateKey: (snapshot) => JSON.stringify(snapshot),
+        label: (snapshot) => `Cosmos: ${snapshot.query}`,
+        apply: applyCosmosHistorySnapshot
+      },
+      secondBrain: {
+        read: (payload) => payload as never,
+        current: () => ({ surface: 'chat' }),
+        stateKey: (snapshot) => snapshot.surface,
+        label: () => 'Second Brain',
+        open: openSecondBrainHistorySnapshot
+      },
+      home: {
+        read: (payload) => payload as never,
+        current: () => ({ surface: 'hub' }),
+        stateKey: (snapshot) => snapshot.surface,
+        label: () => 'Home',
+        open: openHomeHistorySnapshot
+      }
+    }
   })
 
   return {
@@ -73,6 +96,12 @@ function createController() {
     dirty,
     opened,
     documentHistory,
+    setErrorMessage,
+    focusEditor,
+    ensureAllFilesLoaded,
+    applyCosmosHistorySnapshot,
+    openSecondBrainHistorySnapshot,
+    openHomeHistorySnapshot,
     controller,
     setActiveTabType: (type: string) => {
       activeTabType = type
@@ -133,5 +162,47 @@ describe('useAppNavigationController', () => {
 
     expect(opened).toBe(true)
     expect(activeFilePath.value).toBe('/vault/b.md')
+  })
+
+  it('surfaces a save error when the active document stays dirty', async () => {
+    const { controller, dirty, setErrorMessage } = createController({ saveClearsDirty: false })
+
+    dirty.value = true
+    const opened = await controller.openTabWithAutosave('/vault/b.md')
+
+    expect(opened).toBe(false)
+    expect(setErrorMessage).toHaveBeenCalledWith('Could not save current note before switching tabs.')
+  })
+
+  it('focuses the editor after reopening a document from history', async () => {
+    const { controller, documentHistory, focusEditor } = createController()
+
+    documentHistory.record('/vault/a.md')
+    documentHistory.record('/vault/b.md')
+
+    const opened = await controller.goBackInHistory()
+
+    expect(opened).toBe(true)
+    expect(focusEditor).toHaveBeenCalledOnce()
+  })
+
+  it('loads workspace files before opening a second brain history entry', async () => {
+    const {
+      controller,
+      documentHistory,
+      ensureAllFilesLoaded,
+      openSecondBrainHistorySnapshot,
+      setActiveTabType
+    } = createController()
+
+    setActiveTabType('second-brain-chat')
+    controller.recordSecondBrainHistorySnapshot()
+    documentHistory.record('/vault/a.md')
+
+    const opened = await controller.goBackInHistory()
+
+    expect(opened).toBe(true)
+    expect(ensureAllFilesLoaded).toHaveBeenCalledOnce()
+    expect(openSecondBrainHistorySnapshot).toHaveBeenCalledOnce()
   })
 })

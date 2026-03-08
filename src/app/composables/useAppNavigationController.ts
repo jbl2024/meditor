@@ -41,17 +41,30 @@ export type NavigationDocumentStatus = {
   saveError: string
 }
 
-/** Declares the services and shell state used by the app navigation controller. */
-export type UseAppNavigationControllerOptions = {
+/**
+ * Workspace-scoped state and helpers consumed by the navigation controller.
+ *
+ * Keep this port focused on workspace concerns instead of passing isolated
+ * callbacks one by one from `App.vue`.
+ */
+export type AppNavigationWorkspacePort = {
   hasWorkspace: Readonly<Ref<boolean>>
-  activeFilePath: Readonly<Ref<string>>
   allWorkspaceFiles: Readonly<Ref<string[]>>
   setErrorMessage: (message: string) => void
   toRelativePath: (path: string) => string
   ensureAllFilesLoaded: () => Promise<void>
+}
+
+/** Editor-specific state used to enforce autosave and restore focus. */
+export type AppNavigationEditorPort = {
+  activeFilePath: Readonly<Ref<string>>
   saveActiveDocument: () => Promise<void>
   focusEditor: () => void
   getDocumentStatus: (path: string) => NavigationDocumentStatus
+}
+
+/** Pane layout and surface routing used by shell navigation flows. */
+export type AppNavigationPanePort = {
   getActiveTab: () => { type: string } | null
   getActiveDocumentPath: (paneId?: string) => string
   getActivePaneId: () => string
@@ -62,6 +75,15 @@ export type UseAppNavigationControllerOptions = {
   setActivePathInPane: (paneId: string, path: string) => void
   openSurfaceInPane: (type: 'home' | 'cosmos' | 'second-brain-chat', paneId?: string) => void
   findPaneContainingSurface: (type: 'home' | 'cosmos' | 'second-brain-chat') => string | null
+}
+
+/**
+ * History state and pane-native snapshot adapters.
+ *
+ * This grouped contract is the reference pattern for future shell composables:
+ * prefer a few cohesive ports over a flat list of callbacks.
+ */
+export type AppNavigationHistoryPort = {
   documentHistory: {
     record: (path: string) => void
     recordEntry: (entry: DocumentHistoryEntry) => void
@@ -70,21 +92,35 @@ export type UseAppNavigationControllerOptions = {
     jumpToEntry: (index: number) => DocumentHistoryEntry | null
     currentIndex: Ref<number>
   }
-  readCosmosHistorySnapshot: (payload: unknown) => CosmosHistorySnapshot | null
-  currentCosmosHistorySnapshot: () => CosmosHistorySnapshot
-  cosmosSnapshotStateKey: (snapshot: CosmosHistorySnapshot) => string
-  cosmosHistoryLabel: (snapshot: CosmosHistorySnapshot) => string
-  applyCosmosHistorySnapshot: (snapshot: CosmosHistorySnapshot) => Promise<boolean>
-  readSecondBrainHistorySnapshot: (payload: unknown) => SecondBrainHistorySnapshot | null
-  currentSecondBrainHistorySnapshot: () => SecondBrainHistorySnapshot
-  secondBrainSnapshotStateKey: (snapshot: SecondBrainHistorySnapshot) => string
-  secondBrainHistoryLabel: (snapshot: SecondBrainHistorySnapshot) => string
-  openSecondBrainHistorySnapshot: (snapshot: SecondBrainHistorySnapshot) => Promise<boolean>
-  readHomeHistorySnapshot: (payload: unknown) => HomeHistorySnapshot | null
-  currentHomeHistorySnapshot: () => HomeHistorySnapshot
-  homeSnapshotStateKey: (snapshot: HomeHistorySnapshot) => string
-  homeHistoryLabel: (snapshot: HomeHistorySnapshot) => string
-  openHomeHistorySnapshot: (snapshot: HomeHistorySnapshot) => Promise<boolean>
+  cosmos: {
+    read: (payload: unknown) => CosmosHistorySnapshot | null
+    current: () => CosmosHistorySnapshot
+    stateKey: (snapshot: CosmosHistorySnapshot) => string
+    label: (snapshot: CosmosHistorySnapshot) => string
+    apply: (snapshot: CosmosHistorySnapshot) => Promise<boolean>
+  }
+  secondBrain: {
+    read: (payload: unknown) => SecondBrainHistorySnapshot | null
+    current: () => SecondBrainHistorySnapshot
+    stateKey: (snapshot: SecondBrainHistorySnapshot) => string
+    label: (snapshot: SecondBrainHistorySnapshot) => string
+    open: (snapshot: SecondBrainHistorySnapshot) => Promise<boolean>
+  }
+  home: {
+    read: (payload: unknown) => HomeHistorySnapshot | null
+    current: () => HomeHistorySnapshot
+    stateKey: (snapshot: HomeHistorySnapshot) => string
+    label: (snapshot: HomeHistorySnapshot) => string
+    open: (snapshot: HomeHistorySnapshot) => Promise<boolean>
+  }
+}
+
+/** Declares the cohesive ports required by the app navigation controller. */
+export type UseAppNavigationControllerOptions = {
+  workspacePort: AppNavigationWorkspacePort
+  editorPort: AppNavigationEditorPort
+  panePort: AppNavigationPanePort
+  historyPort: AppNavigationHistoryPort
 }
 
 /**
@@ -94,26 +130,43 @@ export type UseAppNavigationControllerOptions = {
 export function useAppNavigationController(options: UseAppNavigationControllerOptions) {
   const isApplyingHistoryNavigation = ref(false)
   let cosmosHistoryDebounceTimer: ReturnType<typeof setTimeout> | null = null
+  const { workspacePort, editorPort, panePort, historyPort } = options
+
+  async function openSurfaceHistoryEntry<T>(
+    payload: unknown,
+    handlers: {
+      read: (payload: unknown) => T | null
+      open: (snapshot: T) => Promise<boolean>
+      ensureWorkspaceFiles?: boolean
+    }
+  ): Promise<boolean> {
+    const snapshot = handlers.read(payload)
+    if (!snapshot) return false
+    if (handlers.ensureWorkspaceFiles && !workspacePort.allWorkspaceFiles.value.length) {
+      await workspacePort.ensureAllFilesLoaded()
+    }
+    return await handlers.open(snapshot)
+  }
 
   /** Formats a history entry label for the back/forward menus. */
   function historyTargetLabel(entry: DocumentHistoryEntry): string {
     if (entry.kind === 'cosmos') return entry.label
     if (entry.kind === 'second-brain') return entry.label || 'Second Brain'
     if (entry.kind === 'home') return entry.label || 'Home'
-    return options.toRelativePath(entry.path)
+    return workspacePort.toRelativePath(entry.path)
   }
 
   /** Records the current Home surface into linear document history. */
   function recordHomeHistorySnapshot() {
     if (isApplyingHistoryNavigation.value) return
-    const active = options.getActiveTab()
+    const active = panePort.getActiveTab()
     if (!active || active.type !== 'home') return
-    const snapshot = options.currentHomeHistorySnapshot()
-    options.documentHistory.recordEntry({
+    const snapshot = historyPort.home.current()
+    historyPort.documentHistory.recordEntry({
       kind: 'home',
       path: '__tomosona_home_view__',
-      label: options.homeHistoryLabel(snapshot),
-      stateKey: options.homeSnapshotStateKey(snapshot),
+      label: historyPort.home.label(snapshot),
+      stateKey: historyPort.home.stateKey(snapshot),
       payload: snapshot
     })
   }
@@ -121,14 +174,14 @@ export function useAppNavigationController(options: UseAppNavigationControllerOp
   /** Records the current Second Brain surface into linear document history. */
   function recordSecondBrainHistorySnapshot() {
     if (isApplyingHistoryNavigation.value) return
-    const active = options.getActiveTab()
+    const active = panePort.getActiveTab()
     if (!active || active.type !== 'second-brain-chat') return
-    const snapshot = options.currentSecondBrainHistorySnapshot()
-    options.documentHistory.recordEntry({
+    const snapshot = historyPort.secondBrain.current()
+    historyPort.documentHistory.recordEntry({
       kind: 'second-brain',
       path: '__tomosona_second_brain_view__',
-      label: options.secondBrainHistoryLabel(snapshot),
-      stateKey: options.secondBrainSnapshotStateKey(snapshot),
+      label: historyPort.secondBrain.label(snapshot),
+      stateKey: historyPort.secondBrain.stateKey(snapshot),
       payload: snapshot
     })
   }
@@ -136,14 +189,14 @@ export function useAppNavigationController(options: UseAppNavigationControllerOp
   /** Records the current Cosmos surface state into linear document history. */
   function recordCosmosHistorySnapshot() {
     if (isApplyingHistoryNavigation.value) return
-    const active = options.getActiveTab()
+    const active = panePort.getActiveTab()
     if (!active || active.type !== 'cosmos') return
-    const snapshot = options.currentCosmosHistorySnapshot()
-    options.documentHistory.recordEntry({
+    const snapshot = historyPort.cosmos.current()
+    historyPort.documentHistory.recordEntry({
       kind: 'cosmos',
       path: 'cosmos',
-      label: options.cosmosHistoryLabel(snapshot),
-      stateKey: options.cosmosSnapshotStateKey(snapshot),
+      label: historyPort.cosmos.label(snapshot),
+      stateKey: historyPort.cosmos.stateKey(snapshot),
       payload: snapshot
     })
   }
@@ -165,18 +218,18 @@ export function useAppNavigationController(options: UseAppNavigationControllerOp
   /** Saves the active document before a tab switch when it still has unsaved changes. */
   async function ensureActiveTabSavedBeforeSwitch(targetPath: string): Promise<boolean> {
     const target = targetPath.trim()
-    const current = options.activeFilePath.value
+    const current = editorPort.activeFilePath.value
     if (!target || !current || current === target) return true
 
-    const status = options.getDocumentStatus(current)
+    const status = editorPort.getDocumentStatus(current)
     if (!status.dirty) return true
 
-    await options.saveActiveDocument()
+    await editorPort.saveActiveDocument()
 
-    const activeAfterSave = options.activeFilePath.value || current
-    const statusAfterSave = options.getDocumentStatus(activeAfterSave)
+    const activeAfterSave = editorPort.activeFilePath.value || current
+    const statusAfterSave = editorPort.getDocumentStatus(activeAfterSave)
     if (statusAfterSave.dirty) {
-      options.setErrorMessage(statusAfterSave.saveError || 'Could not save current note before switching tabs.')
+      workspacePort.setErrorMessage(statusAfterSave.saveError || 'Could not save current note before switching tabs.')
       return false
     }
 
@@ -190,12 +243,12 @@ export function useAppNavigationController(options: UseAppNavigationControllerOp
     const canSwitch = await ensureActiveTabSavedBeforeSwitch(target)
     if (!canSwitch) return false
     if (navigation.revealInTargetPane) {
-      options.revealDocumentInPane(target, navigation.targetPaneId)
+      panePort.revealDocumentInPane(target, navigation.targetPaneId)
     } else {
-      options.openPathInPane(target, navigation.targetPaneId)
+      panePort.openPathInPane(target, navigation.targetPaneId)
     }
     if (navigation.recordHistory !== false) {
-      options.documentHistory.record(target)
+      historyPort.documentHistory.record(target)
     }
     return true
   }
@@ -206,20 +259,20 @@ export function useAppNavigationController(options: UseAppNavigationControllerOp
     if (!target) return false
     const canSwitch = await ensureActiveTabSavedBeforeSwitch(target)
     if (!canSwitch) return false
-    options.setActivePathInPane(options.getActivePaneId(), target)
+    panePort.setActivePathInPane(panePort.getActivePaneId(), target)
     if (navigation.recordHistory !== false) {
-      options.documentHistory.record(target)
+      historyPort.documentHistory.record(target)
     }
     return true
   }
 
   /** Opens a note from the Second Brain surface into another pane when available. */
   async function openNoteFromSecondBrain(path: string): Promise<void> {
-    const sourcePaneId = options.findPaneContainingSurface('second-brain-chat')
-    const paneOrder = options.getPaneOrder()
+    const sourcePaneId = panePort.findPaneContainingSurface('second-brain-chat')
+    const paneOrder = panePort.getPaneOrder()
     const targetPaneId = sourcePaneId
       ? paneOrder.find((paneId) => paneId !== sourcePaneId) ?? sourcePaneId
-      : options.getActivePaneId()
+      : panePort.getActivePaneId()
 
     await openTabWithAutosave(path, {
       targetPaneId,
@@ -231,34 +284,35 @@ export function useAppNavigationController(options: UseAppNavigationControllerOp
   /** Replays a history entry regardless of whether it targets a note or a pane-native surface. */
   async function openHistoryEntry(entry: DocumentHistoryEntry): Promise<boolean> {
     if (entry.kind === 'cosmos') {
-      const snapshot = options.readCosmosHistorySnapshot(entry.payload)
-      if (!snapshot) return false
-      return await options.applyCosmosHistorySnapshot(snapshot)
+      return await openSurfaceHistoryEntry(entry.payload, {
+        read: historyPort.cosmos.read,
+        open: historyPort.cosmos.apply
+      })
     }
     if (entry.kind === 'second-brain') {
-      const snapshot = options.readSecondBrainHistorySnapshot(entry.payload)
-      if (!snapshot) return false
-      if (!options.allWorkspaceFiles.value.length) {
-        await options.ensureAllFilesLoaded()
-      }
-      return await options.openSecondBrainHistorySnapshot(snapshot)
+      return await openSurfaceHistoryEntry(entry.payload, {
+        read: historyPort.secondBrain.read,
+        open: historyPort.secondBrain.open,
+        ensureWorkspaceFiles: true
+      })
     }
     if (entry.kind === 'home') {
-      const snapshot = options.readHomeHistorySnapshot(entry.payload)
-      if (!snapshot) return false
-      return await options.openHomeHistorySnapshot(snapshot)
+      return await openSurfaceHistoryEntry(entry.payload, {
+        read: historyPort.home.read,
+        open: historyPort.home.open
+      })
     }
 
     const opened = await openTabWithAutosave(entry.path, { recordHistory: false })
     if (!opened) return false
     await nextTick()
-    options.focusEditor()
+    editorPort.focusEditor()
     return true
   }
 
   /** Moves backward in linear history and reverts the pointer if opening fails. */
   async function goBackInHistory() {
-    const target = options.documentHistory.goBackEntry()
+    const target = historyPort.documentHistory.goBackEntry()
     if (!target) return false
     isApplyingHistoryNavigation.value = true
     let opened = false
@@ -268,13 +322,13 @@ export function useAppNavigationController(options: UseAppNavigationControllerOp
       isApplyingHistoryNavigation.value = false
     }
     if (opened) return true
-    options.documentHistory.goForwardEntry()
+    historyPort.documentHistory.goForwardEntry()
     return false
   }
 
   /** Moves forward in linear history and reverts the pointer if opening fails. */
   async function goForwardInHistory() {
-    const target = options.documentHistory.goForwardEntry()
+    const target = historyPort.documentHistory.goForwardEntry()
     if (!target) return false
     isApplyingHistoryNavigation.value = true
     let opened = false
@@ -284,16 +338,16 @@ export function useAppNavigationController(options: UseAppNavigationControllerOp
       isApplyingHistoryNavigation.value = false
     }
     if (opened) return true
-    options.documentHistory.goBackEntry()
+    historyPort.documentHistory.goBackEntry()
     return false
   }
 
   /** Advances to the next document tab inside the active pane. */
   async function openNextTabWithAutosave() {
-    const paneId = options.getActivePaneId()
-    const tabs = options.getDocumentPathsForPane(paneId)
+    const paneId = panePort.getActivePaneId()
+    const tabs = panePort.getDocumentPathsForPane(paneId)
     if (!tabs.length) return false
-    const currentPath = options.getActiveDocumentPath(paneId)
+    const currentPath = panePort.getActiveDocumentPath(paneId)
     const currentIndex = tabs.findIndex((path) => path === currentPath)
     const nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % tabs.length
     const nextPath = tabs[nextIndex] ?? ''
