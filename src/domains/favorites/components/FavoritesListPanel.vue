@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue'
 import { ExclamationTriangleIcon, StarIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import type { FavoriteEntry } from '../../../shared/api/apiTypes'
+import UiInput from '../../../shared/components/ui/UiInput.vue'
 
 /**
  * FavoritesListPanel
@@ -9,7 +11,7 @@ import type { FavoriteEntry } from '../../../shared/api/apiTypes'
  * - Render a flat favorites list with missing-entry cleanup controls.
  */
 
-defineProps<{
+const props = defineProps<{
   items: FavoriteEntry[]
   activePath: string
   loading: boolean
@@ -20,16 +22,32 @@ const emit = defineEmits<{
   open: [path: string]
   remove: [path: string]
 }>()
+
+const filterQuery = ref('')
+const filteredItems = computed(() => {
+  const query = filterQuery.value.trim().toLowerCase()
+  if (!query) return props.items
+  return props.items.filter((item) => props.toRelativePath(item.path).toLowerCase().includes(query))
+})
 </script>
 
 <template>
   <div class="favorites-panel panel-fill">
+    <div class="favorites-toolbar">
+      <UiInput
+        v-model="filterQuery"
+        size="sm"
+        placeholder="Filter favorites"
+        class-name="favorites-filter-input"
+      />
+    </div>
     <div v-if="loading" class="placeholder">Loading favorites…</div>
     <div v-else-if="!items.length" class="placeholder">
       No favorites yet. Use the command palette to add the active note.
     </div>
+    <div v-else-if="!filteredItems.length" class="placeholder">No matching favorites</div>
     <ul v-else class="favorites-list" aria-label="Favorites list">
-      <li v-for="item in items" :key="item.path" class="favorites-row-wrapper">
+      <li v-for="item in filteredItems" :key="item.path" class="favorites-row-wrapper">
         <button
           type="button"
           class="favorites-row"
@@ -71,34 +89,41 @@ const emit = defineEmits<{
   flex-direction: column;
 }
 
+.favorites-toolbar {
+  padding: 0 0 8px;
+}
+
 .favorites-list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   overflow: auto;
 }
 
 .favorites-row-wrapper {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .favorites-row {
+  position: relative;
   flex: 1;
   min-width: 0;
   border: 0;
-  border-radius: 8px;
+  border-radius: 6px;
   background: transparent;
   color: var(--explorer-row-text);
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 8px;
+  gap: 6px;
+  padding: 4px 8px;
   text-align: left;
+  font-size: 13px;
+  line-height: 1.35;
 }
 
 .favorites-row:hover:not(:disabled) {
@@ -113,16 +138,20 @@ const emit = defineEmits<{
 .favorites-row--active {
   background: var(--explorer-row-active-bg);
   color: var(--explorer-row-active-text);
+  font-weight: 500;
 }
 
 .favorites-row--missing {
   color: var(--text-dim);
-  background: color-mix(in srgb, var(--shell-chrome-bg) 88%, var(--danger, #c2410c) 12%);
+  background: color-mix(in srgb, var(--shell-chrome-bg) 92%, var(--danger, #c2410c) 8%);
 }
 
 .favorites-row-indicator {
   width: 3px;
-  align-self: stretch;
+  position: absolute;
+  left: 0;
+  top: 3px;
+  bottom: 3px;
   border-radius: 999px;
   background: transparent;
 }
@@ -137,6 +166,7 @@ const emit = defineEmits<{
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  color: var(--text-dim);
 }
 
 .favorites-row-icon :deep(svg) {
@@ -192,5 +222,9 @@ const emit = defineEmits<{
   width: 14px;
   height: 14px;
   stroke-width: 1.8;
+}
+
+.favorites-filter-input {
+  border-radius: 8px;
 }
 </style>

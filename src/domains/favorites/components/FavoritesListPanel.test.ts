@@ -46,4 +46,21 @@ describe('FavoritesListPanel', () => {
 
     mounted.app.unmount()
   })
+
+  it('filters favorites with the input', async () => {
+    const mounted = mountHarness()
+    const input = mounted.root.querySelector<HTMLInputElement>('input[placeholder="Filter favorites"]')
+    expect(input).toBeTruthy()
+    if (!input) return
+
+    input.value = 'ghost'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    await Promise.resolve()
+
+    const rows = mounted.root.querySelectorAll('.favorites-row')
+    expect(rows).toHaveLength(1)
+    expect(mounted.root.textContent).toContain('ghost.md')
+
+    mounted.app.unmount()
+  })
 })
