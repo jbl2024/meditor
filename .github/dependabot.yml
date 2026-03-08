@@ -1,0 +1,20 @@
+version: 2
+
+updates:
+  # Frontend dependencies declared in package.json/package-lock.json.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # Rust crates for the Tauri backend live under src-tauri/.
+  - package-ecosystem: "cargo"
+    directory: "/src-tauri"
+    schedule:
+      interval: "weekly"
+
+  # Keep workflow actions up to date as GitHub releases new major/minor versions.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
