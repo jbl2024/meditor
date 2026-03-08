@@ -115,9 +115,11 @@ const LARGE_DOC_THRESHOLD = 40_000
 const pulse = usePulseTransformation()
 const pulseOpen = ref(false)
 const pulsePanelWrap = ref<HTMLDivElement | null>(null)
+const pulsePanelMeasuredHeight = ref(360)
 const pulseSourceKind = ref<'editor_selection' | 'editor_note'>('editor_selection')
 const pulseActionId = ref<PulseActionId>('rewrite')
 const pulseInstruction = ref('')
+const pulseInstructionDirty = ref(false)
 const pulseSelectionRange = ref<{ from: number; to: number } | null>(null)
 const pulseSourceText = ref('')
 const pulseAnchorNonce = ref(0)
@@ -222,6 +224,7 @@ const pulsePanelStyle = computed<CSSProperties>(() => {
   const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1440
   const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 900
   const panelWidth = Math.min(420, Math.max(280, viewportWidth - 32))
+  const panelHeight = Math.max(220, pulsePanelMeasuredHeight.value)
 
   if (!pulseOpen.value) {
     return {
@@ -244,11 +247,15 @@ const pulsePanelStyle = computed<CSSProperties>(() => {
   void pulseAnchorNonce.value
   const holderEl = holder.value
   const holderRect = holderEl.getBoundingClientRect()
-  const anchorLeft = holderRect.left + inlineFormatToolbar.formatToolbarLeft.value - holderEl.scrollLeft
   const anchorTop = holderRect.top + inlineFormatToolbar.formatToolbarTop.value - holderEl.scrollTop
-  const clampedLeft = Math.min(Math.max(16, anchorLeft - panelWidth / 2), viewportWidth - panelWidth - 16)
-  const preferredTop = anchorTop + 54
-  const clampedTop = Math.min(Math.max(16, preferredTop), viewportHeight - 320)
+  const rightDockLeft = viewportWidth - panelWidth - 24
+  const clampedLeft = Math.max(16, rightDockLeft)
+  const preferredBelow = anchorTop + 54
+  const preferredAbove = anchorTop - panelHeight - 20
+  const fitsBelow = preferredBelow + panelHeight <= viewportHeight - 16
+  const fitsAbove = preferredAbove >= 16
+  const targetTop = fitsBelow || !fitsAbove ? preferredBelow : preferredAbove
+  const clampedTop = Math.min(Math.max(16, targetTop), viewportHeight - panelHeight - 16)
 
   return {
     position: 'fixed',
@@ -257,6 +264,29 @@ const pulsePanelStyle = computed<CSSProperties>(() => {
     width: `${panelWidth}px`
   }
 })
+
+function updatePulsePanelMetrics() {
+  const nextHeight = pulsePanelWrap.value?.offsetHeight ?? 0
+  if (nextHeight > 0) {
+    pulsePanelMeasuredHeight.value = nextHeight
+  }
+}
+
+watch(
+  [
+    pulseOpen,
+    pulsePanelWrap,
+    () => pulse.previewMarkdown.value,
+    () => pulse.running.value,
+    () => pulse.error.value
+  ],
+  async ([open]) => {
+    if (!open) return
+    await nextTick()
+    updatePulsePanelMetrics()
+  },
+  { flush: 'post' }
+)
 // Keep template binding reactive when active session editor changes.
 const renderedEditor = computed(() => sessionStore.getActiveSession(MAIN_PANE_ID)?.editor ?? null)
 const blockMenuControls = useBlockMenuControls({
@@ -479,7 +509,7 @@ function onDocumentMouseDown(event: MouseEvent) {
     if (target instanceof Element && target.closest('.inline-format-toolbar')) return
     if (target instanceof Element && target.closest('.editor-find-toolbar')) return
     if (target instanceof Element && target.closest('.ui-filterable-dropdown-menu')) return
-    pulseOpen.value = false
+    closePulsePanel()
   }
 }
 
@@ -492,7 +522,7 @@ function onDocumentKeydown(event: KeyboardEvent) {
   }
 
   if (event.key === 'Escape' && pulseOpen.value) {
-    pulseOpen.value = false
+    closePulsePanel()
   }
 }
 
@@ -939,8 +969,61 @@ useEditorPathWatchers({
   }
 })
 
+watch(pulseActionId, (next, previous) => {
+  if (next === previous) return
+  if (!pulseInstructionDirty.value) {
+    setPulseInstruction(pulseDefaultInstruction(next), { markDirty: false })
+  }
+  if (pulseOpen.value && !pulse.running.value && pulse.previewMarkdown.value.trim()) {
+    resetPulseResult()
+  }
+})
+
+watch(pulseSourceText, (next, previous) => {
+  if (next === previous) return
+  if (pulseOpen.value && !pulse.running.value && pulse.previewMarkdown.value.trim()) {
+    resetPulseResult()
+  }
+})
+
 function focusEditor() {
   editor?.commands.focus()
+}
+
+function pulseDefaultInstruction(actionId: PulseActionId): string {
+  return PULSE_ACTIONS_BY_SOURCE[pulseSourceKind.value].find((item) => item.id === actionId)?.description
+    ?? 'Transform the provided material into a useful written output.'
+}
+
+function setPulseInstruction(value: string, options?: { markDirty?: boolean }) {
+  pulseInstruction.value = value
+  if (options?.markDirty !== undefined) {
+    pulseInstructionDirty.value = options.markDirty
+  }
+}
+
+function onPulseActionChange(value: PulseActionId) {
+  pulseActionId.value = value
+}
+
+function onPulseInstructionChange(value: string) {
+  pulseInstruction.value = value
+  pulseInstructionDirty.value = true
+  if (pulseOpen.value && !pulse.running.value && pulse.previewMarkdown.value.trim()) {
+    resetPulseResult()
+  }
+}
+
+function resetPulseResult() {
+  pulse.reset()
+}
+
+function closePulsePanel() {
+  if (pulse.running.value) {
+    void pulse.cancel()
+  }
+  pulseOpen.value = false
+  resetPulseResult()
 }
 
 function openPulseForSelection() {
@@ -951,14 +1034,17 @@ function openPulseForSelection() {
   if (!text) return
   pulseSourceKind.value = 'editor_selection'
   pulseActionId.value = 'rewrite'
+  setPulseInstruction(pulseDefaultInstruction('rewrite'), { markDirty: false })
   pulseSelectionRange.value = { from, to }
   pulseSourceText.value = text
+  resetPulseResult()
   pulseAnchorNonce.value += 1
   pulseOpen.value = true
 }
 
 async function runPulseFromEditor() {
-  if (!currentPath.value) return
+  if (pulse.running.value) return
+  if (!currentPath.value && pulseSourceKind.value !== 'editor_selection') return
   const sourceText = pulseSourceKind.value === 'editor_selection'
     ? pulseSourceText.value
     : (pulseSourceText.value || (editor?.getText().trim() ?? ''))
@@ -970,12 +1056,6 @@ async function runPulseFromEditor() {
     source_text: sourceText || undefined,
     selection_label: pulseSourceKind.value === 'editor_selection' ? 'Editor selection' : 'Current note'
   })
-}
-
-async function quickRunPulseFromEditor(actionId: PulseActionId) {
-  pulseActionId.value = actionId
-  await nextTick()
-  await runPulseFromEditor()
 }
 
 function buildSecondBrainPulsePrompt(): string {
@@ -1003,7 +1083,7 @@ function replaceSelectionWithPulseOutput() {
     .setTextSelection(pulseSelectionRange.value)
     .insertContent(pulse.previewMarkdown.value)
     .run()
-  pulseOpen.value = false
+  closePulsePanel()
 }
 
 function insertPulseBelow() {
@@ -1018,7 +1098,7 @@ function insertPulseBelow() {
   } else {
     editor.chain().focus('end').insertContent(`\n\n${pulse.previewMarkdown.value}`).run()
   }
-  pulseOpen.value = false
+  closePulsePanel()
 }
 
 function sendPulseContextToSecondBrain() {
@@ -1027,7 +1107,7 @@ function sendPulseContextToSecondBrain() {
     contextPaths: pulseSourceKind.value === 'editor_selection' ? [] : [currentPath.value],
     prompt: buildSecondBrainPulsePrompt()
   })
-  pulseOpen.value = false
+  closePulsePanel()
 }
 
 async function focusFirstContentBlock() {
@@ -1295,13 +1375,14 @@ defineExpose({
               :provenance-paths="pulse.provenancePaths.value"
               :running="pulse.running.value"
               :error="pulse.error.value"
+              :source-text="pulseSourceText"
               :apply-modes="pulseSourceKind === 'editor_selection' ? ['replace_selection', 'insert_below', 'send_to_second_brain'] : ['insert_below', 'send_to_second_brain']"
-              @update:action-id="(value) => { pulseActionId = value as PulseActionId }"
-              @update:instruction="(value) => { pulseInstruction = value }"
-              @quick-run="void quickRunPulseFromEditor($event as PulseActionId)"
+              :primary-apply-mode="pulseSourceKind === 'editor_selection' ? 'replace_selection' : 'insert_below'"
+              @update:action-id="onPulseActionChange($event as PulseActionId)"
+              @update:instruction="onPulseInstructionChange($event)"
               @run="void runPulseFromEditor()"
               @cancel="void pulse.cancel()"
-              @close="pulseOpen = false"
+              @close="closePulsePanel()"
               @apply="(mode: PulseApplyMode) => {
                 if (mode === 'replace_selection') replaceSelectionWithPulseOutput()
                 if (mode === 'insert_below') insertPulseBelow()
@@ -1367,7 +1448,7 @@ defineExpose({
 }
 
 .editor-pulse-panel-wrap {
-  z-index: 35;
+  z-index: 36;
   pointer-events: auto;
 }
 </style>

@@ -1,0 +1,216 @@
+import { createApp, defineComponent, h, nextTick, ref } from 'vue'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+const previewMarkdown = ref('')
+const provenancePaths = ref<string[]>([])
+const previewTitle = ref('')
+const running = ref(false)
+const error = ref('')
+const requestId = ref('')
+const outputId = ref('')
+const runMock = vi.fn(async () => ({ request_id: 'pulse-test', output_id: 'pulse-output' }))
+const cancelMock = vi.fn(async () => {})
+const resetMock = vi.fn(() => {
+  previewMarkdown.value = ''
+  provenancePaths.value = []
+  previewTitle.value = ''
+  running.value = false
+  error.value = ''
+})
+
+vi.mock('../../pulse/composables/usePulseTransformation', () => ({
+  usePulseTransformation: () => ({
+    requestId,
+    outputId,
+    previewMarkdown,
+    provenancePaths,
+    previewTitle,
+    running,
+    error,
+    run: runMock,
+    cancel: cancelMock,
+    reset: resetMock
+  })
+}))
+
+vi.mock('./editor/EditorInlineFormatToolbar.vue', () => ({
+  default: defineComponent({
+    emits: ['open-pulse'],
+    setup(_props, { emit }) {
+      return () => h('button', {
+        type: 'button',
+        'data-action': 'pulse',
+        onClick: () => emit('open-pulse')
+      }, 'Pulse')
+    }
+  })
+}))
+
+import EditorView from './EditorView.vue'
+
+async function flushUi() {
+  await nextTick()
+  await Promise.resolve()
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  await nextTick()
+}
+
+function mountHarness() {
+  const root = document.createElement('div')
+  document.body.appendChild(root)
+  const onPulseOpenSecondBrain = vi.fn()
+  const editorRef = ref<unknown>(null)
+
+  const app = createApp(defineComponent({
+    setup() {
+      return () => h(EditorView, {
+        ref: editorRef,
+        path: 'a.md',
+        openPaths: ['a.md'],
+        openFile: async () => '# Title\n\nAlpha beta gamma',
+        saveFile: async () => ({ persisted: true }),
+        renameFileFromTitle: async (path: string, title: string) => ({ path, title }),
+        loadLinkTargets: async () => ['a.md'],
+        loadLinkHeadings: async () => ['H1'],
+        loadPropertyTypeSchema: async () => ({}),
+        savePropertyTypeSchema: async () => {},
+        openLinkTarget: async () => true,
+        onStatus: () => {},
+        onOutline: () => {},
+        onProperties: () => {},
+        onPathRenamed: () => {},
+        onPulseOpenSecondBrain
+      })
+    }
+  }))
+
+  app.mount(root)
+  return { app, root, onPulseOpenSecondBrain, editorRef }
+}
+
+function openPulseFromEditorHarness(editorRef: ReturnType<typeof ref<unknown>>) {
+  const setupState = (editorRef.value as { $?: { setupState?: Record<string, any> } })?.$?.setupState
+  if (!setupState) throw new Error('Expected EditorView setup state')
+  setupState.pulseSourceKind = 'editor_selection'
+  setupState.pulseActionId = 'rewrite'
+  setupState.pulseSourceText = 'Alpha beta'
+  setupState.pulseSelectionRange = { from: 10, to: 20 }
+  setupState.setPulseInstruction('Clarify the selected passage without changing its meaning.', { markDirty: false })
+  setupState.pulseOpen = true
+}
+
+describe('EditorView Pulse flow', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'scrollBy', {
+      configurable: true,
+      value: vi.fn()
+    })
+    const rectList = () => [{ left: 0, top: 0, right: 40, bottom: 16, width: 40, height: 16 }]
+    const rect = () => ({ left: 0, top: 0, right: 40, bottom: 16, width: 40, height: 16 })
+    for (const prototype of [Node.prototype, Element.prototype, HTMLElement.prototype, Text.prototype, Range.prototype]) {
+      Object.defineProperty(prototype, 'getClientRects', {
+        configurable: true,
+        value: rectList
+      })
+      Object.defineProperty(prototype, 'getBoundingClientRect', {
+        configurable: true,
+        value: rect
+      })
+    }
+    previewMarkdown.value = ''
+    provenancePaths.value = []
+    previewTitle.value = ''
+    running.value = false
+    error.value = ''
+    requestId.value = ''
+    outputId.value = ''
+    runMock.mockClear()
+    cancelMock.mockClear()
+    resetMock.mockClear()
+  })
+
+  afterEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  it('opens Pulse from selection with a prefilled prompt and no auto-run', async () => {
+    const harness = mountHarness()
+    await flushUi()
+
+    openPulseFromEditorHarness(harness.editorRef)
+    await flushUi()
+
+    const prompt = harness.root.querySelector('[data-pulse-prompt="true"]') as HTMLTextAreaElement
+    expect(prompt).toBeTruthy()
+    expect(prompt.value).toContain('Clarify the selected passage')
+    expect(runMock).not.toHaveBeenCalled()
+
+    harness.app.unmount()
+  })
+
+  it('runs with Enter, invalidates stale preview on prompt edit, and applies with Cmd+Enter', async () => {
+    const harness = mountHarness()
+    await flushUi()
+
+    openPulseFromEditorHarness(harness.editorRef)
+    await flushUi()
+
+    const prompt = harness.root.querySelector('[data-pulse-prompt="true"]') as HTMLTextAreaElement
+    prompt.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    await flushUi()
+    expect(runMock).toHaveBeenCalledTimes(0)
+
+    prompt.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true }))
+    await flushUi()
+    expect(runMock).toHaveBeenCalledTimes(1)
+
+    previewMarkdown.value = 'Alpha beta, clarified.'
+    await flushUi()
+    expect(harness.root.textContent).toContain('Replace selection')
+
+    prompt.value = 'Make it shorter.'
+    prompt.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushUi()
+    expect(resetMock).toHaveBeenCalled()
+    expect(harness.root.textContent).not.toContain('Replace selection')
+
+    previewMarkdown.value = 'Alpha beta, clarified.'
+    await flushUi()
+    prompt.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true }))
+    await flushUi()
+
+    expect((harness.root.querySelector('.ProseMirror')?.textContent ?? '')).toContain('clarified')
+
+    harness.app.unmount()
+  })
+
+  it('closes on Escape, supports send to Second Brain, and cancels when closing while running', async () => {
+    const harness = mountHarness()
+    await flushUi()
+
+    openPulseFromEditorHarness(harness.editorRef)
+    await flushUi()
+
+    previewMarkdown.value = 'Alpha beta gamma.'
+    await flushUi()
+    const sendButton = Array.from(harness.root.querySelectorAll('.pulse-apply .pulse-btn'))
+      .find((button) => button.textContent?.includes('Second Brain')) as HTMLButtonElement
+    sendButton.click()
+    await flushUi()
+    expect(harness.onPulseOpenSecondBrain).toHaveBeenCalledTimes(1)
+
+    openPulseFromEditorHarness(harness.editorRef)
+    await flushUi()
+
+    running.value = true
+    await flushUi()
+    const prompt = harness.root.querySelector('[data-pulse-prompt="true"]') as HTMLTextAreaElement
+    prompt.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    await flushUi()
+
+    expect(cancelMock).toHaveBeenCalled()
+    expect(harness.root.querySelector('[data-pulse-prompt="true"]')).toBeNull()
+
+    harness.app.unmount()
+  })
+})
