@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import UiButton from '../../../shared/components/ui/UiButton.vue'
+import UiField from '../../../shared/components/ui/UiField.vue'
+import UiInput from '../../../shared/components/ui/UiInput.vue'
+import UiModalShell from '../../../shared/components/ui/UiModalShell.vue'
 
 /**
  * Module: WorkspaceEntryModals
@@ -40,87 +43,96 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div v-if="newFileVisible" class="modal-overlay" @click.self="emit('closeNewFile')">
-    <div
-      class="modal confirm-modal"
-      data-modal="new-file"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="new-file-title"
-      aria-describedby="new-file-description"
-      tabindex="-1"
-    >
-      <h3 id="new-file-title" class="confirm-title">New Note</h3>
-      <p id="new-file-description" class="confirm-text">Enter a workspace-relative note path. `.md` is added automatically.</p>
-      <input
-        :value="newFilePathInput"
-        data-new-file-input="true"
-        class="tool-input"
-        placeholder="untitled"
-        @input="emit('updateNewFilePath', ($event.target as HTMLInputElement).value)"
-        @keydown="emit('keydownNewFile', $event)"
-      />
-      <p v-if="newFileError" class="modal-input-error">{{ newFileError }}</p>
-      <div class="confirm-actions">
+  <UiModalShell
+    :model-value="newFileVisible"
+    title="New Note"
+    description="Enter a workspace-relative note path. `.md` is added automatically."
+    labelledby="new-file-title"
+    describedby="new-file-description"
+    width="sm"
+    panel-class="confirm-modal"
+    @close="emit('closeNewFile')"
+  >
+    <UiField for-id="new-file-input" label="Note path" :error="newFileError">
+      <template #default="{ describedBy, invalid }">
+        <UiInput
+          id="new-file-input"
+          :model-value="newFilePathInput"
+          size="sm"
+          data-new-file-input="true"
+          placeholder="untitled"
+          :invalid="invalid"
+          :aria-describedby="describedBy"
+          @update:model-value="emit('updateNewFilePath', $event)"
+          @keydown="emit('keydownNewFile', $event)"
+        />
+      </template>
+    </UiField>
+    <template #footer>
         <UiButton size="sm" variant="ghost" @click="emit('closeNewFile')">Cancel</UiButton>
-        <UiButton size="sm" @click="emit('submitNewFile')">Create</UiButton>
-      </div>
-    </div>
-  </div>
+        <UiButton size="sm" variant="primary" @click="emit('submitNewFile')">Create</UiButton>
+    </template>
+  </UiModalShell>
 
-  <div v-if="newFolderVisible" class="modal-overlay" @click.self="emit('closeNewFolder')">
-    <div
-      class="modal confirm-modal"
-      data-modal="new-folder"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="new-folder-title"
-      aria-describedby="new-folder-description"
-      tabindex="-1"
-    >
-      <h3 id="new-folder-title" class="confirm-title">New Folder</h3>
-      <p id="new-folder-description" class="confirm-text">Enter a workspace-relative folder path.</p>
-      <input
-        :value="newFolderPathInput"
-        data-new-folder-input="true"
-        class="tool-input"
-        placeholder="new-folder"
-        @input="emit('updateNewFolderPath', ($event.target as HTMLInputElement).value)"
-        @keydown="emit('keydownNewFolder', $event)"
-      />
-      <p v-if="newFolderError" class="modal-input-error">{{ newFolderError }}</p>
-      <div class="confirm-actions">
+  <UiModalShell
+    :model-value="newFolderVisible"
+    title="New Folder"
+    description="Enter a workspace-relative folder path."
+    labelledby="new-folder-title"
+    describedby="new-folder-description"
+    width="sm"
+    panel-class="confirm-modal"
+    @close="emit('closeNewFolder')"
+  >
+    <UiField for-id="new-folder-input" label="Folder path" :error="newFolderError">
+      <template #default="{ describedBy, invalid }">
+        <UiInput
+          id="new-folder-input"
+          :model-value="newFolderPathInput"
+          size="sm"
+          data-new-folder-input="true"
+          placeholder="new-folder"
+          :invalid="invalid"
+          :aria-describedby="describedBy"
+          @update:model-value="emit('updateNewFolderPath', $event)"
+          @keydown="emit('keydownNewFolder', $event)"
+        />
+      </template>
+    </UiField>
+    <template #footer>
         <UiButton size="sm" variant="ghost" @click="emit('closeNewFolder')">Cancel</UiButton>
-        <UiButton size="sm" @click="emit('submitNewFolder')">Create</UiButton>
-      </div>
-    </div>
-  </div>
+        <UiButton size="sm" variant="primary" @click="emit('submitNewFolder')">Create</UiButton>
+    </template>
+  </UiModalShell>
 
-  <div v-if="openDateVisible" class="modal-overlay" @click.self="emit('closeOpenDate')">
-    <div
-      class="modal confirm-modal"
-      data-modal="open-date"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="open-date-title"
-      aria-describedby="open-date-description"
-      tabindex="-1"
-    >
-      <h3 id="open-date-title" class="confirm-title">Open Specific Date</h3>
-      <p id="open-date-description" class="confirm-text">Enter a date as `YYYY-MM-DD`.</p>
-      <input
-        :value="openDateInput"
-        data-open-date-input="true"
-        class="tool-input"
-        placeholder="2026-02-22"
-        @input="emit('updateOpenDate', ($event.target as HTMLInputElement).value)"
-        @keydown="emit('keydownOpenDate', $event)"
-      />
-      <p v-if="openDateError" class="modal-input-error">{{ openDateError }}</p>
-      <div class="confirm-actions">
+  <UiModalShell
+    :model-value="openDateVisible"
+    title="Open Specific Date"
+    description="Enter a date as `YYYY-MM-DD`."
+    labelledby="open-date-title"
+    describedby="open-date-description"
+    width="sm"
+    panel-class="confirm-modal"
+    @close="emit('closeOpenDate')"
+  >
+    <UiField for-id="open-date-input" label="Date" :error="openDateError">
+      <template #default="{ describedBy, invalid }">
+        <UiInput
+          id="open-date-input"
+          :model-value="openDateInput"
+          size="sm"
+          data-open-date-input="true"
+          placeholder="2026-02-22"
+          :invalid="invalid"
+          :aria-describedby="describedBy"
+          @update:model-value="emit('updateOpenDate', $event)"
+          @keydown="emit('keydownOpenDate', $event)"
+        />
+      </template>
+    </UiField>
+    <template #footer>
         <UiButton size="sm" variant="ghost" @click="emit('closeOpenDate')">Cancel</UiButton>
-        <UiButton size="sm" @click="emit('submitOpenDate')">Open</UiButton>
-      </div>
-    </div>
-  </div>
+        <UiButton size="sm" variant="primary" @click="emit('submitOpenDate')">Open</UiButton>
+    </template>
+  </UiModalShell>
 </template>

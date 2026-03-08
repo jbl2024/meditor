@@ -431,7 +431,7 @@ watch(() => props.visible, async (visible) => {
       <div class="settings-footer">
         <p class="settings-config-path"><code>{{ settingsConfigPath }}</code></p>
         <div class="settings-footer-actions">
-          <button type="button" class="settings-cancel-btn" @click="emit('cancel')">Cancel</button>
+          <UiButton size="sm" variant="ghost" @click="emit('cancel')">Cancel</UiButton>
           <UiButton size="sm" variant="primary" @click="submitSettingsModal">Save</UiButton>
         </div>
       </div>
@@ -541,16 +541,4 @@ watch(() => props.visible, async (visible) => {
   gap: 10px;
 }
 
-.settings-cancel-btn {
-  border: 0;
-  background: transparent;
-  color: var(--text-dim);
-  font-size: 12px;
-  padding: 2px 4px;
-  cursor: pointer;
-}
-
-.settings-cancel-btn:hover {
-  color: var(--text-main);
-}
 </style>

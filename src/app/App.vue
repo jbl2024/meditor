@@ -12,6 +12,7 @@ import WikilinkRewriteModal from './components/app/WikilinkRewriteModal.vue'
 import WorkspaceEntryModals from './components/app/WorkspaceEntryModals.vue'
 import WorkspaceStatusBar from './components/app/WorkspaceStatusBar.vue'
 import SettingsModal from './components/settings/SettingsModal.vue'
+import DesignSystemDebugModal from './components/app/DesignSystemDebugModal.vue'
 import { useDocumentHistory } from '../domains/editor/composables/useDocumentHistory'
 import {
   clearWorkingFolder,
@@ -218,6 +219,7 @@ const openDateModalVisible = ref(false)
 const openDateInput = ref('')
 const openDateModalError = ref('')
 const settingsModalVisible = ref(false)
+const designSystemDebugVisible = ref(false)
 const shortcutsModalVisible = ref(false)
 const workspaceSetupWizardVisible = ref(false)
 const workspaceSetupWizardBusy = ref(false)
@@ -255,6 +257,7 @@ let unlistenWorkspaceFsChanged: (() => void) | null = null
 let recentNotesRequestToken = 0
 let recentNotesCacheKey = ''
 const recentNotesRefreshNonce = ref(0)
+const showDebugTools = import.meta.env.DEV
 
 const resizeState = ref<{
   side: 'left' | 'right'
@@ -854,6 +857,20 @@ function openShortcutsFromOverflow() {
 function openSettingsFromOverflow() {
   closeOverflowMenu()
   void openSettingsModal()
+}
+
+function openDesignSystemDebugFromOverflow() {
+  if (!showDebugTools) return
+  closeOverflowMenu()
+  rememberFocusBeforeModalOpen()
+  designSystemDebugVisible.value = true
+}
+
+function closeDesignSystemDebugModal() {
+  designSystemDebugVisible.value = false
+  void nextTick(() => {
+    restoreFocusAfterModalClose()
+  })
 }
 
 function openShortcutsFromPalette() {
@@ -2354,6 +2371,7 @@ async function runQuickOpenAction(id: string) {
         !newFolderModalVisible.value &&
         !openDateModalVisible.value &&
         !settingsModalVisible.value &&
+        !designSystemDebugVisible.value &&
         !shortcutsModalVisible.value &&
         !workspaceSetupWizardVisible.value &&
         !cosmosCommandLoadingVisible.value
@@ -2809,6 +2827,12 @@ function onWindowKeydown(event: KeyboardEvent) {
     closeSettingsModal()
     return
   }
+  if (isEscape && designSystemDebugVisible.value) {
+    event.preventDefault()
+    event.stopPropagation()
+    closeDesignSystemDebugModal()
+    return
+  }
   if (isEscape && shortcutsModalVisible.value) {
     event.preventDefault()
     event.stopPropagation()
@@ -3261,6 +3285,7 @@ onBeforeUnmount(() => {
       :indexing-state="filesystem.indexingState.value"
       :zoom-percent-label="zoomPercentLabel"
       :theme-preference="themePreference"
+      :show-debug-tools="showDebugTools"
       @history-button-click="onHistoryButtonClick"
       @history-button-context-menu="onHistoryButtonContextMenu"
       @history-button-pointer-down="onHistoryButtonPointerDown"
@@ -3283,6 +3308,7 @@ onBeforeUnmount(() => {
       @open-command-palette="openCommandPalette"
       @open-shortcuts="openShortcutsFromOverflow"
       @open-settings="openSettingsFromOverflow"
+      @open-design-system-debug="openDesignSystemDebugFromOverflow"
       @rebuild-index="void rebuildIndexFromOverflow()"
       @close-workspace="closeWorkspace"
       @zoom-in="zoomInFromOverflow"
@@ -3565,6 +3591,11 @@ onBeforeUnmount(() => {
       :visible="settingsModalVisible"
       @cancel="closeSettingsModal"
       @saved="onSettingsSaved"
+    />
+
+    <DesignSystemDebugModal
+      :visible="designSystemDebugVisible"
+      @close="closeDesignSystemDebugModal"
     />
 
     <ShortcutsModal
@@ -3860,7 +3891,7 @@ onBeforeUnmount(() => {
   width: min(760px, calc(100vw - 32px));
   border: 1px solid var(--modal-border);
   background: var(--modal-bg);
-  border-radius: 6px;
+  border-radius: var(--modal-radius);
   padding: 10px;
 }
 

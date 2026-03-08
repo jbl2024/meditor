@@ -2,7 +2,7 @@ import { createApp, defineComponent, h, nextTick, ref } from 'vue'
 import { afterEach, describe, expect, it } from 'vitest'
 import WorkspaceOverflowMenu from './WorkspaceOverflowMenu.vue'
 
-function mountHarness() {
+function mountHarness(showDebugTools = false) {
   const root = document.createElement('div')
   document.body.appendChild(root)
 
@@ -19,10 +19,12 @@ function mountHarness() {
           indexingState: 'indexed',
           zoomPercentLabel: '100%',
           themePreference: theme.value,
+          showDebugTools,
           onToggle: () => events.push('toggle'),
           onOpenCommandPalette: () => events.push('palette'),
           onOpenShortcuts: () => events.push('shortcuts'),
           onOpenSettings: () => events.push('settings'),
+          onOpenDesignSystemDebug: () => events.push('design-system'),
           onRebuildIndex: () => events.push('rebuild'),
           onCloseWorkspace: () => events.push('close-workspace'),
           onZoomIn: () => events.push('zoom-in'),
@@ -58,5 +60,22 @@ describe('WorkspaceOverflowMenu', () => {
     expect(mounted.theme.value).toBe('light')
 
     mounted.app.unmount()
+  })
+
+  it('shows the design-system debug entry only when enabled', async () => {
+    const hidden = mountHarness(false)
+    expect(hidden.root.textContent).not.toContain('Design system debug')
+    hidden.app.unmount()
+
+    const shown = mountHarness(true)
+    const debugButton = Array.from(shown.root.querySelectorAll<HTMLButtonElement>('.overflow-item'))
+      .find((button) => button.textContent?.includes('Design system debug'))
+
+    debugButton?.click()
+    await nextTick()
+
+    expect(debugButton).toBeTruthy()
+    expect(shown.events).toContain('design-system')
+    shown.app.unmount()
   })
 })

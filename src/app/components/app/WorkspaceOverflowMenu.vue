@@ -1,7 +1,11 @@
 <script setup lang="ts">
-import { Cog8ToothIcon, CommandLineIcon, ComputerDesktopIcon, MoonIcon, SunIcon } from '@heroicons/vue/24/outline'
+import { BeakerIcon, Cog8ToothIcon, CommandLineIcon, ComputerDesktopIcon, MoonIcon, SunIcon } from '@heroicons/vue/24/outline'
 import { computed, ref } from 'vue'
 import type { ThemePreference } from '../../composables/useAppTheme'
+import UiIconButton from '../../../shared/components/ui/UiIconButton.vue'
+import UiMenu from '../../../shared/components/ui/UiMenu.vue'
+import UiMenuList from '../../../shared/components/ui/UiMenuList.vue'
+import UiSeparator from '../../../shared/components/ui/UiSeparator.vue'
 
 /**
  * Module: WorkspaceOverflowMenu
@@ -18,6 +22,7 @@ const props = defineProps<{
   indexingState: 'idle' | 'indexing' | 'indexed' | 'out_of_sync'
   zoomPercentLabel: string
   themePreference: ThemePreference
+  showDebugTools?: boolean
 }>()
 
 /** Events emitted for each menu action so the parent can keep state ownership. */
@@ -26,6 +31,7 @@ const emit = defineEmits<{
   openCommandPalette: []
   openShortcuts: []
   openSettings: []
+  openDesignSystemDebug: []
   rebuildIndex: []
   closeWorkspace: []
   zoomIn: []
@@ -50,11 +56,9 @@ defineExpose({
 
 <template>
   <div ref="wrapRef" class="overflow-wrap">
-    <button
-      type="button"
-      class="toolbar-icon-btn"
-      title="View options"
+    <UiIconButton
       aria-label="View options"
+      title="View options"
       :aria-expanded="open"
       @click="emit('toggle')"
     >
@@ -63,13 +67,14 @@ defineExpose({
         <circle cx="12" cy="12" r="1.8" />
         <circle cx="19" cy="12" r="1.8" />
       </svg>
-    </button>
-    <div v-if="open" class="overflow-menu">
-      <button type="button" class="overflow-item" @click="emit('openCommandPalette')">
+    </UiIconButton>
+    <UiMenu v-if="open" class-name="overflow-menu">
+      <UiMenuList>
+      <button type="button" class="ui-menu-item overflow-item" @click="emit('openCommandPalette')">
         <CommandLineIcon class="overflow-item-icon" />
         Command palette
       </button>
-      <button type="button" class="overflow-item" @click="emit('openShortcuts')">
+      <button type="button" class="ui-menu-item overflow-item" @click="emit('openShortcuts')">
         <svg class="overflow-item-icon" viewBox="0 0 16 16" aria-hidden="true">
           <rect x="1.5" y="2.5" width="13" height="10.5" rx="1.6" ry="1.6" />
           <line x1="4" y1="6" x2="12" y2="6" />
@@ -77,45 +82,53 @@ defineExpose({
         </svg>
         Keyboard shortcuts
       </button>
-      <button type="button" class="overflow-item" @click="emit('openSettings')">
+      <button type="button" class="ui-menu-item overflow-item" @click="emit('openSettings')">
         <Cog8ToothIcon class="overflow-item-icon" />
         Open Settings
       </button>
-      <button type="button" class="overflow-item" :disabled="rebuildDisabled" @click="emit('rebuildIndex')">
+      <button v-if="showDebugTools" type="button" class="ui-menu-item overflow-item" @click="emit('openDesignSystemDebug')">
+        <BeakerIcon class="overflow-item-icon" />
+        Design system debug
+      </button>
+      <button type="button" class="ui-menu-item overflow-item" :disabled="rebuildDisabled" @click="emit('rebuildIndex')">
         <svg class="overflow-item-icon" viewBox="0 0 16 16" aria-hidden="true">
           <path d="M8 2.5a5.5 5.5 0 1 1-4.4 2.2" />
           <polyline points="1.8,2.6 4.9,2.6 4.9,5.7" />
         </svg>
         Reindex workspace
       </button>
-      <button type="button" class="overflow-item" :disabled="closeDisabled" @click="emit('closeWorkspace')">
+      <button type="button" class="ui-menu-item overflow-item" :disabled="closeDisabled" @click="emit('closeWorkspace')">
         <svg class="overflow-item-icon" viewBox="0 0 16 16" aria-hidden="true">
           <line x1="4" y1="4" x2="12" y2="12" />
           <line x1="12" y1="4" x2="4" y2="12" />
         </svg>
         Close workspace
       </button>
-      <div class="overflow-divider"></div>
+      </UiMenuList>
+      <UiSeparator class="overflow-divider" />
       <div class="overflow-label">Zoom</div>
-      <button type="button" class="overflow-item" @click="emit('zoomIn')">
+      <UiMenuList>
+      <button type="button" class="ui-menu-item overflow-item" @click="emit('zoomIn')">
         <span class="overflow-item-icon overflow-glyph">+</span>
         Zoom in
       </button>
-      <button type="button" class="overflow-item" @click="emit('zoomOut')">
+      <button type="button" class="ui-menu-item overflow-item" @click="emit('zoomOut')">
         <span class="overflow-item-icon overflow-glyph">-</span>
         Zoom out
       </button>
-      <button type="button" class="overflow-item" @click="emit('resetZoom')">
+      <button type="button" class="ui-menu-item overflow-item" @click="emit('resetZoom')">
         <span class="overflow-item-icon overflow-glyph">100</span>
         Reset zoom
       </button>
+      </UiMenuList>
       <div class="overflow-zoom-state">Editor zoom: {{ zoomPercentLabel }}</div>
-      <div class="overflow-divider"></div>
+      <UiSeparator class="overflow-divider" />
       <div class="overflow-label">Theme</div>
+      <UiMenuList>
       <button
         type="button"
-        class="overflow-item"
-        :class="{ active: themePreference === 'light' }"
+        class="ui-menu-item overflow-item"
+        :data-active="themePreference === 'light'"
         @click="emit('setTheme', 'light')"
       >
         <SunIcon class="overflow-item-icon" />
@@ -123,8 +136,8 @@ defineExpose({
       </button>
       <button
         type="button"
-        class="overflow-item"
-        :class="{ active: themePreference === 'dark' }"
+        class="ui-menu-item overflow-item"
+        :data-active="themePreference === 'dark'"
         @click="emit('setTheme', 'dark')"
       >
         <MoonIcon class="overflow-item-icon" />
@@ -132,14 +145,15 @@ defineExpose({
       </button>
       <button
         type="button"
-        class="overflow-item"
-        :class="{ active: themePreference === 'system' }"
+        class="ui-menu-item overflow-item"
+        :data-active="themePreference === 'system'"
         @click="emit('setTheme', 'system')"
       >
         <ComputerDesktopIcon class="overflow-item-icon" />
         System
       </button>
-    </div>
+      </UiMenuList>
+    </UiMenu>
   </div>
 </template>
 
@@ -154,44 +168,10 @@ defineExpose({
   right: 0;
   z-index: 30;
   min-width: 220px;
-  border: 1px solid var(--menu-border);
-  border-radius: 12px;
-  background: var(--menu-bg);
-  box-shadow: var(--menu-shadow);
-  padding: 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
 }
 
 .overflow-item {
-  border: 0;
-  background: transparent;
-  color: var(--menu-text);
-  border-radius: 8px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  text-align: left;
-  font-size: 12px;
-  font-weight: 500;
-  padding: 7px 10px;
-}
-
-.overflow-item:hover:not(:disabled) {
-  background: var(--menu-hover-bg);
-  color: var(--menu-text-strong);
-}
-
-.overflow-item:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.overflow-item.active {
-  background: var(--menu-active-bg);
-  color: var(--menu-active-text);
-  font-weight: 500;
+  justify-content: flex-start;
 }
 
 .overflow-item-icon {
@@ -221,8 +201,6 @@ defineExpose({
 }
 
 .overflow-divider {
-  height: 1px;
-  background: var(--menu-divider);
   margin: 4px 0;
 }
 

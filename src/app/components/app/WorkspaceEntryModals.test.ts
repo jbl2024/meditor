@@ -1,4 +1,4 @@
-import { createApp, defineComponent, h, ref } from 'vue'
+import { createApp, defineComponent, h, nextTick, ref } from 'vue'
 import { afterEach, describe, expect, it } from 'vitest'
 import WorkspaceEntryModals from './WorkspaceEntryModals.vue'
 
@@ -49,8 +49,9 @@ describe('WorkspaceEntryModals', () => {
     document.body.innerHTML = ''
   })
 
-  it('emits new file modal interactions', () => {
+  it('emits new file modal interactions', async () => {
     const mounted = mountHarness()
+    await nextTick()
     const input = mounted.root.querySelector<HTMLInputElement>('[data-new-file-input="true"]')
 
     if (input) {
@@ -59,7 +60,9 @@ describe('WorkspaceEntryModals', () => {
       input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
     }
 
-    mounted.root.querySelector<HTMLButtonElement>('.confirm-actions button:last-child')?.click()
+    const submit = Array.from(mounted.root.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent?.trim() === 'Create')
+    submit?.click()
 
     expect(mounted.newFilePath.value).toBe('notes/updated')
     expect(mounted.events).toEqual(['file:notes/updated', 'keydown-file', 'submit-file'])

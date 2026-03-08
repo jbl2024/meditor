@@ -11,6 +11,9 @@ import { ref, type CSSProperties } from 'vue'
 import MultiPaneToolbarMenu from '../panes/MultiPaneToolbarMenu.vue'
 import WorkspaceOverflowMenu from './WorkspaceOverflowMenu.vue'
 import type { ThemePreference } from '../../composables/useAppTheme'
+import UiIconButton from '../../../shared/components/ui/UiIconButton.vue'
+import UiMenu from '../../../shared/components/ui/UiMenu.vue'
+import UiMenuList from '../../../shared/components/ui/UiMenuList.vue'
 
 /**
  * Module: TopbarNavigationControls
@@ -47,6 +50,7 @@ const props = defineProps<{
   indexingState: 'idle' | 'indexing' | 'indexed' | 'out_of_sync'
   zoomPercentLabel: string
   themePreference: ThemePreference
+  showDebugTools?: boolean
 }>()
 
 /** Events emitted for every interaction so the parent remains the single state owner. */
@@ -73,6 +77,7 @@ const emit = defineEmits<{
   openCommandPalette: []
   openShortcuts: []
   openSettings: []
+  openDesignSystemDebug: []
   rebuildIndex: []
   closeWorkspace: []
   zoomIn: []
@@ -83,13 +88,15 @@ const emit = defineEmits<{
 
 const backHistoryMenuRef = ref<HTMLElement | null>(null)
 const forwardHistoryMenuRef = ref<HTMLElement | null>(null)
-const backHistoryButtonRef = ref<HTMLElement | null>(null)
-const forwardHistoryButtonRef = ref<HTMLElement | null>(null)
+const backHistoryButtonRef = ref<InstanceType<typeof UiIconButton> | null>(null)
+const forwardHistoryButtonRef = ref<InstanceType<typeof UiIconButton> | null>(null)
 const overflowRef = ref<InstanceType<typeof WorkspaceOverflowMenu> | null>(null)
 
 /** Returns the history button element used as anchor for menu positioning. */
 function getHistoryButtonEl(side: 'back' | 'forward'): HTMLElement | null {
-  return side === 'back' ? backHistoryButtonRef.value : forwardHistoryButtonRef.value
+  return side === 'back'
+    ? backHistoryButtonRef.value?.getRootEl() ?? null
+    : forwardHistoryButtonRef.value?.getRootEl() ?? null
 }
 
 /** Returns true when the DOM target belongs to the requested history menu wrapper. */
@@ -115,10 +122,9 @@ defineExpose({
     <div class="topbar-content">
       <div class="topbar-side topbar-side-left">
         <div class="toolbar-group toolbar-group-window">
-          <button
-            type="button"
-            class="toolbar-icon-btn"
-            :class="{ active: sidebarVisible }"
+          <UiIconButton
+            class-name="toolbar-icon-btn"
+            :active="sidebarVisible"
             :title="sidebarVisible ? 'Hide sidebar' : 'Show sidebar'"
             :aria-label="sidebarVisible ? 'Hide sidebar' : 'Show sidebar'"
             @click="emit('toggleSidebar')"
@@ -127,15 +133,14 @@ defineExpose({
               <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" ry="1.5" />
               <line x1="5.5" y1="2.5" x2="5.5" y2="13.5" />
             </svg>
-          </button>
+          </UiIconButton>
         </div>
 
         <div class="toolbar-group">
           <div ref="backHistoryMenuRef" class="history-nav-wrap">
-            <button
+            <UiIconButton
               ref="backHistoryButtonRef"
-              type="button"
-              class="toolbar-icon-btn"
+              class-name="toolbar-icon-btn"
               :disabled="!canGoBack"
               :title="`Back (${backShortcutLabel})`"
               :aria-label="`Back (${backShortcutLabel})`"
@@ -147,26 +152,27 @@ defineExpose({
               @pointercancel="emit('historyLongPressCancel')"
             >
               <ArrowLeftIcon />
-            </button>
-            <div v-if="historyMenuOpen === 'back'" class="history-menu" :style="historyMenuStyle">
+            </UiIconButton>
+            <UiMenu v-if="historyMenuOpen === 'back'" class-name="history-menu" :style="historyMenuStyle">
+              <UiMenuList>
               <button
                 v-for="target in backItems"
                 :key="target.key"
                 type="button"
-                class="history-menu-item"
+                class="ui-menu-item history-menu-item"
                 @click="emit('historyTargetClick', target.index)"
               >
                 {{ target.label }}
               </button>
+              </UiMenuList>
               <div v-if="!backItems.length" class="history-menu-empty">No back history</div>
-            </div>
+            </UiMenu>
           </div>
 
           <div ref="forwardHistoryMenuRef" class="history-nav-wrap">
-            <button
+            <UiIconButton
               ref="forwardHistoryButtonRef"
-              type="button"
-              class="toolbar-icon-btn"
+              class-name="toolbar-icon-btn"
               :disabled="!canGoForward"
               :title="`Forward (${forwardShortcutLabel})`"
               :aria-label="`Forward (${forwardShortcutLabel})`"
@@ -178,37 +184,38 @@ defineExpose({
               @pointercancel="emit('historyLongPressCancel')"
             >
               <ArrowRightIcon />
-            </button>
-            <div
+            </UiIconButton>
+            <UiMenu
               v-if="historyMenuOpen === 'forward'"
-              class="history-menu history-menu-forward"
+              class-name="history-menu history-menu-forward"
               :style="historyMenuStyle"
             >
+              <UiMenuList>
               <button
                 v-for="target in forwardItems"
                 :key="target.key"
                 type="button"
-                class="history-menu-item"
+                class="ui-menu-item history-menu-item"
                 @click="emit('historyTargetClick', target.index)"
               >
                 {{ target.label }}
               </button>
+              </UiMenuList>
               <div v-if="!forwardItems.length" class="history-menu-empty">No forward history</div>
-            </div>
+            </UiMenu>
           </div>
         </div>
 
         <div class="toolbar-group toolbar-group-nav-tail">
-          <button
-            type="button"
-            class="toolbar-icon-btn"
+          <UiIconButton
+            class-name="toolbar-icon-btn"
             :disabled="!hasWorkspace"
             :title="`Home (${homeShortcutLabel})`"
             :aria-label="`Home (${homeShortcutLabel})`"
             @click="emit('openToday')"
           >
             <HomeIcon />
-          </button>
+          </UiIconButton>
         </div>
       </div>
 
@@ -229,26 +236,24 @@ defineExpose({
 
       <div class="topbar-side topbar-side-right">
         <div class="toolbar-group">
-          <button
-            type="button"
-            class="toolbar-icon-btn"
+          <UiIconButton
+            class-name="toolbar-icon-btn"
             :disabled="!hasWorkspace"
             title="Cosmos view"
             aria-label="Cosmos view"
             @click="emit('openCosmos')"
           >
             <ShareIcon />
-          </button>
-          <button
-            type="button"
-            class="toolbar-icon-btn"
+          </UiIconButton>
+          <UiIconButton
+            class-name="toolbar-icon-btn"
             :disabled="!hasWorkspace"
             title="Second Brain"
             aria-label="Second Brain"
             @click="emit('openSecondBrain')"
           >
             <SparklesIcon />
-          </button>
+          </UiIconButton>
         </div>
 
         <div class="toolbar-group">
@@ -287,10 +292,12 @@ defineExpose({
             :indexing-state="indexingState"
             :zoom-percent-label="zoomPercentLabel"
             :theme-preference="themePreference"
+            :show-debug-tools="showDebugTools"
             @toggle="emit('toggleOverflow')"
             @open-command-palette="emit('openCommandPalette')"
             @open-shortcuts="emit('openShortcuts')"
             @open-settings="emit('openSettings')"
+            @open-design-system-debug="emit('openDesignSystemDebug')"
             @rebuild-index="emit('rebuildIndex')"
             @close-workspace="emit('closeWorkspace')"
             @zoom-in="emit('zoomIn')"

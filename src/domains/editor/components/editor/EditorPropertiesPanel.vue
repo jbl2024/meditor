@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { ChevronRightIcon } from '@heroicons/vue/24/outline'
 import { CircleStackIcon } from '@heroicons/vue/24/solid'
+import UiButton from '../../../../shared/components/ui/UiButton.vue'
+import UiCheckbox from '../../../../shared/components/ui/UiCheckbox.vue'
+import UiInput from '../../../../shared/components/ui/UiInput.vue'
+import UiSelect from '../../../../shared/components/ui/UiSelect.vue'
+import UiTextarea from '../../../../shared/components/ui/UiTextarea.vue'
 import type { FrontmatterField } from '../../lib/frontmatter'
 import type { PropertyType } from '../../lib/propertyTypes'
 import PropertyAddDropdown from '../../../explorer/components/PropertyAddDropdown.vue'
@@ -38,18 +43,6 @@ const emit = defineEmits<{
   'add-property': [key: string]
   'raw-yaml-input': [value: string]
 }>()
-
-function inputValue(event: Event): string {
-  return (event.target as HTMLInputElement | HTMLTextAreaElement | null)?.value ?? ''
-}
-
-function selectValue(event: Event): string {
-  return (event.target as HTMLSelectElement | null)?.value ?? ''
-}
-
-function checkboxValue(event: Event): boolean {
-  return (event.target as HTMLInputElement | null)?.checked ?? false
-}
 </script>
 
 <template>
@@ -80,23 +73,27 @@ function checkboxValue(event: Event): boolean {
         />
       </button>
       <div v-if="props.expanded" class="flex items-center gap-1.5">
-        <button
+        <UiButton
           type="button"
-          class="properties-mode-btn rounded border px-1.5 py-0.5 text-[10px]"
-          :class="props.mode === 'structured' ? 'properties-mode-btn--active' : ''"
+          size="sm"
+          variant="ghost"
+          class-name="properties-mode-btn text-[10px]"
+          :active="props.mode === 'structured'"
           :disabled="!props.canUseStructuredProperties"
           @click="emit('set-mode', 'structured')"
         >
           Structured
-        </button>
-        <button
+        </UiButton>
+        <UiButton
           type="button"
-          class="properties-mode-btn rounded border px-1.5 py-0.5 text-[10px]"
-          :class="props.mode === 'raw' ? 'properties-mode-btn--active' : ''"
+          size="sm"
+          variant="ghost"
+          class-name="properties-mode-btn text-[10px]"
+          :active="props.mode === 'raw'"
           @click="emit('set-mode', 'raw')"
         >
           Raw YAML
-        </button>
+        </UiButton>
       </div>
     </div>
 
@@ -108,17 +105,18 @@ function checkboxValue(event: Event): boolean {
             :key="index"
             class="property-row grid grid-cols-[1fr_auto_2fr_auto] items-center gap-2"
           >
-            <input
-              :value="field.key"
-              class="properties-field rounded border px-2 py-1 text-xs"
+            <UiInput
+              :model-value="field.key"
+              size="sm"
+              class-name="properties-field text-xs"
               placeholder="key"
-              @input="emit('property-key-input', { index, value: inputValue($event) })"
+              @update:model-value="emit('property-key-input', { index, value: $event })"
             />
-            <select
-              :value="props.effectiveTypeForField(field)"
-              class="properties-field properties-field--muted rounded border px-2 py-1 text-xs"
+            <UiSelect
+              :model-value="props.effectiveTypeForField(field)"
+              class-name="properties-field properties-field--muted text-xs"
               :disabled="props.isPropertyTypeLocked(field.key)"
-              @change="emit('property-type-change', { index, value: selectValue($event) })"
+              @update:model-value="emit('property-type-change', { index, value: $event })"
             >
               <option value="text">Text</option>
               <option value="list">List</option>
@@ -126,21 +124,23 @@ function checkboxValue(event: Event): boolean {
               <option value="checkbox">Checkbox</option>
               <option value="date">Date</option>
               <option value="tags">Tags</option>
-            </select>
+            </UiSelect>
             <div class="min-w-0">
-              <input
+              <UiInput
                 v-if="props.effectiveTypeForField(field) === 'text' || props.effectiveTypeForField(field) === 'date'"
-                :value="String(field.value ?? '')"
-                class="properties-field w-full rounded border px-2 py-1 text-xs"
+                :model-value="String(field.value ?? '')"
+                size="sm"
+                class-name="properties-field w-full text-xs"
                 :placeholder="props.effectiveTypeForField(field) === 'date' ? 'YYYY-MM-DD' : 'value'"
-                @input="emit('property-value-input', { index, value: inputValue($event) })"
+                @update:model-value="emit('property-value-input', { index, value: $event })"
               />
-              <input
+              <UiInput
                 v-else-if="props.effectiveTypeForField(field) === 'number'"
-                :value="String(field.value ?? 0)"
-                class="properties-field w-full rounded border px-2 py-1 text-xs"
+                :model-value="String(field.value ?? 0)"
+                size="sm"
+                class-name="properties-field w-full text-xs"
                 type="number"
-                @input="emit('property-value-input', { index, value: inputValue($event) })"
+                @update:model-value="emit('property-value-input', { index, value: $event })"
               />
               <PropertyTokenInput
                 v-else-if="props.effectiveTypeForField(field) === 'list' || props.effectiveTypeForField(field) === 'tags'"
@@ -148,22 +148,24 @@ function checkboxValue(event: Event): boolean {
                 :placeholder="props.effectiveTypeForField(field) === 'tags' ? 'add tag' : 'add value'"
                 @update:modelValue="emit('property-tokens-change', { index, tokens: $event })"
               />
-              <label v-else class="properties-checkbox inline-flex items-center gap-2 text-xs">
-                <input
-                  type="checkbox"
-                  :checked="Boolean(field.value)"
-                  @change="emit('property-checkbox-input', { index, checked: checkboxValue($event) })"
-                />
+              <UiCheckbox
+                v-else
+                :model-value="Boolean(field.value)"
+                class-name="properties-checkbox text-xs"
+                @update:model-value="emit('property-checkbox-input', { index, checked: $event })"
+              >
                 true / false
-              </label>
+              </UiCheckbox>
             </div>
-            <button
+            <UiButton
               type="button"
-              class="properties-remove-btn rounded border px-2 py-1 text-xs"
+              size="sm"
+              variant="ghost"
+              class-name="properties-remove-btn text-xs"
               @click="emit('remove-property', index)"
             >
               Remove
-            </button>
+            </UiButton>
           </div>
 
           <div class="flex items-center gap-2">
@@ -176,12 +178,12 @@ function checkboxValue(event: Event): boolean {
         </div>
 
         <div v-else>
-          <textarea
-            class="properties-field properties-textarea font-mono min-h-28 w-full rounded border p-2 text-xs"
-            :value="props.activeRawYaml"
+          <UiTextarea
+            class-name="properties-field properties-textarea font-mono text-xs"
+            :model-value="props.activeRawYaml"
             placeholder="title: My note"
-            @input="emit('raw-yaml-input', inputValue($event))"
-          ></textarea>
+            @update:model-value="emit('raw-yaml-input', $event)"
+          />
         </div>
 
         <div v-if="props.activeParseErrors.length" class="properties-errors mt-2 text-xs">
@@ -198,7 +200,7 @@ function checkboxValue(event: Event): boolean {
 .properties-panel {
   margin: 0 0 0.38rem;
   padding: 0;
-  background: transparent;
+  background: var(--properties-panel-bg);
   transition: opacity 140ms ease;
 }
 
@@ -257,22 +259,11 @@ function checkboxValue(event: Event): boolean {
   opacity: 0.82;
 }
 
-.properties-mode-btn {
-  border-color: var(--properties-mode-border);
-  color: var(--properties-mode-text);
-  line-height: 1.1;
-  background: transparent;
-}
-
-.properties-mode-btn--active {
-  background: var(--properties-mode-active-bg);
-  color: var(--properties-mode-active-text);
-}
-
 .properties-field {
-  border-color: var(--properties-field-border);
-  background: var(--properties-field-bg);
-  color: var(--properties-field-text);
+  --input-border: var(--properties-field-border);
+  --input-bg: var(--properties-field-bg);
+  --input-text: var(--properties-field-text);
+  --input-placeholder: var(--properties-placeholder);
 }
 
 .properties-field--muted,
@@ -280,20 +271,19 @@ function checkboxValue(event: Event): boolean {
   color: var(--properties-field-muted);
 }
 
-.properties-field::placeholder,
-.properties-textarea::placeholder {
-  color: var(--properties-placeholder);
+.properties-mode-btn {
+  min-height: 1.65rem;
+  line-height: 1.1;
+  --button-ghost-text: var(--properties-mode-text);
+  --button-active-bg: var(--properties-mode-active-bg);
+  --button-active-text: var(--properties-mode-active-text);
+  --button-active-border: var(--properties-mode-border);
 }
 
 .properties-remove-btn {
-  border-color: var(--properties-field-border);
-  background: var(--properties-field-bg);
-  color: var(--properties-field-muted);
-}
-
-.properties-remove-btn:hover {
-  background: var(--properties-remove-hover-bg);
-  color: var(--properties-remove-hover-text);
+  --button-ghost-text: var(--properties-field-muted);
+  --button-ghost-hover-text: var(--properties-remove-hover-text);
+  --button-active-bg: var(--properties-remove-hover-bg);
 }
 
 .properties-errors {

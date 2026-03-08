@@ -58,7 +58,7 @@ const emit = defineEmits<{
         <div v-if="!sections.length" class="placeholder">No matching shortcuts</div>
       </div>
       <div class="confirm-actions">
-        <UiButton size="sm" @click="emit('close')">Close</UiButton>
+        <UiButton size="sm" variant="ghost" @click="emit('close')">Close</UiButton>
       </div>
     </div>
   </div>

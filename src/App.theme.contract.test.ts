@@ -22,12 +22,12 @@ describe('App theme contracts', () => {
     expect(rightPaneSource).toContain('var(--text-main)')
     expect(rightPaneSource).not.toContain('.ide-root.dark .pane-card')
 
-    expect(overflowMenuSource).toContain('var(--menu-bg)')
-    expect(overflowMenuSource).toContain('var(--menu-active-text)')
+    expect(overflowMenuSource).toContain('UiMenu')
+    expect(overflowMenuSource).toContain("data-active")
     expect(overflowMenuSource).not.toContain(':global(.ide-root.dark)')
 
-    expect(multiPaneMenuSource).toContain('var(--menu-bg)')
-    expect(multiPaneMenuSource).toContain('var(--menu-divider)')
+    expect(multiPaneMenuSource).toContain('UiMenu')
+    expect(multiPaneMenuSource).toContain('UiSeparator')
     expect(multiPaneMenuSource).not.toContain(':global(.ide-root.dark)')
   })
 })

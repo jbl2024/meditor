@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { PlusIcon, TrashIcon } from '@heroicons/vue/24/outline'
 import type { SecondBrainSessionSummary } from '../../../shared/api/apiTypes'
+import UiButton from '../../../shared/components/ui/UiButton.vue'
 
 const props = defineProps<{
   sessions: SecondBrainSessionSummary[]
@@ -86,8 +87,8 @@ function confirmDelete() {
         <h3 id="delete-session-title" class="confirm-title">Delete session?</h3>
         <p class="confirm-text">This will permanently remove session messages and context.</p>
         <div class="confirm-actions">
-          <button type="button" class="sb-btn" @click="closeDeleteConfirm">Cancel</button>
-          <button type="button" class="sb-btn danger" @click="confirmDelete">Delete</button>
+          <UiButton size="sm" variant="ghost" @click="closeDeleteConfirm">Cancel</UiButton>
+          <UiButton size="sm" variant="danger" @click="confirmDelete">Delete</UiButton>
         </div>
       </div>
     </div>

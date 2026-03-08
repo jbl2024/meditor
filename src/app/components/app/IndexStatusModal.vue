@@ -176,7 +176,7 @@ const emit = defineEmits<{
         >
           {{ actionLabel }}
         </UiButton>
-        <UiButton size="sm" @click="emit('close')">Close</UiButton>
+        <UiButton size="sm" variant="ghost" @click="emit('close')">Close</UiButton>
       </div>
     </div>
   </div>

@@ -12,6 +12,8 @@ import {
   ScissorsIcon,
   TrashIcon
 } from '@heroicons/vue/24/outline'
+import UiMenu from '../../../shared/components/ui/UiMenu.vue'
+import UiMenuList from '../../../shared/components/ui/UiMenuList.vue'
 
 export type MenuAction =
   | 'open'
@@ -39,7 +41,7 @@ const emit = defineEmits<{
   action: [action: MenuAction]
 }>()
 
-const menuRef = ref<HTMLElement | null>(null)
+const menuRef = ref<InstanceType<typeof UiMenu> | null>(null)
 const clampedX = ref(0)
 const clampedY = ref(0)
 
@@ -72,8 +74,9 @@ function onAction(id: MenuAction) {
 
 function recomputePosition() {
   const margin = 8
-  const width = menuRef.value?.offsetWidth ?? 230
-  const height = menuRef.value?.offsetHeight ?? 320
+  const menuEl = menuRef.value?.getRootEl() ?? null
+  const width = menuEl?.offsetWidth ?? 230
+  const height = menuEl?.offsetHeight ?? 320
 
   let x = props.x
   let y = props.y
@@ -109,41 +112,31 @@ onBeforeUnmount(() => {
 
 <template>
   <Teleport to="body">
-    <div
+    <UiMenu
       ref="menuRef"
-      class="explorer-context-menu fixed z-[120] w-60 max-w-[calc(100vw-16px)] rounded-xl border p-1"
+      class-name="explorer-context-menu fixed z-[120] w-60 max-w-[calc(100vw-16px)]"
       :style="{ left: `${clampedX}px`, top: `${clampedY}px` }"
       @click.stop
     >
+      <UiMenuList>
       <button
         v-for="item in items"
         :key="item.id"
         type="button"
-        class="explorer-context-menu-item flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs"
-        :class="isDisabled(item.id) ? 'cursor-not-allowed opacity-45' : ''"
+        class="ui-menu-item explorer-context-menu-item"
         :disabled="isDisabled(item.id)"
         @click="onAction(item.id)"
       >
         <component :is="item.icon" class="h-4 w-4 shrink-0" />
         {{ item.label }}
       </button>
-    </div>
+      </UiMenuList>
+    </UiMenu>
   </Teleport>
 </template>
 
 <style scoped>
-.explorer-context-menu {
-  border-color: var(--menu-border);
-  background: var(--menu-bg);
-  box-shadow: var(--menu-shadow);
-}
-
 .explorer-context-menu-item {
-  color: var(--menu-text);
-}
-
-.explorer-context-menu-item:hover:not(:disabled) {
-  background: var(--menu-hover-bg);
-  color: var(--menu-text-strong);
+  justify-content: flex-start;
 }
 </style>

@@ -1,17 +1,15 @@
 <script setup lang="ts">
-export type UiInputSize = 'sm' | 'md' | 'lg'
-
 const props = withDefaults(defineProps<{
   modelValue: string
   placeholder?: string
-  size?: UiInputSize
   invalid?: boolean
   className?: string
+  rows?: number
 }>(), {
   placeholder: '',
-  size: 'md',
   invalid: false,
-  className: ''
+  className: '',
+  rows: 4
 })
 
 const emit = defineEmits<{
@@ -20,42 +18,38 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <input
+  <textarea
     :value="props.modelValue"
     :placeholder="placeholder"
+    :rows="rows"
     :aria-invalid="invalid ? 'true' : undefined"
     :class="[
-      'ui-input w-full border px-3 outline-none transition',
-      {
-        'h-8 text-xs': size === 'sm',
-        'h-10 text-sm': size === 'md',
-        'h-11 text-sm': size === 'lg',
-        'ui-input--invalid': invalid
-      },
+      'ui-textarea min-h-28 w-full border px-3 py-2 text-sm outline-none transition',
+      { 'ui-textarea--invalid': invalid },
       className
     ]"
-    @input="emit('update:modelValue', ($event.target as HTMLInputElement).value)"
-  />
+    @input="emit('update:modelValue', ($event.target as HTMLTextAreaElement).value)"
+  ></textarea>
 </template>
 
 <style scoped>
-.ui-input {
+.ui-textarea {
   border-color: var(--input-border);
   background: var(--input-bg);
   color: var(--input-text);
   border-radius: var(--radius-md);
 }
 
-.ui-input::placeholder {
+.ui-textarea::placeholder {
   color: var(--input-placeholder);
 }
 
-.ui-input:focus {
+.ui-textarea:focus {
   border-color: var(--input-focus-border);
   box-shadow: 0 0 0 2px var(--input-focus-ring);
 }
 
-.ui-input--invalid {
+.ui-textarea--invalid {
   border-color: var(--field-error-border);
 }
 </style>
