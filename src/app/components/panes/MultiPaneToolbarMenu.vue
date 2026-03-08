@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Squares2X2Icon } from '@heroicons/vue/24/outline'
 import { computed, ref } from 'vue'
 import UiIconButton from '../../../shared/components/ui/UiIconButton.vue'
 import UiMenu from '../../../shared/components/ui/UiMenu.vue'
@@ -47,11 +48,7 @@ function run(action: () => void) {
       :aria-expanded="open"
       @click="toggle"
     >
-      <svg viewBox="0 0 16 16" aria-hidden="true">
-        <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" ry="1.5" />
-        <line x1="8" y1="2.5" x2="8" y2="13.5" />
-        <line x1="1.5" y1="8" x2="14.5" y2="8" />
-      </svg>
+      <Squares2X2Icon />
     </UiIconButton>
 
     <UiMenu v-if="open" class-name="multi-pane-dropdown">

@@ -200,7 +200,7 @@ const emit = defineEmits<{
 .properties-panel {
   margin: 0 0 0.38rem;
   padding: 0;
-  background: var(--properties-panel-bg);
+  background: transparent;
   transition: opacity 140ms ease;
 }
 

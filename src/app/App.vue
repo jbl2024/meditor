@@ -3724,11 +3724,26 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   padding: 0;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease,
+    box-shadow 140ms ease,
+    transform 90ms ease;
 }
 
-.toolbar-icon-btn:hover {
-  background: var(--menu-hover-bg);
+.toolbar-icon-btn:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--border-strong) 82%, transparent);
+  background: color-mix(in srgb, var(--surface-bg) 62%, var(--accent-soft));
   color: var(--menu-text-strong);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 50%, transparent);
+}
+
+.toolbar-icon-btn:active:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--border-strong));
+  background: color-mix(in srgb, var(--accent-soft) 76%, var(--surface-bg));
+  color: var(--text-main);
+  transform: translateY(1px);
 }
 
 .toolbar-icon-btn:disabled {
@@ -3741,6 +3756,7 @@ onBeforeUnmount(() => {
   border-color: var(--button-active-border);
   background: var(--button-active-bg);
   color: var(--button-active-text);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 55%, transparent);
 }
 
 .toolbar-icon-btn svg {

@@ -21,7 +21,7 @@ describe('Explorer and properties theme contracts', () => {
   })
 
   it('routes the editor properties panel through semantic tokens', () => {
-    expect(propertiesSource).toContain('var(--properties-panel-bg)')
+    expect(propertiesSource).toContain('background: transparent')
     expect(propertiesSource).toContain('var(--properties-field-border)')
     expect(propertiesSource).toContain('var(--focus-ring)')
     expect(propertiesSource).toContain('var(--danger)')
