@@ -20,34 +20,37 @@ import { PULSE_ACTIONS_BY_SOURCE } from '../../pulse/lib/pulse'
 import type { PulseActionId } from '../../../shared/api/apiTypes'
 import type { DocumentSession } from './useDocumentEditorSessions'
 
+/** Exposes only the host refs and getters chrome needs to render around the editor. */
 export type EditorChromeRuntimeHostPort = {
   holder: Ref<HTMLDivElement | null>
   contentShell: Ref<HTMLDivElement | null>
   pulsePanelWrap: Ref<HTMLDivElement | null>
-  currentPath: Ref<string>
-  activeEditor: Ref<Editor | null>
+  getCurrentPath: () => string
+  getEditor: () => Editor | null
   getSession: (path: string) => DocumentSession | null
 }
 
+/** Keeps chrome-facing interaction callbacks grouped by how the chrome consumes them. */
 export type EditorChromeRuntimeInteractionPort = {
-  closeSlashMenu: () => void
-  dismissSlashMenu: () => void
-  closeWikilinkMenu: () => void
-  openSlashAtSelection: () => void
-  currentTextSelectionContext: () => { text: string; nodeType: string; from: number; to: number } | null
-  insertBlockFromDescriptor: (
-    type: string,
-    data: Record<string, unknown>,
-    options?: { replaceRange?: { from: number; to: number } | null }
-  ) => boolean
-  onEditorKeydown: (event: KeyboardEvent) => void
-  onEditorKeyup: () => void
-  onEditorContextMenu: (event: MouseEvent) => void
-  onEditorPaste: (event: ClipboardEvent) => void
-  markEditorInteraction: () => void
-  resetWikilinkDataCache: () => void
+  menus: {
+    closeSlashMenu: () => void
+    dismissSlashMenu: () => void
+    closeWikilinkMenu: () => void
+    openSlashAtSelection: () => void
+  }
+  editorEvents: {
+    onEditorKeydown: (event: KeyboardEvent) => void
+    onEditorKeyup: () => void
+    onEditorContextMenu: (event: MouseEvent) => void
+    onEditorPaste: (event: ClipboardEvent) => void
+    markEditorInteraction: () => void
+  }
+  caches: {
+    resetWikilinkDataCache: () => void
+  }
 }
 
+/** Emits shell-facing chrome actions without leaking internal UI wiring. */
 export type EditorChromeRuntimeEmitPort = {
   emitPulseOpenSecondBrain: (payload: { contextPaths: string[]; prompt?: string }) => void
 }
@@ -56,9 +59,9 @@ export type EditorChromeRuntimeEmitPort = {
  * Owns toolbars, overlays, pulse UI, and holder/document event wiring around the editor.
  */
 export type UseEditorChromeRuntimeOptions = {
-  hostPort: EditorChromeRuntimeHostPort
-  interactionPort: EditorChromeRuntimeInteractionPort
-  emitPort: EditorChromeRuntimeEmitPort
+  chromeHostPort: EditorChromeRuntimeHostPort
+  chromeInteractionPort: EditorChromeRuntimeInteractionPort
+  chromeOutputPort: EditorChromeRuntimeEmitPort
 }
 
 export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
@@ -131,18 +134,18 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     dragging: false,
     activeTarget: null
   })
-  const renderedEditor = computed(() => options.hostPort.activeEditor.value)
+  const renderedEditor = computed(() => options.chromeHostPort.getEditor())
   const computedDragLock = computed(() => computeHandleLock(dragHandleUiState.value))
   const debugTargetPos = computed(() => String(dragHandleUiState.value.activeTarget?.pos ?? ''))
 
   const inlineFormatToolbar = useInlineFormatToolbar({
-    holder: options.hostPort.holder,
-    getEditor: () => options.hostPort.activeEditor.value,
+    holder: options.chromeHostPort.holder,
+    getEditor: () => options.chromeHostPort.getEditor(),
     sanitizeHref: sanitizeExternalHref
   })
   const findToolbar = useEditorFindToolbar({
-    holder: options.hostPort.holder,
-    getEditor: () => options.hostPort.activeEditor.value
+    holder: options.chromeHostPort.holder,
+    getEditor: () => options.chromeHostPort.getEditor()
   })
   const blockMenuControls = useBlockMenuControls({
     getEditor: () => renderedEditor.value,
@@ -152,7 +155,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     stableTarget: lastStableBlockMenuTarget
   })
   const blockHandleControls = useEditorBlockHandleControls({
-    getEditor: () => options.hostPort.activeEditor.value,
+    getEditor: () => options.chromeHostPort.getEditor(),
     blockMenuOpen: blockMenuControls.blockMenuOpen,
     blockMenuIndex: blockMenuControls.blockMenuIndex,
     blockMenuTarget: blockMenuControls.blockMenuTarget,
@@ -163,11 +166,11 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
       blockMenuPos.value = payload
     },
     setDragHandleLockMeta: (locked) => {
-      options.hostPort.activeEditor.value?.commands.setMeta('lockDragHandle', locked)
+      options.chromeHostPort.getEditor()?.commands.setMeta('lockDragHandle', locked)
     },
-    closeSlashMenu: () => options.interactionPort.closeSlashMenu(),
-    closeWikilinkMenu: () => options.interactionPort.closeWikilinkMenu(),
-    openSlashAtSelection: () => options.interactionPort.openSlashAtSelection(),
+    closeSlashMenu: () => options.chromeInteractionPort.menus.closeSlashMenu(),
+    closeWikilinkMenu: () => options.chromeInteractionPort.menus.closeWikilinkMenu(),
+    openSlashAtSelection: () => options.chromeInteractionPort.menus.openSlashAtSelection(),
     copyTextToClipboard: (text) => {
       if (!navigator.clipboard?.writeText) return
       void navigator.clipboard.writeText(text)
@@ -185,7 +188,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     stickyMs: TABLE_EDGE_STICKY_MS
   })
   const tableGeometry = useEditorTableGeometry({
-    holder: options.hostPort.holder,
+    holder: options.chromeHostPort.holder,
     state: {
       tableMenuBtnLeft,
       tableMenuBtnTop,
@@ -201,8 +204,8 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     }
   })
   const tableInteractions = useEditorTableInteractions({
-    getEditor: () => options.hostPort.activeEditor.value,
-    holder: options.hostPort.holder,
+    getEditor: () => options.chromeHostPort.getEditor(),
+    holder: options.chromeHostPort.holder,
     floatingMenuEl: tableToolbarFloatingEl,
     visibility: {
       tableToolbarTriggerVisible: tableControls.tableToolbarTriggerVisible,
@@ -216,8 +219,8 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     updateTableToolbarPosition: (cellEl, tableEl) => tableGeometry.updateTableToolbarPosition(cellEl, tableEl)
   })
   const layoutMetrics = useEditorLayoutMetrics({
-    holder: options.hostPort.holder,
-    contentShell: options.hostPort.contentShell,
+    holder: options.chromeHostPort.holder,
+    contentShell: options.chromeHostPort.contentShell,
     onScrollSync: () => tableInteractions.updateTableToolbar()
   })
   const {
@@ -232,7 +235,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   const dragHandleLockXMiddleware: Middleware = {
     name: 'tomosonaLockXToContent',
     fn(state: MiddlewareState) {
-      const shellEl = options.hostPort.contentShell.value
+      const shellEl = options.chromeHostPort.contentShell.value
       if (!shellEl) return {}
       const shellRect = shellEl.getBoundingClientRect()
       const shellStyle = window.getComputedStyle(shellEl)
@@ -262,13 +265,13 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     if (!pulseOpen.value) {
       return { position: 'fixed', right: '24px', bottom: '24px', width: `${panelWidth}px` }
     }
-    if (pulseSourceKind.value !== 'editor_selection' || !options.hostPort.holder.value) {
+    if (pulseSourceKind.value !== 'editor_selection' || !options.chromeHostPort.holder.value) {
       return { position: 'fixed', right: '24px', bottom: '24px', width: `${panelWidth}px` }
     }
 
     void pulseAnchorNonce.value
-    const holderRect = options.hostPort.holder.value.getBoundingClientRect()
-    const anchorTop = holderRect.top + inlineFormatToolbar.formatToolbarTop.value - options.hostPort.holder.value.scrollTop
+    const holderRect = options.chromeHostPort.holder.value.getBoundingClientRect()
+    const anchorTop = holderRect.top + inlineFormatToolbar.formatToolbarTop.value - options.chromeHostPort.holder.value.scrollTop
     const rightDockLeft = viewportWidth - panelWidth - 24
     const preferredBelow = anchorTop + 54
     const preferredAbove = anchorTop - panelHeight - 20
@@ -285,7 +288,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   })
 
   function updatePulsePanelMetrics() {
-    const nextHeight = options.hostPort.pulsePanelWrap.value?.offsetHeight ?? 0
+    const nextHeight = options.chromeHostPort.pulsePanelWrap.value?.offsetHeight ?? 0
     if (nextHeight > 0) {
       pulsePanelMeasuredHeight.value = nextHeight
     }
@@ -294,7 +297,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   watch(
     [
       pulseOpen,
-      options.hostPort.pulsePanelWrap,
+      options.chromeHostPort.pulsePanelWrap,
       () => pulse.previewMarkdown.value,
       () => pulse.running.value,
       () => pulse.error.value
@@ -331,7 +334,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   })
 
   function focusEditor() {
-    options.hostPort.activeEditor.value?.commands.focus()
+    options.chromeHostPort.getEditor()?.commands.focus()
   }
 
   function updateFormattingToolbar() {
@@ -375,7 +378,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   }
 
   function openPulseForSelection() {
-    const editor = options.hostPort.activeEditor.value
+    const editor = options.chromeHostPort.getEditor()
     if (!editor) return
     const { from, to, empty } = editor.state.selection
     if (empty || from === to) return
@@ -393,15 +396,15 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
 
   async function runPulseFromEditor() {
     if (pulse.running.value) return
-    if (!options.hostPort.currentPath.value && pulseSourceKind.value !== 'editor_selection') return
+    if (!options.chromeHostPort.getCurrentPath() && pulseSourceKind.value !== 'editor_selection') return
     const sourceText = pulseSourceKind.value === 'editor_selection'
       ? pulseSourceText.value
-      : (pulseSourceText.value || (options.hostPort.activeEditor.value?.getText().trim() ?? ''))
+      : (pulseSourceText.value || (options.chromeHostPort.getEditor()?.getText().trim() ?? ''))
     await pulse.run({
       source_kind: pulseSourceKind.value,
       action_id: pulseActionId.value,
       instructions: pulseInstruction.value.trim() || undefined,
-      context_paths: pulseSourceKind.value === 'editor_selection' ? [] : [options.hostPort.currentPath.value],
+      context_paths: pulseSourceKind.value === 'editor_selection' ? [] : [options.chromeHostPort.getCurrentPath()],
       source_text: sourceText || undefined,
       selection_label: pulseSourceKind.value === 'editor_selection' ? 'Editor selection' : 'Current note'
     })
@@ -419,20 +422,20 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     }
     const basePrompt = pulsePrompts[pulseActionId.value] ?? 'Transform the provided material into a useful written output.'
     const guidance = pulseInstruction.value.trim()
-    const sourceText = (pulseSourceText.value || options.hostPort.activeEditor.value?.getText() || '').trim()
+    const sourceText = (pulseSourceText.value || options.chromeHostPort.getEditor()?.getText() || '').trim()
     const quotedSource = sourceText ? `\n\nSource material:\n"""\n${sourceText}\n"""` : ''
     return guidance ? `${basePrompt}\n\nAdditional guidance: ${guidance}${quotedSource}` : `${basePrompt}${quotedSource}`
   }
 
   function replaceSelectionWithPulseOutput() {
-    const editor = options.hostPort.activeEditor.value
+    const editor = options.chromeHostPort.getEditor()
     if (!editor || !pulse.previewMarkdown.value.trim() || !pulseSelectionRange.value) return
     editor.chain().focus().setTextSelection(pulseSelectionRange.value).insertContent(pulse.previewMarkdown.value).run()
     closePulsePanel()
   }
 
   function insertPulseBelow() {
-    const editor = options.hostPort.activeEditor.value
+    const editor = options.chromeHostPort.getEditor()
     if (!editor || !pulse.previewMarkdown.value.trim()) return
     if (pulseSelectionRange.value) {
       editor
@@ -448,17 +451,17 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   }
 
   function sendPulseContextToSecondBrain() {
-    if (!options.hostPort.currentPath.value && pulseSourceKind.value !== 'editor_selection') return
-    options.emitPort.emitPulseOpenSecondBrain({
-      contextPaths: pulseSourceKind.value === 'editor_selection' ? [] : [options.hostPort.currentPath.value],
+    if (!options.chromeHostPort.getCurrentPath() && pulseSourceKind.value !== 'editor_selection') return
+    options.chromeOutputPort.emitPulseOpenSecondBrain({
+      contextPaths: pulseSourceKind.value === 'editor_selection' ? [] : [options.chromeHostPort.getCurrentPath()],
       prompt: buildSecondBrainPulsePrompt()
     })
     closePulsePanel()
   }
 
   function resetTransientUiState() {
-    options.interactionPort.dismissSlashMenu()
-    options.interactionPort.closeWikilinkMenu()
+    options.chromeInteractionPort.menus.dismissSlashMenu()
+    options.chromeInteractionPort.menus.closeWikilinkMenu()
     blockHandleControls.closeBlockMenu()
     blockMenuControls.blockMenuTarget.value = null
     lastStableBlockMenuTarget.value = null
@@ -466,7 +469,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     inlineFormatToolbar.dismissToolbar()
     findToolbar.closeToolbar()
     tableInteractions.hideTableToolbarAnchor()
-    options.interactionPort.resetWikilinkDataCache()
+    options.chromeInteractionPort.caches.resetWikilinkDataCache()
   }
 
   function onDocumentMouseDown(event: MouseEvent) {
@@ -487,7 +490,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     }
 
     if (pulseOpen.value) {
-      if (options.hostPort.pulsePanelWrap.value?.contains(target)) return
+      if (options.chromeHostPort.pulsePanelWrap.value?.contains(target)) return
       if (target instanceof Element && target.closest('.inline-format-toolbar')) return
       if (target instanceof Element && target.closest('.editor-find-toolbar')) return
       if (target instanceof Element && target.closest('.ui-filterable-dropdown-menu')) return
@@ -508,33 +511,33 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   }
 
   function onHolderPointerDownMarkInteraction() {
-    options.interactionPort.markEditorInteraction()
+    options.chromeInteractionPort.editorEvents.markEditorInteraction()
   }
 
   function onHolderKeydown(event: KeyboardEvent) {
-    options.interactionPort.markEditorInteraction()
+    options.chromeInteractionPort.editorEvents.markEditorInteraction()
     if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === 'f') {
       event.preventDefault()
       event.stopPropagation()
       findToolbar.openToolbar()
       return
     }
-    options.interactionPort.onEditorKeydown(event)
+    options.chromeInteractionPort.editorEvents.onEditorKeydown(event)
   }
 
   function onHolderContextMenu(event: MouseEvent) {
-    options.interactionPort.markEditorInteraction()
-    options.interactionPort.onEditorContextMenu(event)
+    options.chromeInteractionPort.editorEvents.markEditorInteraction()
+    options.chromeInteractionPort.editorEvents.onEditorContextMenu(event)
   }
 
   function onHolderPaste(event: ClipboardEvent) {
-    options.interactionPort.markEditorInteraction()
-    options.interactionPort.onEditorPaste(event)
+    options.chromeInteractionPort.editorEvents.markEditorInteraction()
+    options.chromeInteractionPort.editorEvents.onEditorPaste(event)
   }
 
   function onHolderCopy(event: ClipboardEvent) {
-    options.interactionPort.markEditorInteraction()
-    const root = options.hostPort.holder.value
+    options.chromeInteractionPort.editorEvents.markEditorInteraction()
+    const root = options.chromeHostPort.holder.value
     if (!root || !event.clipboardData) return
     const payload = extractSelectionClipboardPayload(root)
     if (!payload) return
@@ -546,7 +549,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   }
 
   async function onInlineToolbarCopyAs(format: CopyAsFormat) {
-    const root = options.hostPort.holder.value
+    const root = options.chromeHostPort.holder.value
     if (!root) return
     const payload = extractSelectionClipboardPayload(root)
     if (!payload) return
@@ -559,13 +562,13 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
 
   async function onMountInit() {
     initEditorZoomFromStorage()
-    options.hostPort.holder.value?.addEventListener('pointerdown', onHolderPointerDownMarkInteraction, true)
-    options.hostPort.holder.value?.addEventListener('keydown', onHolderKeydown, true)
-    options.hostPort.holder.value?.addEventListener('keyup', options.interactionPort.onEditorKeyup, true)
-    options.hostPort.holder.value?.addEventListener('contextmenu', onHolderContextMenu, true)
-    options.hostPort.holder.value?.addEventListener('paste', onHolderPaste, true)
-    options.hostPort.holder.value?.addEventListener('copy', onHolderCopy, true)
-    options.hostPort.holder.value?.addEventListener('scroll', layoutMetrics.onHolderScroll, true)
+    options.chromeHostPort.holder.value?.addEventListener('pointerdown', onHolderPointerDownMarkInteraction, true)
+    options.chromeHostPort.holder.value?.addEventListener('keydown', onHolderKeydown, true)
+    options.chromeHostPort.holder.value?.addEventListener('keyup', options.chromeInteractionPort.editorEvents.onEditorKeyup, true)
+    options.chromeHostPort.holder.value?.addEventListener('contextmenu', onHolderContextMenu, true)
+    options.chromeHostPort.holder.value?.addEventListener('paste', onHolderPaste, true)
+    options.chromeHostPort.holder.value?.addEventListener('copy', onHolderCopy, true)
+    options.chromeHostPort.holder.value?.addEventListener('scroll', layoutMetrics.onHolderScroll, true)
     window.addEventListener('resize', layoutMetrics.updateGutterHitboxStyle)
     document.addEventListener('keydown', onDocumentKeydown, true)
     await nextTick()
@@ -579,13 +582,13 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     if (mermaidReplaceDialog.value.resolve) {
       mermaidReplaceDialog.value.resolve(false)
     }
-    options.hostPort.holder.value?.removeEventListener('pointerdown', onHolderPointerDownMarkInteraction, true)
-    options.hostPort.holder.value?.removeEventListener('keydown', onHolderKeydown, true)
-    options.hostPort.holder.value?.removeEventListener('keyup', options.interactionPort.onEditorKeyup, true)
-    options.hostPort.holder.value?.removeEventListener('contextmenu', onHolderContextMenu, true)
-    options.hostPort.holder.value?.removeEventListener('paste', onHolderPaste, true)
-    options.hostPort.holder.value?.removeEventListener('copy', onHolderCopy, true)
-    options.hostPort.holder.value?.removeEventListener('scroll', layoutMetrics.onHolderScroll, true)
+    options.chromeHostPort.holder.value?.removeEventListener('pointerdown', onHolderPointerDownMarkInteraction, true)
+    options.chromeHostPort.holder.value?.removeEventListener('keydown', onHolderKeydown, true)
+    options.chromeHostPort.holder.value?.removeEventListener('keyup', options.chromeInteractionPort.editorEvents.onEditorKeyup, true)
+    options.chromeHostPort.holder.value?.removeEventListener('contextmenu', onHolderContextMenu, true)
+    options.chromeHostPort.holder.value?.removeEventListener('paste', onHolderPaste, true)
+    options.chromeHostPort.holder.value?.removeEventListener('copy', onHolderCopy, true)
+    options.chromeHostPort.holder.value?.removeEventListener('scroll', layoutMetrics.onHolderScroll, true)
     window.removeEventListener('resize', layoutMetrics.updateGutterHitboxStyle)
     document.removeEventListener('mousedown', onDocumentMouseDown, true)
     document.removeEventListener('keydown', onDocumentKeydown, true)

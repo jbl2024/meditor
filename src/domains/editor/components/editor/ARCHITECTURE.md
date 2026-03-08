@@ -30,6 +30,7 @@
 ## Invariants
 - `EditorView.vue` stays a shell; it wires runtimes and template, but does not own editor workflows directly.
 - Cross-runtime coordination should happen through explicit runtime APIs, not ad-hoc local helpers in `EditorView.vue`.
+- Runtime option contracts should stay grouped by responsibility (`input`, `session`, `ui`, `io`, `output`) rather than flat callback bags.
 - Any save/load status mutation should flow through lifecycle composable APIs.
 - Overlay wrappers must stay feature-scoped; avoid mega pass-through overlay components.
 - Reactive `computed` values must be pure and must not mutate refs.
@@ -49,5 +50,6 @@
 - Monolithic input-handler signatures that mix unrelated feature concerns.
 - Leaving dead transitional modules in tree (for example obsolete persistence abstractions).
 - Setup-order coupling where callbacks dereference later-declared composable instances.
+- Flat runtime contracts that re-expose technical callbacks instead of stable ports.
 - Using Vue-only selectors (for example `:deep(...)`) in extracted plain CSS files.
 - Hiding the large-document overlay before async heavy node views (Mermaid/tables) have settled.

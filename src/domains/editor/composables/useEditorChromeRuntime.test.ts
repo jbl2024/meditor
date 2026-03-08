@@ -46,29 +46,33 @@ describe('useEditorChromeRuntime', () => {
     const app = createApp(defineComponent({
       setup() {
         runtime = useEditorChromeRuntime({
-          hostPort: {
+          chromeHostPort: {
             holder: ref(document.createElement('div')),
             contentShell: ref(document.createElement('div')),
             pulsePanelWrap: ref(document.createElement('div')),
-            currentPath: ref('a.md'),
-            activeEditor,
+            getCurrentPath: () => 'a.md',
+            getEditor: () => activeEditor.value,
             getSession: vi.fn(() => null)
           },
-          interactionPort: {
-            closeSlashMenu: vi.fn(),
-            dismissSlashMenu: vi.fn(),
-            closeWikilinkMenu: vi.fn(),
-            openSlashAtSelection: vi.fn(),
-            currentTextSelectionContext: vi.fn(() => null),
-            insertBlockFromDescriptor: vi.fn(() => false),
-            onEditorKeydown: vi.fn(),
-            onEditorKeyup: vi.fn(),
-            onEditorContextMenu: vi.fn(),
-            onEditorPaste: vi.fn(),
-            markEditorInteraction: vi.fn(),
-            resetWikilinkDataCache: vi.fn()
+          chromeInteractionPort: {
+            menus: {
+              closeSlashMenu: vi.fn(),
+              dismissSlashMenu: vi.fn(),
+              closeWikilinkMenu: vi.fn(),
+              openSlashAtSelection: vi.fn()
+            },
+            editorEvents: {
+              onEditorKeydown: vi.fn(),
+              onEditorKeyup: vi.fn(),
+              onEditorContextMenu: vi.fn(),
+              onEditorPaste: vi.fn(),
+              markEditorInteraction: vi.fn()
+            },
+            caches: {
+              resetWikilinkDataCache: vi.fn()
+            }
           },
-          emitPort: {
+          chromeOutputPort: {
             emitPulseOpenSecondBrain: vi.fn()
           }
         })
@@ -88,33 +92,38 @@ describe('useEditorChromeRuntime', () => {
 
   it('exposes loading overlay refs for document orchestration', async () => {
     let runtime!: ReturnType<typeof useEditorChromeRuntime>
+    const activeEditor = ref<Editor | null>(createEditorStub()) as Ref<Editor | null>
 
     const app = createApp(defineComponent({
       setup() {
         runtime = useEditorChromeRuntime({
-          hostPort: {
+          chromeHostPort: {
             holder: ref(document.createElement('div')),
             contentShell: ref(document.createElement('div')),
             pulsePanelWrap: ref(document.createElement('div')),
-            currentPath: ref('a.md'),
-            activeEditor: ref<Editor | null>(createEditorStub()) as Ref<Editor | null>,
+            getCurrentPath: () => 'a.md',
+            getEditor: () => activeEditor.value,
             getSession: vi.fn(() => null)
           },
-          interactionPort: {
-            closeSlashMenu: vi.fn(),
-            dismissSlashMenu: vi.fn(),
-            closeWikilinkMenu: vi.fn(),
-            openSlashAtSelection: vi.fn(),
-            currentTextSelectionContext: vi.fn(() => null),
-            insertBlockFromDescriptor: vi.fn(() => false),
-            onEditorKeydown: vi.fn(),
-            onEditorKeyup: vi.fn(),
-            onEditorContextMenu: vi.fn(),
-            onEditorPaste: vi.fn(),
-            markEditorInteraction: vi.fn(),
-            resetWikilinkDataCache: vi.fn()
+          chromeInteractionPort: {
+            menus: {
+              closeSlashMenu: vi.fn(),
+              dismissSlashMenu: vi.fn(),
+              closeWikilinkMenu: vi.fn(),
+              openSlashAtSelection: vi.fn()
+            },
+            editorEvents: {
+              onEditorKeydown: vi.fn(),
+              onEditorKeyup: vi.fn(),
+              onEditorContextMenu: vi.fn(),
+              onEditorPaste: vi.fn(),
+              markEditorInteraction: vi.fn()
+            },
+            caches: {
+              resetWikilinkDataCache: vi.fn()
+            }
           },
-          emitPort: {
+          chromeOutputPort: {
             emitPulseOpenSecondBrain: vi.fn()
           }
         })

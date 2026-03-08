@@ -16,6 +16,7 @@ import type { WaitForHeavyRenderIdle, HasPendingHeavyRender, EditorLoadUiState }
 
 const MAIN_PANE_ID: PaneId = 'main'
 
+/** Groups editor props and persistence I/O consumed by the document runtime. */
 export type EditorDocumentRuntimePropsPort = {
   path: Ref<string>
   openPaths: Ref<string[]>
@@ -26,6 +27,7 @@ export type EditorDocumentRuntimePropsPort = {
   savePropertyTypeSchema: (schema: Record<string, string>) => Promise<void>
 }
 
+/** Emits document-facing updates back to the shell. */
 export type EditorDocumentRuntimeEmitPort = {
   emitStatus: (payload: { path: string; dirty: boolean; saving: boolean; saveError: string }) => void
   emitOutline: (payload: Array<{ text: string; level: number; id: string }>) => void
@@ -33,6 +35,7 @@ export type EditorDocumentRuntimeEmitPort = {
   emitPathRenamed: (payload: { from: string; to: string; manual: boolean }) => void
 }
 
+/** Owns active editor/session access for document lifecycle orchestration. */
 export type EditorDocumentRuntimeSessionPort = {
   holder: Ref<HTMLDivElement | null>
   activeEditor: Ref<Editor | null>
@@ -40,52 +43,51 @@ export type EditorDocumentRuntimeSessionPort = {
   createSessionEditor: (path: string) => Editor
 }
 
-export type EditorDocumentRuntimeInteractionPort = {
-  captureCaret: (path: string) => void
-  restoreCaret: (path: string) => boolean
-  clearOutlineTimer: (path: string) => void
-  emitOutlineSoon: (path: string) => void
-  closeSlashMenu: () => void
-  closeWikilinkMenu: () => void
-  syncWikilinkUiFromPluginState: () => void
-}
-
-export type EditorDocumentRuntimeChromePort = {
+/** Keeps only the UI hooks the document runtime truly needs to coordinate with. */
+export type EditorDocumentRuntimeUiPort = {
+  loading: EditorLoadUiState
   largeDocThreshold: number
-  loadUiState: EditorLoadUiState
-  resetTransientUiState: () => void
-  updateGutterHitboxStyle: () => void
+  resetTransientUi: () => void
+  syncLayout: () => void
   hideTableToolbarAnchor: () => void
-  closeBlockMenu: () => void
-  onActiveSessionChanged: () => void
-  onDocumentContentChanged: () => void
-  onMountInit: () => Promise<void>
-  onUnmountCleanup: () => Promise<void>
+  closeCompetingMenus: () => void
+  syncAfterSessionChange: () => void
+  syncAfterDocumentChange: () => void
+  initializeUi: () => Promise<void>
+  disposeUi: () => Promise<void>
+  interaction: {
+    captureCaret: (path: string) => void
+    restoreCaret: (path: string) => boolean
+    clearOutlineTimer: (path: string) => void
+    emitOutlineSoon: (path: string) => void
+    closeSlashMenu: () => void
+    closeWikilinkMenu: () => void
+    syncWikilinkUiFromPluginState: () => void
+  }
 }
 
 /**
  * Groups document/session lifecycle ownership so EditorView can stay a shell.
  */
 export type UseEditorDocumentRuntimeOptions = {
-  propsPort: EditorDocumentRuntimePropsPort
-  emitPort: EditorDocumentRuntimeEmitPort
-  sessionPort: EditorDocumentRuntimeSessionPort
-  interactionPort: EditorDocumentRuntimeInteractionPort
-  chromePort: EditorDocumentRuntimeChromePort
+  documentInputPort: EditorDocumentRuntimePropsPort
+  documentOutputPort: EditorDocumentRuntimeEmitPort
+  documentSessionPort: EditorDocumentRuntimeSessionPort
+  documentUiPort: EditorDocumentRuntimeUiPort
   waitForHeavyRenderIdle?: WaitForHeavyRenderIdle
   hasPendingHeavyRender?: HasPendingHeavyRender
 }
 
 export function useEditorDocumentRuntime(options: UseEditorDocumentRuntimeOptions) {
-  const currentPath = computed(() => options.propsPort.path.value?.trim() || '')
+  const currentPath = computed(() => options.documentInputPort.path.value?.trim() || '')
 
   const sessionStore = useDocumentEditorSessions({
-    createEditor: (path) => options.sessionPort.createSessionEditor(path)
+    createEditor: (path) => options.documentSessionPort.createSessionEditor(path)
   })
   const lifecycle = useEditorSessionLifecycle({
-    emitStatus: (payload) => options.emitPort.emitStatus(payload),
+    emitStatus: (payload) => options.documentOutputPort.emitStatus(payload),
     saveCurrentFile: (manual) => saveCurrentFile(manual),
-    isEditingTitle: () => options.sessionPort.isEditingTitle(),
+    isEditingTitle: () => options.documentSessionPort.isEditingTitle(),
     autosaveIdleMs: 1800
   })
   const sessionStatus = useEditorSessionStatus({
@@ -104,23 +106,23 @@ export function useEditorDocumentRuntime(options: UseEditorDocumentRuntimeOption
   const scheduleAutosave = sessionStatus.scheduleAutosave
 
   function serializeCurrentDocBlocks(): EditorBlock[] {
-    const editor = options.sessionPort.activeEditor.value
+    const editor = options.documentSessionPort.activeEditor.value
     if (!editor) return []
     return fromTiptapDoc(editor.getJSON())
   }
 
   async function renderBlocks(blocks: EditorBlock[]) {
-    const editor = options.sessionPort.activeEditor.value
+    const editor = options.documentSessionPort.activeEditor.value
     if (!editor) return
     const doc = toTiptapDoc(blocks)
-    const rememberedScroll = options.sessionPort.holder.value?.scrollTop ?? 0
+    const rememberedScroll = options.documentSessionPort.holder.value?.scrollTop ?? 0
     setSuppressOnChange(true)
     editor.commands.setContent(doc, { emitUpdate: false })
     setSuppressOnChange(false)
     await nextTick()
-    options.chromePort.onDocumentContentChanged()
-    if (options.sessionPort.holder.value) {
-      options.sessionPort.holder.value.scrollTop = rememberedScroll
+    options.documentUiPort.syncAfterDocumentChange()
+    if (options.documentSessionPort.holder.value) {
+      options.documentSessionPort.holder.value.scrollTop = rememberedScroll
     }
   }
 
@@ -155,14 +157,14 @@ export function useEditorDocumentRuntime(options: UseEditorDocumentRuntimeOption
     movePathState: moveFrontmatterPathState
   } = useFrontmatterProperties({
     currentPath,
-    loadPropertyTypeSchema: options.propsPort.loadPropertyTypeSchema,
-    savePropertyTypeSchema: options.propsPort.savePropertyTypeSchema,
+    loadPropertyTypeSchema: options.documentInputPort.loadPropertyTypeSchema,
+    savePropertyTypeSchema: options.documentInputPort.savePropertyTypeSchema,
     onDirty: (path) => {
       setDirty(path, true)
       setSaveError(path, '')
       scheduleAutosave(path)
     },
-    emitProperties: (payload) => options.emitPort.emitProperties(payload)
+    emitProperties: (payload) => options.documentOutputPort.emitProperties(payload)
   })
 
   function onTitleInput(value: string) {
@@ -191,18 +193,18 @@ export function useEditorDocumentRuntime(options: UseEditorDocumentRuntimeOption
     setDirty(path, true)
     setSaveError(path, '')
     scheduleAutosave(path)
-    options.interactionPort.emitOutlineSoon(path)
-    options.chromePort.onDocumentContentChanged()
+    options.documentUiPort.interaction.emitOutlineSoon(path)
+    options.documentUiPort.syncAfterDocumentChange()
   }
 
   function setActiveSession(path: string) {
     sessionStore.setActivePath(MAIN_PANE_ID, path)
-    options.sessionPort.activeEditor.value = getSession(path)?.editor ?? null
-    options.chromePort.onActiveSessionChanged()
+    options.documentSessionPort.activeEditor.value = getSession(path)?.editor ?? null
+    options.documentUiPort.syncAfterSessionChange()
   }
 
   const mountedSessions = useEditorMountedSessions({
-    openPaths: computed(() => options.propsPort.openPaths.value ?? []),
+    openPaths: computed(() => options.documentInputPort.openPaths.value ?? []),
     currentPath,
     ensureSession
   })
@@ -219,8 +221,8 @@ export function useEditorDocumentRuntime(options: UseEditorDocumentRuntimeOption
   const fileLifecycle = useEditorFileLifecycle({
     sessionPort: {
       currentPath,
-      holder: options.sessionPort.holder,
-      getEditor: () => options.sessionPort.activeEditor.value,
+      holder: options.documentSessionPort.holder,
+      getEditor: () => options.documentSessionPort.activeEditor.value,
       getSession,
       ensureSession,
       renameSessionPath: (from, to) => {
@@ -228,7 +230,7 @@ export function useEditorDocumentRuntime(options: UseEditorDocumentRuntimeOption
       },
       moveLifecyclePathState: (from, to) => lifecycle.movePathState(from, to),
       setSuppressOnChange,
-      restoreCaret: (path) => options.interactionPort.restoreCaret(path),
+      restoreCaret: (path) => options.documentUiPort.interaction.restoreCaret(path),
       setDirty,
       setSaving,
       setSaveError
@@ -254,19 +256,19 @@ export function useEditorDocumentRuntime(options: UseEditorDocumentRuntimeOption
     },
     uiPort: {
       clearAutosaveTimer,
-      clearOutlineTimer: (path) => options.interactionPort.clearOutlineTimer(path),
-      emitOutlineSoon: (path) => options.interactionPort.emitOutlineSoon(path),
-      emitPathRenamed: (payload) => options.emitPort.emitPathRenamed(payload),
-      resetTransientUiState: () => options.chromePort.resetTransientUiState(),
-      updateGutterHitboxStyle: () => options.chromePort.updateGutterHitboxStyle(),
-      syncWikilinkUiFromPluginState: () => options.interactionPort.syncWikilinkUiFromPluginState(),
-      largeDocThreshold: options.chromePort.largeDocThreshold,
-      ui: options.chromePort.loadUiState
+      clearOutlineTimer: (path) => options.documentUiPort.interaction.clearOutlineTimer(path),
+      emitOutlineSoon: (path) => options.documentUiPort.interaction.emitOutlineSoon(path),
+      emitPathRenamed: (payload) => options.documentOutputPort.emitPathRenamed(payload),
+      resetTransientUiState: () => options.documentUiPort.resetTransientUi(),
+      updateGutterHitboxStyle: () => options.documentUiPort.syncLayout(),
+      syncWikilinkUiFromPluginState: () => options.documentUiPort.interaction.syncWikilinkUiFromPluginState(),
+      largeDocThreshold: options.documentUiPort.largeDocThreshold,
+      ui: options.documentUiPort.loading
     },
     ioPort: {
-      openFile: options.propsPort.openFile,
-      saveFile: options.propsPort.saveFile,
-      renameFileFromTitle: options.propsPort.renameFileFromTitle
+      openFile: options.documentInputPort.openFile,
+      saveFile: options.documentInputPort.saveFile,
+      renameFileFromTitle: options.documentInputPort.renameFileFromTitle
     },
     requestPort: {
       isCurrentRequest: (requestId) => lifecycle.isCurrentRequest(requestId)
@@ -284,37 +286,37 @@ export function useEditorDocumentRuntime(options: UseEditorDocumentRuntimeOption
   }
 
   useEditorPathWatchers({
-    path: computed(() => options.propsPort.path.value ?? ''),
-    openPaths: computed(() => options.propsPort.openPaths.value ?? []),
-    holder: options.sessionPort.holder,
+    path: computed(() => options.documentInputPort.path.value ?? ''),
+    openPaths: computed(() => options.documentInputPort.openPaths.value ?? []),
+    holder: options.documentSessionPort.holder,
     currentPath,
     nextRequestId: () => lifecycle.nextRequestId(),
     ensureSession,
     setActiveSession,
     loadCurrentFile,
-    captureCaret: (path) => options.interactionPort.captureCaret(path),
+    captureCaret: (path) => options.documentUiPort.interaction.captureCaret(path),
     getSession,
     getActivePath: () => sessionStore.getActivePath(MAIN_PANE_ID),
     setActivePath: (path) => sessionStore.setActivePath(MAIN_PANE_ID, path),
     clearActiveEditor: () => {
-      options.sessionPort.activeEditor.value = null
-      options.chromePort.onActiveSessionChanged()
+      options.documentSessionPort.activeEditor.value = null
+      options.documentUiPort.syncAfterSessionChange()
     },
     listPaths: () => sessionStore.listPaths(),
     closePath: (path) => sessionStore.closePath(path),
     resetPropertySchemaState,
     emitEmptyProperties: () => {
-      options.emitPort.emitProperties({ path: '', items: [], parseErrorCount: 0 })
+      options.documentOutputPort.emitProperties({ path: '', items: [], parseErrorCount: 0 })
     },
-    closeSlashMenu: () => options.interactionPort.closeSlashMenu(),
-    closeWikilinkMenu: () => options.interactionPort.closeWikilinkMenu(),
-    closeBlockMenu: () => options.chromePort.closeBlockMenu(),
-    hideTableToolbarAnchor: () => options.chromePort.hideTableToolbarAnchor(),
+    closeSlashMenu: () => options.documentUiPort.interaction.closeSlashMenu(),
+    closeWikilinkMenu: () => options.documentUiPort.interaction.closeWikilinkMenu(),
+    closeBlockMenu: () => options.documentUiPort.closeCompetingMenus(),
+    hideTableToolbarAnchor: () => options.documentUiPort.hideTableToolbarAnchor(),
     emitEmptyOutline: () => {
-      options.emitPort.emitOutline([])
+      options.documentOutputPort.emitOutline([])
     },
     onMountInit: async () => {
-      const chromeInitPromise = options.chromePort.onMountInit()
+      const chromeInitPromise = options.documentUiPort.initializeUi()
       if (currentPath.value) {
         const requestId = lifecycle.nextRequestId()
         ensureSession(currentPath.value)
@@ -324,9 +326,9 @@ export function useEditorDocumentRuntime(options: UseEditorDocumentRuntimeOption
       await chromeInitPromise
     },
     onUnmountCleanup: async () => {
-      await options.chromePort.onUnmountCleanup()
+      await options.documentUiPort.disposeUi()
       sessionStore.closeAll()
-      options.sessionPort.activeEditor.value = null
+      options.documentSessionPort.activeEditor.value = null
     }
   })
 
@@ -378,11 +380,11 @@ export function useEditorDocumentRuntime(options: UseEditorDocumentRuntimeOption
     togglePropertiesVisibility,
     onRawYamlInput,
     moveFrontmatterPathState,
-    isLoadingLargeDocument: options.chromePort.loadUiState.isLoadingLargeDocument,
-    loadStageLabel: options.chromePort.loadUiState.loadStageLabel,
-    loadProgressPercent: options.chromePort.loadUiState.loadProgressPercent,
-    loadProgressIndeterminate: options.chromePort.loadUiState.loadProgressIndeterminate,
-    loadDocumentStats: options.chromePort.loadUiState.loadDocumentStats,
-    resetTransientDocumentUiState: options.chromePort.resetTransientUiState
+    isLoadingLargeDocument: options.documentUiPort.loading.isLoadingLargeDocument,
+    loadStageLabel: options.documentUiPort.loading.loadStageLabel,
+    loadProgressPercent: options.documentUiPort.loading.loadProgressPercent,
+    loadProgressIndeterminate: options.documentUiPort.loading.loadProgressIndeterminate,
+    loadDocumentStats: options.documentUiPort.loading.loadDocumentStats,
+    resetTransientDocumentUiState: options.documentUiPort.resetTransientUi
   }
 }

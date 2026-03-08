@@ -47,7 +47,7 @@ describe('useEditorDocumentRuntime', () => {
     const app = createApp(defineComponent({
       setup() {
         runtime = useEditorDocumentRuntime({
-          propsPort: {
+          documentInputPort: {
             path,
             openPaths,
             openFile,
@@ -56,44 +56,44 @@ describe('useEditorDocumentRuntime', () => {
             loadPropertyTypeSchema: async () => ({}),
             savePropertyTypeSchema: async () => {}
           },
-          emitPort: {
+          documentOutputPort: {
             emitStatus: vi.fn(),
             emitOutline: vi.fn(),
             emitProperties: vi.fn(),
             emitPathRenamed: vi.fn()
           },
-          sessionPort: {
+          documentSessionPort: {
             holder: ref(document.createElement('div')),
             activeEditor,
             isEditingTitle: () => false,
             createSessionEditor: () => createEditorStub()
           },
-          interactionPort: {
-            captureCaret: vi.fn(),
-            restoreCaret: vi.fn(() => false),
-            clearOutlineTimer: vi.fn(),
-            emitOutlineSoon: vi.fn(),
-            closeSlashMenu: vi.fn(),
-            closeWikilinkMenu: vi.fn(),
-            syncWikilinkUiFromPluginState: vi.fn()
-          },
-          chromePort: {
-            largeDocThreshold: 40_000,
-            loadUiState: {
+          documentUiPort: {
+            loading: {
               isLoadingLargeDocument: ref(false),
               loadStageLabel: ref(''),
               loadProgressPercent: ref(0),
               loadProgressIndeterminate: ref(false),
               loadDocumentStats: ref(null)
             },
-            resetTransientUiState: vi.fn(),
-            updateGutterHitboxStyle: vi.fn(),
+            largeDocThreshold: 40_000,
+            resetTransientUi: vi.fn(),
+            syncLayout: vi.fn(),
             hideTableToolbarAnchor: vi.fn(),
-            closeBlockMenu: vi.fn(),
-            onActiveSessionChanged: vi.fn(),
-            onDocumentContentChanged: vi.fn(),
-            onMountInit: async () => {},
-            onUnmountCleanup: async () => {}
+            closeCompetingMenus: vi.fn(),
+            syncAfterSessionChange: vi.fn(),
+            syncAfterDocumentChange: vi.fn(),
+            initializeUi: async () => {},
+            disposeUi: async () => {},
+            interaction: {
+              captureCaret: vi.fn(),
+              restoreCaret: vi.fn(() => false),
+              clearOutlineTimer: vi.fn(),
+              emitOutlineSoon: vi.fn(),
+              closeSlashMenu: vi.fn(),
+              closeWikilinkMenu: vi.fn(),
+              syncWikilinkUiFromPluginState: vi.fn()
+            }
           }
         })
         return () => h('div')
@@ -121,7 +121,7 @@ describe('useEditorDocumentRuntime', () => {
     const app = createApp(defineComponent({
       setup() {
         runtime = useEditorDocumentRuntime({
-          propsPort: {
+          documentInputPort: {
             path,
             openPaths,
             openFile: async () => '# A\n\nAlpha',
@@ -130,44 +130,44 @@ describe('useEditorDocumentRuntime', () => {
             loadPropertyTypeSchema: async () => ({}),
             savePropertyTypeSchema: async () => {}
           },
-          emitPort: {
+          documentOutputPort: {
             emitStatus: vi.fn(),
             emitOutline,
             emitProperties,
             emitPathRenamed: vi.fn()
           },
-          sessionPort: {
+          documentSessionPort: {
             holder: ref(document.createElement('div')),
             activeEditor,
             isEditingTitle: () => false,
             createSessionEditor: () => createEditorStub()
           },
-          interactionPort: {
-            captureCaret: vi.fn(),
-            restoreCaret: vi.fn(() => false),
-            clearOutlineTimer: vi.fn(),
-            emitOutlineSoon: vi.fn(),
-            closeSlashMenu: vi.fn(),
-            closeWikilinkMenu: vi.fn(),
-            syncWikilinkUiFromPluginState: vi.fn()
-          },
-          chromePort: {
-            largeDocThreshold: 40_000,
-            loadUiState: {
+          documentUiPort: {
+            loading: {
               isLoadingLargeDocument: ref(false),
               loadStageLabel: ref(''),
               loadProgressPercent: ref(0),
               loadProgressIndeterminate: ref(false),
               loadDocumentStats: ref(null)
             },
-            resetTransientUiState: vi.fn(),
-            updateGutterHitboxStyle: vi.fn(),
+            largeDocThreshold: 40_000,
+            resetTransientUi: vi.fn(),
+            syncLayout: vi.fn(),
             hideTableToolbarAnchor: vi.fn(),
-            closeBlockMenu: vi.fn(),
-            onActiveSessionChanged: vi.fn(),
-            onDocumentContentChanged: vi.fn(),
-            onMountInit: async () => {},
-            onUnmountCleanup: async () => {}
+            closeCompetingMenus: vi.fn(),
+            syncAfterSessionChange: vi.fn(),
+            syncAfterDocumentChange: vi.fn(),
+            initializeUi: async () => {},
+            disposeUi: async () => {},
+            interaction: {
+              captureCaret: vi.fn(),
+              restoreCaret: vi.fn(() => false),
+              clearOutlineTimer: vi.fn(),
+              emitOutlineSoon: vi.fn(),
+              closeSlashMenu: vi.fn(),
+              closeWikilinkMenu: vi.fn(),
+              syncWikilinkUiFromPluginState: vi.fn()
+            }
           }
         })
         return () => h('div')

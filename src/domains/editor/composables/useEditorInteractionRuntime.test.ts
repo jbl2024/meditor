@@ -39,7 +39,7 @@ describe('useEditorInteractionRuntime', () => {
     const openLinkTarget = vi.fn(async () => true)
 
     const runtime = useEditorInteractionRuntime({
-      documentPort: {
+      interactionDocumentPort: {
         currentPath: ref('a.md'),
         holder: ref(document.createElement('div')),
         activeEditor,
@@ -47,33 +47,39 @@ describe('useEditorInteractionRuntime', () => {
         saveCurrentFile,
         onEditorDocChanged: vi.fn()
       },
-      chromePort: {
-        blockMenuOpen: ref(false),
-        tableToolbarOpen: ref(false),
-        isDragMenuOpen: () => false,
-        closeBlockMenu: vi.fn(),
-        hideTableToolbar: vi.fn(),
-        updateFormattingToolbar: vi.fn(),
-        updateTableToolbar: vi.fn(),
-        zoomEditorBy: vi.fn(() => 1),
-        resetEditorZoom: vi.fn(() => 1),
-        inlineFormatToolbar: {
+      interactionEditorPort: {
+        emitOutline: vi.fn(),
+        requestMermaidReplaceConfirm: vi.fn(async () => true)
+      },
+      interactionChromePort: {
+        menus: {
+          blockMenuOpen: ref(false),
+          tableToolbarOpen: ref(false),
+          isDragMenuOpen: () => false,
+          closeBlockMenu: vi.fn(),
+          hideTableToolbar: vi.fn()
+        },
+        toolbars: {
           updateFormattingToolbar: vi.fn(),
-          openLinkPopover: vi.fn(),
-          linkPopoverOpen: ref(false),
-          cancelLink: vi.fn()
+          updateTableToolbar: vi.fn(),
+          inlineFormatToolbar: {
+            updateFormattingToolbar: vi.fn(),
+            openLinkPopover: vi.fn(),
+            linkPopoverOpen: ref(false),
+            cancelLink: vi.fn()
+          }
+        },
+        zoom: {
+          zoomEditorBy: vi.fn(() => 1),
+          resetEditorZoom: vi.fn(() => 1)
         }
       },
-      ioPort: {
+      interactionIoPort: {
         loadLinkTargets: async () => ['a.md'],
         loadLinkHeadings: async () => ['H1'],
         openLinkTarget,
         openExternalUrl: vi.fn(async () => {})
-      },
-      emitPort: {
-        emitOutline: vi.fn()
-      },
-      requestMermaidReplaceConfirm: vi.fn(async () => true)
+      }
     })
 
     await runtime.openLinkTargetWithAutosave('b.md')
@@ -85,7 +91,7 @@ describe('useEditorInteractionRuntime', () => {
   it('creates session editors through the tiptap setup runtime', () => {
     const activeEditor = ref<Editor | null>(createEditorStub()) as Ref<Editor | null>
     const runtime = useEditorInteractionRuntime({
-      documentPort: {
+      interactionDocumentPort: {
         currentPath: ref('a.md'),
         holder: ref(document.createElement('div')),
         activeEditor,
@@ -93,33 +99,39 @@ describe('useEditorInteractionRuntime', () => {
         saveCurrentFile: vi.fn(async () => {}),
         onEditorDocChanged: vi.fn()
       },
-      chromePort: {
-        blockMenuOpen: ref(false),
-        tableToolbarOpen: ref(false),
-        isDragMenuOpen: () => false,
-        closeBlockMenu: vi.fn(),
-        hideTableToolbar: vi.fn(),
-        updateFormattingToolbar: vi.fn(),
-        updateTableToolbar: vi.fn(),
-        zoomEditorBy: vi.fn(() => 1),
-        resetEditorZoom: vi.fn(() => 1),
-        inlineFormatToolbar: {
+      interactionEditorPort: {
+        emitOutline: vi.fn(),
+        requestMermaidReplaceConfirm: vi.fn(async () => true)
+      },
+      interactionChromePort: {
+        menus: {
+          blockMenuOpen: ref(false),
+          tableToolbarOpen: ref(false),
+          isDragMenuOpen: () => false,
+          closeBlockMenu: vi.fn(),
+          hideTableToolbar: vi.fn()
+        },
+        toolbars: {
           updateFormattingToolbar: vi.fn(),
-          openLinkPopover: vi.fn(),
-          linkPopoverOpen: ref(false),
-          cancelLink: vi.fn()
+          updateTableToolbar: vi.fn(),
+          inlineFormatToolbar: {
+            updateFormattingToolbar: vi.fn(),
+            openLinkPopover: vi.fn(),
+            linkPopoverOpen: ref(false),
+            cancelLink: vi.fn()
+          }
+        },
+        zoom: {
+          zoomEditorBy: vi.fn(() => 1),
+          resetEditorZoom: vi.fn(() => 1)
         }
       },
-      ioPort: {
+      interactionIoPort: {
         loadLinkTargets: async () => ['a.md'],
         loadLinkHeadings: async () => ['H1'],
         openLinkTarget: vi.fn(async () => true),
         openExternalUrl: vi.fn(async () => {})
-      },
-      emitPort: {
-        emitOutline: vi.fn()
-      },
-      requestMermaidReplaceConfirm: vi.fn(async () => true)
+      }
     })
 
     expect(runtime.createSessionEditor('a.md')).toBeTruthy()

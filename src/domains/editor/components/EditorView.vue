@@ -86,107 +86,88 @@ const pathRef = computed(() => props.path ?? '')
 const openPathsRef = computed(() => props.openPaths ?? [])
 const currentPathSource = computed(() => props.path?.trim() || '')
 
-let getSession: (path: string) => DocumentSession | null = () => null
-let saveCurrentFileInternal: (manual?: boolean) => Promise<void> = async () => {}
-let onEditorDocChangedInternal: (path: string) => void = () => {}
-let closeSlashMenuInternal = () => {}
-let dismissSlashMenuInternal = () => {}
-let closeWikilinkMenuInternal = () => {}
-let openSlashAtSelectionInternal = () => {}
-let currentTextSelectionContextInternal: () => { text: string; nodeType: string; from: number; to: number } | null = () => null
-let insertBlockFromDescriptorInternal: (
-  type: string,
-  data: Record<string, unknown>,
-  options?: { replaceRange?: { from: number; to: number } | null }
-) => boolean = () => false
-let onEditorKeydownInternal = (_event: KeyboardEvent) => {}
-let onEditorKeyupInternal = () => {}
-let onEditorContextMenuInternal = (_event: MouseEvent) => {}
-let onEditorPasteInternal = (_event: ClipboardEvent) => {}
-let markEditorInteractionInternal = () => {}
-let resetWikilinkDataCacheInternal = () => {}
+let chromeRuntime!: ReturnType<typeof useEditorChromeRuntime>
+let interactionRuntime!: ReturnType<typeof useEditorInteractionRuntime>
+let documentRuntime!: ReturnType<typeof useEditorDocumentRuntime>
 
-const chromeRuntime = useEditorChromeRuntime({
-  hostPort: {
+chromeRuntime = useEditorChromeRuntime({
+  chromeHostPort: {
     holder,
     contentShell,
     pulsePanelWrap,
-    currentPath: currentPathSource,
-    activeEditor,
+    getCurrentPath: () => currentPathSource.value,
+    getEditor: () => activeEditor.value,
     getSession: (path) => getSession(path)
   },
-  interactionPort: {
-    closeSlashMenu: () => closeSlashMenuInternal(),
-    dismissSlashMenu: () => dismissSlashMenuInternal(),
-    closeWikilinkMenu: () => closeWikilinkMenuInternal(),
-    openSlashAtSelection: () => openSlashAtSelectionInternal(),
-    currentTextSelectionContext: () => currentTextSelectionContextInternal(),
-    insertBlockFromDescriptor: (type, data, options) => insertBlockFromDescriptorInternal(type, data, options),
-    onEditorKeydown: (event) => onEditorKeydownInternal(event),
-    onEditorKeyup: () => onEditorKeyupInternal(),
-    onEditorContextMenu: (event) => onEditorContextMenuInternal(event),
-    onEditorPaste: (event) => onEditorPasteInternal(event),
-    markEditorInteraction: () => markEditorInteractionInternal(),
-    resetWikilinkDataCache: () => resetWikilinkDataCacheInternal()
+  chromeInteractionPort: {
+    menus: {
+      closeSlashMenu: () => interactionRuntime?.closeSlashMenu(),
+      dismissSlashMenu: () => interactionRuntime?.dismissSlashMenu(),
+      closeWikilinkMenu: () => interactionRuntime?.closeWikilinkMenu(),
+      openSlashAtSelection: () => interactionRuntime?.openSlashAtSelection()
+    },
+    editorEvents: {
+      onEditorKeydown: (event) => interactionRuntime?.onEditorKeydown(event),
+      onEditorKeyup: () => interactionRuntime?.onEditorKeyup(),
+      onEditorContextMenu: (event) => interactionRuntime?.onEditorContextMenu(event),
+      onEditorPaste: (event) => interactionRuntime?.onEditorPaste(event),
+      markEditorInteraction: () => interactionRuntime?.markEditorInteraction()
+    },
+    caches: {
+      resetWikilinkDataCache: () => interactionRuntime?.resetWikilinkDataCache()
+    }
   },
-  emitPort: {
+  chromeOutputPort: {
     emitPulseOpenSecondBrain
   }
 })
 
-const interactionRuntime = useEditorInteractionRuntime({
-  documentPort: {
+interactionRuntime = useEditorInteractionRuntime({
+  interactionDocumentPort: {
     currentPath: currentPathSource,
     holder,
     activeEditor,
     getSession: (path) => getSession(path),
-    saveCurrentFile: (manual) => saveCurrentFileInternal(manual),
-    onEditorDocChanged: (path) => onEditorDocChangedInternal(path)
+    saveCurrentFile: (manual) => documentRuntime?.saveCurrentFile(manual),
+    onEditorDocChanged: (path) => documentRuntime?.onEditorDocChanged(path)
   },
-  chromePort: {
-    blockMenuOpen: chromeRuntime.blockMenuOpen,
-    tableToolbarOpen: chromeRuntime.tableToolbarOpen,
-    isDragMenuOpen: () => chromeRuntime.dragHandleUiState.value.menuOpen,
-    closeBlockMenu: () => chromeRuntime.closeBlockMenu(),
-    hideTableToolbar: () => chromeRuntime.hideTableToolbar(),
-    updateFormattingToolbar: () => chromeRuntime.updateFormattingToolbar(),
-    updateTableToolbar: () => chromeRuntime.updateTableToolbar(),
-    zoomEditorBy: (delta) => chromeRuntime.zoomEditorBy(delta),
-    resetEditorZoom: () => chromeRuntime.resetEditorZoom(),
-    inlineFormatToolbar: {
-      updateFormattingToolbar: chromeRuntime.inlineFormatToolbar.updateFormattingToolbar,
-      openLinkPopover: chromeRuntime.inlineFormatToolbar.openLinkPopover,
-      linkPopoverOpen: chromeRuntime.inlineFormatToolbar.linkPopoverOpen,
-      cancelLink: chromeRuntime.inlineFormatToolbar.cancelLink
+  interactionEditorPort: {
+    emitOutline,
+    requestMermaidReplaceConfirm: chromeRuntime.requestMermaidReplaceConfirm
+  },
+  interactionChromePort: {
+    menus: {
+      blockMenuOpen: chromeRuntime.blockMenuOpen,
+      tableToolbarOpen: chromeRuntime.tableToolbarOpen,
+      isDragMenuOpen: () => chromeRuntime.dragHandleUiState.value.menuOpen,
+      closeBlockMenu: () => chromeRuntime.closeBlockMenu(),
+      hideTableToolbar: () => chromeRuntime.hideTableToolbar()
+    },
+    toolbars: {
+      updateFormattingToolbar: () => chromeRuntime.updateFormattingToolbar(),
+      updateTableToolbar: () => chromeRuntime.updateTableToolbar(),
+      inlineFormatToolbar: {
+        updateFormattingToolbar: chromeRuntime.inlineFormatToolbar.updateFormattingToolbar,
+        openLinkPopover: chromeRuntime.inlineFormatToolbar.openLinkPopover,
+        linkPopoverOpen: chromeRuntime.inlineFormatToolbar.linkPopoverOpen,
+        cancelLink: chromeRuntime.inlineFormatToolbar.cancelLink
+      }
+    },
+    zoom: {
+      zoomEditorBy: (delta) => chromeRuntime.zoomEditorBy(delta),
+      resetEditorZoom: () => chromeRuntime.resetEditorZoom()
     }
   },
-  ioPort: {
+  interactionIoPort: {
     loadLinkTargets: props.loadLinkTargets,
     loadLinkHeadings: props.loadLinkHeadings,
     openLinkTarget: props.openLinkTarget,
     openExternalUrl
-  },
-  emitPort: {
-    emitOutline
-  },
-  requestMermaidReplaceConfirm: chromeRuntime.requestMermaidReplaceConfirm
+  }
 })
 
-closeSlashMenuInternal = interactionRuntime.closeSlashMenu
-dismissSlashMenuInternal = interactionRuntime.dismissSlashMenu
-closeWikilinkMenuInternal = interactionRuntime.closeWikilinkMenu
-openSlashAtSelectionInternal = interactionRuntime.openSlashAtSelection
-currentTextSelectionContextInternal = interactionRuntime.currentTextSelectionContext
-insertBlockFromDescriptorInternal = interactionRuntime.insertBlockFromDescriptor
-onEditorKeydownInternal = interactionRuntime.onEditorKeydown
-onEditorKeyupInternal = interactionRuntime.onEditorKeyup
-onEditorContextMenuInternal = interactionRuntime.onEditorContextMenu
-onEditorPasteInternal = interactionRuntime.onEditorPaste
-markEditorInteractionInternal = interactionRuntime.markEditorInteraction
-resetWikilinkDataCacheInternal = interactionRuntime.resetWikilinkDataCache
-
-const documentRuntime = useEditorDocumentRuntime({
-  propsPort: {
+documentRuntime = useEditorDocumentRuntime({
+  documentInputPort: {
     path: pathRef,
     openPaths: openPathsRef,
     openFile: props.openFile,
@@ -195,46 +176,42 @@ const documentRuntime = useEditorDocumentRuntime({
     loadPropertyTypeSchema: props.loadPropertyTypeSchema,
     savePropertyTypeSchema: props.savePropertyTypeSchema
   },
-  emitPort: {
+  documentOutputPort: {
     emitStatus,
     emitOutline,
     emitProperties,
     emitPathRenamed
   },
-  sessionPort: {
+  documentSessionPort: {
     holder,
     activeEditor,
     isEditingTitle: () => chromeRuntime.titleEditorFocused.value,
     createSessionEditor: interactionRuntime.createSessionEditor
   },
-  interactionPort: {
-    captureCaret: interactionRuntime.captureCaret,
-    restoreCaret: interactionRuntime.restoreCaret,
-    clearOutlineTimer: interactionRuntime.clearOutlineTimer,
-    emitOutlineSoon: interactionRuntime.emitOutlineSoon,
-    closeSlashMenu: interactionRuntime.closeSlashMenu,
-    closeWikilinkMenu: interactionRuntime.closeWikilinkMenu,
-    syncWikilinkUiFromPluginState: interactionRuntime.syncWikilinkUiFromPluginState
-  },
-  chromePort: {
+  documentUiPort: {
+    loading: chromeRuntime.loadUiState,
     largeDocThreshold: chromeRuntime.largeDocThreshold,
-    loadUiState: chromeRuntime.loadUiState,
-    resetTransientUiState: chromeRuntime.resetTransientUiState,
-    updateGutterHitboxStyle: chromeRuntime.updateGutterHitboxStyle,
+    resetTransientUi: chromeRuntime.resetTransientUiState,
+    syncLayout: chromeRuntime.updateGutterHitboxStyle,
     hideTableToolbarAnchor: chromeRuntime.hideTableToolbarAnchor,
-    closeBlockMenu: chromeRuntime.closeBlockMenu,
-    onActiveSessionChanged: chromeRuntime.onActiveSessionChanged,
-    onDocumentContentChanged: chromeRuntime.onDocumentContentChanged,
-    onMountInit: chromeRuntime.onMountInit,
-    onUnmountCleanup: chromeRuntime.onUnmountCleanup
+    closeCompetingMenus: chromeRuntime.closeBlockMenu,
+    syncAfterSessionChange: chromeRuntime.onActiveSessionChanged,
+    syncAfterDocumentChange: chromeRuntime.onDocumentContentChanged,
+    initializeUi: chromeRuntime.onMountInit,
+    disposeUi: chromeRuntime.onUnmountCleanup,
+    interaction: {
+      captureCaret: interactionRuntime.captureCaret,
+      restoreCaret: interactionRuntime.restoreCaret,
+      clearOutlineTimer: interactionRuntime.clearOutlineTimer,
+      emitOutlineSoon: interactionRuntime.emitOutlineSoon,
+      closeSlashMenu: interactionRuntime.closeSlashMenu,
+      closeWikilinkMenu: interactionRuntime.closeWikilinkMenu,
+      syncWikilinkUiFromPluginState: interactionRuntime.syncWikilinkUiFromPluginState
+    }
   },
   waitForHeavyRenderIdle,
   hasPendingHeavyRender
 })
-
-getSession = documentRuntime.getSession
-saveCurrentFileInternal = documentRuntime.saveCurrentFile
-onEditorDocChangedInternal = documentRuntime.onEditorDocChanged
 
 const currentPath = documentRuntime.currentPath
 const currentTitle = documentRuntime.currentTitle
@@ -374,6 +351,10 @@ const {
   revealOutlineHeading,
   revealAnchor
 } = interactionRuntime
+
+function getSession(path: string): DocumentSession | null {
+  return documentRuntime?.getSession(path) ?? null
+}
 
 async function focusFirstContentBlock() {
   const editor = activeEditor.value
