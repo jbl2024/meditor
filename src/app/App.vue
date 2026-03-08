@@ -601,8 +601,8 @@ const shortcutSections = computed(() => {
     {
       title: 'Navigation',
       items: [
-        { keys: `${mod}+[`, action: 'Back in history' },
-        { keys: `${mod}+]`, action: 'Forward in history' },
+        { keys: backShortcutLabel.value, action: 'Back in history' },
+        { keys: forwardShortcutLabel.value, action: 'Forward in history' },
         { keys: `${mod}+D`, action: 'Open today note' },
         { keys: `${mod}+Shift+H`, action: 'Open Home' },
         { keys: `${mod}+Click`, action: 'Open date token (YYYY-MM-DD) in editor' },
@@ -692,8 +692,8 @@ const mediaQuery = typeof window !== 'undefined'
   ? window.matchMedia('(prefers-color-scheme: dark)')
   : null
 
-const backShortcutLabel = computed(() => (isMacOs ? 'Cmd+[' : 'Ctrl+['))
-const forwardShortcutLabel = computed(() => (isMacOs ? 'Cmd+]' : 'Ctrl+]'))
+const backShortcutLabel = computed(() => (isMacOs ? 'Cmd+[' : 'Alt+Left'))
+const forwardShortcutLabel = computed(() => (isMacOs ? 'Cmd+]' : 'Alt+Right'))
 const homeShortcutLabel = computed(() => (isMacOs ? 'Cmd+Shift+H' : 'Ctrl+Shift+H'))
 const commandPaletteShortcutLabel = computed(() => (isMacOs ? 'Cmd+Shift+P' : 'Ctrl+Shift+P'))
 const zoomPercentLabel = computed(() => `${Math.round(editorZoom.value * 100)}%`)
@@ -2879,8 +2879,14 @@ function onWindowKeydown(event: KeyboardEvent) {
     return
   }
 
-  const isMod = event.metaKey || event.ctrlKey
   const key = event.key.toLowerCase()
+  const isMod = event.metaKey || event.ctrlKey
+  const isBackHistoryShortcut = isMacOs
+    ? isMod && !event.altKey && !event.shiftKey && key === '['
+    : event.altKey && !event.metaKey && !event.ctrlKey && !event.shiftKey && key === 'arrowleft'
+  const isForwardHistoryShortcut = isMacOs
+    ? isMod && !event.altKey && !event.shiftKey && key === ']'
+    : event.altKey && !event.metaKey && !event.ctrlKey && !event.shiftKey && key === 'arrowright'
 
   if (isMod && key === 'w') {
     event.preventDefault()
@@ -2900,6 +2906,18 @@ function onWindowKeydown(event: KeyboardEvent) {
 
   if (shouldBlockGlobalShortcutsFromTarget(event.target)) return
 
+  if (isBackHistoryShortcut) {
+    event.preventDefault()
+    void goBackInHistory()
+    return
+  }
+
+  if (isForwardHistoryShortcut) {
+    event.preventDefault()
+    void goForwardInHistory()
+    return
+  }
+
   if (!isMod) return
 
   if (key === 'p' && !event.shiftKey) {
@@ -2917,18 +2935,6 @@ function onWindowKeydown(event: KeyboardEvent) {
   if (key === 'd') {
     event.preventDefault()
     void openTodayNote()
-    return
-  }
-
-  if (key === '[' && !event.shiftKey) {
-    event.preventDefault()
-    void goBackInHistory()
-    return
-  }
-
-  if (key === ']' && !event.shiftKey) {
-    event.preventDefault()
-    void goForwardInHistory()
     return
   }
 

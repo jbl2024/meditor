@@ -13,8 +13,8 @@ function mountHarness() {
         h(TopbarNavigationControls, {
           canGoBack: true,
           canGoForward: true,
-          backShortcutLabel: 'Cmd+[',
-          forwardShortcutLabel: 'Cmd+]',
+          backShortcutLabel: 'Alt+Left',
+          forwardShortcutLabel: 'Alt+Right',
           homeShortcutLabel: 'Cmd+Shift+H',
           commandPaletteShortcutLabel: 'Cmd+Shift+P',
           hasWorkspace: true,
@@ -74,7 +74,7 @@ describe('TopbarNavigationControls', () => {
     const mounted = mountHarness()
 
     mounted.root.querySelector<HTMLButtonElement>('[aria-label="Hide sidebar"]')?.click()
-    mounted.root.querySelector<HTMLButtonElement>('[aria-label="Back (Cmd+[)"]')?.click()
+    mounted.root.querySelector<HTMLButtonElement>('[aria-label="Back (Alt+Left)"]')?.click()
     mounted.root.querySelector<HTMLButtonElement>('.history-menu-item')?.click()
     mounted.root.querySelector<HTMLButtonElement>('[aria-label="Home (Cmd+Shift+H)"]')?.click()
     mounted.root.querySelector<HTMLButtonElement>('[aria-label="Search or type a command (Cmd+Shift+P)"]')?.click()
