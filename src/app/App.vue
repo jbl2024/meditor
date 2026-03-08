@@ -463,17 +463,33 @@ const {
   restoreFocusAfterModalClose,
   trapTabWithinActiveModal
 } = modalController
-const secondBrainBridge = useAppSecondBrainBridge({
+const secondBrainWorkspacePort = {
   workingFolderPath: filesystem.workingFolderPath,
-  activeFilePath,
-  errorMessage: filesystem.errorMessage,
-  notifySuccess: (message) => filesystem.notifySuccess(message),
+  activeFilePath
+}
+
+const secondBrainContextPort = {
   storageKeyForWorkspace: workspaceScopedSecondBrainSessionKey,
   toAbsoluteWorkspacePath,
-  normalizeContextPathsForUpdate,
+  normalizeContextPathsForUpdate
+}
+
+const secondBrainSessionPort = {
   createDeliberationSession,
   loadDeliberationSession,
   replaceSessionContext
+}
+
+const secondBrainUiEffectsPort = {
+  errorMessage: filesystem.errorMessage,
+  notifySuccess: (message: string) => filesystem.notifySuccess(message)
+}
+
+const secondBrainBridge = useAppSecondBrainBridge({
+  secondBrainWorkspacePort,
+  secondBrainContextPort,
+  secondBrainSessionPort,
+  secondBrainUiEffectsPort
 })
 const {
   secondBrainRequestedSessionId,

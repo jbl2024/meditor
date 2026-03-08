@@ -8,15 +8,21 @@ import { ref, watch, type Ref } from 'vue'
  *   app shell.
  */
 
-/** Declares the services and state required to bridge the shell with Second Brain sessions. */
-export type UseAppSecondBrainBridgeOptions = {
+/** Groups the shell refs that define the current workspace and active note. */
+export type AppSecondBrainWorkspacePort = {
   workingFolderPath: Readonly<Ref<string>>
   activeFilePath: Readonly<Ref<string>>
-  errorMessage: Ref<string>
-  notifySuccess: (message: string) => void
+}
+
+/** Groups the path helpers used to persist and normalize Second Brain context. */
+export type AppSecondBrainContextPort = {
   storageKeyForWorkspace: (workspacePath: string) => string
   toAbsoluteWorkspacePath: (workspacePath: string, path: string) => string | null
   normalizeContextPathsForUpdate: (workspacePath: string, paths: string[]) => string[]
+}
+
+/** Groups the session API calls used by the shell bridge. */
+export type AppSecondBrainSessionPort = {
   createDeliberationSession: (payload: { contextPaths: string[]; title: string }) => Promise<{ sessionId: string }>
   loadDeliberationSession: (sessionId: string) => Promise<{
     session_id: string
@@ -25,18 +31,47 @@ export type UseAppSecondBrainBridgeOptions = {
   replaceSessionContext: (sessionId: string, paths: string[]) => Promise<unknown>
 }
 
+/** Groups UI-facing effects while keeping storage responsibility local to the bridge. */
+export type AppSecondBrainUiEffectsPort = {
+  errorMessage: Ref<string>
+  notifySuccess: (message: string) => void
+}
+
+/**
+ * Declares the grouped dependencies required by the shell Second Brain bridge.
+ *
+ * Ports keep workspace, context, session API, and UI effects readable without
+ * pushing localStorage persistence out of the shell boundary.
+ */
+export type UseAppSecondBrainBridgeOptions = {
+  secondBrainWorkspacePort: AppSecondBrainWorkspacePort
+  secondBrainContextPort: AppSecondBrainContextPort
+  secondBrainSessionPort: AppSecondBrainSessionPort
+  secondBrainUiEffectsPort: AppSecondBrainUiEffectsPort
+}
+
 /** Owns requested session persistence and context updates for the shell Second Brain surface. */
 export function useAppSecondBrainBridge(options: UseAppSecondBrainBridgeOptions) {
+  const {
+    secondBrainWorkspacePort,
+    secondBrainContextPort,
+    secondBrainSessionPort,
+    secondBrainUiEffectsPort
+  } = options
   const secondBrainRequestedSessionId = ref('')
   const secondBrainRequestedSessionNonce = ref(0)
   const secondBrainRequestedPrompt = ref('')
   const secondBrainRequestedPromptNonce = ref(0)
 
+  function currentWorkspacePath() {
+    return secondBrainWorkspacePort.workingFolderPath.value.trim()
+  }
+
   /** Persists the requested session id for the currently open workspace. */
   function persistSecondBrainSessionId(sessionId: string) {
-    const workspacePath = options.workingFolderPath.value.trim()
+    const workspacePath = currentWorkspacePath()
     if (!workspacePath) return
-    const storageKey = options.storageKeyForWorkspace(workspacePath)
+    const storageKey = secondBrainContextPort.storageKeyForWorkspace(workspacePath)
     const normalized = sessionId.trim()
     if (!normalized) {
       window.localStorage.removeItem(storageKey)
@@ -49,7 +84,7 @@ export function useAppSecondBrainBridge(options: UseAppSecondBrainBridgeOptions)
   function readPersistedSecondBrainSessionId(workspacePath: string): string {
     const normalizedPath = workspacePath.trim()
     if (!normalizedPath) return ''
-    const storageKey = options.storageKeyForWorkspace(normalizedPath)
+    const storageKey = secondBrainContextPort.storageKeyForWorkspace(normalizedPath)
     return window.localStorage.getItem(storageKey)?.trim() ?? ''
   }
 
@@ -72,8 +107,8 @@ export function useAppSecondBrainBridge(options: UseAppSecondBrainBridgeOptions)
 
   /** Resolves an existing session for the active note or creates a new one when needed. */
   async function resolveSecondBrainSessionForPath(seedPath: string): Promise<string> {
-    const workspacePath = options.workingFolderPath.value.trim()
-    const normalizedSeedPath = options.toAbsoluteWorkspacePath(workspacePath, seedPath)
+    const workspacePath = currentWorkspacePath()
+    const normalizedSeedPath = secondBrainContextPort.toAbsoluteWorkspacePath(workspacePath, seedPath)
     if (!normalizedSeedPath) {
       throw new Error('Could not resolve active note path for Second Brain.')
     }
@@ -81,54 +116,58 @@ export function useAppSecondBrainBridge(options: UseAppSecondBrainBridgeOptions)
     const requestedId = secondBrainRequestedSessionId.value.trim() || readPersistedSecondBrainSessionId(workspacePath)
     if (requestedId) {
       try {
-        const existing = await options.loadDeliberationSession(requestedId)
+        const existing = await secondBrainSessionPort.loadDeliberationSession(requestedId)
         if (existing.session_id.trim()) return existing.session_id.trim()
       } catch {
         // Session may have been deleted; create a fresh one for this workspace.
       }
     }
 
-    const created = await options.createDeliberationSession({ contextPaths: [normalizedSeedPath], title: '' })
+    const created = await secondBrainSessionPort.createDeliberationSession({
+      contextPaths: [normalizedSeedPath],
+      title: ''
+    })
     return created.sessionId.trim()
   }
 
   /** Ensures a path is present in the requested session context without duplicating existing items. */
   async function ensurePathInSecondBrainSession(sessionId: string, path: string) {
-    const workspacePath = options.workingFolderPath.value.trim()
-    const payload = await options.loadDeliberationSession(sessionId)
-    const merged = options.normalizeContextPathsForUpdate(workspacePath, [
+    const workspacePath = currentWorkspacePath()
+    const payload = await secondBrainSessionPort.loadDeliberationSession(sessionId)
+    const merged = secondBrainContextPort.normalizeContextPathsForUpdate(workspacePath, [
       ...payload.context_items.map((item) => String(item.path ?? '')),
       path
     ])
-    await options.replaceSessionContext(sessionId, merged)
+    await secondBrainSessionPort.replaceSessionContext(sessionId, merged)
   }
 
   /** Adds the active note to the requested session context, creating a session when needed. */
   async function addActiveNoteToSecondBrain() {
-    const workspacePath = options.workingFolderPath.value.trim()
+    const workspacePath = currentWorkspacePath()
     if (!workspacePath) {
-      options.errorMessage.value = 'Open a workspace first.'
+      secondBrainUiEffectsPort.errorMessage.value = 'Open a workspace first.'
       return false
     }
 
-    const activePath = options.activeFilePath.value.trim()
+    const activePath = secondBrainWorkspacePort.activeFilePath.value.trim()
     if (!activePath) {
-      options.errorMessage.value = 'No active note to add to Second Brain.'
+      secondBrainUiEffectsPort.errorMessage.value = 'No active note to add to Second Brain.'
       return false
     }
 
     try {
-      const normalizedActivePath = options.toAbsoluteWorkspacePath(workspacePath, activePath)
+      const normalizedActivePath = secondBrainContextPort.toAbsoluteWorkspacePath(workspacePath, activePath)
       if (!normalizedActivePath) {
         throw new Error('Could not resolve active note path for Second Brain.')
       }
       const sessionId = await resolveSecondBrainSessionForPath(normalizedActivePath)
       await ensurePathInSecondBrainSession(sessionId, normalizedActivePath)
       setSecondBrainSessionId(sessionId, { bumpNonce: true })
-      options.notifySuccess('Active note added to Second Brain context.')
+      secondBrainUiEffectsPort.notifySuccess('Active note added to Second Brain context.')
       return true
     } catch (err) {
-      options.errorMessage.value = err instanceof Error ? err.message : 'Could not update Second Brain context.'
+      secondBrainUiEffectsPort.errorMessage.value =
+        err instanceof Error ? err.message : 'Could not update Second Brain context.'
       return false
     }
   }
@@ -142,7 +181,7 @@ export function useAppSecondBrainBridge(options: UseAppSecondBrainBridgeOptions)
   }
 
   watch(
-    () => options.workingFolderPath.value,
+    () => secondBrainWorkspacePort.workingFolderPath.value,
     () => {
       secondBrainRequestedSessionId.value = ''
       secondBrainRequestedSessionNonce.value += 1
