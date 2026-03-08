@@ -21,23 +21,44 @@ export type PaletteAction = {
   loadingLabel?: string
 }
 
-/** Provides the workspace and palette inputs used to derive quick-open state. */
-export type UseAppQuickOpenOptions = {
+/** Groups the workspace-backed inputs required to derive file quick-open results. */
+export type AppQuickOpenDataPort = {
   allWorkspaceFiles: Ref<string[]>
-  quickOpenQuery?: Ref<string>
-  quickOpenActiveIndex?: Ref<number>
+  workingFolderPath: Ref<string>
+}
+
+/** Groups document/path helpers so quick-open does not take a flat list of callbacks. */
+export type AppQuickOpenDocumentPort = {
   isIsoDate: (value: string) => boolean
   toRelativePath: (path: string) => string
   dailyNotePath: (root: string, date: string) => string
-  workingFolderPath: Ref<string>
+}
+
+/** Groups command palette inputs used only in action mode. */
+export type AppQuickOpenPalettePort = {
   paletteActions: Ref<PaletteAction[]>
   paletteActionPriority: Record<string, number>
+}
+
+/**
+ * Provides the grouped dependencies required to derive quick-open state.
+ *
+ * Ports keep workspace, document, and palette concerns readable without hiding
+ * the optional controlled state refs, which remain top-level on purpose.
+ */
+export type UseAppQuickOpenOptions = {
+  quickOpenDataPort: AppQuickOpenDataPort
+  quickOpenDocumentPort: AppQuickOpenDocumentPort
+  quickOpenPalettePort: AppQuickOpenPalettePort
+  quickOpenQuery?: Ref<string>
+  quickOpenActiveIndex?: Ref<number>
 }
 
 /**
  * Derives quick-open search results, action matches, and list navigation state.
  */
 export function useAppQuickOpen(options: UseAppQuickOpenOptions) {
+  const { quickOpenDataPort, quickOpenDocumentPort, quickOpenPalettePort } = options
   const quickOpenQuery = options.quickOpenQuery ?? ref('')
   const quickOpenActiveIndex = options.quickOpenActiveIndex ?? ref(0)
 
@@ -49,17 +70,20 @@ export function useAppQuickOpen(options: UseAppQuickOpenOptions) {
     const q = quickOpenQuery.value.trim().toLowerCase()
     if (!q) return []
 
-    const fileResults = options.allWorkspaceFiles.value
-      .filter((path) => path.toLowerCase().includes(q) || options.toRelativePath(path).toLowerCase().includes(q))
-      .map((path) => ({ kind: 'file' as const, path, label: options.toRelativePath(path) }))
+    const fileResults = quickOpenDataPort.allWorkspaceFiles.value
+      .filter((path) =>
+        path.toLowerCase().includes(q) ||
+        quickOpenDocumentPort.toRelativePath(path).toLowerCase().includes(q)
+      )
+      .map((path) => ({ kind: 'file' as const, path, label: quickOpenDocumentPort.toRelativePath(path) }))
       .slice(0, 80)
 
-    if (!options.isIsoDate(q) || !options.workingFolderPath.value) {
+    if (!quickOpenDocumentPort.isIsoDate(q) || !quickOpenDataPort.workingFolderPath.value) {
       return fileResults
     }
 
-    const path = options.dailyNotePath(options.workingFolderPath.value, q)
-    const exists = options.allWorkspaceFiles.value.some((item) => item.toLowerCase() === path.toLowerCase())
+    const path = quickOpenDocumentPort.dailyNotePath(quickOpenDataPort.workingFolderPath.value, q)
+    const exists = quickOpenDataPort.allWorkspaceFiles.value.some((item) => item.toLowerCase() === path.toLowerCase())
     const dateResult: QuickOpenResult = {
       kind: 'daily',
       date: q,
@@ -74,7 +98,7 @@ export function useAppQuickOpen(options: UseAppQuickOpenOptions) {
   const quickOpenActionResults = computed(() => {
     if (!quickOpenIsActionMode.value) return []
     const q = quickOpenActionQuery.value
-    const withRank = options.paletteActions.value
+    const withRank = quickOpenPalettePort.paletteActions.value
       .map((item) => {
         const label = item.label.toLowerCase()
         const matchRank = !q
@@ -83,10 +107,10 @@ export function useAppQuickOpen(options: UseAppQuickOpenOptions) {
             ? 0
             : label.startsWith(q)
               ? 1
-              : label.includes(q)
+            : label.includes(q)
                 ? 2
                 : 99
-        const priority = options.paletteActionPriority[item.id] ?? Number.MAX_SAFE_INTEGER
+        const priority = quickOpenPalettePort.paletteActionPriority[item.id] ?? Number.MAX_SAFE_INTEGER
         return { item, matchRank, priority, label }
       })
       .filter((entry) => entry.matchRank < 99)

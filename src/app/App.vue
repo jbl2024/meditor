@@ -643,6 +643,22 @@ const paletteActions = computed<PaletteAction[]>(() => [
   { id: 'reveal-in-explorer', label: 'Reveal in Explorer', run: () => revealActiveInExplorer() }
 ])
 
+const quickOpenDataPort = {
+  allWorkspaceFiles,
+  workingFolderPath: filesystem.workingFolderPath
+}
+
+const quickOpenDocumentPort = {
+  isIsoDate,
+  toRelativePath,
+  dailyNotePath
+}
+
+const quickOpenPalettePort = {
+  paletteActions,
+  paletteActionPriority
+}
+
 const {
   quickOpenIsActionMode,
   quickOpenActionResults,
@@ -652,15 +668,11 @@ const {
   setQuickOpenActiveIndex,
   resetQuickOpenState
 } = useAppQuickOpen({
-  allWorkspaceFiles,
+  quickOpenDataPort,
+  quickOpenDocumentPort,
+  quickOpenPalettePort,
   quickOpenQuery,
-  quickOpenActiveIndex,
-  isIsoDate,
-  toRelativePath,
-  dailyNotePath,
-  workingFolderPath: filesystem.workingFolderPath,
-  paletteActions,
-  paletteActionPriority
+  quickOpenActiveIndex
 })
 
 const shortcutSections = computed(() => {
