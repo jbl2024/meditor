@@ -22,11 +22,21 @@ export type IndexRunPhase = 'idle' | 'indexing_files' | 'refreshing_views' | 'do
 /** Tracks the delayed semantic indexing pipeline independently from lexical indexing. */
 export type SemanticIndexState = 'idle' | 'pending' | 'running' | 'error'
 
-/** Declares the services and reactive state the app shell provides to the indexing controller. */
-export type UseAppIndexingControllerOptions = {
+/**
+ * Shell state consumed by the indexing controller.
+ *
+ * Ports group coherent dependencies so the controller contract stays readable
+ * as orchestration grows.
+ */
+export type AppIndexingShellPort = {
   workingFolderPath: Readonly<Ref<string>>
   hasWorkspace: Readonly<Ref<boolean>>
   indexingState: Ref<'idle' | 'indexing' | 'indexed' | 'out_of_sync'>
+  toRelativePath: (path: string) => string
+}
+
+/** Backend operations used by the indexing controller. */
+export type AppIndexingApiPort = {
   readIndexLogs: (limit: number) => Promise<IndexLogEntry[]>
   readIndexRuntimeStatus: () => Promise<IndexRuntimeStatus>
   requestIndexCancel: () => Promise<void>
@@ -35,15 +45,35 @@ export type UseAppIndexingControllerOptions = {
   reindexMarkdownFileSemantic: (path: string) => Promise<void>
   refreshSemanticEdgesCacheNow: () => Promise<void>
   removeMarkdownFileFromIndex: (path: string) => Promise<void>
+}
+
+/** Markdown-specific decisions used to filter indexing work. */
+export type AppIndexingDocumentPort = {
   isMarkdownPath: (path: string) => boolean
-  toRelativePath: (path: string) => string
+}
+
+/** Derived surfaces that need refreshes after indexing work completes. */
+export type AppIndexingSurfacePort = {
   refreshBacklinks: () => Promise<void>
   refreshCosmosGraph: () => Promise<void>
   hasCosmosSurface: () => boolean
+}
+
+/** UI-side effects triggered by indexing flows. */
+export type AppIndexingUiEffectsPort = {
   confirmStopCurrentOperation?: () => boolean
   notifyInfo?: (message: string) => void
   notifySuccess?: (message: string) => void
   notifyError?: (message: string) => void
+}
+
+/** Declares the cohesive ports required by the indexing controller. */
+export type UseAppIndexingControllerOptions = {
+  indexingShellPort: AppIndexingShellPort
+  indexingApiPort: AppIndexingApiPort
+  indexingDocumentPort: AppIndexingDocumentPort
+  indexingSurfacePort: AppIndexingSurfacePort
+  indexingUiEffectsPort?: AppIndexingUiEffectsPort
 }
 
 /**
@@ -51,6 +81,13 @@ export type UseAppIndexingControllerOptions = {
  * reindex scheduling.
  */
 export function useAppIndexingController(options: UseAppIndexingControllerOptions) {
+  const {
+    indexingShellPort,
+    indexingApiPort,
+    indexingDocumentPort,
+    indexingSurfacePort,
+    indexingUiEffectsPort
+  } = options
   const semanticDebounceMs = 15_000
   let reindexWorkerRunning = false
   let reindexGeneration = 0
@@ -77,19 +114,31 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
   const indexLogFilter = ref<IndexLogFilter>('all')
   const indexStatusModalVisible = ref(false)
 
+  async function refreshIndexedViews(): Promise<number> {
+    indexFinalizeCompleted.value = 0
+    indexFinalizeTotal.value = indexingSurfacePort.hasCosmosSurface() ? 2 : 1
+    await indexingSurfacePort.refreshBacklinks()
+    indexFinalizeCompleted.value = 1
+    if (indexingSurfacePort.hasCosmosSurface()) {
+      await indexingSurfacePort.refreshCosmosGraph()
+      indexFinalizeCompleted.value = 2
+    }
+    return indexFinalizeCompleted.value
+  }
+
   const indexStateLabel = computed(() => {
-    if (options.indexingState.value === 'indexing') return 'reindexing'
-    if (options.indexingState.value === 'indexed') return 'indexed'
+    if (indexingShellPort.indexingState.value === 'indexing') return 'reindexing'
+    if (indexingShellPort.indexingState.value === 'indexed') return 'indexed'
     return 'out of sync'
   })
 
   const indexStateClass = computed(() => {
-    if (options.indexingState.value === 'indexing') return 'status-item-indexing'
-    if (options.indexingState.value === 'indexed') return 'status-item-indexed'
+    if (indexingShellPort.indexingState.value === 'indexing') return 'status-item-indexing'
+    if (indexingShellPort.indexingState.value === 'indexed') return 'status-item-indexed'
     return 'status-item-out-of-sync'
   })
 
-  const indexRunning = computed(() => options.indexingState.value === 'indexing')
+  const indexRunning = computed(() => indexingShellPort.indexingState.value === 'indexing')
 
   const indexProgressLabel = computed(() => {
     if (!indexRunning.value) return indexStateLabel.value
@@ -135,7 +184,7 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
   })
 
   const indexStatusBadgeLabel = computed(() => {
-    if (indexRunPhase.value === 'error' || options.indexingState.value === 'out_of_sync') return 'Needs attention'
+    if (indexRunPhase.value === 'error' || indexingShellPort.indexingState.value === 'out_of_sync') return 'Needs attention'
     if (indexRunning.value) return 'Reindexing'
     if (semanticIndexState.value === 'running') return 'Semantic sync'
     if (semanticIndexState.value === 'pending') return 'Semantic pending'
@@ -144,7 +193,7 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
   })
 
   const indexStatusBadgeClass = computed(() => {
-    if (indexRunPhase.value === 'error' || options.indexingState.value === 'out_of_sync') return 'index-badge-error'
+    if (indexRunPhase.value === 'error' || indexingShellPort.indexingState.value === 'out_of_sync') return 'index-badge-error'
     if (indexRunning.value) return 'index-badge-running'
     if (semanticIndexState.value === 'error') return 'index-badge-error'
     if (semanticIndexState.value === 'pending' || semanticIndexState.value === 'running') return 'index-badge-running'
@@ -176,12 +225,12 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
       if (total <= 0) return 8
       return Math.min(85, Math.max(0, Math.round((indexProgressCurrent.value / total) * 85)))
     }
-    return options.indexingState.value === 'indexed' ? 100 : 0
+    return indexingShellPort.indexingState.value === 'indexed' ? 100 : 0
   })
 
   const indexProgressSummary = computed(() => {
     if (!indexRunning.value) {
-      if (options.indexingState.value === 'out_of_sync') return 'Pending reindex'
+      if (indexingShellPort.indexingState.value === 'out_of_sync') return 'Pending reindex'
       if (semanticIndexState.value === 'pending') return 'Semantic index pending'
       if (semanticIndexState.value === 'running') return 'Semantic index syncing'
       if (semanticIndexState.value === 'error') return 'Semantic index warning'
@@ -220,7 +269,7 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
         message: indexRunMessage.value || 'An indexing step failed. You can retry a full rebuild.'
       }
     }
-    if (options.indexingState.value === 'out_of_sync') {
+    if (indexingShellPort.indexingState.value === 'out_of_sync') {
       return {
         level: 'warning' as const,
         title: 'Workspace changed',
@@ -237,7 +286,7 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
     return null
   })
 
-  const indexActivityRows = computed(() => buildIndexActivityRows(indexLogEntries.value, options.toRelativePath))
+  const indexActivityRows = computed(() => buildIndexActivityRows(indexLogEntries.value, indexingShellPort.toRelativePath))
 
   const filteredIndexActivityRows = computed(() => {
     if (indexLogFilter.value === 'all') return indexActivityRows.value
@@ -255,8 +304,8 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
 
   /** Marks the index dirty without interrupting an already running indexing pass. */
   function markIndexOutOfSync() {
-    if (options.indexingState.value !== 'indexing') {
-      options.indexingState.value = 'out_of_sync'
+    if (indexingShellPort.indexingState.value !== 'indexing') {
+      indexingShellPort.indexingState.value = 'out_of_sync'
     }
   }
 
@@ -319,12 +368,12 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
 
   /** Refreshes recent backend index log entries for modal display. */
   async function refreshIndexLogs() {
-    if (!options.hasWorkspace.value) {
+    if (!indexingShellPort.hasWorkspace.value) {
       indexLogEntries.value = []
       return
     }
     try {
-      indexLogEntries.value = await options.readIndexLogs(160)
+      indexLogEntries.value = await indexingApiPort.readIndexLogs(160)
     } catch {
       indexLogEntries.value = []
     }
@@ -332,9 +381,9 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
 
   /** Refreshes backend runtime status for the modal summary cards. */
   async function refreshIndexRuntimeStatus() {
-    if (!options.hasWorkspace.value) return
+    if (!indexingShellPort.hasWorkspace.value) return
     try {
-      indexRuntimeStatus.value = await options.readIndexRuntimeStatus()
+      indexRuntimeStatus.value = await indexingApiPort.readIndexRuntimeStatus()
     } catch {
       indexRuntimeStatus.value = null
     }
@@ -372,7 +421,7 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
   /** Runs debounced semantic reindex work and refreshes dependent semantic views once per batch. */
   async function runSemanticReindexWorker() {
     if (semanticReindexWorkerRunning) return
-    if (!options.workingFolderPath.value) return
+    if (!indexingShellPort.workingFolderPath.value) return
     semanticReindexWorkerRunning = true
     semanticIndexState.value = 'running'
     try {
@@ -393,7 +442,7 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
         for (const path of duePaths) {
           pendingSemanticReindexAt.delete(path)
           try {
-            await options.reindexMarkdownFileSemantic(path)
+            await indexingApiPort.reindexMarkdownFileSemantic(path)
             updated += 1
           } catch {
             hadSemanticError = true
@@ -403,11 +452,8 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
 
         if (updated > 0) {
           try {
-            await options.refreshSemanticEdgesCacheNow()
-            await options.refreshBacklinks()
-            if (options.hasCosmosSurface()) {
-              await options.refreshCosmosGraph()
-            }
+            await indexingApiPort.refreshSemanticEdgesCacheNow()
+            await refreshIndexedViews()
           } catch {
             hadSemanticError = true
             console.warn('[index] semantic:refresh:error')
@@ -438,7 +484,7 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
   /** Processes the lexical reindex queue and updates shell progress state. */
   async function runReindexWorker() {
     if (reindexWorkerRunning) return
-    if (!options.workingFolderPath.value) return
+    if (!indexingShellPort.workingFolderPath.value) return
     const generationAtStart = reindexGeneration
     reindexWorkerRunning = true
     console.info('[index] background:worker:start', { queued: pendingReindexCount.value })
@@ -450,7 +496,7 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
     indexFinalizeTotal.value = 0
     indexRunCurrentPath.value = ''
     indexRunMessage.value = ''
-    options.indexingState.value = 'indexing'
+    indexingShellPort.indexingState.value = 'indexing'
     try {
       while (pendingReindexPaths.size > 0) {
         if (reindexGeneration !== generationAtStart) {
@@ -465,11 +511,11 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
         indexRunCurrentPath.value = nextPath
         indexRunTotal.value = Math.max(indexRunTotal.value, indexRunCompleted.value + pendingReindexCount.value + 1)
         try {
-          await options.reindexMarkdownFileLexical(nextPath)
+          await indexingApiPort.reindexMarkdownFileLexical(nextPath)
         } catch {
-          options.indexingState.value = 'out_of_sync'
+          indexingShellPort.indexingState.value = 'out_of_sync'
           indexRunPhase.value = 'error'
-          indexRunMessage.value = `Failed to reindex ${options.toRelativePath(nextPath)}.`
+          indexRunMessage.value = `Failed to reindex ${indexingShellPort.toRelativePath(nextPath)}.`
           console.warn('[index] background:file:error', { path: nextPath })
         }
         indexRunCompleted.value += 1
@@ -479,23 +525,16 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
       reindexWorkerRunning = false
       if (reindexGeneration !== generationAtStart) return
       if (pendingReindexPaths.size > 0) {
-        options.indexingState.value = 'out_of_sync'
+        indexingShellPort.indexingState.value = 'out_of_sync'
         console.info('[index] background:worker:restart', { queued: pendingReindexPaths.size })
         void runReindexWorker()
         return
       }
       indexRunPhase.value = 'refreshing_views'
       indexRunCurrentPath.value = ''
-      indexFinalizeCompleted.value = 0
-      indexFinalizeTotal.value = options.hasCosmosSurface() ? 2 : 1
-      await options.refreshBacklinks()
-      indexFinalizeCompleted.value = 1
-      if (options.hasCosmosSurface()) {
-        await options.refreshCosmosGraph()
-        indexFinalizeCompleted.value = 2
-      }
-      if (options.indexingState.value !== 'out_of_sync') {
-        options.indexingState.value = 'indexed'
+      await refreshIndexedViews()
+      if (indexingShellPort.indexingState.value !== 'out_of_sync') {
+        indexingShellPort.indexingState.value = 'indexed'
         indexRunPhase.value = 'done'
         indexRunMessage.value = ''
         indexRunLastFinishedAt.value = Date.now()
@@ -518,11 +557,12 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
 
   /** Queues a markdown file for lexical reindex plus delayed semantic refresh. */
   function enqueueMarkdownReindex(path: string) {
-    if (!options.workingFolderPath.value || !options.isMarkdownPath(path)) return
+    if (!indexingShellPort.workingFolderPath.value || !indexingDocumentPort.isMarkdownPath(path)) return
+    if (indexRunKind.value === 'background' && indexRunCurrentPath.value === path) return
     pendingReindexPaths.add(path)
     updatePendingReindexCount()
-    if (options.indexingState.value !== 'indexing') {
-      options.indexingState.value = 'out_of_sync'
+    if (indexingShellPort.indexingState.value !== 'indexing') {
+      indexingShellPort.indexingState.value = 'out_of_sync'
     }
     if (indexRunKind.value !== 'background' || indexRunPhase.value === 'idle') {
       indexRunKind.value = 'background'
@@ -546,14 +586,15 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
 
   /** Removes a file from the index asynchronously and refreshes dependent views afterward. */
   function removeMarkdownFromIndexInBackground(path: string) {
+    if (!path.trim()) return
     pendingSemanticReindexAt.delete(path)
     scheduleSemanticReindexTimer()
-    void options.removeMarkdownFileFromIndex(path).then(() => {
+    void indexingApiPort.removeMarkdownFileFromIndex(path).then(() => {
       console.info('[index] background:remove:done', { path })
-      if (options.hasCosmosSurface()) {
-        void options.refreshCosmosGraph()
+      if (indexingSurfacePort.hasCosmosSurface()) {
+        void indexingSurfacePort.refreshCosmosGraph()
       }
-      void options.refreshBacklinks()
+      void indexingSurfacePort.refreshBacklinks()
     }).catch((err) => {
       console.warn('[index] background:remove:error', {
         path,
@@ -565,7 +606,7 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
 
   /** Runs a full workspace rebuild and refreshes shell views when it completes. */
   async function rebuildIndex() {
-    const root = options.workingFolderPath.value
+    const root = indexingShellPort.workingFolderPath.value
     if (!root) return
     reindexGeneration += 1
     pendingReindexPaths.clear()
@@ -582,44 +623,37 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
     indexFinalizeCompleted.value = 0
     indexFinalizeTotal.value = 0
     indexRunMessage.value = ''
-    options.indexingState.value = 'indexing'
+    indexingShellPort.indexingState.value = 'indexing'
     console.info('[index] rebuild:start')
     try {
-      const result = await options.rebuildWorkspaceIndex()
+      const result = await indexingApiPort.rebuildWorkspaceIndex()
       indexRunTotal.value = result.indexed_files
       indexRunCompleted.value = result.indexed_files
       if (result.canceled) {
-        options.indexingState.value = 'out_of_sync'
+        indexingShellPort.indexingState.value = 'out_of_sync'
         semanticIndexState.value = 'error'
         indexRunPhase.value = 'error'
         indexRunMessage.value = 'Rebuild canceled by user.'
-        options.notifyInfo?.('Index rebuild canceled.')
+        indexingUiEffectsPort?.notifyInfo?.('Index rebuild canceled.')
         return
       }
       indexRunPhase.value = 'refreshing_views'
-      indexFinalizeCompleted.value = 0
-      indexFinalizeTotal.value = options.hasCosmosSurface() ? 2 : 1
-      await options.refreshBacklinks()
-      indexFinalizeCompleted.value = 1
-      if (options.hasCosmosSurface()) {
-        await options.refreshCosmosGraph()
-        indexFinalizeCompleted.value = 2
-      }
-      options.indexingState.value = 'indexed'
+      await refreshIndexedViews()
+      indexingShellPort.indexingState.value = 'indexed'
       semanticIndexState.value = 'idle'
       indexRunPhase.value = 'done'
       indexRunLastFinishedAt.value = Date.now()
       console.info('[index] rebuild:done', { indexed: result.indexed_files })
-      options.notifySuccess?.(`Index rebuilt (${result.indexed_files} file${result.indexed_files === 1 ? '' : 's'}).`)
+      indexingUiEffectsPort?.notifySuccess?.(`Index rebuilt (${result.indexed_files} file${result.indexed_files === 1 ? '' : 's'}).`)
     } catch (err) {
-      options.indexingState.value = 'out_of_sync'
+      indexingShellPort.indexingState.value = 'out_of_sync'
       semanticIndexState.value = 'error'
       indexRunPhase.value = 'error'
       indexRunMessage.value = err instanceof Error ? err.message : 'Could not rebuild index.'
       console.warn('[index] rebuild:error', {
         message: err instanceof Error ? err.message : 'Could not rebuild index.'
       })
-      options.notifyError?.(err instanceof Error ? err.message : 'Could not rebuild index.')
+      indexingUiEffectsPort?.notifyError?.(err instanceof Error ? err.message : 'Could not rebuild index.')
     }
   }
 
@@ -634,13 +668,13 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
       clearSemanticTimer()
       semanticIndexState.value = 'idle'
       reindexWorkerRunning = false
-      options.indexingState.value = 'out_of_sync'
+      indexingShellPort.indexingState.value = 'out_of_sync'
       indexRunPhase.value = 'error'
       indexRunMessage.value = 'Stopped by user.'
       return
     }
     try {
-      await options.requestIndexCancel()
+      await indexingApiPort.requestIndexCancel()
       indexRunMessage.value = 'Stop requested. Waiting for backend to stop...'
     } catch {
       indexRunMessage.value = 'Could not request stop.'
@@ -653,7 +687,7 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
     indexStatusBusy.value = true
     try {
       if (indexRunning.value) {
-        const confirmed = options.confirmStopCurrentOperation ? options.confirmStopCurrentOperation() : true
+        const confirmed = indexingUiEffectsPort?.confirmStopCurrentOperation ? indexingUiEffectsPort.confirmStopCurrentOperation() : true
         if (!confirmed) return
         await stopCurrentIndexOperation()
       } else {

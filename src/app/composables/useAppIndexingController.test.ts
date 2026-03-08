@@ -2,41 +2,98 @@ import { ref } from 'vue'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useAppIndexingController } from './useAppIndexingController'
 
+async function flushMicrotasks(times = 3) {
+  for (let i = 0; i < times; i += 1) {
+    await Promise.resolve()
+  }
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
 function createController() {
+  const workingFolderPath = ref('/vault')
+  const hasWorkspace = ref(true)
   const indexingState = ref<'idle' | 'indexing' | 'indexed' | 'out_of_sync'>('indexed')
   const refreshBacklinks = vi.fn(async () => {})
   const refreshCosmosGraph = vi.fn(async () => {})
+  const readIndexLogs = vi.fn(async () => [])
+  const readIndexRuntimeStatus = vi.fn(async () => ({
+    model_name: 'bge',
+    model_state: 'ready',
+    model_init_attempts: 1,
+    model_last_started_at_ms: null,
+    model_last_finished_at_ms: null,
+    model_last_duration_ms: null,
+    model_last_error: null
+  }))
+  const requestIndexCancel = vi.fn(async () => {})
+  const rebuildWorkspaceIndex = vi.fn(async () => ({ indexed_files: 2, canceled: false }))
+  const reindexMarkdownFileLexical = vi.fn(async () => {})
+  const reindexMarkdownFileSemantic = vi.fn(async () => {})
+  const refreshSemanticEdgesCacheNow = vi.fn(async () => {})
+  const removeMarkdownFileFromIndex = vi.fn(async () => {})
+  const confirmStopCurrentOperation = vi.fn(() => true)
+  const notifyInfo = vi.fn()
+  const notifySuccess = vi.fn()
+  const notifyError = vi.fn()
 
   return {
+    workingFolderPath,
+    hasWorkspace,
     indexingState,
+    readIndexLogs,
+    readIndexRuntimeStatus,
+    requestIndexCancel,
+    rebuildWorkspaceIndex,
+    reindexMarkdownFileLexical,
+    reindexMarkdownFileSemantic,
+    refreshSemanticEdgesCacheNow,
+    removeMarkdownFileFromIndex,
     refreshBacklinks,
     refreshCosmosGraph,
+    confirmStopCurrentOperation,
+    notifyInfo,
+    notifySuccess,
+    notifyError,
     controller: useAppIndexingController({
-      workingFolderPath: ref('/vault'),
-      hasWorkspace: ref(true),
-      indexingState,
-      readIndexLogs: vi.fn(async () => []),
-      readIndexRuntimeStatus: vi.fn(async () => ({
-        model_name: 'bge',
-        model_state: 'ready',
-        model_init_attempts: 1,
-        model_last_started_at_ms: null,
-        model_last_finished_at_ms: null,
-        model_last_duration_ms: null,
-        model_last_error: null
-      })),
-      requestIndexCancel: vi.fn(async () => {}),
-      rebuildWorkspaceIndex: vi.fn(async () => ({ indexed_files: 2, canceled: false })),
-      reindexMarkdownFileLexical: vi.fn(async () => {}),
-      reindexMarkdownFileSemantic: vi.fn(async () => {}),
-      refreshSemanticEdgesCacheNow: vi.fn(async () => {}),
-      removeMarkdownFileFromIndex: vi.fn(async () => {}),
-      isMarkdownPath: (path) => path.endsWith('.md'),
-      toRelativePath: (path) => path.replace('/vault/', ''),
-      refreshBacklinks,
-      refreshCosmosGraph,
-      hasCosmosSurface: () => false,
-      confirmStopCurrentOperation: () => true
+      indexingShellPort: {
+        workingFolderPath,
+        hasWorkspace,
+        indexingState,
+        toRelativePath: (path) => path.replace('/vault/', '')
+      },
+      indexingApiPort: {
+        readIndexLogs,
+        readIndexRuntimeStatus,
+        requestIndexCancel,
+        rebuildWorkspaceIndex,
+        reindexMarkdownFileLexical,
+        reindexMarkdownFileSemantic,
+        refreshSemanticEdgesCacheNow,
+        removeMarkdownFileFromIndex
+      },
+      indexingDocumentPort: {
+        isMarkdownPath: (path) => path.endsWith('.md')
+      },
+      indexingSurfacePort: {
+        refreshBacklinks,
+        refreshCosmosGraph,
+        hasCosmosSurface: () => false
+      },
+      indexingUiEffectsPort: {
+        confirmStopCurrentOperation,
+        notifyInfo,
+        notifySuccess,
+        notifyError
+      }
     })
   }
 }
@@ -57,8 +114,7 @@ describe('useAppIndexingController', () => {
     const { controller, indexingState, refreshBacklinks } = createController()
 
     controller.enqueueMarkdownReindex('/vault/a.md')
-    await Promise.resolve()
-    await Promise.resolve()
+    await flushMicrotasks()
 
     expect(indexingState.value).toBe('indexed')
     expect(controller.indexRunKind.value).toBe('background')
@@ -75,5 +131,188 @@ describe('useAppIndexingController', () => {
     expect(controller.indexRunPhase.value).toBe('done')
     expect(controller.indexRunCompleted.value).toBe(2)
     expect(refreshBacklinks).toHaveBeenCalled()
+  })
+
+  it('ignores non-markdown paths when queueing reindex work', async () => {
+    const { controller, indexingState, reindexMarkdownFileLexical } = createController()
+
+    controller.enqueueMarkdownReindex('/vault/a.png')
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(indexingState.value).toBe('indexed')
+    expect(reindexMarkdownFileLexical).not.toHaveBeenCalled()
+  })
+
+  it('ignores queueing when no workspace is open', async () => {
+    const { controller, hasWorkspace, workingFolderPath, reindexMarkdownFileLexical } = createController()
+    hasWorkspace.value = false
+    workingFolderPath.value = ''
+
+    controller.enqueueMarkdownReindex('/vault/a.md')
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(reindexMarkdownFileLexical).not.toHaveBeenCalled()
+  })
+
+  it('deduplicates queued markdown paths', async () => {
+    const { controller, reindexMarkdownFileLexical } = createController()
+    const lexical = deferred<void>()
+    reindexMarkdownFileLexical.mockImplementationOnce(async () => await lexical.promise)
+
+    controller.enqueueMarkdownReindex('/vault/a.md')
+    controller.enqueueMarkdownReindex('/vault/a.md')
+    await flushMicrotasks()
+    lexical.resolve()
+    await flushMicrotasks()
+
+    expect(reindexMarkdownFileLexical).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the index out of sync and reports the failing file when lexical reindex fails', async () => {
+    const { controller, indexingState, reindexMarkdownFileLexical } = createController()
+    reindexMarkdownFileLexical.mockRejectedValueOnce(new Error('failed'))
+
+    controller.enqueueMarkdownReindex('/vault/a.md')
+    await flushMicrotasks(5)
+
+    expect(indexingState.value).toBe('out_of_sync')
+    expect(controller.indexRunPhase.value).toBe('error')
+    expect(controller.indexRunMessage.value).toBe('Failed to reindex a.md.')
+  })
+
+  it('runs semantic refresh work only for due paths and refreshes backlinks once', async () => {
+    vi.useFakeTimers()
+    const {
+      controller,
+      reindexMarkdownFileSemantic,
+      refreshSemanticEdgesCacheNow,
+      refreshBacklinks
+    } = createController()
+
+    controller.enqueueMarkdownReindex('/vault/a.md')
+    vi.advanceTimersByTime(15_000)
+    await vi.runAllTimersAsync()
+
+    expect(reindexMarkdownFileSemantic).toHaveBeenCalledWith('/vault/a.md')
+    expect(refreshSemanticEdgesCacheNow).toHaveBeenCalledOnce()
+    expect(refreshBacklinks).toHaveBeenCalled()
+    expect(controller.semanticIndexState.value).toBe('idle')
+  })
+
+  it('marks semantic indexing as error when semantic reindex fails', async () => {
+    vi.useFakeTimers()
+    const { controller, reindexMarkdownFileSemantic } = createController()
+    reindexMarkdownFileSemantic.mockRejectedValueOnce(new Error('semantic failed'))
+
+    controller.enqueueMarkdownReindex('/vault/a.md')
+    vi.advanceTimersByTime(15_000)
+    await vi.runAllTimersAsync()
+
+    expect(controller.semanticIndexState.value).toBe('error')
+  })
+
+  it('removes markdown from the index in background and refreshes derived views', async () => {
+    const { controller, removeMarkdownFileFromIndex, refreshBacklinks } = createController()
+
+    controller.removeMarkdownFromIndexInBackground('/vault/a.md')
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(removeMarkdownFileFromIndex).toHaveBeenCalledWith('/vault/a.md')
+    expect(refreshBacklinks).toHaveBeenCalled()
+  })
+
+  it('ignores empty paths when removing markdown from the index in background', async () => {
+    const { controller, removeMarkdownFileFromIndex } = createController()
+
+    controller.removeMarkdownFromIndexInBackground('   ')
+    await Promise.resolve()
+
+    expect(removeMarkdownFileFromIndex).not.toHaveBeenCalled()
+  })
+
+  it('reports canceled rebuilds via notifyInfo', async () => {
+    const { controller, indexingState, rebuildWorkspaceIndex, notifyInfo } = createController()
+    rebuildWorkspaceIndex.mockResolvedValueOnce({ indexed_files: 0, canceled: true })
+
+    await controller.rebuildIndex()
+
+    expect(indexingState.value).toBe('out_of_sync')
+    expect(controller.indexRunPhase.value).toBe('error')
+    expect(notifyInfo).toHaveBeenCalledWith('Index rebuild canceled.')
+  })
+
+  it('reports rebuild errors via notifyError', async () => {
+    const { controller, indexingState, rebuildWorkspaceIndex, notifyError } = createController()
+    rebuildWorkspaceIndex.mockRejectedValueOnce(new Error('boom'))
+
+    await controller.rebuildIndex()
+
+    expect(indexingState.value).toBe('out_of_sync')
+    expect(controller.indexRunPhase.value).toBe('error')
+    expect(notifyError).toHaveBeenCalledWith('boom')
+  })
+
+  it('requests stop when the primary action is confirmed during a running rebuild', async () => {
+    const { controller, requestIndexCancel, indexingState } = createController()
+    controller.indexStatusBusy.value = false
+    controller.indexRunKind.value = 'rebuild'
+    controller.indexRunPhase.value = 'indexing_files'
+    controller.indexRunCurrentPath.value = ''
+    controller.indexRunCompleted.value = 0
+    controller.indexRunTotal.value = 1
+    indexingState.value = 'indexing'
+
+    await controller.onIndexPrimaryAction()
+
+    expect(requestIndexCancel).toHaveBeenCalledOnce()
+  })
+
+  it('does not request stop when confirmation is refused', async () => {
+    const { controller, requestIndexCancel, confirmStopCurrentOperation, indexingState } = createController()
+    confirmStopCurrentOperation.mockReturnValueOnce(false)
+    indexingState.value = 'indexing'
+    controller.indexRunKind.value = 'rebuild'
+    controller.indexRunPhase.value = 'indexing_files'
+
+    await controller.onIndexPrimaryAction()
+
+    expect(requestIndexCancel).not.toHaveBeenCalled()
+  })
+
+  it('opens and closes the index status modal with polling-safe state', async () => {
+    vi.useFakeTimers()
+    const { controller, readIndexLogs, readIndexRuntimeStatus } = createController()
+
+    controller.openIndexStatusModal()
+    await Promise.resolve()
+    expect(controller.indexStatusModalVisible.value).toBe(true)
+    expect(readIndexLogs).toHaveBeenCalled()
+    expect(readIndexRuntimeStatus).toHaveBeenCalled()
+
+    readIndexLogs.mockClear()
+    readIndexRuntimeStatus.mockClear()
+    controller.closeIndexStatusModal()
+    vi.advanceTimersByTime(1_000)
+
+    expect(controller.indexStatusModalVisible.value).toBe(false)
+    expect(readIndexLogs).not.toHaveBeenCalled()
+    expect(readIndexRuntimeStatus).not.toHaveBeenCalled()
+  })
+
+  it('resetIndexingState clears queues and transient run state', async () => {
+    vi.useFakeTimers()
+    const { controller } = createController()
+
+    controller.enqueueMarkdownReindex('/vault/a.md')
+    controller.resetIndexingState()
+
+    expect(controller.pendingReindexCount.value).toBe(0)
+    expect(controller.indexRunKind.value).toBe('idle')
+    expect(controller.indexRunPhase.value).toBe('idle')
+    expect(controller.indexRunMessage.value).toBe('')
+    expect(controller.semanticIndexState.value).toBe('idle')
   })
 })

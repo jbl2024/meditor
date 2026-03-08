@@ -359,10 +359,14 @@ const favorites = useFavoritesController({
   removeFavorite,
   renameFavorite
 })
-const indexing = useAppIndexingController({
+const indexingControllerShellPort = {
   workingFolderPath: filesystem.workingFolderPath,
   hasWorkspace: filesystem.hasWorkspace,
   indexingState: filesystem.indexingState,
+  toRelativePath
+}
+
+const indexingControllerApiPort = {
   readIndexLogs,
   readIndexRuntimeStatus,
   requestIndexCancel,
@@ -370,16 +374,32 @@ const indexing = useAppIndexingController({
   reindexMarkdownFileLexical,
   reindexMarkdownFileSemantic,
   refreshSemanticEdgesCacheNow,
-  removeMarkdownFileFromIndex,
-  isMarkdownPath,
-  toRelativePath,
+  removeMarkdownFileFromIndex
+}
+
+const indexingControllerDocumentPort = {
+  isMarkdownPath
+}
+
+const indexingControllerSurfacePort = {
   refreshBacklinks,
   refreshCosmosGraph: () => cosmos.refreshGraph(),
-  hasCosmosSurface: () => multiPane.findPaneContainingSurface('cosmos') !== null,
+  hasCosmosSurface: () => multiPane.findPaneContainingSurface('cosmos') !== null
+}
+
+const indexingControllerUiEffectsPort = {
   confirmStopCurrentOperation: () => typeof window === 'undefined' || window.confirm('Cancel current indexing run?'),
-  notifyInfo: (message) => filesystem.notifyInfo(message),
-  notifySuccess: (message) => filesystem.notifySuccess(message),
-  notifyError: (message) => filesystem.notifyError(message)
+  notifyInfo: (message: string) => filesystem.notifyInfo(message),
+  notifySuccess: (message: string) => filesystem.notifySuccess(message),
+  notifyError: (message: string) => filesystem.notifyError(message)
+}
+
+const indexing = useAppIndexingController({
+  indexingShellPort: indexingControllerShellPort,
+  indexingApiPort: indexingControllerApiPort,
+  indexingDocumentPort: indexingControllerDocumentPort,
+  indexingSurfacePort: indexingControllerSurfacePort,
+  indexingUiEffectsPort: indexingControllerUiEffectsPort
 })
 const {
   semanticIndexState,
