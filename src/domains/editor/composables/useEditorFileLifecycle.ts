@@ -84,14 +84,14 @@ export type EditorFileLifecycleDocumentPort = {
   frontmatterByPath: Ref<Record<string, FrontmatterEnvelope>>
   propertyEditorMode: Ref<'structured' | 'raw'>
   rawYamlByPath: Ref<Record<string, string>>
-  serializableFrontmatterFields: (fields: FrontmatterEnvelope['fields']) => FrontmatterEnvelope['fields']
+ serializableFrontmatterFields: (fields: FrontmatterEnvelope['fields']) => FrontmatterEnvelope['fields']
   moveFrontmatterPathState: (from: string, to: string) => void
   countLines: (input: string) => number
   noteTitleFromPath: (path: string) => string
-  readVirtualTitle: (blocks: EditorBlock[]) => string
-  blockTextCandidate: (block: EditorBlock | undefined) => string
-  withVirtualTitle: (blocks: EditorBlock[], title: string) => { blocks: EditorBlock[]; changed: boolean }
-  stripVirtualTitle: (blocks: EditorBlock[]) => EditorBlock[]
+  getCurrentTitle: (path: string) => string
+  syncLoadedTitle: (path: string, title: string) => void
+  commitTitle: (path: string) => string
+  moveTitlePathState: (from: string, to: string) => void
   serializeCurrentDocBlocks: () => EditorBlock[]
   renderBlocks: (blocks: EditorBlock[]) => Promise<void>
 }
@@ -276,7 +276,7 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
         }
 
         const parsed = markdownToEditorData(body)
-        const normalized = documentPort.withVirtualTitle(parsed.blocks as EditorBlock[], documentPort.noteTitleFromPath(path)).blocks
+        documentPort.syncLoadedTitle(path, documentPort.noteTitleFromPath(path))
         const shouldWaitForHeavyRender = isHeavyRenderMarkdown(body) && typeof options.waitForHeavyRenderIdle === 'function'
 
         if (uiPort.ui.isLoadingLargeDocument.value) {
@@ -286,7 +286,7 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
         }
 
         sessionPort.setSuppressOnChange(true)
-        session.editor.commands.setContent(toTiptapDoc(normalized), { emitUpdate: false })
+        session.editor.commands.setContent(toTiptapDoc(parsed.blocks as EditorBlock[]), { emitUpdate: false })
         sessionPort.setSuppressOnChange(false)
 
         if (
@@ -392,7 +392,7 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
 
     try {
       const rawBlocks = documentPort.serializeCurrentDocBlocks()
-      const requestedTitle = documentPort.readVirtualTitle(rawBlocks) || documentPort.blockTextCandidate(rawBlocks[0]) || documentPort.noteTitleFromPath(initialPath)
+      const requestedTitle = documentPort.commitTitle(initialPath) || documentPort.getCurrentTitle(initialPath) || documentPort.noteTitleFromPath(initialPath)
       const lastLoaded = initialSession.loadedText
 
       const latestOnDisk = await ioPort.openFile(initialPath)
@@ -402,9 +402,7 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
 
       const renameResult = await ioPort.renameFileFromTitle(initialPath, requestedTitle)
       savePath = renameResult.path
-      const normalized = documentPort.withVirtualTitle(rawBlocks, renameResult.title)
-      const markdownBlocks = documentPort.stripVirtualTitle(normalized.blocks)
-      const bodyMarkdown = editorDataToMarkdown({ blocks: markdownBlocks })
+      const bodyMarkdown = editorDataToMarkdown({ blocks: rawBlocks })
       const frontmatterState = documentPort.frontmatterByPath.value[savePath] ?? documentPort.frontmatterByPath.value[initialPath]
       const frontmatterYaml = documentPort.propertyEditorMode.value === 'raw'
         ? (documentPort.rawYamlByPath.value[savePath] ?? documentPort.rawYamlByPath.value[initialPath] ?? '')
@@ -420,11 +418,9 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
         sessionPort.renameSessionPath(initialPath, savePath)
         sessionPort.moveLifecyclePathState(initialPath, savePath)
         documentPort.moveFrontmatterPathState(initialPath, savePath)
+        documentPort.moveTitlePathState(initialPath, savePath)
+        documentPort.syncLoadedTitle(savePath, renameResult.title)
         uiPort.emitPathRenamed({ from: initialPath, to: savePath, manual })
-      }
-
-      if (normalized.changed) {
-        await documentPort.renderBlocks(normalized.blocks)
       }
 
       const result = await ioPort.saveFile(savePath, markdown, { explicit: manual })
@@ -440,6 +436,7 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
       }
 
       documentPort.parseAndStoreFrontmatter(savePath, markdown)
+      documentPort.syncLoadedTitle(savePath, renameResult.title)
       sessionPort.setDirty(savePath, false)
     } catch (error) {
       sessionPort.setSaveError(savePath, error instanceof Error ? error.message : 'Could not save file.')

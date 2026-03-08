@@ -27,8 +27,8 @@ describe('computeHandleLock', () => {
 
 describe('resolveActiveTarget', () => {
   it('prefers current active target and falls back to last stable', () => {
-    const stable = { pos: 5, nodeType: 'paragraph', nodeSize: 3, canDelete: true, canConvert: true, text: 'x', isVirtualTitle: false }
-    const active = { pos: 7, nodeType: 'heading', nodeSize: 4, canDelete: true, canConvert: true, text: 'y', isVirtualTitle: false }
+    const stable = { pos: 5, nodeType: 'paragraph', nodeSize: 3, canDelete: true, canConvert: true, text: 'x' }
+    const active = { pos: 7, nodeType: 'heading', nodeSize: 4, canDelete: true, canConvert: true, text: 'y' }
 
     expect(resolveActiveTarget(active, stable)).toEqual(active)
     expect(resolveActiveTarget(null, stable)).toEqual(stable)

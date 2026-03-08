@@ -184,10 +184,7 @@ function blockToNode(block: EditorBlock): TiptapNode | null {
       const level = Math.max(1, Math.min(6, Number(data.level ?? 2)))
       return {
         type: 'heading',
-        attrs: {
-          level,
-          isVirtualTitle: block.id === '__virtual_title__'
-        },
+        attrs: { level },
         content: inlineNodesFromHtml(data.text)
       }
     }

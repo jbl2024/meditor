@@ -108,8 +108,7 @@ function createTarget(editor: Editor): BlockMenuTarget {
     nodeSize: node.nodeSize,
     canDelete: true,
     canConvert: true,
-    text: node.textContent ?? '',
-    isVirtualTitle: false
+    text: node.textContent ?? ''
   }
 }
 
@@ -122,8 +121,7 @@ function createTargetAtPos(editor: Editor, pos: number): BlockMenuTarget {
     nodeSize: node.nodeSize,
     canDelete: true,
     canConvert: true,
-    text: node.textContent ?? '',
-    isVirtualTitle: false
+    text: node.textContent ?? ''
   }
 }
 

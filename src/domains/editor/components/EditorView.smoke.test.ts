@@ -2,6 +2,13 @@ import { createApp, defineComponent, h, nextTick, ref } from 'vue'
 import { afterEach, describe, expect, it } from 'vitest'
 import EditorView from './EditorView.vue'
 
+async function flushUi() {
+  await nextTick()
+  await Promise.resolve()
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  await nextTick()
+}
+
 describe('EditorView smoke wiring', () => {
   afterEach(() => {
     document.body.innerHTML = ''
@@ -77,9 +84,11 @@ describe('EditorView smoke wiring', () => {
 
     const app = createApp(Harness)
     app.mount(root)
-    await nextTick()
+    await flushUi()
 
     expect(root.querySelector('.editor-holder')).toBeTruthy()
+    expect(root.querySelector('.editor-title-field')).toBeTruthy()
+    expect(root.querySelector('.ProseMirror .editor-title-field')).toBeFalsy()
     expect(root.querySelector('.editor-holder .properties-panel')).toBeTruthy()
     expect(root.querySelector('.editor-shell > .properties-panel')).toBeFalsy()
 

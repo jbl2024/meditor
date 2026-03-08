@@ -25,12 +25,12 @@ export type SessionStatus = {
  *
  * Parameter semantics:
  * - `saveCurrentFile(false)` is invoked for autosave.
- * - `isEditingVirtualTitle()` controls autosave deferral windows.
+ * - `isEditingTitle()` controls autosave deferral windows.
  */
 export type UseEditorSessionLifecycleOptions = {
   emitStatus: (payload: { path: string; dirty: boolean; saving: boolean; saveError: string }) => void
   saveCurrentFile: (manual?: boolean) => Promise<void>
-  isEditingVirtualTitle: () => boolean
+  isEditingTitle: () => boolean
   autosaveIdleMs?: number
   autosaveTitleIdleMs?: number
   autosaveTitleRetryMs?: number
@@ -93,14 +93,14 @@ export function useEditorSessionLifecycle(options: UseEditorSessionLifecycleOpti
   }
 
   /**
-   * Schedules autosave and defers once while virtual title is actively edited.
+   * Schedules autosave and defers once while the title field is actively edited.
    */
   function scheduleAutosave() {
     clearAutosaveTimer()
-    const idleMs = options.isEditingVirtualTitle() ? autosaveTitleIdleMs : autosaveIdleMs
+    const idleMs = options.isEditingTitle() ? autosaveTitleIdleMs : autosaveIdleMs
     autosaveTimer = setTimeout(() => {
       // Keep one retry buffer to avoid save/rename races during title edits.
-      if (options.isEditingVirtualTitle()) {
+      if (options.isEditingTitle()) {
         autosaveTimer = setTimeout(() => {
           void options.saveCurrentFile(false)
         }, autosaveTitleRetryMs)

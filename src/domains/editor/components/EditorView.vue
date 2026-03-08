@@ -9,6 +9,7 @@ import {
 } from '../lib/markdownBlocks'
 import { EDITOR_SLASH_COMMANDS } from '../lib/editorSlashCommands'
 import { openExternalUrl } from '../../../shared/api/workspaceApi'
+import EditorTitleField from './editor/EditorTitleField.vue'
 import EditorPropertiesPanel from './editor/EditorPropertiesPanel.vue'
 import EditorSlashOverlay from './editor/EditorSlashOverlay.vue'
 import EditorWikilinkOverlay from './editor/EditorWikilinkOverlay.vue'
@@ -36,7 +37,7 @@ import { useEditorWikilinkOverlayState } from '../composables/useEditorWikilinkO
 import { useEditorTiptapSetup } from '../composables/useEditorTiptapSetup'
 import { useEditorTableInteractions } from '../composables/useEditorTableInteractions'
 import { useEditorPathWatchers } from '../composables/useEditorPathWatchers'
-import { useEditorVirtualTitleDocument } from '../composables/useEditorVirtualTitleDocument'
+import { useEditorTitleState } from '../composables/useEditorTitleState'
 import { useEditorWikilinkDataSource } from '../composables/useEditorWikilinkDataSource'
 import { useEditorBlockHandleControls } from '../composables/useEditorBlockHandleControls'
 import { useEditorSessionStatus } from '../composables/useEditorSessionStatus'
@@ -101,6 +102,7 @@ const emit = defineEmits<{
 
 const holder = ref<HTMLDivElement | null>(null)
 const contentShell = ref<HTMLDivElement | null>(null)
+const titleEditorFocused = ref(false)
 let editor: Editor | null = null
 let suppressOnChange = false
 const MAIN_PANE_ID: PaneId = 'main'
@@ -345,7 +347,6 @@ const tableAddTopVisible = tableControls.tableAddTopVisible
 const tableAddBottomVisible = tableControls.tableAddBottomVisible
 const tableAddLeftVisible = tableControls.tableAddLeftVisible
 const tableAddRightVisible = tableControls.tableAddRightVisible
-const virtualTitleDoc = useEditorVirtualTitleDocument()
 const { editorZoomStyle, initFromStorage: initEditorZoomFromStorage, zoomBy: zoomEditorBy, resetZoom: resetEditorZoom, getZoom } = useEditorZoom()
 const { mermaidReplaceDialog, resolveMermaidReplaceDialog, requestMermaidReplaceConfirm } = useMermaidReplaceDialog()
 const navigation = useEditorNavigation({
@@ -358,7 +359,7 @@ const navigation = useEditorNavigation({
 const lifecycle = useEditorSessionLifecycle({
   emitStatus: (payload) => emit('status', payload),
   saveCurrentFile: (manual) => saveCurrentFile(manual),
-  isEditingVirtualTitle: () => isEditingVirtualTitle(),
+  isEditingTitle: () => isEditingVirtualTitle(),
   autosaveIdleMs: 1800
 })
 const sessionStatus = useEditorSessionStatus({
@@ -422,15 +423,7 @@ const onEditorMouseMove = tableInteractions.onEditorMouseMove
 const onEditorMouseLeave = tableInteractions.onEditorMouseLeave
 
 function isEditingVirtualTitle(): boolean {
-  if (!editor) return false
-  const { $from } = editor.state.selection
-  for (let depth = $from.depth; depth >= 0; depth -= 1) {
-    const node = $from.node(depth)
-    if (node.type.name === 'heading' && Boolean(node.attrs?.isVirtualTitle)) {
-      return true
-    }
-  }
-  return false
+  return titleEditorFocused.value
 }
 
 function serializeCurrentDocBlocks(): EditorBlock[] {
@@ -513,6 +506,24 @@ const countLines = layoutMetrics.countLines
 const updateGutterHitboxStyle = layoutMetrics.updateGutterHitboxStyle
 const onHolderScroll = layoutMetrics.onHolderScroll
 
+const titleState = useEditorTitleState(currentPath)
+const currentTitle = titleState.currentTitle
+
+function onTitleInput(value: string) {
+  const path = currentPath.value
+  if (!path) return
+  titleState.setCurrentTitle(path, value)
+  setDirty(path, true)
+  setSaveError(path, '')
+  scheduleAutosave(path)
+}
+
+function onTitleCommit() {
+  const path = currentPath.value
+  if (!path) return
+  titleState.commitTitle(path)
+}
+
 function updateFormattingToolbar() {
   inlineFormatToolbar.updateFormattingToolbar()
 }
@@ -556,7 +567,9 @@ const {
 })
 
 watch(editorZoomStyle, () => {
-  void nextTick().then(() => updateGutterHitboxStyle())
+  void nextTick().then(() => {
+    updateGutterHitboxStyle()
+  })
 }, { deep: true })
 
 function onEditorDocChanged(path: string) {
@@ -688,11 +701,11 @@ const fileLifecycle = useEditorFileLifecycle({
     serializableFrontmatterFields,
     moveFrontmatterPathState,
     countLines,
-    noteTitleFromPath: virtualTitleDoc.noteTitleFromPath,
-    readVirtualTitle: virtualTitleDoc.readVirtualTitle,
-    blockTextCandidate: virtualTitleDoc.blockTextCandidate,
-    withVirtualTitle: virtualTitleDoc.withVirtualTitle,
-    stripVirtualTitle: virtualTitleDoc.stripVirtualTitle,
+    noteTitleFromPath: titleState.noteTitleFromPath,
+    getCurrentTitle: titleState.getTitle,
+    syncLoadedTitle: titleState.syncLoadedTitle,
+    commitTitle: titleState.commitTitle,
+    moveTitlePathState: titleState.movePathState,
     serializeCurrentDocBlocks,
     renderBlocks
   },
@@ -1020,13 +1033,7 @@ function sendPulseContextToSecondBrain() {
 async function focusFirstContentBlock() {
   if (!editor) return
   let targetPos = 1
-  let firstSeen = false
   editor.state.doc.descendants((node, pos) => {
-    if (!firstSeen && node.type.name === 'heading' && node.attrs.isVirtualTitle) {
-      firstSeen = true
-      return
-    }
-    if (!firstSeen) return
     if (node.isTextblock) {
       targetPos = pos + 1
       return false
@@ -1100,49 +1107,57 @@ defineExpose({
           @mouseleave="onEditorMouseLeave"
           @click="dismissSlashMenu(); closeWikilinkMenu(); closeBlockMenu()"
         >
-          <div class="editor-note-chrome">
-            <EditorPropertiesPanel
-              :expanded="propertiesExpanded(path)"
-              :has-properties="structuredPropertyKeys.length > 0 || activeParseErrors.length > 0"
-              :mode="propertyEditorMode"
-              :can-use-structured-properties="canUseStructuredProperties"
-              :structured-property-fields="structuredPropertyFields"
-              :structured-property-keys="structuredPropertyKeys"
-              :active-raw-yaml="activeRawYaml"
-              :active-parse-errors="activeParseErrors"
-              :core-property-options="CORE_PROPERTY_OPTIONS"
-              :effective-type-for-field="effectiveTypeForField"
-              :is-property-type-locked="isPropertyTypeLocked"
-              @toggle-visibility="togglePropertiesVisibility"
-              @set-mode="propertyEditorMode = $event"
-              @property-key-input="void onPropertyKeyInput($event.index, $event.value)"
-              @property-type-change="void onPropertyTypeChange($event.index, $event.value)"
-              @property-value-input="onPropertyValueInput($event.index, $event.value)"
-              @property-checkbox-input="onPropertyCheckboxInput($event.index, $event.checked)"
-              @property-tokens-change="onPropertyTokensChange($event.index, $event.tokens)"
-              @remove-property="removePropertyField($event)"
-              @add-property="addPropertyField($event)"
-              @raw-yaml-input="onRawYamlInput($event)"
-            />
-
-            <div ref="contentShell" class="editor-content-shell">
-              <div
-                v-for="sessionPath in renderPaths"
-                :key="`editor-pane:${sessionPath}`"
-                class="editor-session-pane"
-                :data-session-path="sessionPath"
-                :data-active="isActiveMountedPath(sessionPath) ? 'true' : 'false'"
-                :aria-hidden="isActiveMountedPath(sessionPath) ? undefined : 'true'"
-                :tabindex="isActiveMountedPath(sessionPath) ? undefined : -1"
-                :inert="isActiveMountedPath(sessionPath) ? undefined : true"
-                v-show="isActiveMountedPath(sessionPath)"
-              >
-                <EditorContent
-                  v-if="renderedEditorsByPath[sessionPath]"
-                  :key="`editor-content:${sessionPath}`"
-                  :editor="renderedEditorsByPath[sessionPath]!"
-                />
-              </div>
+          <div ref="contentShell" class="editor-content-shell">
+            <div class="editor-header-shell">
+              <EditorTitleField
+                :model-value="currentTitle"
+                :saving="Boolean(currentPath && getSession(currentPath)?.saving)"
+                @update:model-value="onTitleInput"
+                @commit="onTitleCommit"
+                @focus="titleEditorFocused = true"
+                @blur="titleEditorFocused = false"
+                @focus-body-request="focusEditor()"
+              />
+              <EditorPropertiesPanel
+                :expanded="propertiesExpanded(path)"
+                :has-properties="structuredPropertyKeys.length > 0 || activeParseErrors.length > 0"
+                :mode="propertyEditorMode"
+                :can-use-structured-properties="canUseStructuredProperties"
+                :structured-property-fields="structuredPropertyFields"
+                :structured-property-keys="structuredPropertyKeys"
+                :active-raw-yaml="activeRawYaml"
+                :active-parse-errors="activeParseErrors"
+                :core-property-options="CORE_PROPERTY_OPTIONS"
+                :effective-type-for-field="effectiveTypeForField"
+                :is-property-type-locked="isPropertyTypeLocked"
+                @toggle-visibility="togglePropertiesVisibility"
+                @set-mode="propertyEditorMode = $event"
+                @property-key-input="void onPropertyKeyInput($event.index, $event.value)"
+                @property-type-change="void onPropertyTypeChange($event.index, $event.value)"
+                @property-value-input="onPropertyValueInput($event.index, $event.value)"
+                @property-checkbox-input="onPropertyCheckboxInput($event.index, $event.checked)"
+                @property-tokens-change="onPropertyTokensChange($event.index, $event.tokens)"
+                @remove-property="removePropertyField($event)"
+                @add-property="addPropertyField($event)"
+                @raw-yaml-input="onRawYamlInput($event)"
+              />
+            </div>
+            <div
+              v-for="sessionPath in renderPaths"
+              :key="`editor-pane:${sessionPath}`"
+              class="editor-session-pane"
+              :data-session-path="sessionPath"
+              :data-active="isActiveMountedPath(sessionPath) ? 'true' : 'false'"
+              :aria-hidden="isActiveMountedPath(sessionPath) ? undefined : 'true'"
+              :tabindex="isActiveMountedPath(sessionPath) ? undefined : -1"
+              :inert="isActiveMountedPath(sessionPath) ? undefined : true"
+              v-show="isActiveMountedPath(sessionPath)"
+            >
+              <EditorContent
+                v-if="renderedEditorsByPath[sessionPath]"
+                :key="`editor-content:${sessionPath}`"
+                :editor="renderedEditorsByPath[sessionPath]!"
+              />
             </div>
           </div>
           <!-- Invariant: interactive overlays/drag-handle stay bound to active editor only. -->
@@ -1347,9 +1362,8 @@ defineExpose({
   background: var(--surface-bg);
 }
 
-.editor-note-chrome {
-  max-width: 800px;
-  margin: 0 auto;
+.editor-header-shell {
+  margin: 0 0 1.75rem;
 }
 
 .editor-pulse-panel-wrap {

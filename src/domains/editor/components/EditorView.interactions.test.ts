@@ -105,6 +105,9 @@ describe('EditorView interactions contract', () => {
     expect(root.querySelector('.properties-content-wrap')).toBeTruthy()
     expect(root.textContent).toContain('Structured')
     expect(propertiesEvents).toHaveBeenCalled()
+    const title = root.querySelector('.ProseMirror > h1') as HTMLElement
+    expect(title).toBeTruthy()
+    expect(getComputedStyle(title).marginBottom).not.toBe('0px')
 
     app.unmount()
     document.body.innerHTML = ''

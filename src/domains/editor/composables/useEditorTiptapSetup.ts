@@ -1,4 +1,4 @@
-import { Extension, Editor } from '@tiptap/vue-3'
+import { Editor } from '@tiptap/vue-3'
 import type { Ref } from 'vue'
 import type { Transaction } from '@tiptap/pm/state'
 import type { EditorView as ProseMirrorEditorView } from '@tiptap/pm/view'
@@ -12,7 +12,6 @@ import { MermaidNode } from '../lib/tiptap/extensions/MermaidNode'
 import { QuoteNode } from '../lib/tiptap/extensions/QuoteNode'
 import { HtmlNode } from '../lib/tiptap/extensions/HtmlNode'
 import { WikilinkNode } from '../lib/tiptap/extensions/WikilinkNode'
-import { VirtualTitleGuard } from '../lib/tiptap/extensions/VirtualTitleGuard'
 import { CodeBlockNode } from '../lib/tiptap/extensions/CodeBlockNode'
 import { TableCellAlign } from '../lib/tiptap/extensions/TableCellAlign'
 import { EditorFindExtension } from '../lib/tiptap/extensions/EditorFind'
@@ -69,22 +68,6 @@ export type UseEditorTiptapSetupOptions = {
 export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
   const ISO_DATE_TOKEN_REGEX = /^\d{4}-\d{2}-\d{2}$/
 
-  const headingMeta = Extension.create({
-    name: 'headingMeta',
-    addGlobalAttributes() {
-      return [
-        {
-          types: ['heading'],
-          attributes: {
-            isVirtualTitle: {
-              default: false
-            }
-          }
-        }
-      ]
-    }
-  })
-
   function closestAnchorFromEventTarget(target: EventTarget | null): HTMLAnchorElement | null {
     const element = target instanceof Element
       ? target
@@ -123,7 +106,6 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
     const { $from } = selection
     const parent = $from.parent
     if (parent.type.name !== 'heading') return false
-    if (Boolean(parent.attrs?.isVirtualTitle)) return false
     if ($from.parentOffset !== 0) return false
 
     const currentLevel = Number(parent.attrs?.level ?? 1)
@@ -160,7 +142,6 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
         Link.configure({
           openOnClick: false
         }),
-        headingMeta,
         ListKit.configure({
           taskItem: {
             nested: true
@@ -183,8 +164,7 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
           onNavigate: (target: string) => options.openLinkTargetWithAutosave(target),
           onCreate: async (_target: string) => {},
           resolve: (target: string) => options.resolveWikilinkTarget(target)
-        }),
-        VirtualTitleGuard
+        })
       ],
       editorProps: {
         attributes: {

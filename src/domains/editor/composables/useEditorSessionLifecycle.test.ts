@@ -6,7 +6,7 @@ describe('useEditorSessionLifecycle', () => {
     const lifecycle = useEditorSessionLifecycle({
       emitStatus: () => {},
       saveCurrentFile: async () => {},
-      isEditingVirtualTitle: () => false
+      isEditingTitle: () => false
     })
 
     const id1 = lifecycle.nextRequestId()
@@ -20,7 +20,7 @@ describe('useEditorSessionLifecycle', () => {
     const lifecycle = useEditorSessionLifecycle({
       emitStatus,
       saveCurrentFile: async () => {},
-      isEditingVirtualTitle: () => false
+      isEditingTitle: () => false
     })
 
     lifecycle.patchStatus('a.md', { dirty: true, saving: true, saveError: 'x' })
@@ -31,14 +31,14 @@ describe('useEditorSessionLifecycle', () => {
     expect(emitStatus).toHaveBeenCalled()
   })
 
-  it('defers autosave while virtual title is active', async () => {
+  it('defers autosave while title field is active', async () => {
     vi.useFakeTimers()
     const saveCurrentFile = vi.fn(async () => {})
     let editing = true
     const lifecycle = useEditorSessionLifecycle({
       emitStatus: () => {},
       saveCurrentFile,
-      isEditingVirtualTitle: () => editing,
+      isEditingTitle: () => editing,
       autosaveIdleMs: 10,
       autosaveTitleIdleMs: 10,
       autosaveTitleRetryMs: 15

@@ -815,7 +815,7 @@ async function rebuildIndexFromOverflow() {
 
 function isTitleOnlyContent(content: string, titleLine: string): boolean {
   const normalized = content.replace(/\r\n/g, '\n').trim()
-  return normalized === titleLine
+  return normalized === '' || normalized === titleLine
 }
 
 function toggleOverflowMenu() {
@@ -1760,7 +1760,7 @@ async function ensureVirtualMarkdown(path: string, titleLine: string) {
   virtualDocs.value = {
     ...virtualDocs.value,
     [path]: {
-      content: titleLine ? `${titleLine}\n` : '',
+      content: '',
       titleLine
     }
   }

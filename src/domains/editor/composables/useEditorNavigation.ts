@@ -7,7 +7,7 @@ import type { Editor } from '@tiptap/vue-3'
  * - Own outline extraction and reveal/focus helpers for the TipTap-based editor.
  *
  * Responsibilities:
- * - Parse level 1..3 headings while excluding virtual-title nodes.
+ * - Parse level 1..3 headings from the TipTap body.
  * - Debounce outline emission after document changes.
  * - Reveal outline headings, snippets, and anchors in the active editor document.
  *
@@ -62,7 +62,6 @@ export function useEditorNavigation(options: UseEditorNavigationOptions) {
     const out: EditorHeadingNode[] = []
     editor.state.doc.descendants((node) => {
       if (node.type.name !== 'heading') return
-      if (node.attrs.isVirtualTitle) return
       const text = node.textContent.trim()
       if (!text) return
       const rawLevel = Number(node.attrs.level ?? 2)
@@ -90,7 +89,6 @@ export function useEditorNavigation(options: UseEditorNavigationOptions) {
     let targetPos = -1
     editor.state.doc.descendants((node, pos) => {
       if (node.type.name !== 'heading') return
-      if (node.attrs.isVirtualTitle) return
       if (visibleIndex === index) {
         targetPos = pos + 1
         return false
@@ -141,7 +139,7 @@ export function useEditorNavigation(options: UseEditorNavigationOptions) {
     if (anchor.heading) {
       const wanted = options.normalizeHeadingAnchor(anchor.heading)
       editor.state.doc.descendants((node, pos) => {
-        if (node.type.name !== 'heading' || node.attrs.isVirtualTitle) return
+        if (node.type.name !== 'heading') return
         const text = node.textContent.trim()
         if (!text) return
         if (options.normalizeHeadingAnchor(text) === wanted || options.slugifyHeading(text) === options.slugifyHeading(anchor.heading ?? '')) {

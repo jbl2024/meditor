@@ -30,7 +30,7 @@ describe('editor architecture ownership guardrails', () => {
     expect(editorViewSource).toContain('useEditorPathWatchers')
     expect(editorViewSource).toContain('useEditorMountedSessions')
     expect(editorViewSource).toContain('useEditorBlockHandleControls')
-    expect(editorViewSource).toContain('useEditorVirtualTitleDocument')
+    expect(editorViewSource).toContain('useEditorTitleState')
     expect(editorViewSource).not.toContain('function createEditorOptions(')
     expect(editorViewSource).not.toContain('function syncWikilinkUiFromPluginState(')
     expect(editorViewSource).not.toContain('function applyWikilinkCandidateToken(')

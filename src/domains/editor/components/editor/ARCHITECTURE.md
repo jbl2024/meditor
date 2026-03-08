@@ -11,7 +11,7 @@
 - Wikilink target/headings cache and resolve: `useEditorWikilinkDataSource`
 - Slash descriptor insertion mapping: `useEditorSlashInsertion`
 - Block handle/menu orchestration and drag lock: `useEditorBlockHandleControls`
-- Virtual-title document transforms: `useEditorVirtualTitleDocument`
+- Header title state and rename sync: `useEditorTitleState`
 - Block menu action derivation: `useBlockMenuControls`
 - Table edge visibility + sticky timing: `useTableToolbarControls`
 - Table toolbar/hover/action orchestration: `useEditorTableInteractions`
@@ -32,6 +32,7 @@
 - `useEditorPersistence` is removed; do not reintroduce parallel lifecycle ownership.
 - `useEditorWikilinkOverlayState` should be initialized before binding tiptap callbacks that invoke it.
 - Editor content rendering is multi-instance and path-scoped; only active path is visible/interactable.
+- Title and properties are owned by the Vue header; the TipTap body owns only persisted note content.
 - Loading overlays for complex docs should remain visible until `waitForHeavyRenderIdle` settles after `setContent`.
 - Overlay trigger is not size-only: heavy markdown complexity and runtime pending render signals can escalate loading UI for below-threshold files.
 

@@ -151,9 +151,7 @@ function nodeToBlock(node: JSONContent): EditorBlock | null {
     case 'heading': {
       const level = Math.max(1, Math.min(6, Number(node.attrs?.level ?? 2)))
       const text = paragraphText(node)
-      const isVirtualTitle = Boolean(node.attrs?.isVirtualTitle)
       return {
-        ...(isVirtualTitle ? { id: '__virtual_title__' } : {}),
         type: 'header',
         data: { level, text }
       }

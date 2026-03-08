@@ -45,9 +45,9 @@ function createEditor(nodes: Array<{ node: DescNode; pos: number }>) {
 }
 
 describe('useEditorNavigation', () => {
-  it('parses outline excluding virtual title', () => {
+  it('parses outline from body headings', () => {
     const { editor } = createEditor([
-      { pos: 1, node: { type: { name: 'heading' }, attrs: { level: 1, isVirtualTitle: true }, textContent: 'Virtual' } },
+      { pos: 1, node: { type: { name: 'heading' }, attrs: { level: 1 }, textContent: 'Title heading' } },
       { pos: 8, node: { type: { name: 'heading' }, attrs: { level: 2 }, textContent: 'Section A' } },
       { pos: 18, node: { type: { name: 'heading' }, attrs: { level: 4 }, textContent: 'Section B' } }
     ])
@@ -61,6 +61,7 @@ describe('useEditorNavigation', () => {
     })
 
     expect(nav.parseOutlineFromDoc()).toEqual([
+      { level: 1, text: 'Title heading' },
       { level: 2, text: 'Section A' },
       { level: 3, text: 'Section B' }
     ])

@@ -67,8 +67,12 @@
   font-size: calc(var(--editor-heading-1-size) * var(--editor-zoom, 1));
   font-weight: 580;
   line-height: 1.35;
-  margin: 0.68rem 0 1.12rem;
+  margin: 0.68rem 0 0.45rem;
   color: var(--text-main);
+}
+
+.editor-holder .tomosona-properties-anchor {
+  display: block;
 }
 
 .editor-holder .ProseMirror h2 {

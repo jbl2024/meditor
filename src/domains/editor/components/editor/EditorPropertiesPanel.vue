@@ -189,10 +189,9 @@ function checkboxValue(event: Event): boolean {
 
 <style scoped>
 .properties-panel {
-  margin: 0 0 0.7rem;
-  padding: 0 2rem 0.85rem 3.5rem;
+  margin: 0 0 1.15rem;
+  padding: 0;
   background: transparent;
-  border-bottom: 1px solid color-mix(in srgb, var(--properties-panel-bg) 42%, transparent);
 }
 
 .properties-row {
@@ -204,23 +203,23 @@ function checkboxValue(event: Event): boolean {
 }
 
 .properties-toggle {
-  color: color-mix(in srgb, var(--properties-toggle-text) 62%, transparent);
+  color: color-mix(in srgb, var(--properties-toggle-text) 42%, transparent);
   transition: color 140ms ease;
 }
 
 .properties-toggle:hover {
-  color: var(--properties-toggle-text);
+  color: color-mix(in srgb, var(--properties-toggle-text) 76%, transparent);
 }
 
 .properties-toggle-label {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.01em;
 }
 
 .properties-accent-icon {
   color: var(--properties-accent);
-  opacity: 0.82;
+  opacity: 0.65;
 }
 
 .properties-mode-btn {
@@ -273,7 +272,9 @@ function checkboxValue(event: Event): boolean {
 
 .properties-content-wrap {
   overflow: hidden;
-  margin-top: 0.65rem;
+  margin-top: 0.5rem;
+  padding: 0.5rem 0 0 1rem;
+  border-left: 2px solid color-mix(in srgb, var(--properties-field-border) 82%, transparent);
 }
 
 .properties-content-enter-active,
@@ -304,8 +305,7 @@ function checkboxValue(event: Event): boolean {
 
 @media (max-width: 840px) {
   .properties-panel {
-    padding-right: 1rem;
-    padding-left: 1rem;
+    padding: 0;
   }
 }
 </style>

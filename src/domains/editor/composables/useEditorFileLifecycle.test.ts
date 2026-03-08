@@ -109,10 +109,10 @@ function createOptions(overrides: UseEditorFileLifecycleOverrides = {}) {
     moveFrontmatterPathState: vi.fn(),
     countLines: (input) => input.split('\n').length,
     noteTitleFromPath: () => 'Title',
-    readVirtualTitle: () => 'Title',
-    blockTextCandidate: () => 'Title',
-    withVirtualTitle: (blocks, _title) => ({ blocks, changed: false }),
-    stripVirtualTitle: (blocks) => blocks,
+    getCurrentTitle: () => 'Title',
+    syncLoadedTitle: vi.fn(),
+    commitTitle: () => 'Title',
+    moveTitlePathState: vi.fn(),
     serializeCurrentDocBlocks: () => [{ id: 'b1', type: 'paragraph', data: { text: 'Body' } }] as EditorBlock[],
     renderBlocks: vi.fn(async () => {})
   }

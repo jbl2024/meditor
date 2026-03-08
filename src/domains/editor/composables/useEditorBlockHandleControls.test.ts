@@ -11,7 +11,6 @@ function createTarget(): BlockMenuTarget {
     nodeSize: 2,
     nodeType: 'paragraph',
     text: 'Hello',
-    isVirtualTitle: false,
     canDelete: true,
     canConvert: true
   }

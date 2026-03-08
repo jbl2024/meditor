@@ -184,15 +184,7 @@ export function useEditorInputHandlers(options: UseEditorInputHandlersOptions) {
     options.uiPort.updateTableToolbar()
   }
 
-  function onEditorContextMenu(event: MouseEvent) {
-    const target = event.target as HTMLElement | null
-    const heading = target?.closest('h1') as HTMLElement | null
-    if (!heading) return
-    if (heading.closest('[data-virtual-title="true"]') || heading.parentElement?.getAttribute('data-virtual-title') === 'true') {
-      event.preventDefault()
-      event.stopPropagation()
-    }
-  }
+  function onEditorContextMenu(_event: MouseEvent) {}
 
   function onEditorPaste(event: ClipboardEvent) {
     const editor = options.editingPort.getEditor()

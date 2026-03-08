@@ -35,8 +35,8 @@ export function useBlockMenuControls(options: {
   const actions = computed<BlockMenuActionItem[]>(() => {
     const editor = options.getEditor()
     const target = actionTarget.value
-    const moveUp = Boolean(editor && target && !target.isVirtualTitle && canMoveUp(editor, target))
-    const moveDown = Boolean(editor && target && !target.isVirtualTitle && canMoveDown(editor, target))
+    const moveUp = Boolean(editor && target && canMoveUp(editor, target))
+    const moveDown = Boolean(editor && target && canMoveDown(editor, target))
 
     return [
       { id: 'insert_above', actionId: 'insert_above', label: 'Insert above', disabled: !target },

@@ -26,7 +26,6 @@ export type BlockMenuTarget = {
   canDelete: boolean
   canConvert: boolean
   text: string
-  isVirtualTitle: boolean
 }
 
 export type BlockMenuActionItem = {
