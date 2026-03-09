@@ -448,6 +448,7 @@ defineExpose({
           <div ref="contentShell" class="editor-content-shell">
             <div class="editor-header-shell">
               <EditorTitleField
+                :key="currentPath"
                 :model-value="currentTitle"
                 :saving="Boolean(currentPath && getSession(currentPath)?.saving)"
                 @update:model-value="onTitleInput"

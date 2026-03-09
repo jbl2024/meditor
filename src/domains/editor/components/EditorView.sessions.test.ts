@@ -61,6 +61,10 @@ function editorText(root: HTMLElement): string {
   return (activePane?.querySelector('.ProseMirror')?.textContent ?? '')
 }
 
+function titleText(root: HTMLElement): string {
+  return (root.querySelector('.editor-title-field')?.textContent ?? '').trim()
+}
+
 function allEditorTexts(root: HTMLElement): string[] {
   return Array.from(root.querySelectorAll('.ProseMirror')).map((el) => el.textContent ?? '')
 }
@@ -260,6 +264,36 @@ describe('EditorView per-document sessions', () => {
 
     expect(editorText(mounted.root)).toContain('Beta body')
     expect(openFile.mock.calls.filter(([path]) => path === 'b.md')).toHaveLength(1)
+
+    mounted.app.unmount()
+  })
+
+  it('updates the visible title when switching tabs after editing another title', async () => {
+    const controls: HarnessControls = {
+      path: ref('first.md'),
+      openPaths: ref(['first.md', 'second.md'])
+    }
+
+    const openFile = vi.fn(async (path: string) => {
+      if (path === 'first.md') return '# First\n\nAlpha body'
+      return '# Second\n\nBeta body'
+    })
+
+    const mounted = mountHarness({ controls, openFile })
+    await flushEditorUi()
+
+    const titleEl = mounted.root.querySelector('.editor-title-field') as HTMLElement
+    titleEl.dispatchEvent(new FocusEvent('focus', { bubbles: true }))
+    titleEl.textContent = 'Renamed first'
+    titleEl.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushEditorUi()
+
+    expect(titleText(mounted.root)).toBe('Renamed first')
+
+    controls.path.value = 'second.md'
+    await flushEditorUi()
+
+    expect(titleText(mounted.root)).toBe('second')
 
     mounted.app.unmount()
   })
