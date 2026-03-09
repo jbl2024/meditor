@@ -341,8 +341,67 @@ describe('useEditorChromeRuntime', () => {
 
     expect(holderAddEventListenerSpy).toHaveBeenCalledWith('keydown', expect.any(Function), true)
     expect(addEventListenerSpy).toHaveBeenCalledWith('keydown', expect.any(Function), true)
+    expect(addEventListenerSpy).toHaveBeenCalledWith('mousedown', expect.any(Function), true)
     expect(holderRemoveEventListenerSpy).toHaveBeenCalledWith('keydown', expect.any(Function), true)
+    expect(removeEventListenerSpy).toHaveBeenCalledWith('mousedown', expect.any(Function), true)
     expect(removeEventListenerSpy).toHaveBeenCalledWith('keydown', expect.any(Function), true)
     expect(resolved).toBe(false)
+  })
+
+  it('does not bind document mousedown after unmount when teardown happens before the RAF callback', async () => {
+    const addEventListenerSpy = vi.spyOn(document, 'addEventListener')
+    const removeEventListenerSpy = vi.spyOn(document, 'removeEventListener')
+    const cancelAnimationFrameSpy = vi.fn()
+    let scheduledFrame: FrameRequestCallback | null = null
+
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      scheduledFrame = callback
+      return 42
+    })
+    vi.stubGlobal('cancelAnimationFrame', cancelAnimationFrameSpy)
+
+    const harness = createRuntimeHarness()
+    const mountPromise = harness.runtime.onMountInit()
+    await nextTick()
+    await harness.runtime.onUnmountCleanup()
+
+    expect(cancelAnimationFrameSpy).toHaveBeenCalledWith(42)
+    expect(removeEventListenerSpy).toHaveBeenCalledWith('mousedown', expect.any(Function), true)
+
+    const frame = scheduledFrame as FrameRequestCallback | null
+    if (frame) {
+      frame(0)
+    }
+    await mountPromise
+
+    const mousedownAdds = addEventListenerSpy.mock.calls.filter(([name]) => name === 'mousedown')
+    expect(mousedownAdds).toHaveLength(0)
+  })
+
+  it('drops stale pending mousedown binds when a newer mount sequence supersedes the older one', async () => {
+    const addEventListenerSpy = vi.spyOn(document, 'addEventListener')
+    const frameCallbacks: FrameRequestCallback[] = []
+
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      frameCallbacks.push(callback)
+      return frameCallbacks.length
+    })
+    vi.stubGlobal('cancelAnimationFrame', vi.fn())
+
+    const harness = createRuntimeHarness()
+    const firstMount = harness.runtime.onMountInit()
+    await nextTick()
+    const secondMount = harness.runtime.onMountInit()
+    await nextTick()
+
+    expect(frameCallbacks).toHaveLength(2)
+
+    frameCallbacks[0]?.(0)
+    await firstMount
+    expect(addEventListenerSpy.mock.calls.filter(([name]) => name === 'mousedown')).toHaveLength(0)
+
+    frameCallbacks[1]?.(0)
+    await secondMount
+    expect(addEventListenerSpy.mock.calls.filter(([name]) => name === 'mousedown')).toHaveLength(1)
   })
 })

@@ -109,6 +109,8 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   const host = options.chromeHostPort
   const interaction = options.chromeInteractionPort
   const output = options.chromeOutputPort
+  let mountSequence = 0
+  let pendingDocumentMouseDownRaf: number | null = null
 
   const titleEditorFocused = ref(false)
   const isLoadingLargeDocument = ref(false)
@@ -642,16 +644,48 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     document.removeEventListener('keydown', documentEvents.onDocumentKeydown, true)
   }
 
+  function cancelPendingDocumentMouseDownBind() {
+    if (pendingDocumentMouseDownRaf === null) return
+    const cancelRaf = typeof cancelAnimationFrame === 'function'
+      ? cancelAnimationFrame
+      : (id: number) => window.clearTimeout(id)
+    cancelRaf(pendingDocumentMouseDownRaf)
+    pendingDocumentMouseDownRaf = null
+  }
+
+  /**
+   * Defers document-level click dismissal until the first paint so floating UI
+   * anchors exist, while still allowing teardown to cancel the pending bind.
+   */
+  function waitForDocumentMouseDownBindFrame(sequence: number) {
+    return new Promise<void>((resolve) => {
+      const requestRaf = typeof requestAnimationFrame === 'function'
+        ? requestAnimationFrame
+        : (callback: FrameRequestCallback) => window.setTimeout(() => callback(performance.now()), 16)
+      pendingDocumentMouseDownRaf = requestRaf(() => {
+        pendingDocumentMouseDownRaf = null
+        if (sequence !== mountSequence) {
+          resolve()
+          return
+        }
+        layoutMetrics.updateGutterHitboxStyle()
+        document.addEventListener('mousedown', documentEvents.onDocumentMouseDown, true)
+        resolve()
+      })
+    })
+  }
+
   async function onMountInit() {
+    const sequence = ++mountSequence
     initEditorZoomFromStorage()
     bindChromeEventListeners()
     await nextTick()
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
-    layoutMetrics.updateGutterHitboxStyle()
-    document.addEventListener('mousedown', documentEvents.onDocumentMouseDown, true)
+    await waitForDocumentMouseDownBindFrame(sequence)
   }
 
   async function onUnmountCleanup() {
+    mountSequence += 1
+    cancelPendingDocumentMouseDownBind()
     tableInteractions.clearTimers()
     if (mermaidReplaceDialog.value.resolve) {
       mermaidReplaceDialog.value.resolve(false)
