@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import mermaid from 'mermaid'
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { NodeViewWrapper } from '@tiptap/vue-3'
 import UiFilterableDropdown, { type FilterableDropdownItem } from '../../../../../shared/components/ui/UiFilterableDropdown.vue'
 import { beginHeavyRender, endHeavyRender } from '../../../lib/tiptap/renderStabilizer'
@@ -35,23 +35,80 @@ let renderCount = 0
 type MermaidRuntimeState = {
   initialized: boolean
   instanceSeq: number
+  themeKey: 'light' | 'dark' | null
 }
 
 function runtimeState(): MermaidRuntimeState {
   const target = window as typeof window & { __tomosonaMermaidRuntime?: MermaidRuntimeState }
   if (!target.__tomosonaMermaidRuntime) {
-    target.__tomosonaMermaidRuntime = { initialized: false, instanceSeq: 0 }
+    target.__tomosonaMermaidRuntime = { initialized: false, instanceSeq: 0, themeKey: null }
   }
   return target.__tomosonaMermaidRuntime
 }
 
 const instanceId = ++runtimeState().instanceSeq
+let themeObserver: MutationObserver | null = null
+
+function resolveThemeKey(): 'light' | 'dark' {
+  const root = document.documentElement
+  return root.classList.contains('dark') || root.dataset.theme === 'dark' ? 'dark' : 'light'
+}
+
+function buildMermaidConfig(themeKey: 'light' | 'dark') {
+  if (themeKey === 'dark') {
+    return {
+      startOnLoad: false,
+      securityLevel: 'strict' as const,
+      suppressErrorRendering: true,
+      theme: 'base' as const,
+      darkMode: true,
+      themeVariables: {
+        background: '#282c34',
+        primaryColor: '#3b4252',
+        primaryBorderColor: '#a78bfa',
+        primaryTextColor: '#e5e7eb',
+        lineColor: '#9ca3af',
+        textColor: '#e5e7eb',
+        mainBkg: '#3b4252',
+        secondBkg: '#312e81',
+        tertiaryColor: '#282c34',
+        clusterBkg: '#282c34',
+        clusterBorder: '#64748b',
+        edgeLabelBackground: '#282c34'
+      }
+    }
+  }
+
+  return {
+    startOnLoad: false,
+    securityLevel: 'strict' as const,
+    suppressErrorRendering: true,
+    theme: 'base' as const,
+    darkMode: false,
+    themeVariables: {
+      background: '#ffffff',
+      primaryColor: '#ede9fe',
+      primaryBorderColor: '#a78bfa',
+      primaryTextColor: '#1f2937',
+      lineColor: '#4b5563',
+      textColor: '#1f2937',
+      mainBkg: '#ede9fe',
+      secondBkg: '#f8fafc',
+      tertiaryColor: '#ffffff',
+      clusterBkg: '#f8fafc',
+      clusterBorder: '#cbd5e1',
+      edgeLabelBackground: '#ffffff'
+    }
+  }
+}
 
 function ensureMermaid() {
   const runtime = runtimeState()
-  if (runtime.initialized) return
-  mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', suppressErrorRendering: true })
+  const themeKey = resolveThemeKey()
+  if (runtime.initialized && runtime.themeKey === themeKey) return
+  mermaid.initialize(buildMermaidConfig(themeKey))
   runtime.initialized = true
+  runtime.themeKey = themeKey
 }
 
 async function renderPreview() {
@@ -115,7 +172,17 @@ async function onTemplateSelect(item: FilterableDropdownItem) {
 }
 
 onMounted(() => {
+  const root = document.documentElement
+  themeObserver = new MutationObserver(() => {
+    void renderPreview()
+  })
+  themeObserver.observe(root, { attributes: true, attributeFilter: ['class', 'data-theme'] })
   void renderPreview()
+})
+
+onBeforeUnmount(() => {
+  themeObserver?.disconnect()
+  themeObserver = null
 })
 
 watch(code, () => {

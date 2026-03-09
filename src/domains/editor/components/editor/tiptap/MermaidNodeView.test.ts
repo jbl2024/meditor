@@ -86,10 +86,40 @@ describe('MermaidNodeView', () => {
     await flush()
 
     expect(mermaidInitialize).toHaveBeenCalledTimes(1)
+    expect(mermaidInitialize).toHaveBeenCalledWith(expect.objectContaining({
+      theme: 'base',
+      darkMode: false,
+      themeVariables: expect.objectContaining({
+        primaryColor: '#ede9fe',
+        primaryBorderColor: '#a78bfa'
+      })
+    }))
     expect(mermaidRender).toHaveBeenCalledTimes(1)
     expect(beginHeavyRender).toHaveBeenCalledTimes(1)
     expect(endHeavyRender).toHaveBeenCalledTimes(1)
     expect(harness.root.querySelector('.tomosona-mermaid-preview svg')).toBeTruthy()
+
+    harness.app.unmount()
+  })
+
+  it('reconfigures mermaid when the app theme changes', async () => {
+    const harness = mountHarness({ initialCode: 'flowchart TD\n  A --> B' })
+    await flush()
+
+    document.documentElement.classList.add('dark')
+    await flush()
+
+    expect(mermaidInitialize).toHaveBeenCalledTimes(2)
+    expect(mermaidInitialize).toHaveBeenLastCalledWith(expect.objectContaining({
+      theme: 'base',
+      darkMode: true,
+      themeVariables: expect.objectContaining({
+        primaryColor: '#3b4252',
+        primaryBorderColor: '#a78bfa',
+        primaryTextColor: '#e5e7eb'
+      })
+    }))
+    expect(mermaidRender).toHaveBeenCalledTimes(2)
 
     harness.app.unmount()
   })
