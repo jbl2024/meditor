@@ -7,8 +7,8 @@ mod favorites;
 mod fs_ops;
 mod index_schema;
 mod markdown_index;
-mod second_brain;
 mod search_index;
+mod second_brain;
 mod semantic;
 mod settings;
 mod wikilink_graph;
@@ -30,9 +30,9 @@ use fs_ops::{
     read_file_metadata, read_text_file, rename_entry, reveal_in_file_manager,
     select_working_folder, set_working_folder, trash_entry, write_text_file,
 };
+pub(crate) use index_schema::refresh_semantic_edges_cache_now_sync;
 use index_schema::{
-    ensure_index_schema, init_db as init_db_impl, list_markdown_files_via_find,
-    min_max_normalize,
+    ensure_index_schema, init_db as init_db_impl, list_markdown_files_via_find, min_max_normalize,
     read_index_logs as read_index_logs_impl,
     read_index_runtime_status as read_index_runtime_status_impl,
     rebuild_workspace_index_sync as rebuild_workspace_index_sync_impl,
@@ -41,9 +41,18 @@ use index_schema::{
     request_index_cancel as request_index_cancel_impl, IndexLogEntry, IndexRuntimeStatus,
     RebuildIndexResult,
 };
+#[cfg(test)]
+use markdown_index::{
+    inject_relative_path_context, parse_note_targets, parse_yaml_frontmatter_properties,
+    strip_yaml_frontmatter,
+};
 use markdown_index::{
     reindex_markdown_file_lexical_sync, reindex_markdown_file_now_sync,
     reindex_markdown_file_semantic_sync, remove_markdown_file_from_index_sync,
+};
+#[cfg(test)]
+use search_index::{
+    build_prefix_fts_query, parse_search_query, semantic_snippet_preview, SearchMode,
 };
 use search_index::{
     fts_search_sync as fts_search_sync_impl,
@@ -51,30 +60,21 @@ use search_index::{
     write_property_type_schema as write_property_type_schema_impl, Hit,
 };
 use wikilink_graph::{
-    backlinks_for_path as backlinks_for_path_impl,
-    get_wikilink_graph as get_wikilink_graph_impl,
-    update_wikilinks_for_rename as update_wikilinks_for_rename_impl, Backlink,
-    WikilinkGraphDto, WikilinkRewriteResult,
+    backlinks_for_path as backlinks_for_path_impl, get_wikilink_graph as get_wikilink_graph_impl,
+    update_wikilinks_for_rename as update_wikilinks_for_rename_impl, Backlink, WikilinkGraphDto,
+    WikilinkRewriteResult,
 };
-pub(crate) use index_schema::refresh_semantic_edges_cache_now_sync;
 pub(crate) use workspace_paths::{
-    ensure_within_root, has_hidden_dir_component, normalize_key_text,
-    normalize_note_key, normalize_note_key_from_workspace_path,
-    normalize_workspace_path, normalize_workspace_relative_from_input,
-    normalize_workspace_relative_path, note_key_basename, note_label_from_workspace_path,
-    note_link_target, rewrite_wikilinks_for_note, workspace_absolute_path,
+    ensure_within_root, has_hidden_dir_component, normalize_key_text, normalize_note_key,
+    normalize_note_key_from_workspace_path, normalize_workspace_path,
+    normalize_workspace_relative_from_input, normalize_workspace_relative_path, note_key_basename,
+    note_label_from_workspace_path, note_link_target, rewrite_wikilinks_for_note,
+    workspace_absolute_path,
 };
 pub(crate) use workspace_runtime::{
     active_workspace_root, clear_active_workspace, open_db, property_type_schema_path,
     set_active_workspace,
 };
-#[cfg(test)]
-use markdown_index::{
-    inject_relative_path_context, parse_note_targets, parse_yaml_frontmatter_properties,
-    strip_yaml_frontmatter,
-};
-#[cfg(test)]
-use search_index::{build_prefix_fts_query, parse_search_query, semantic_snippet_preview, SearchMode};
 
 const INTERNAL_DIR_NAME: &str = ".tomosona";
 const TRASH_DIR_NAME: &str = ".tomosona-trash";
@@ -326,11 +326,11 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
+    use std::time::{SystemTime, UNIX_EPOCH};
     use std::{
         fs,
         path::{Path, PathBuf},
     };
-    use std::time::{SystemTime, UNIX_EPOCH};
 
     use directories::UserDirs;
     use rusqlite::params;
@@ -748,9 +748,11 @@ mod tests {
 
         let conn = open_db().expect("open db");
         let chunks_n: i64 = conn
-            .query_row("SELECT COUNT(*) FROM chunks WHERE path = 'notes.md'", [], |row| {
-                row.get(0)
-            })
+            .query_row(
+                "SELECT COUNT(*) FROM chunks WHERE path = 'notes.md'",
+                [],
+                |row| row.get(0),
+            )
             .expect("query chunks");
         let links_n: i64 = conn
             .query_row(
@@ -980,7 +982,10 @@ mod tests {
                     .iter()
                     .any(|label| label == "Semantically related")
         }));
-        assert!(pack.items.iter().any(|item| item.path.ends_with("/c.md") && item.reason_label == "Backlink"));
+        assert!(pack
+            .items
+            .iter()
+            .any(|item| item.path.ends_with("/c.md") && item.reason_label == "Backlink"));
 
         clear_active_workspace().expect("clear workspace");
         fs::remove_dir_all(&workspace).expect("cleanup workspace");
@@ -999,7 +1004,10 @@ mod tests {
         init_db().expect("init db");
 
         let pack = echoes::compute_echoes_pack(echoes::ComputeEchoesPackPayload {
-            anchor_path: workspace.join("notes/anchor.md").to_string_lossy().to_string(),
+            anchor_path: workspace
+                .join("notes/anchor.md")
+                .to_string_lossy()
+                .to_string(),
             limit: Some(5),
             include_recent_activity: Some(true),
         })
@@ -1008,7 +1016,8 @@ mod tests {
         assert!(pack
             .items
             .iter()
-            .any(|item| item.path.ends_with("/notes/recent.md") && item.reason_label == "Recently active"));
+            .any(|item| item.path.ends_with("/notes/recent.md")
+                && item.reason_label == "Recently active"));
 
         clear_active_workspace().expect("clear workspace");
         fs::remove_dir_all(&workspace).expect("cleanup workspace");

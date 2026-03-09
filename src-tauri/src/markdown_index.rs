@@ -9,14 +9,14 @@ use std::{
 
 use rusqlite::params;
 
+use crate::workspace_paths::{
+    has_hidden_dir_component, normalize_existing_file, normalize_note_key,
+    normalize_workspace_relative_from_input, normalize_workspace_relative_path,
+};
 use crate::{
     active_workspace_root, ensure_index_schema, ensure_within_root, log_index, open_db,
     refresh_semantic_edges_cache, refresh_semantic_edges_cache_now_sync, semantic, AppError,
     Result,
-};
-use crate::workspace_paths::{
-    has_hidden_dir_component, normalize_note_key, normalize_workspace_relative_from_input,
-    normalize_workspace_relative_path, normalize_existing_file,
 };
 
 // Small semantic embedding batches reduce peak memory on large notes.
@@ -311,7 +311,11 @@ pub(crate) fn parse_yaml_frontmatter_properties(markdown: &str) -> Vec<IndexedPr
     while idx < lines.len() {
         let line = lines[idx];
         let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with('#') || line.starts_with(' ') || line.starts_with('\t') {
+        if trimmed.is_empty()
+            || trimmed.starts_with('#')
+            || line.starts_with(' ')
+            || line.starts_with('\t')
+        {
             idx += 1;
             continue;
         }
@@ -425,7 +429,11 @@ pub(crate) fn parse_yaml_frontmatter_properties(markdown: &str) -> Vec<IndexedPr
                 kind: "bool",
                 value_text: Some(scalar.to_lowercase()),
                 value_num: None,
-                value_bool: Some(if scalar.eq_ignore_ascii_case("true") { 1 } else { 0 }),
+                value_bool: Some(if scalar.eq_ignore_ascii_case("true") {
+                    1
+                } else {
+                    0
+                }),
                 value_date: None,
             });
             idx += 1;
@@ -535,7 +543,14 @@ pub(crate) fn reindex_markdown_file_lexical_sync(path: String) -> Result<()> {
                text = excluded.text,
                content_hash = excluded.content_hash,
                mtime = excluded.mtime",
-            params![path_for_db, chunk_ord as i64, anchor, text, chunk_hash, mtime],
+            params![
+                path_for_db,
+                chunk_ord as i64,
+                anchor,
+                text,
+                chunk_hash,
+                mtime
+            ],
         )?;
     }
     tx.execute(
@@ -673,9 +688,12 @@ pub(crate) fn reindex_markdown_file_semantic_sync(path: String) -> Result<()> {
         let embedding_blob: Option<Vec<u8>> = row.get(6)?;
 
         let mut reused_vector: Option<Vec<f32>> = None;
-        if let (Some(model), Some(hash), Some(dim), Some(blob)) =
-            (embedding_model, embedding_hash, embedding_dim, embedding_blob)
-        {
+        if let (Some(model), Some(hash), Some(dim), Some(blob)) = (
+            embedding_model,
+            embedding_hash,
+            embedding_dim,
+            embedding_blob,
+        ) {
             if model == model_name && hash == chunk_hash {
                 reused_vector = semantic::blob_to_vector(&blob, dim as usize);
             }
@@ -790,7 +808,10 @@ pub(crate) fn remove_markdown_file_from_index_sync(path: String) -> Result<()> {
     let conn = open_db()?;
     ensure_index_schema(&conn)?;
     let tx = conn.unchecked_transaction()?;
-    tx.execute("DELETE FROM chunks WHERE path = ?1", params![path_for_db.clone()])?;
+    tx.execute(
+        "DELETE FROM chunks WHERE path = ?1",
+        params![path_for_db.clone()],
+    )?;
     tx.execute(
         "DELETE FROM note_links WHERE source_path = ?1 OR target_key = ?2",
         params![path_for_db.clone(), source_key],

@@ -5,13 +5,12 @@ use std::{collections::HashSet, path::Path};
 use rusqlite::{params, params_from_iter, types::Value as SqlValue, Connection};
 use serde::Serialize;
 
+use crate::markdown_index::{is_iso_date_value, unquote_yaml_scalar};
 use crate::{
     active_workspace_root, min_max_normalize, open_db, property_type_schema_path, semantic,
-    workspace_absolute_path, AppError, Result,
-    HYBRID_LEXICAL_WEIGHT, HYBRID_SEMANTIC_WEIGHT, SEARCH_CANDIDATE_LIMIT, SEARCH_RESULT_LIMIT,
-    SEMANTIC_THRESHOLD,
+    workspace_absolute_path, AppError, Result, HYBRID_LEXICAL_WEIGHT, HYBRID_SEMANTIC_WEIGHT,
+    SEARCH_CANDIDATE_LIMIT, SEARCH_RESULT_LIMIT, SEMANTIC_THRESHOLD,
 };
-use crate::markdown_index::{is_iso_date_value, unquote_yaml_scalar};
 
 #[derive(Serialize)]
 pub(crate) struct Hit {
@@ -72,7 +71,10 @@ pub(crate) fn read_property_type_schema() -> Result<std::collections::HashMap<St
             let Some(raw_type) = value.as_str() else {
                 continue;
             };
-            if matches!(raw_type, "text" | "list" | "number" | "checkbox" | "date" | "tags") {
+            if matches!(
+                raw_type,
+                "text" | "list" | "number" | "checkbox" | "date" | "tags"
+            ) {
                 out.insert(normalized_key, raw_type.to_string());
             }
         }
@@ -90,7 +92,10 @@ pub(crate) fn write_property_type_schema(
         if normalized_key.is_empty() {
             continue;
         }
-        if matches!(value.as_str(), "text" | "list" | "number" | "checkbox" | "date" | "tags") {
+        if matches!(
+            value.as_str(),
+            "text" | "list" | "number" | "checkbox" | "date" | "tags"
+        ) {
             sanitized.insert(normalized_key, value);
         }
     }
@@ -122,7 +127,14 @@ fn parse_property_filter_token(token: &str) -> Option<PropertyFilter> {
         return None;
     }
 
-    let operators = [(">=", 2usize), ("<=", 2usize), (">", 1usize), ("<", 1usize), (":", 1usize), ("=", 1usize)];
+    let operators = [
+        (">=", 2usize),
+        ("<=", 2usize),
+        (">", 1usize),
+        ("<", 1usize),
+        (":", 1usize),
+        ("=", 1usize),
+    ];
     for (op, len) in operators {
         let Some(position) = token.find(op) else {
             continue;
@@ -144,7 +156,11 @@ fn parse_property_filter_token(token: &str) -> Option<PropertyFilter> {
             if value.eq_ignore_ascii_case("true") || value.eq_ignore_ascii_case("false") {
                 return Some(PropertyFilter::EqBool {
                     key,
-                    value: if value.eq_ignore_ascii_case("true") { 1 } else { 0 },
+                    value: if value.eq_ignore_ascii_case("true") {
+                        1
+                    } else {
+                        0
+                    },
                 });
             }
             if let Ok(number) = value.parse::<f64>() {
@@ -193,9 +209,15 @@ pub(crate) fn parse_search_query(raw: &str) -> (SearchMode, String, Vec<Property
     let trimmed = raw.trim();
     let lowered = trimmed.to_ascii_lowercase();
     let (mode, remainder) = if lowered.starts_with("semantic:") {
-        (SearchMode::Semantic, trimmed["semantic:".len()..].trim_start())
+        (
+            SearchMode::Semantic,
+            trimmed["semantic:".len()..].trim_start(),
+        )
     } else if lowered.starts_with("lexical:") {
-        (SearchMode::Lexical, trimmed["lexical:".len()..].trim_start())
+        (
+            SearchMode::Lexical,
+            trimmed["lexical:".len()..].trim_start(),
+        )
     } else if lowered.starts_with("hybrid:") {
         (SearchMode::Hybrid, trimmed["hybrid:".len()..].trim_start())
     } else {
@@ -214,7 +236,10 @@ pub(crate) fn parse_search_query(raw: &str) -> (SearchMode, String, Vec<Property
     (mode, text_terms.join(" "), filters)
 }
 
-fn path_set_for_property_filter(conn: &Connection, filter: &PropertyFilter) -> Result<HashSet<String>> {
+fn path_set_for_property_filter(
+    conn: &Connection,
+    filter: &PropertyFilter,
+) -> Result<HashSet<String>> {
     let (sql, args): (&str, Vec<SqlValue>) = match filter {
         PropertyFilter::Has { key } => (
             "SELECT DISTINCT path FROM note_properties WHERE key = ?1",
@@ -279,7 +304,10 @@ fn path_set_for_property_filter(conn: &Connection, filter: &PropertyFilter) -> R
     Ok(out)
 }
 
-fn paths_matching_property_filters(conn: &Connection, filters: &[PropertyFilter]) -> Result<HashSet<String>> {
+fn paths_matching_property_filters(
+    conn: &Connection,
+    filters: &[PropertyFilter],
+) -> Result<HashSet<String>> {
     let mut acc: Option<HashSet<String>> = None;
     for filter in filters {
         let next = path_set_for_property_filter(conn, filter)?;

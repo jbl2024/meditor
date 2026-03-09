@@ -8,7 +8,9 @@ use std::{fs, path::PathBuf};
 use rusqlite::params;
 
 use super::{
-    super::{active_workspace_root, now_ms, open_db, reindex_markdown_file_now_sync, AppError, Result},
+    super::{
+        active_workspace_root, now_ms, open_db, reindex_markdown_file_now_sync, AppError, Result,
+    },
     draft::{read_draft, write_draft},
     paths::{
         chrono_like_today, ensure_within, normalize_workspace_markdown_relative, sanitize_file_name,
@@ -47,7 +49,8 @@ pub(super) fn append_message_to_draft(payload: AppendMessageToDraftPayload) -> R
         )
         .map_err(|_| AppError::InvalidOperation("Message not found in session.".to_string()))?;
 
-    let draft_content = merge_markdown_sections(&read_draft(&payload.session_id)?, &message_content);
+    let draft_content =
+        merge_markdown_sections(&read_draft(&payload.session_id)?, &message_content);
     write_draft(&payload.session_id, &draft_content)?;
 
     conn.execute(
@@ -173,9 +176,7 @@ pub(super) fn insert_assistant_into_target_note_impl(
     })
 }
 
-pub(super) fn export_session_markdown(
-    session_id: String,
-) -> Result<ExportSessionMarkdownResult> {
+pub(super) fn export_session_markdown(session_id: String) -> Result<ExportSessionMarkdownResult> {
     let conn = open_db()?;
     ensure_session_exists(&conn, &session_id)?;
 
@@ -263,10 +264,7 @@ mod tests {
 
     #[test]
     fn merge_markdown_sections_uses_separator() {
-        assert_eq!(
-            merge_markdown_sections("A", "B"),
-            "A\n\n---\n\nB"
-        );
+        assert_eq!(merge_markdown_sections("A", "B"), "A\n\n---\n\nB");
     }
 
     #[test]

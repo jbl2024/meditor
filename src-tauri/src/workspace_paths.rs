@@ -113,7 +113,10 @@ pub(crate) fn note_label_from_workspace_path(path: &str) -> String {
     without_md.replace('\\', "/")
 }
 
-pub(crate) fn normalize_note_key_from_workspace_path(root: &Path, stored_path: &str) -> Option<String> {
+pub(crate) fn normalize_note_key_from_workspace_path(
+    root: &Path,
+    stored_path: &str,
+) -> Option<String> {
     normalize_note_key(root, &root.join(stored_path)).ok()
 }
 
@@ -248,7 +251,10 @@ pub(crate) fn rewrite_wikilinks_for_note(
 }
 
 pub(crate) fn should_skip_workspace_walk_file(path: &Path) -> bool {
-    let name = path.file_name().and_then(|v| v.to_str()).unwrap_or_default();
+    let name = path
+        .file_name()
+        .and_then(|v| v.to_str())
+        .unwrap_or_default();
     name == DB_FILE_NAME || name.starts_with("tomosona.sqlite-")
 }
 

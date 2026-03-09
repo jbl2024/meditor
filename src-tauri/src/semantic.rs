@@ -483,7 +483,10 @@ pub fn try_upsert_note_vector(conn: &Connection, path: &str, vector: &[f32]) -> 
     ) {
         Ok(_) => return Ok(()),
         Err(replace_err) => {
-            if replace_err.to_string().contains("no such function: vec_f32") {
+            if replace_err
+                .to_string()
+                .contains("no such function: vec_f32")
+            {
                 return conn
                     .execute(
                         "INSERT OR REPLACE INTO note_embeddings_vec(path, embedding) VALUES (?1, ?2)",
@@ -497,9 +500,7 @@ pub fn try_upsert_note_vector(conn: &Connection, path: &str, vector: &[f32]) -> 
                 params![path],
             )
             .map_err(|delete_err| {
-                format!(
-                    "replace_err={replace_err}; fallback_delete_err={delete_err}"
-                )
+                format!("replace_err={replace_err}; fallback_delete_err={delete_err}")
             })?;
 
             conn.execute(
@@ -508,9 +509,7 @@ pub fn try_upsert_note_vector(conn: &Connection, path: &str, vector: &[f32]) -> 
             )
             .map(|_| ())
             .map_err(|insert_err| {
-                format!(
-                    "replace_err={replace_err}; fallback_insert_err={insert_err}"
-                )
+                format!("replace_err={replace_err}; fallback_insert_err={insert_err}")
             })
         }
     }
@@ -647,7 +646,8 @@ mod tests {
         )
         .expect("create note_embeddings_vec");
 
-        let err = try_upsert_note_vector(&conn, "notes/a.md", &[0.1, 0.2]).expect_err("upsert should fail");
+        let err = try_upsert_note_vector(&conn, "notes/a.md", &[0.1, 0.2])
+            .expect_err("upsert should fail");
         assert!(err.contains("replace_err="));
         assert!(err.contains("fallback_insert_err=") || err.contains("json_replace_err="));
     }
@@ -661,7 +661,8 @@ mod tests {
         )
         .expect("create note_embeddings_vec");
 
-        let err = try_upsert_note_vector(&conn, "notes/a.md", &[0.1, 0.2]).expect_err("upsert should fail");
+        let err = try_upsert_note_vector(&conn, "notes/a.md", &[0.1, 0.2])
+            .expect_err("upsert should fail");
         assert!(err.contains("replace_err="));
         assert!(err.contains("fallback_delete_err="));
     }

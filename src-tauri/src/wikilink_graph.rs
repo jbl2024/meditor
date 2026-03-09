@@ -10,14 +10,14 @@ use std::{
 use rusqlite::Connection;
 use serde::Serialize;
 
+use crate::markdown_index::parse_note_targets;
 use crate::{
     active_workspace_root, list_markdown_files_via_find, normalize_note_key,
     normalize_note_key_from_workspace_path, normalize_workspace_path,
     normalize_workspace_relative_path, note_key_basename, note_label_from_workspace_path,
-    note_link_target, open_db, reindex_markdown_file_now_sync,
-    rewrite_wikilinks_for_note, workspace_absolute_path, AppError, Result,
+    note_link_target, open_db, reindex_markdown_file_now_sync, rewrite_wikilinks_for_note,
+    workspace_absolute_path, AppError, Result,
 };
-use crate::markdown_index::parse_note_targets;
 
 #[derive(Serialize)]
 pub(crate) struct GraphNodeDto {
@@ -147,7 +147,9 @@ pub(crate) fn build_wikilink_graph_from_index(
         let Some(target_path) = target_path else {
             continue;
         };
-        if source_path == target_path || !seen_edges.insert((source_path.clone(), target_path.clone())) {
+        if source_path == target_path
+            || !seen_edges.insert((source_path.clone(), target_path.clone()))
+        {
             continue;
         }
 
@@ -285,7 +287,10 @@ pub(crate) fn backlinks_for_path(path: String) -> Result<Vec<Backlink>> {
             Ok(value) => value,
             Err(_) => continue,
         };
-        if !parse_note_targets(&markdown).iter().any(|item| item == &target_key) {
+        if !parse_note_targets(&markdown)
+            .iter()
+            .any(|item| item == &target_key)
+        {
             continue;
         }
 

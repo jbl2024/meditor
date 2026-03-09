@@ -13,9 +13,8 @@ use serde::Serialize;
 
 use crate::{
     active_workspace_root, ensure_within_root, has_hidden_dir_component, index_log_buffer,
-    log_index, open_db, reindex_markdown_file_lexical_sync,
-    reindex_markdown_file_semantic_sync, semantic, AppError, Result, INDEX_CANCEL_REQUESTED,
-    INDEX_LOG_CAPACITY, INDEX_SCHEMA_VERSION,
+    log_index, open_db, reindex_markdown_file_lexical_sync, reindex_markdown_file_semantic_sync,
+    semantic, AppError, Result, INDEX_CANCEL_REQUESTED, INDEX_LOG_CAPACITY, INDEX_SCHEMA_VERSION,
 };
 
 #[derive(Clone, Serialize)]
@@ -248,7 +247,10 @@ pub(crate) fn min_max_normalize(values: &[f64]) -> Vec<f64> {
     if (max - min).abs() <= f64::EPSILON {
         return vec![1.0; values.len()];
     }
-    values.iter().map(|value| (value - min) / (max - min)).collect()
+    values
+        .iter()
+        .map(|value| (value - min) / (max - min))
+        .collect()
 }
 
 pub(crate) fn refresh_semantic_edges_cache(conn: &Connection, root_canonical: &Path) -> Result<()> {
@@ -270,7 +272,8 @@ pub(crate) fn refresh_semantic_edges_cache(conn: &Connection, root_canonical: &P
         crate::SEMANTIC_THRESHOLD
     ));
 
-    conn.execute("DELETE FROM semantic_edges", []).map_err(AppError::Sqlite)?;
+    conn.execute("DELETE FROM semantic_edges", [])
+        .map_err(AppError::Sqlite)?;
     let updated_at_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|value| value.as_millis() as i64)
@@ -428,8 +431,10 @@ pub(crate) fn rebuild_workspace_index_sync() -> Result<RebuildIndexResult> {
             if ensure_within_root(&root_canonical, &canonical_candidate).is_err() {
                 continue;
             }
-            if reindex_markdown_file_semantic_sync(canonical_candidate.to_string_lossy().to_string())
-                .is_ok()
+            if reindex_markdown_file_semantic_sync(
+                canonical_candidate.to_string_lossy().to_string(),
+            )
+            .is_ok()
             {
                 semantic_indexed += 1;
             }

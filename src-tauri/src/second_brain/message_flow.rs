@@ -45,7 +45,9 @@ pub(super) async fn send_message(
     let user_message_id = next_id("sbm-user");
     let assistant_message_id = next_id("sbm-assistant");
     if consume_stream_cancel(&payload.session_id, &assistant_message_id) {
-        return Err(AppError::InvalidOperation("Generation canceled.".to_string()));
+        return Err(AppError::InvalidOperation(
+            "Generation canceled.".to_string(),
+        ));
     }
 
     persist_user_message(&conn, &payload, &user_message_id)?;
@@ -77,13 +79,7 @@ pub(super) async fn send_message(
     .await?;
 
     let citations = build_citations(&built_prompt.included_context_paths);
-    persist_assistant_message(
-        &conn,
-        &payload,
-        &assistant_message_id,
-        &answer,
-        &citations,
-    )?;
+    persist_assistant_message(&conn, &payload, &assistant_message_id, &answer, &citations)?;
     emit_assistant_complete(&app, &payload.session_id, &assistant_message_id, &answer);
 
     Ok(SendMessageResult {
@@ -191,8 +187,15 @@ async fn run_assistant_generation(
     };
 
     if consume_stream_cancel(session_id, assistant_message_id) {
-        emit_assistant_error(app, session_id, assistant_message_id, "Generation canceled.");
-        return Err(AppError::InvalidOperation("Generation canceled.".to_string()));
+        emit_assistant_error(
+            app,
+            session_id,
+            assistant_message_id,
+            "Generation canceled.",
+        );
+        return Err(AppError::InvalidOperation(
+            "Generation canceled.".to_string(),
+        ));
     }
 
     if !active.capabilities.streaming {

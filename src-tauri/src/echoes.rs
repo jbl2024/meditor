@@ -125,7 +125,10 @@ pub fn compute_echoes_pack(payload: ComputeEchoesPackPayload) -> Result<EchoesPa
     let anchor_relative = normalize_anchor_path(&root, &payload.anchor_path)?;
     let markdown_paths = list_workspace_markdown_paths(&root)?;
     let resolver = build_path_resolver(&root, &markdown_paths);
-    let limit = payload.limit.unwrap_or(DEFAULT_LIMIT).clamp(1, HARD_MAX_LIMIT);
+    let limit = payload
+        .limit
+        .unwrap_or(DEFAULT_LIMIT)
+        .clamp(1, HARD_MAX_LIMIT);
     let include_recent = payload.include_recent_activity.unwrap_or(true);
 
     let direct = collect_direct_candidates(&conn, &resolver, &anchor_relative)?;
@@ -180,7 +183,9 @@ fn build_path_resolver(root: &Path, markdown_paths: &[String]) -> PathResolver {
     for path in markdown_paths {
         if let Some(key) = normalize_note_key_from_workspace_path(root, path) {
             let basename = note_key_basename(&key);
-            path_by_key.entry(key.clone()).or_insert_with(|| path.clone());
+            path_by_key
+                .entry(key.clone())
+                .or_insert_with(|| path.clone());
             match path_by_unique_basename.get(&basename) {
                 Some(Some(previous)) if !previous.eq_ignore_ascii_case(path) => {
                     path_by_unique_basename.insert(basename, None);

@@ -159,7 +159,12 @@ fn validate_existing_markdown(root: &Path, raw_path: &str) -> Result<String> {
 fn list_favorites_inner() -> Result<Vec<FavoriteEntry>> {
     let root = active_workspace_root()?;
     let mut items = read_stored_items(&root)?;
-    items.sort_by(|left, right| left.path.to_lowercase().cmp(&right.path.to_lowercase()).then(left.path.cmp(&right.path)));
+    items.sort_by(|left, right| {
+        left.path
+            .to_lowercase()
+            .cmp(&right.path.to_lowercase())
+            .then(left.path.cmp(&right.path))
+    });
 
     Ok(items
         .into_iter()
@@ -210,11 +215,10 @@ pub fn add_favorite(path: String) -> Result<FavoriteEntry> {
 #[tauri::command]
 pub fn remove_favorite(path: String) -> Result<()> {
     let root = active_workspace_root()?;
-    let normalized_path = normalize_workspace_relative_from_input(&root, &path)
-        .or_else(|_| {
-            normalize_stored_path(&root, &path)
-                .ok_or_else(|| AppError::InvalidOperation("Invalid favorite path.".to_string()))
-        })?;
+    let normalized_path = normalize_workspace_relative_from_input(&root, &path).or_else(|_| {
+        normalize_stored_path(&root, &path)
+            .ok_or_else(|| AppError::InvalidOperation("Invalid favorite path.".to_string()))
+    })?;
     let mut items = read_stored_items(&root)?;
     items.retain(|item| !item.path.eq_ignore_ascii_case(&normalized_path));
     write_stored_items(&root, &items)
@@ -223,11 +227,10 @@ pub fn remove_favorite(path: String) -> Result<()> {
 #[tauri::command]
 pub fn rename_favorite(old_path: String, new_path: String) -> Result<()> {
     let root = active_workspace_root()?;
-    let old_relative = normalize_workspace_relative_from_input(&root, &old_path)
-        .or_else(|_| {
-            normalize_stored_path(&root, &old_path)
-                .ok_or_else(|| AppError::InvalidOperation("Invalid favorite path.".to_string()))
-        })?;
+    let old_relative = normalize_workspace_relative_from_input(&root, &old_path).or_else(|_| {
+        normalize_stored_path(&root, &old_path)
+            .ok_or_else(|| AppError::InvalidOperation("Invalid favorite path.".to_string()))
+    })?;
     let new_relative = validate_existing_markdown(&root, &new_path)?;
     let mut items = read_stored_items(&root)?;
 
@@ -274,7 +277,8 @@ mod tests {
     }
 
     fn read_favorites_file(workspace: &Path) -> String {
-        fs::read_to_string(workspace.join(".tomosona").join("favorites.json")).expect("read favorites")
+        fs::read_to_string(workspace.join(".tomosona").join("favorites.json"))
+            .expect("read favorites")
     }
 
     #[test]
@@ -426,7 +430,13 @@ mod tests {
         set_active_workspace(&workspace.to_string_lossy()).expect("set workspace");
 
         let items = list_favorites().expect("list favorites");
-        assert_eq!(items.iter().map(|item| item.path.as_str()).collect::<Vec<_>>(), vec!["Alpha.md", "zeta.md"]);
+        assert_eq!(
+            items
+                .iter()
+                .map(|item| item.path.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Alpha.md", "zeta.md"]
+        );
 
         clear_active_workspace().expect("clear workspace");
         fs::remove_dir_all(workspace).expect("cleanup workspace");
@@ -437,7 +447,8 @@ mod tests {
         let _guard = workspace_test_guard();
         let workspace = create_temp_workspace("tomosona-favorites-invalid");
         fs::create_dir_all(workspace.join(".tomosona")).expect("create internal dir");
-        fs::write(workspace.join(".tomosona").join("favorites.json"), "{").expect("write favorites");
+        fs::write(workspace.join(".tomosona").join("favorites.json"), "{")
+            .expect("write favorites");
         set_active_workspace(&workspace.to_string_lossy()).expect("set workspace");
 
         let result = list_favorites();

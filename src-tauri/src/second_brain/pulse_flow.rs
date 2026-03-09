@@ -47,7 +47,9 @@ pub(super) async fn run_pulse(
         .unwrap_or_else(|| next_id("pulse"));
     let output_id = next_id("pulse-output");
     if consume_stream_cancel(&request_id, &output_id) {
-        return Err(AppError::InvalidOperation("Generation canceled.".to_string()));
+        return Err(AppError::InvalidOperation(
+            "Generation canceled.".to_string(),
+        ));
     }
 
     let context_entries = load_context_entries_from_paths(&payload.context_paths)?;
@@ -157,7 +159,9 @@ async fn run_pulse_generation(
             "Generation canceled.",
             Vec::new(),
         );
-        return Err(AppError::InvalidOperation("Generation canceled.".to_string()));
+        return Err(AppError::InvalidOperation(
+            "Generation canceled.".to_string(),
+        ));
     }
 
     if !active.capabilities.streaming {
@@ -251,7 +255,10 @@ mod tests {
 
     #[test]
     fn completion_title_tracks_action_id() {
-        assert_eq!(pulse_completion_title("identify_tensions"), "Pulse identify tensions");
+        assert_eq!(
+            pulse_completion_title("identify_tensions"),
+            "Pulse identify tensions"
+        );
     }
 
     #[test]

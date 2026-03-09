@@ -19,7 +19,11 @@ pub(super) fn normalize_markdown_path(path: &str) -> Result<String> {
         return Err(AppError::InvalidPath);
     }
     let canonical = fs::canonicalize(candidate)?;
-    ensure_markdown_under_root(&root, &canonical, "Only markdown notes can be used in Second Brain context.")
+    ensure_markdown_under_root(
+        &root,
+        &canonical,
+        "Only markdown notes can be used in Second Brain context.",
+    )
 }
 
 /// Normalizes a workspace note target and rejects non-markdown destinations.
@@ -82,7 +86,11 @@ pub(super) fn chrono_like_today() -> String {
     format!("{:04}-{:02}-{:02}", year, m, d)
 }
 
-fn ensure_markdown_under_root(root: &Path, canonical: &Path, error_message: &str) -> Result<String> {
+fn ensure_markdown_under_root(
+    root: &Path,
+    canonical: &Path,
+    error_message: &str,
+) -> Result<String> {
     if !canonical.starts_with(root) {
         return Err(AppError::InvalidPath);
     }

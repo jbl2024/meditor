@@ -251,10 +251,20 @@ pub(super) fn build_pulse_user_prompt(
         pulse_source_label(&payload.source_kind),
         action_id
     ));
-    if let Some(label) = payload.selection_label.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+    if let Some(label) = payload
+        .selection_label
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
         prompt.push_str(&format!("Libelle: {label}\n"));
     }
-    if let Some(session_id) = payload.session_id.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+    if let Some(session_id) = payload
+        .session_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
         prompt.push_str(&format!("Session: {session_id}\n"));
     }
     if let Some(node_id) = payload
@@ -271,12 +281,22 @@ pub(super) fn build_pulse_user_prompt(
             prompt.push_str(&format!("- {path}\n"));
         }
     }
-    if let Some(instructions) = payload.instructions.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+    if let Some(instructions) = payload
+        .instructions
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
         prompt.push_str("\nInstruction supplementaire:\n");
         prompt.push_str(instructions);
         prompt.push('\n');
     }
-    if let Some(source_text) = payload.source_text.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+    if let Some(source_text) = payload
+        .source_text
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
         prompt.push_str("\nMatiere source explicite:\n");
         prompt.push_str(source_text);
         prompt.push('\n');
