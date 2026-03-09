@@ -208,6 +208,7 @@ export function useEditorInteractionRuntime(options: UseEditorInteractionRuntime
     requestMermaidReplaceConfirm: editorPort.requestMermaidReplaceConfirm,
     getWikilinkCandidates,
     openLinkTargetWithAutosave,
+    revealAnchor: navigation.revealAnchor,
     resolveWikilinkTarget: wikilinkDataSource.resolveWikilinkTarget,
     sanitizeExternalHref,
     openExternalUrl: ioPort.openExternalUrl,

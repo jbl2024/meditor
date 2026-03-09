@@ -86,6 +86,9 @@ function serializeTextWithMarks(node: JSONContent): string {
       }
       case 'link': {
         const href = String(mark.attrs?.href ?? '').trim()
+        if (href.startsWith('#')) {
+          return `<a href="${escapeHtml(href)}">${acc}</a>`
+        }
         return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${acc}</a>`
       }
       default:

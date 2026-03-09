@@ -76,6 +76,29 @@ describe('clipboardHtmlToMarkdown', () => {
   })
 })
 
+describe('inline internal markdown links', () => {
+  it('renders internal fragment links as anchors', () => {
+    expect(inlineTextToHtml('[Resume](#1-resume-executif)')).toBe('<a href="#1-resume-executif">Resume</a>')
+  })
+
+  it('parses internal fragment links into editor html blocks', () => {
+    const parsed = markdownToEditorData('- [Resume](#1-resume-executif)')
+    expect(parsed.blocks).toHaveLength(1)
+    expect(parsed.blocks[0]).toEqual({
+      type: 'list',
+      data: {
+        style: 'unordered',
+        items: [
+          {
+            content: '<a href="#1-resume-executif">Resume</a>',
+            items: []
+          }
+        ]
+      }
+    })
+  })
+})
+
 describe('markdownToEditorData tables', () => {
   it('parses column alignment markers from separator row', () => {
     const markdown = `

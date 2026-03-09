@@ -129,6 +129,19 @@ describe('EditorInlineFormatToolbar', () => {
     harness.app.unmount()
   })
 
+  it('renders link input as free text for internal anchors', async () => {
+    const harness = mountHarness({ linkPopoverOpen: true, linkValue: '#section' })
+    await flush()
+
+    const input = harness.root.querySelector('[data-testid="link-input"]') as HTMLInputElement
+    expect(input).toBeTruthy()
+    expect(input.type).toBe('text')
+    expect(input.value).toBe('#section')
+    expect(input.placeholder).toContain('#ma-section')
+
+    harness.app.unmount()
+  })
+
   it('opens copy menu and emits explicit copy format', async () => {
     const harness = mountHarness()
     await flush()

@@ -17,6 +17,7 @@ import { TableCellAlign } from '../lib/tiptap/extensions/TableCellAlign'
 import { EditorFindExtension } from '../lib/tiptap/extensions/EditorFind'
 import { WIKILINK_STATE_KEY, type WikilinkCandidate } from '../lib/tiptap/plugins/wikilinkState'
 import { enterWikilinkEditFromNode } from '../lib/tiptap/extensions/wikilinkCommands'
+import type { RevealAnchorRequest } from './useEditorNavigation'
 
 /**
  * Module: useEditorTiptapSetup
@@ -45,6 +46,7 @@ export type UseEditorTiptapSetupOptions = {
   requestMermaidReplaceConfirm: (payload: { templateLabel: string }) => Promise<boolean>
   getWikilinkCandidates: (query: string) => Promise<WikilinkCandidate[]>
   openLinkTargetWithAutosave: (target: string) => Promise<void>
+  revealAnchor: (anchor: RevealAnchorRequest) => Promise<boolean>
   resolveWikilinkTarget: (target: string) => Promise<boolean>
   sanitizeExternalHref: (value: string) => string | null
   openExternalUrl: (value: string) => Promise<void>
@@ -95,6 +97,50 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
 
     const token = nearby.slice(start, end).trim()
     return ISO_DATE_TOKEN_REGEX.test(token) ? token : null
+  }
+
+  /**
+   * Parses current-document anchor hrefs such as `#section-1` or `#^todo-12`.
+   */
+  function parseInternalAnchorHref(href: string): RevealAnchorRequest | null {
+    const value = String(href ?? '').trim()
+    if (!value.startsWith('#')) return null
+    const fragment = value.slice(1).trim()
+    if (!fragment) return null
+    if (fragment.startsWith('^')) {
+      const blockId = fragment.slice(1).trim()
+      return blockId ? { blockId } : null
+    }
+    return { heading: fragment }
+  }
+
+  function openLinkPopoverFromAnchorSelection(
+    view: ProseMirrorEditorView,
+    path: string,
+    anchor: HTMLAnchorElement,
+    pos: number
+  ) {
+    const targetEditor = options.getSessionEditor(path) ?? options.getCurrentEditor()
+    if (!targetEditor) return true
+
+    let domPos = 0
+    try {
+      domPos = view.posAtDOM(anchor, 0)
+    } catch {
+      domPos = 0
+    }
+
+    const candidates = [pos, pos + 1, pos - 1, domPos, domPos + 1, domPos - 1]
+    for (const candidate of candidates) {
+      if (candidate < 0 || candidate > view.state.doc.content.size) continue
+      targetEditor.chain().focus().setTextSelection(candidate).extendMarkRange('link').run()
+      const { from, to, empty } = targetEditor.state.selection
+      if (empty || from === to || !targetEditor.isActive('link')) continue
+      options.inlineFormatToolbar.updateFormattingToolbar()
+      options.inlineFormatToolbar.openLinkPopover()
+      return true
+    }
+    return true
   }
 
   function adjustHeadingLevelFromTab(view: ProseMirrorEditorView, event: KeyboardEvent): boolean {
@@ -229,32 +275,25 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
           }
 
           const href = anchor.getAttribute('href')?.trim() ?? ''
+          const internalAnchor = parseInternalAnchorHref(href)
+          if (internalAnchor) {
+            if (modifierPressed) {
+              event.preventDefault()
+              event.stopPropagation()
+              return openLinkPopoverFromAnchorSelection(view, path, anchor, pos)
+            }
+            event.preventDefault()
+            event.stopPropagation()
+            void options.revealAnchor(internalAnchor)
+            return true
+          }
+
           const safe = options.sanitizeExternalHref(href)
           if (!safe) return false
           if (modifierPressed) {
             event.preventDefault()
             event.stopPropagation()
-            const targetEditor = options.getSessionEditor(path) ?? options.getCurrentEditor()
-            if (!targetEditor) return true
-
-            let domPos = 0
-            try {
-              domPos = view.posAtDOM(anchor, 0)
-            } catch {
-              domPos = 0
-            }
-
-            const candidates = [pos, pos + 1, pos - 1, domPos, domPos + 1, domPos - 1]
-            for (const candidate of candidates) {
-              if (candidate < 0 || candidate > view.state.doc.content.size) continue
-              targetEditor.chain().focus().setTextSelection(candidate).extendMarkRange('link').run()
-              const { from, to, empty } = targetEditor.state.selection
-              if (empty || from === to || !targetEditor.isActive('link')) continue
-              options.inlineFormatToolbar.updateFormattingToolbar()
-              options.inlineFormatToolbar.openLinkPopover()
-              return true
-            }
-            return true
+            return openLinkPopoverFromAnchorSelection(view, path, anchor, pos)
           }
           event.preventDefault()
           event.stopPropagation()

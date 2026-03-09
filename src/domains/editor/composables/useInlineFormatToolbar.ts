@@ -55,6 +55,11 @@ export function useInlineFormatToolbar(options: UseInlineFormatToolbarOptions) {
     linkError.value = ''
   }
 
+  function isInternalAnchorHref(raw: string): boolean {
+    const value = String(raw ?? '').trim()
+    return value.startsWith('#') && value.length > 1
+  }
+
   /**
    * Fully closes the toolbar and clears link-editor transient state.
    */
@@ -202,9 +207,20 @@ export function useInlineFormatToolbar(options: UseInlineFormatToolbarOptions) {
       return true
     }
 
+    if (isInternalAnchorHref(href)) {
+      editor
+        .chain()
+        .focus()
+        .setLink({ href })
+        .run()
+      clearLinkState()
+      updateFormattingToolbar()
+      return true
+    }
+
     const safeHref = options.sanitizeHref(href)
     if (!safeHref) {
-      linkError.value = 'Enter a valid URL (http://, https://, or mailto:).'
+      linkError.value = 'Enter a valid link (#section, http://, https://, or mailto:).'
       return false
     }
 

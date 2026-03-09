@@ -223,8 +223,13 @@ function inlineMarkdownToHtml(value: string): string {
     } else {
       const text = match[3]
       const href = match[4]
+      const internalHref = href.trim().startsWith('#') && href.trim().length > 1 ? href.trim() : ''
       const safeHref = sanitizeExternalHref(href)
-      if (safeHref) {
+      if (internalHref) {
+        const token = `\u0000MDLINK${tokens.length}\u0000`
+        tokens.push(`<a href="${escapeHtml(internalHref)}">${parseInlineSegment(text)}</a>`)
+        expanded += token
+      } else if (safeHref) {
         const token = `\u0000MDLINK${tokens.length}\u0000`
         tokens.push(`<a href="${escapeHtml(safeHref)}" target="_blank" rel="noopener noreferrer">${parseInlineSegment(text)}</a>`)
         expanded += token

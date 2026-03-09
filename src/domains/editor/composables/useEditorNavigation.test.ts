@@ -16,6 +16,21 @@ function createEditor(nodes: Array<{ node: DescNode; pos: number }>) {
     scrolled: false
   }
 
+  const holder = document.createElement('div')
+  holder.className = 'editor-holder'
+  Object.defineProperty(holder, 'clientHeight', { value: 400, configurable: true })
+  Object.defineProperty(holder, 'scrollHeight', { value: 1200, configurable: true })
+  Object.defineProperty(holder, 'scrollTop', { value: 100, writable: true, configurable: true })
+  holder.getBoundingClientRect = () => ({ top: 50, left: 0, right: 800, bottom: 450, width: 800, height: 400, x: 0, y: 50, toJSON: () => ({}) }) as DOMRect
+  holder.scrollTo = vi.fn(({ top }: { top: number }) => {
+    holder.scrollTop = top
+  })
+
+  const dom = document.createElement('div')
+  dom.focus = vi.fn()
+  holder.appendChild(dom)
+  document.body.appendChild(holder)
+
   const editor = {
     state: {
       doc: {
@@ -26,10 +41,26 @@ function createEditor(nodes: Array<{ node: DescNode; pos: number }>) {
         }
       }
     },
+    view: {
+      dom,
+      coordsAtPos: vi.fn((pos: number) => ({
+        top: pos * 10,
+        bottom: pos * 10 + 24,
+        left: 20,
+        right: 120
+      }))
+    },
+    commands: {
+      setTextSelection: vi.fn((pos: number) => {
+        chainState.selectionPos = pos
+        return true
+      })
+    },
     chain: () => ({
       focus: (pos?: number) => {
         if (typeof pos === 'number') chainState.selectionPos = pos
         return {
+          run: () => true,
           scrollIntoView: () => ({
             run: () => {
               chainState.scrolled = true
@@ -41,7 +72,14 @@ function createEditor(nodes: Array<{ node: DescNode; pos: number }>) {
     })
   }
 
-  return { editor: editor as unknown as Editor, chainState }
+  return {
+    editor: editor as unknown as Editor,
+    chainState,
+    holder,
+    coordsAtPos: editor.view.coordsAtPos,
+    setTextSelection: editor.commands.setTextSelection,
+    focusDom: dom.focus
+  }
 }
 
 describe('useEditorNavigation', () => {
@@ -68,7 +106,7 @@ describe('useEditorNavigation', () => {
   })
 
   it('reveals heading, snippet, and block anchor', async () => {
-    const { editor, chainState } = createEditor([
+    const { editor, chainState, holder, setTextSelection, focusDom } = createEditor([
       { pos: 2, node: { type: { name: 'heading' }, attrs: { level: 2 }, textContent: 'Roadmap' } },
       { pos: 12, node: { type: { name: 'paragraph' }, attrs: {}, textContent: '', isText: true, text: 'alpha beta gamma ^task-12' } }
     ])
@@ -92,7 +130,32 @@ describe('useEditorNavigation', () => {
 
     const byBlock = await nav.revealAnchor({ blockId: 'task-12' })
     expect(byBlock).toBe(true)
-    expect(chainState.scrolled).toBe(true)
+    expect(chainState.scrolled).toBe(false)
+    expect(setTextSelection).toHaveBeenCalled()
+    expect(focusDom).toHaveBeenCalled()
+    expect(holder.scrollTo).toHaveBeenCalled()
+    expect(holder.scrollTop).toBeGreaterThanOrEqual(0)
+  })
+
+  it('scrolls smoothly and centers the target inside the editor holder', async () => {
+    const { editor, holder } = createEditor([
+      { pos: 30, node: { type: { name: 'heading' }, attrs: { level: 2 }, textContent: 'Centered Heading' } }
+    ])
+
+    const nav = useEditorNavigation({
+      getEditor: () => editor,
+      emitOutline: () => {},
+      normalizeHeadingAnchor: (heading) => heading.trim().toLowerCase(),
+      slugifyHeading: (heading) => heading.trim().toLowerCase().replace(/\s+/g, '-'),
+      normalizeBlockId: (value) => value.trim().toLowerCase()
+    })
+
+    await nav.revealAnchor({ heading: 'centered-heading' })
+
+    expect(holder.scrollTo).toHaveBeenCalledWith({
+      top: 160,
+      behavior: 'smooth'
+    })
   })
 
   it('debounces outline emission', async () => {

@@ -23,6 +23,7 @@ function createSetup(overrides: Partial<Parameters<typeof useEditorTiptapSetup>[
     requestMermaidReplaceConfirm: vi.fn(async () => true),
     getWikilinkCandidates: vi.fn(async () => [{ target: 'a.md', exists: true }]),
     openLinkTargetWithAutosave: vi.fn(async () => {}),
+    revealAnchor: vi.fn(async () => true),
     resolveWikilinkTarget: vi.fn(async () => true),
     sanitizeExternalHref: (v) => v,
     openExternalUrl: vi.fn(async () => {}),
@@ -99,6 +100,80 @@ describe('useEditorTiptapSetup', () => {
     expect(externalClick).toBe(true)
     expect(openExternalUrl).toHaveBeenCalledWith('https://example.com')
     expect(options.inlineFormatToolbar.openLinkPopover).not.toHaveBeenCalled()
+  })
+
+  it('reveals internal anchor links on plain click', () => {
+    const revealAnchor = vi.fn(async () => true)
+    const { setup } = createSetup({ revealAnchor })
+    const editorOptions = setup.createEditorOptions('a.md') as any
+
+    const view = {
+      state: { doc: { content: { size: 100 } } }
+    } as any
+
+    const internalAnchor = document.createElement('a')
+    internalAnchor.setAttribute('href', '#1-resume')
+
+    const click = editorOptions.editorProps.handleClick(view, 3, {
+      target: internalAnchor,
+      metaKey: false,
+      ctrlKey: false,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn()
+    })
+
+    expect(click).toBe(true)
+    expect(revealAnchor).toHaveBeenCalledWith({ heading: '1-resume' })
+  })
+
+  it('opens link popover on modifier-click for internal anchor links', () => {
+    const revealAnchor = vi.fn(async () => true)
+    const { setup, options } = createSetup({ revealAnchor })
+    const editorOptions = setup.createEditorOptions('a.md') as any
+
+    const view = {
+      state: { doc: { content: { size: 100 } } },
+      posAtDOM: vi.fn(() => 10)
+    } as any
+
+    const internalAnchor = document.createElement('a')
+    internalAnchor.setAttribute('href', '#^todo-12')
+
+    const click = editorOptions.editorProps.handleClick(view, 3, {
+      target: internalAnchor,
+      metaKey: true,
+      ctrlKey: false,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn()
+    })
+
+    expect(click).toBe(true)
+    expect(options.inlineFormatToolbar.openLinkPopover).toHaveBeenCalledTimes(1)
+    expect(revealAnchor).not.toHaveBeenCalled()
+  })
+
+  it('ignores empty internal anchor hrefs', () => {
+    const revealAnchor = vi.fn(async () => true)
+    const { setup } = createSetup({ revealAnchor, sanitizeExternalHref: () => null })
+    const editorOptions = setup.createEditorOptions('a.md') as any
+
+    const view = {
+      state: { doc: { content: { size: 100 } } }
+    } as any
+
+    const internalAnchor = document.createElement('a')
+    internalAnchor.setAttribute('href', '#')
+
+    const click = editorOptions.editorProps.handleClick(view, 3, {
+      target: internalAnchor,
+      metaKey: false,
+      ctrlKey: false,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn()
+    })
+
+    expect(click).toBe(false)
+    expect(revealAnchor).not.toHaveBeenCalled()
   })
 
   it('opens ISO date token on modifier click without anchor', () => {

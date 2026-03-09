@@ -16,7 +16,7 @@ import type { InlineFormatMark, InlineFormatMarkOrLink } from '../../composables
  *
  * Important:
  * - Buttons use `@mousedown.prevent` to avoid collapsing editor selection.
- * - Link input emits on Enter/Escape for keyboard-only flows.
+ * - Link input emits on Enter/Escape for keyboard-only flows and accepts `#section` fragments.
  */
 const props = defineProps<{
   open: boolean
@@ -226,9 +226,9 @@ function onCopyAs(format: 'markdown' | 'html' | 'plain') {
     >
       <input
         ref="linkInputEl"
-        type="url"
+        type="text"
         class="inline-format-toolbar-input w-full rounded border px-2 py-1 text-xs outline-none"
-        placeholder="https://example.com"
+        placeholder="#ma-section or https://example.com"
         :value="linkValue"
         data-testid="link-input"
         @input="emit('update:linkValue', ($event.target as HTMLInputElement).value)"

@@ -183,6 +183,24 @@ describe('useInlineFormatToolbar', () => {
     expect(toolbar.linkPopoverOpen.value).toBe(false)
   })
 
+  it('accepts internal anchor links without external attrs', () => {
+    const holder = ref<HTMLElement | null>(null)
+    const fake = createFakeEditor({ href: '#section' })
+    const toolbar = useInlineFormatToolbar({
+      holder,
+      getEditor: () => fake.editor,
+      sanitizeHref: () => null
+    })
+
+    toolbar.openLinkPopover()
+    toolbar.linkValue.value = '#section'
+    const applied = toolbar.applyLink()
+
+    expect(applied).toBe(true)
+    expect(fake.chain.setLink).toHaveBeenCalledWith({ href: '#section' })
+    expect(fake.chain.unsetLink).not.toHaveBeenCalled()
+  })
+
   it('unsets link for empty value', () => {
     const holder = ref<HTMLElement | null>(null)
     const fake = createFakeEditor()
@@ -218,7 +236,7 @@ describe('useInlineFormatToolbar', () => {
     expect(fake.chain.setLink).not.toHaveBeenCalled()
     expect(fake.chain.unsetLink).not.toHaveBeenCalled()
     expect(toolbar.linkPopoverOpen.value).toBe(true)
-    expect(toolbar.linkError.value).toContain('Enter a valid URL')
+    expect(toolbar.linkError.value).toContain('Enter a valid link')
   })
 
   it('cancels link popover without mutating link commands', () => {

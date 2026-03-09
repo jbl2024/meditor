@@ -41,11 +41,47 @@ function blockAnchorMatcher(blockIdRaw: string): RegExp {
   return new RegExp(`(^|\\s)\\^${escaped}(\\s|$)`, 'i')
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max)
+}
+
 /**
  * Creates navigation helpers bound to the current TipTap editor instance.
  */
 export function useEditorNavigation(options: UseEditorNavigationOptions) {
   let outlineTimer: ReturnType<typeof setTimeout> | null = null
+
+  function scrollPosIntoCenter(pos: number) {
+    const editor = options.getEditor()
+    if (!editor) return
+
+    const holder = editor.view.dom.closest('.editor-holder') as HTMLElement | null
+    if (!holder) {
+      editor.chain().focus(pos, { scrollIntoView: true }).run()
+      return
+    }
+
+    editor.commands.setTextSelection(pos)
+    try {
+      editor.view.dom.focus({ preventScroll: true })
+    } catch {
+      editor.view.dom.focus()
+    }
+
+    const coords = editor.view.coordsAtPos(pos)
+    const holderRect = holder.getBoundingClientRect()
+    const absoluteTop = holder.scrollTop + (coords.top - holderRect.top)
+    const targetTop = clamp(
+      absoluteTop - holder.clientHeight / 2,
+      0,
+      Math.max(0, holder.scrollHeight - holder.clientHeight)
+    )
+
+    holder.scrollTo({
+      top: targetTop,
+      behavior: 'smooth'
+    })
+  }
 
   /** Clears any scheduled outline emission. */
   function clearOutlineTimer() {
@@ -97,9 +133,7 @@ export function useEditorNavigation(options: UseEditorNavigationOptions) {
     })
 
     if (targetPos <= 0) return
-    // Keep navigation deterministic from side panes: focus directly at target position,
-    // never via implicit "focus at end" fallback.
-    editor.chain().focus(targetPos).scrollIntoView().run()
+    scrollPosIntoCenter(targetPos)
   }
 
   /** Reveals the first text node containing the normalized snippet text. */
@@ -127,7 +161,7 @@ export function useEditorNavigation(options: UseEditorNavigationOptions) {
     })
 
     if (targetPos <= 0) return
-    editor.chain().focus(targetPos + 1).scrollIntoView().run()
+    scrollPosIntoCenter(targetPos + 1)
   }
 
   /** Reveals a heading anchor or `^block-id` anchor and returns success. */
@@ -160,7 +194,7 @@ export function useEditorNavigation(options: UseEditorNavigationOptions) {
     }
 
     if (targetPos <= 0) return false
-    editor.chain().focus(targetPos).scrollIntoView().run()
+    scrollPosIntoCenter(targetPos)
     return true
   }
 

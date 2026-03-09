@@ -94,3 +94,32 @@ describe('fromTiptapDoc table metadata', () => {
     expect((blocks[0]?.data as Record<string, unknown>).widths).toEqual([37, 30, 33])
   })
 })
+
+describe('fromTiptapDoc internal links', () => {
+  it('keeps internal anchor hrefs without external link attrs', () => {
+    const blocks = fromTiptapDoc({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'text',
+              text: 'Resume',
+              marks: [{ type: 'link', attrs: { href: '#fragment' } }]
+            }
+          ]
+        }
+      ]
+    })
+
+    expect(blocks).toEqual([
+      {
+        type: 'paragraph',
+        data: {
+          text: '<a href="#fragment">Resume</a>'
+        }
+      }
+    ])
+  })
+})

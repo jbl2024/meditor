@@ -13,7 +13,7 @@
 - Session status mutation bridge for session store + lifecycle emits: `useEditorSessionStatus`
 - File load/save orchestration: `useEditorFileLifecycle`
 - Caret snapshot/restore + debounced outline emission: `useEditorCaretOutline`
-- Tiptap setup/hooks/link behavior: `useEditorTiptapSetup`
+- Tiptap setup/hooks/link behavior: `useEditorTiptapSetup` (wikilinks, internal anchors, external links)
 - Async heavy node-render idle coordination: `renderStabilizer` (`src/lib/tiptap/renderStabilizer.ts`)
 - Wikilink overlay state machine: `useEditorWikilinkOverlayState`
 - Wikilink target/headings cache and resolve: `useEditorWikilinkDataSource`
