@@ -15,6 +15,15 @@ import { sanitizeExternalHref } from '../lib/markdownBlocks'
 import { normalizeBlockId, normalizeHeadingAnchor, slugifyHeading } from '../lib/wikilinks'
 import type { WikilinkCandidate } from '../lib/tiptap/plugins/wikilinkState'
 
+/**
+ * Owns interactive editor behavior that depends on the active Tiptap instance:
+ * slash commands, wikilinks, caret capture, outline/navigation, and input routing.
+ *
+ * This runtime deliberately stays as one module because those flows share the same
+ * active editor, selection state, and plugin callbacks. The simplification target is
+ * local readability, not splitting that orchestration into more public files.
+ */
+
 /** Exposes the active document/session surface required for editor interactions. */
 export type EditorInteractionRuntimeDocumentPort = {
   currentPath: Ref<string>
@@ -74,58 +83,97 @@ export type UseEditorInteractionRuntimeOptions = {
   interactionIoPort: EditorInteractionRuntimeIoPort
 }
 
+/**
+ * Coordinates selection-driven editor behavior while keeping the shell free from Tiptap plumbing.
+ */
 export function useEditorInteractionRuntime(options: UseEditorInteractionRuntimeOptions) {
+  const documentPort = options.interactionDocumentPort
+  const editorPort = options.interactionEditorPort
+  const chromePort = options.interactionChromePort
+  const ioPort = options.interactionIoPort
+
   const SLASH_COMMANDS = computed(() => EDITOR_SLASH_COMMANDS)
   const lastEditorInteractionAt = ref(0)
   const USER_INTERACTION_CAPTURE_WINDOW_MS = 1200
 
   const slashMenu = useSlashMenu({
-    getEditor: () => options.interactionDocumentPort.activeEditor.value,
+    getEditor: () => documentPort.activeEditor.value,
     commands: SLASH_COMMANDS,
-    closeCompetingMenus: () => options.interactionChromePort.menus.closeBlockMenu()
+    closeCompetingMenus: () => chromePort.menus.closeBlockMenu()
   })
 
   const navigation = useEditorNavigation({
-    getEditor: () => options.interactionDocumentPort.activeEditor.value,
-    emitOutline: (headings) => options.interactionEditorPort.emitOutline(headings),
+    getEditor: () => documentPort.activeEditor.value,
+    emitOutline: (headings) => editorPort.emitOutline(headings),
     normalizeHeadingAnchor,
     slugifyHeading,
     normalizeBlockId
   })
 
   const caretOutline = useEditorCaretOutline({
-    currentPath: options.interactionDocumentPort.currentPath,
-    getSession: (path) => options.interactionDocumentPort.getSession(path),
-    getEditor: () => options.interactionDocumentPort.activeEditor.value,
+    currentPath: documentPort.currentPath,
+    getSession: (path) => documentPort.getSession(path),
+    getEditor: () => documentPort.activeEditor.value,
     emitOutline: (payload) => {
-      options.interactionEditorPort.emitOutline(payload.headings)
+      editorPort.emitOutline(payload.headings)
     },
     parseOutlineFromDoc: () => navigation.parseOutlineFromDoc()
   })
 
   const wikilinkDataSource = useEditorWikilinkDataSource({
-    loadLinkTargets: options.interactionIoPort.loadLinkTargets,
-    loadLinkHeadings: options.interactionIoPort.loadLinkHeadings
+    loadLinkTargets: ioPort.loadLinkTargets,
+    loadLinkHeadings: ioPort.loadLinkHeadings
   })
 
+  // Invariant: the overlay must exist before Tiptap callbacks can try to sync it.
   const wikilinkOverlay = useEditorWikilinkOverlayState({
-    getEditor: () => options.interactionDocumentPort.activeEditor.value,
-    holder: options.interactionDocumentPort.holder,
-    blockMenuOpen: options.interactionChromePort.menus.blockMenuOpen,
-    isDragMenuOpen: () => options.interactionChromePort.menus.isDragMenuOpen(),
-    closeBlockMenu: () => options.interactionChromePort.menus.closeBlockMenu()
+    getEditor: () => documentPort.activeEditor.value,
+    holder: documentPort.holder,
+    blockMenuOpen: chromePort.menus.blockMenuOpen,
+    isDragMenuOpen: () => chromePort.menus.isDragMenuOpen(),
+    closeBlockMenu: () => chromePort.menus.closeBlockMenu()
   })
 
   const slashInsertion = useEditorSlashInsertion({
-    getEditor: () => options.interactionDocumentPort.activeEditor.value,
+    getEditor: () => documentPort.activeEditor.value,
     currentTextSelectionContext: slashMenu.currentTextSelectionContext,
     readSlashContext: slashMenu.readSlashContext
   })
 
+  /**
+   * Records a recent explicit user interaction so caret snapshots only happen after real editor input.
+   */
   function markEditorInteraction() {
     lastEditorInteractionAt.value = Date.now()
   }
 
+  /**
+   * Captures caret state only for the focused active editor, shortly after user interaction.
+   */
+  function shouldCaptureCaretForActiveEditor(path: string) {
+    if (!path || documentPort.currentPath.value !== path) return false
+    if (!documentPort.holder.value) return false
+    const active = typeof document !== 'undefined' ? document.activeElement : null
+    if (!active || !documentPort.holder.value.contains(active)) return false
+    return Date.now() - lastEditorInteractionAt.value <= USER_INTERACTION_CAPTURE_WINDOW_MS
+  }
+
+  /**
+   * Saves the dirty active document before navigation. If the document is still dirty afterwards,
+   * navigation is canceled to avoid losing edits on a failed or skipped persist.
+   */
+  async function saveDirtyDocumentBeforeNavigation() {
+    const path = documentPort.currentPath.value
+    const session = path ? documentPort.getSession(path) : null
+    if (!path || !session?.dirty) return true
+    await documentPort.saveCurrentFile(false)
+    return !documentPort.getSession(path)?.dirty
+  }
+
+  /**
+   * Builds wikilink candidates from workspace targets, target headings, current-document headings,
+   * and the existing target resolver.
+   */
   async function getWikilinkCandidates(query: string): Promise<WikilinkCandidate[]> {
     return buildWikilinkCandidates({
       query,
@@ -136,50 +184,43 @@ export function useEditorInteractionRuntime(options: UseEditorInteractionRuntime
     })
   }
 
+  /**
+   * Opens a link target only after the current dirty note has been safely persisted.
+   */
   async function openLinkTargetWithAutosave(target: string) {
-    const path = options.interactionDocumentPort.currentPath.value
-    const session = path ? options.interactionDocumentPort.getSession(path) : null
-    if (path && session?.dirty) {
-      await options.interactionDocumentPort.saveCurrentFile(false)
-      if (options.interactionDocumentPort.getSession(path)?.dirty) return
-    }
-    await options.interactionIoPort.openLinkTarget(target)
+    const canNavigate = await saveDirtyDocumentBeforeNavigation()
+    if (!canNavigate) return
+    await ioPort.openLinkTarget(target)
   }
 
   const tiptapSetup = useEditorTiptapSetup({
-    currentPath: options.interactionDocumentPort.currentPath,
-    getCurrentEditor: () => options.interactionDocumentPort.activeEditor.value,
-    getSessionEditor: (path) => options.interactionDocumentPort.getSession(path)?.editor ?? null,
+    currentPath: documentPort.currentPath,
+    getCurrentEditor: () => documentPort.activeEditor.value,
+    getSessionEditor: (path) => documentPort.getSession(path)?.editor ?? null,
     markSlashActivatedByUser: slashMenu.markSlashActivatedByUser,
     syncSlashMenuFromSelection: slashMenu.syncSlashMenuFromSelection,
-    updateTableToolbar: () => options.interactionChromePort.toolbars.updateTableToolbar(),
+    updateTableToolbar: () => chromePort.toolbars.updateTableToolbar(),
     syncWikilinkUiFromPluginState: wikilinkOverlay.syncWikilinkUiFromPluginState,
     captureCaret: caretOutline.captureCaret,
-    shouldCaptureCaret: (path) => {
-      if (!path || options.interactionDocumentPort.currentPath.value !== path) return false
-      if (!options.interactionDocumentPort.holder.value) return false
-      const active = typeof document !== 'undefined' ? document.activeElement : null
-      if (!active || !options.interactionDocumentPort.holder.value.contains(active)) return false
-      return Date.now() - lastEditorInteractionAt.value <= USER_INTERACTION_CAPTURE_WINDOW_MS
-    },
-    updateFormattingToolbar: () => options.interactionChromePort.toolbars.updateFormattingToolbar(),
-    onEditorDocChanged: (path) => options.interactionDocumentPort.onEditorDocChanged(path),
-    requestMermaidReplaceConfirm: options.interactionEditorPort.requestMermaidReplaceConfirm,
+    shouldCaptureCaret: shouldCaptureCaretForActiveEditor,
+    updateFormattingToolbar: () => chromePort.toolbars.updateFormattingToolbar(),
+    onEditorDocChanged: (path) => documentPort.onEditorDocChanged(path),
+    requestMermaidReplaceConfirm: editorPort.requestMermaidReplaceConfirm,
     getWikilinkCandidates,
     openLinkTargetWithAutosave,
     resolveWikilinkTarget: wikilinkDataSource.resolveWikilinkTarget,
     sanitizeExternalHref,
-    openExternalUrl: options.interactionIoPort.openExternalUrl,
+    openExternalUrl: ioPort.openExternalUrl,
     inlineFormatToolbar: {
-      updateFormattingToolbar: options.interactionChromePort.toolbars.inlineFormatToolbar.updateFormattingToolbar,
-      openLinkPopover: options.interactionChromePort.toolbars.inlineFormatToolbar.openLinkPopover
+      updateFormattingToolbar: chromePort.toolbars.inlineFormatToolbar.updateFormattingToolbar,
+      openLinkPopover: chromePort.toolbars.inlineFormatToolbar.openLinkPopover
     }
   })
 
   const inputHandlers = useEditorInputHandlers({
     editingPort: {
-      getEditor: () => options.interactionDocumentPort.activeEditor.value,
-      currentPath: options.interactionDocumentPort.currentPath,
+      getEditor: () => documentPort.activeEditor.value,
+      currentPath: documentPort.currentPath,
       captureCaret: caretOutline.captureCaret,
       currentTextSelectionContext: slashMenu.currentTextSelectionContext,
       insertBlockFromDescriptor: slashInsertion.insertBlockFromDescriptor
@@ -189,66 +230,105 @@ export function useEditorInteractionRuntime(options: UseEditorInteractionRuntime
       slashOpen: slashMenu.slashOpen,
       slashIndex: slashMenu.slashIndex,
       closeSlashMenu: slashMenu.dismissSlashMenu,
-      blockMenuOpen: options.interactionChromePort.menus.blockMenuOpen,
-      closeBlockMenu: () => options.interactionChromePort.menus.closeBlockMenu(),
-      tableToolbarOpen: options.interactionChromePort.menus.tableToolbarOpen,
-      hideTableToolbar: () => options.interactionChromePort.menus.hideTableToolbar(),
+      blockMenuOpen: chromePort.menus.blockMenuOpen,
+      closeBlockMenu: () => chromePort.menus.closeBlockMenu(),
+      tableToolbarOpen: chromePort.menus.tableToolbarOpen,
+      hideTableToolbar: () => chromePort.menus.hideTableToolbar(),
       inlineFormatToolbar: {
-        linkPopoverOpen: options.interactionChromePort.toolbars.inlineFormatToolbar.linkPopoverOpen,
-        cancelLink: options.interactionChromePort.toolbars.inlineFormatToolbar.cancelLink
+        linkPopoverOpen: chromePort.toolbars.inlineFormatToolbar.linkPopoverOpen,
+        cancelLink: chromePort.toolbars.inlineFormatToolbar.cancelLink
       }
     },
     uiPort: {
-      updateFormattingToolbar: () => options.interactionChromePort.toolbars.updateFormattingToolbar(),
-      updateTableToolbar: () => options.interactionChromePort.toolbars.updateTableToolbar(),
+      updateFormattingToolbar: () => chromePort.toolbars.updateFormattingToolbar(),
+      updateTableToolbar: () => chromePort.toolbars.updateTableToolbar(),
       syncSlashMenuFromSelection: slashMenu.syncSlashMenuFromSelection
     },
     zoomPort: {
-      zoomEditorBy: (delta) => options.interactionChromePort.zoom.zoomEditorBy(delta),
-      resetEditorZoom: () => options.interactionChromePort.zoom.resetEditorZoom()
+      zoomEditorBy: (delta) => chromePort.zoom.zoomEditorBy(delta),
+      resetEditorZoom: () => chromePort.zoom.resetEditorZoom()
     }
   })
 
-  return {
-    createSessionEditor: (path: string) => tiptapSetup.createSessionEditor(path),
-    slashOpen: slashMenu.slashOpen,
-    slashIndex: slashMenu.slashIndex,
-    slashLeft: slashMenu.slashLeft,
-    slashTop: slashMenu.slashTop,
-    slashQuery: slashMenu.slashQuery,
-    visibleSlashCommands: slashMenu.visibleSlashCommands,
-    closeSlashMenu: slashMenu.closeSlashMenu,
-    dismissSlashMenu: slashMenu.dismissSlashMenu,
-    setSlashQuery: slashMenu.setSlashQuery,
+  const slashAndInsertion = {
+    slashMenu,
+    slashInsertion,
+    markEditorInteraction,
     markSlashActivatedByUser: slashMenu.markSlashActivatedByUser,
-    currentTextSelectionContext: slashMenu.currentTextSelectionContext,
-    readSlashContext: slashMenu.readSlashContext,
     openSlashAtSelection: slashMenu.openSlashAtSelection,
-    syncSlashMenuFromSelection: slashMenu.syncSlashMenuFromSelection,
-    wikilinkOpen: wikilinkOverlay.wikilinkOpen,
-    wikilinkIndex: wikilinkOverlay.wikilinkIndex,
-    wikilinkLeft: wikilinkOverlay.wikilinkLeft,
-    wikilinkTop: wikilinkOverlay.wikilinkTop,
-    wikilinkResults: wikilinkOverlay.wikilinkResults,
-    closeWikilinkMenu: wikilinkOverlay.closeWikilinkMenu,
+    setSlashQuery: slashMenu.setSlashQuery
+  }
+  const wikilinkFlow = {
+    wikilinkDataSource,
+    wikilinkOverlay,
+    getWikilinkCandidates,
     syncWikilinkUiFromPluginState: wikilinkOverlay.syncWikilinkUiFromPluginState,
+    closeWikilinkMenu: wikilinkOverlay.closeWikilinkMenu,
     onWikilinkMenuSelect: wikilinkOverlay.onWikilinkMenuSelect,
     onWikilinkMenuIndexUpdate: wikilinkOverlay.onWikilinkMenuIndexUpdate,
+    resetWikilinkDataCache: wikilinkDataSource.resetCache
+  }
+  const caretAndOutline = {
+    navigation,
+    caretOutline,
     captureCaret: caretOutline.captureCaret,
     restoreCaret: caretOutline.restoreCaret,
     clearOutlineTimer: caretOutline.clearOutlineTimer,
     emitOutlineSoon: caretOutline.emitOutlineSoon,
-    insertBlockFromDescriptor: slashInsertion.insertBlockFromDescriptor,
-    onEditorKeydown: inputHandlers.onEditorKeydown,
-    onEditorKeyup: inputHandlers.onEditorKeyup,
-    onEditorContextMenu: inputHandlers.onEditorContextMenu,
-    onEditorPaste: inputHandlers.onEditorPaste,
-    openLinkTargetWithAutosave,
-    getWikilinkCandidates,
-    markEditorInteraction,
-    resetWikilinkDataCache: wikilinkDataSource.resetCache,
     revealSnippet: navigation.revealSnippet,
     revealOutlineHeading: navigation.revealOutlineHeading,
     revealAnchor: navigation.revealAnchor
+  }
+  const editorInputAndNavigation = {
+    tiptapSetup,
+    inputHandlers,
+    openLinkTargetWithAutosave,
+    onEditorKeydown: inputHandlers.onEditorKeydown,
+    onEditorKeyup: inputHandlers.onEditorKeyup,
+    onEditorContextMenu: inputHandlers.onEditorContextMenu,
+    onEditorPaste: inputHandlers.onEditorPaste
+  }
+
+  return {
+    createSessionEditor: (path: string) => editorInputAndNavigation.tiptapSetup.createSessionEditor(path),
+    slashOpen: slashAndInsertion.slashMenu.slashOpen,
+    slashIndex: slashAndInsertion.slashMenu.slashIndex,
+    slashLeft: slashAndInsertion.slashMenu.slashLeft,
+    slashTop: slashAndInsertion.slashMenu.slashTop,
+    slashQuery: slashAndInsertion.slashMenu.slashQuery,
+    visibleSlashCommands: slashAndInsertion.slashMenu.visibleSlashCommands,
+    closeSlashMenu: slashAndInsertion.slashMenu.closeSlashMenu,
+    dismissSlashMenu: slashAndInsertion.slashMenu.dismissSlashMenu,
+    setSlashQuery: slashAndInsertion.setSlashQuery,
+    markSlashActivatedByUser: slashAndInsertion.markSlashActivatedByUser,
+    currentTextSelectionContext: slashAndInsertion.slashMenu.currentTextSelectionContext,
+    readSlashContext: slashAndInsertion.slashMenu.readSlashContext,
+    openSlashAtSelection: slashAndInsertion.openSlashAtSelection,
+    syncSlashMenuFromSelection: slashAndInsertion.slashMenu.syncSlashMenuFromSelection,
+    wikilinkOpen: wikilinkFlow.wikilinkOverlay.wikilinkOpen,
+    wikilinkIndex: wikilinkFlow.wikilinkOverlay.wikilinkIndex,
+    wikilinkLeft: wikilinkFlow.wikilinkOverlay.wikilinkLeft,
+    wikilinkTop: wikilinkFlow.wikilinkOverlay.wikilinkTop,
+    wikilinkResults: wikilinkFlow.wikilinkOverlay.wikilinkResults,
+    closeWikilinkMenu: wikilinkFlow.closeWikilinkMenu,
+    syncWikilinkUiFromPluginState: wikilinkFlow.syncWikilinkUiFromPluginState,
+    onWikilinkMenuSelect: wikilinkFlow.onWikilinkMenuSelect,
+    onWikilinkMenuIndexUpdate: wikilinkFlow.onWikilinkMenuIndexUpdate,
+    captureCaret: caretAndOutline.captureCaret,
+    restoreCaret: caretAndOutline.restoreCaret,
+    clearOutlineTimer: caretAndOutline.clearOutlineTimer,
+    emitOutlineSoon: caretAndOutline.emitOutlineSoon,
+    insertBlockFromDescriptor: slashAndInsertion.slashInsertion.insertBlockFromDescriptor,
+    onEditorKeydown: editorInputAndNavigation.onEditorKeydown,
+    onEditorKeyup: editorInputAndNavigation.onEditorKeyup,
+    onEditorContextMenu: editorInputAndNavigation.onEditorContextMenu,
+    onEditorPaste: editorInputAndNavigation.onEditorPaste,
+    openLinkTargetWithAutosave: editorInputAndNavigation.openLinkTargetWithAutosave,
+    getWikilinkCandidates: wikilinkFlow.getWikilinkCandidates,
+    markEditorInteraction: slashAndInsertion.markEditorInteraction,
+    resetWikilinkDataCache: wikilinkFlow.resetWikilinkDataCache,
+    revealSnippet: caretAndOutline.revealSnippet,
+    revealOutlineHeading: caretAndOutline.revealOutlineHeading,
+    revealAnchor: caretAndOutline.revealAnchor
   }
 }
