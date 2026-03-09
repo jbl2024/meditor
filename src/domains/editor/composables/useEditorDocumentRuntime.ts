@@ -78,16 +78,27 @@ export type UseEditorDocumentRuntimeOptions = {
   hasPendingHeavyRender?: HasPendingHeavyRender
 }
 
+/**
+ * Owns document-facing editor lifecycle: session activation, load/save, title,
+ * and frontmatter properties. It deliberately stops short of Tiptap interaction
+ * wiring and chrome concerns, which stay in their dedicated runtimes.
+ */
 export function useEditorDocumentRuntime(options: UseEditorDocumentRuntimeOptions) {
-  const currentPath = computed(() => options.documentInputPort.path.value?.trim() || '')
+  const input = options.documentInputPort
+  const output = options.documentOutputPort
+  const session = options.documentSessionPort
+  const ui = options.documentUiPort
+  const uiInteraction = ui.interaction
+
+  const currentPath = computed(() => input.path.value?.trim() || '')
 
   const sessionStore = useDocumentEditorSessions({
-    createEditor: (path) => options.documentSessionPort.createSessionEditor(path)
+    createEditor: (path) => session.createSessionEditor(path)
   })
   const lifecycle = useEditorSessionLifecycle({
-    emitStatus: (payload) => options.documentOutputPort.emitStatus(payload),
+    emitStatus: (payload) => output.emitStatus(payload),
     saveCurrentFile: (manual) => saveCurrentFile(manual),
-    isEditingTitle: () => options.documentSessionPort.isEditingTitle(),
+    isEditingTitle: () => session.isEditingTitle(),
     autosaveIdleMs: 1800
   })
   const sessionStatus = useEditorSessionStatus({
@@ -105,24 +116,54 @@ export function useEditorDocumentRuntime(options: UseEditorDocumentRuntimeOption
   const clearAutosaveTimer = sessionStatus.clearAutosaveTimer
   const scheduleAutosave = sessionStatus.scheduleAutosave
 
+  const sessionState = {
+    sessionStore,
+    lifecycle,
+    sessionStatus,
+    getSession,
+    ensureSession,
+    setDirty,
+    setSaving,
+    setSaveError,
+    clearAutosaveTimer,
+    scheduleAutosave,
+    nextRequestId: lifecycle.nextRequestId,
+    isCurrentRequest: lifecycle.isCurrentRequest
+  }
+
+  /**
+   * Keeps title edits, property edits, and document edits on the same dirty/save
+   * semantics so autosave behavior does not diverge across entry points.
+   */
+  function markPathDirtyAndQueueAutosave(path: string) {
+    if (!path) return
+    setDirty(path, true)
+    setSaveError(path, '')
+    scheduleAutosave(path)
+  }
+
   function serializeCurrentDocBlocks(): EditorBlock[] {
-    const editor = options.documentSessionPort.activeEditor.value
+    const editor = session.activeEditor.value
     if (!editor) return []
     return fromTiptapDoc(editor.getJSON())
   }
 
+  /**
+   * Replaces editor body content without feeding the normal change pipeline back
+   * into autosave/outline updates. This keeps programmatic loads idempotent.
+   */
   async function renderBlocks(blocks: EditorBlock[]) {
-    const editor = options.documentSessionPort.activeEditor.value
+    const editor = session.activeEditor.value
     if (!editor) return
     const doc = toTiptapDoc(blocks)
-    const rememberedScroll = options.documentSessionPort.holder.value?.scrollTop ?? 0
+    const rememberedScroll = session.holder.value?.scrollTop ?? 0
     setSuppressOnChange(true)
     editor.commands.setContent(doc, { emitUpdate: false })
     setSuppressOnChange(false)
     await nextTick()
-    options.documentUiPort.syncAfterDocumentChange()
-    if (options.documentSessionPort.holder.value) {
-      options.documentSessionPort.holder.value.scrollTop = rememberedScroll
+    ui.syncAfterDocumentChange()
+    if (session.holder.value) {
+      session.holder.value.scrollTop = rememberedScroll
     }
   }
 
@@ -157,23 +198,48 @@ export function useEditorDocumentRuntime(options: UseEditorDocumentRuntimeOption
     movePathState: moveFrontmatterPathState
   } = useFrontmatterProperties({
     currentPath,
-    loadPropertyTypeSchema: options.documentInputPort.loadPropertyTypeSchema,
-    savePropertyTypeSchema: options.documentInputPort.savePropertyTypeSchema,
-    onDirty: (path) => {
-      setDirty(path, true)
-      setSaveError(path, '')
-      scheduleAutosave(path)
-    },
-    emitProperties: (payload) => options.documentOutputPort.emitProperties(payload)
+    loadPropertyTypeSchema: input.loadPropertyTypeSchema,
+    savePropertyTypeSchema: input.savePropertyTypeSchema,
+    onDirty: (path) => markPathDirtyAndQueueAutosave(path),
+    emitProperties: (payload) => output.emitProperties(payload)
   })
+
+  const titleAndProperties = {
+    titleState,
+    currentTitle,
+    propertyEditorMode,
+    frontmatterByPath,
+    rawYamlByPath,
+    activeParseErrors,
+    activeRawYaml,
+    canUseStructuredProperties,
+    structuredPropertyFields,
+    structuredPropertyKeys,
+    ensurePropertySchemaLoaded,
+    resetPropertySchemaState,
+    parseAndStoreFrontmatter,
+    serializableFrontmatterFields,
+    addPropertyField,
+    removePropertyField,
+    onPropertyTypeChange,
+    onPropertyKeyInput,
+    onPropertyValueInput,
+    onPropertyCheckboxInput,
+    onPropertyTokensChange,
+    effectiveTypeForField,
+    isPropertyTypeLocked,
+    propertiesExpanded,
+    togglePropertiesVisibility,
+    onRawYamlInput,
+    moveFrontmatterPathState,
+    markDocumentDirtyFromMetadataChange: markPathDirtyAndQueueAutosave
+  }
 
   function onTitleInput(value: string) {
     const path = currentPath.value
     if (!path) return
     titleState.setCurrentTitle(path, value)
-    setDirty(path, true)
-    setSaveError(path, '')
-    scheduleAutosave(path)
+    markPathDirtyAndQueueAutosave(path)
   }
 
   function onTitleCommit() {
@@ -190,17 +256,15 @@ export function useEditorDocumentRuntime(options: UseEditorDocumentRuntimeOption
 
   function onEditorDocChanged(path: string) {
     if (suppressOnChange || !path) return
-    setDirty(path, true)
-    setSaveError(path, '')
-    scheduleAutosave(path)
-    options.documentUiPort.interaction.emitOutlineSoon(path)
-    options.documentUiPort.syncAfterDocumentChange()
+    markPathDirtyAndQueueAutosave(path)
+    uiInteraction.emitOutlineSoon(path)
+    ui.syncAfterDocumentChange()
   }
 
   function setActiveSession(path: string) {
     sessionStore.setActivePath(MAIN_PANE_ID, path)
-    options.documentSessionPort.activeEditor.value = getSession(path)?.editor ?? null
-    options.documentUiPort.syncAfterSessionChange()
+    session.activeEditor.value = getSession(path)?.editor ?? null
+    ui.syncAfterSessionChange()
   }
 
   const mountedSessions = useEditorMountedSessions({
@@ -221,8 +285,8 @@ export function useEditorDocumentRuntime(options: UseEditorDocumentRuntimeOption
   const fileLifecycle = useEditorFileLifecycle({
     sessionPort: {
       currentPath,
-      holder: options.documentSessionPort.holder,
-      getEditor: () => options.documentSessionPort.activeEditor.value,
+      holder: session.holder,
+      getEditor: () => session.activeEditor.value,
       getSession,
       ensureSession,
       renameSessionPath: (from, to) => {
@@ -230,7 +294,7 @@ export function useEditorDocumentRuntime(options: UseEditorDocumentRuntimeOption
       },
       moveLifecyclePathState: (from, to) => lifecycle.movePathState(from, to),
       setSuppressOnChange,
-      restoreCaret: (path) => options.documentUiPort.interaction.restoreCaret(path),
+      restoreCaret: (path) => uiInteraction.restoreCaret(path),
       setDirty,
       setSaving,
       setSaveError
@@ -256,19 +320,19 @@ export function useEditorDocumentRuntime(options: UseEditorDocumentRuntimeOption
     },
     uiPort: {
       clearAutosaveTimer,
-      clearOutlineTimer: (path) => options.documentUiPort.interaction.clearOutlineTimer(path),
-      emitOutlineSoon: (path) => options.documentUiPort.interaction.emitOutlineSoon(path),
-      emitPathRenamed: (payload) => options.documentOutputPort.emitPathRenamed(payload),
-      resetTransientUiState: () => options.documentUiPort.resetTransientUi(),
-      updateGutterHitboxStyle: () => options.documentUiPort.syncLayout(),
-      syncWikilinkUiFromPluginState: () => options.documentUiPort.interaction.syncWikilinkUiFromPluginState(),
-      largeDocThreshold: options.documentUiPort.largeDocThreshold,
-      ui: options.documentUiPort.loading
+      clearOutlineTimer: (path) => uiInteraction.clearOutlineTimer(path),
+      emitOutlineSoon: (path) => uiInteraction.emitOutlineSoon(path),
+      emitPathRenamed: (payload) => output.emitPathRenamed(payload),
+      resetTransientUiState: () => ui.resetTransientUi(),
+      updateGutterHitboxStyle: () => ui.syncLayout(),
+      syncWikilinkUiFromPluginState: () => uiInteraction.syncWikilinkUiFromPluginState(),
+      largeDocThreshold: ui.largeDocThreshold,
+      ui: ui.loading
     },
     ioPort: {
-      openFile: options.documentInputPort.openFile,
-      saveFile: options.documentInputPort.saveFile,
-      renameFileFromTitle: options.documentInputPort.renameFileFromTitle
+      openFile: input.openFile,
+      saveFile: input.saveFile,
+      renameFileFromTitle: input.renameFileFromTitle
     },
     requestPort: {
       isCurrentRequest: (requestId) => lifecycle.isCurrentRequest(requestId)
@@ -276,6 +340,51 @@ export function useEditorDocumentRuntime(options: UseEditorDocumentRuntimeOption
     waitForHeavyRenderIdle: options.waitForHeavyRenderIdle,
     hasPendingHeavyRender: options.hasPendingHeavyRender
   })
+
+  const documentPersistence = {
+    serializeCurrentDocBlocks,
+    renderBlocks,
+    loadCurrentFile,
+    saveCurrentFile,
+    onEditorDocChanged,
+    setSuppressOnChange
+  }
+  void documentPersistence
+
+  /**
+   * Clears document-facing shell state when no active note remains. The watcher
+   * owns when this happens; the runtime owns what "empty" means.
+   */
+  function resetEmptyDocumentState() {
+    output.emitProperties({ path: '', items: [], parseErrorCount: 0 })
+    output.emitOutline([])
+    titleAndProperties.resetPropertySchemaState()
+  }
+
+  /**
+   * Bootstraps UI listeners first, then rehydrates the active document under the
+   * current request token so stale async loads can be discarded downstream.
+   */
+  async function initializeDocumentRuntime() {
+    const chromeInitPromise = ui.initializeUi()
+    if (currentPath.value) {
+      const requestId = sessionState.nextRequestId()
+      ensureSession(currentPath.value)
+      setActiveSession(currentPath.value)
+      await loadCurrentFile(currentPath.value, { requestId })
+    }
+    await chromeInitPromise
+  }
+
+  /**
+   * Tears down UI listeners and in-memory sessions together so the shell never
+   * points at an editor instance after unmount.
+   */
+  async function disposeDocumentRuntime() {
+    await ui.disposeUi()
+    sessionStore.closeAll()
+    session.activeEditor.value = null
+  }
 
   async function loadCurrentFile(path: string, loadOptions?: { forceReload?: boolean; requestId?: number }) {
     await fileLifecycle.loadCurrentFile(path, loadOptions)
@@ -286,50 +395,33 @@ export function useEditorDocumentRuntime(options: UseEditorDocumentRuntimeOption
   }
 
   useEditorPathWatchers({
-    path: computed(() => options.documentInputPort.path.value ?? ''),
-    openPaths: computed(() => options.documentInputPort.openPaths.value ?? []),
-    holder: options.documentSessionPort.holder,
+    path: computed(() => input.path.value ?? ''),
+    openPaths: computed(() => input.openPaths.value ?? []),
+    holder: session.holder,
     currentPath,
-    nextRequestId: () => lifecycle.nextRequestId(),
+    nextRequestId: () => sessionState.nextRequestId(),
     ensureSession,
     setActiveSession,
     loadCurrentFile,
-    captureCaret: (path) => options.documentUiPort.interaction.captureCaret(path),
+    captureCaret: (path) => uiInteraction.captureCaret(path),
     getSession,
     getActivePath: () => sessionStore.getActivePath(MAIN_PANE_ID),
     setActivePath: (path) => sessionStore.setActivePath(MAIN_PANE_ID, path),
     clearActiveEditor: () => {
-      options.documentSessionPort.activeEditor.value = null
-      options.documentUiPort.syncAfterSessionChange()
+      session.activeEditor.value = null
+      ui.syncAfterSessionChange()
     },
     listPaths: () => sessionStore.listPaths(),
     closePath: (path) => sessionStore.closePath(path),
     resetPropertySchemaState,
-    emitEmptyProperties: () => {
-      options.documentOutputPort.emitProperties({ path: '', items: [], parseErrorCount: 0 })
-    },
-    closeSlashMenu: () => options.documentUiPort.interaction.closeSlashMenu(),
-    closeWikilinkMenu: () => options.documentUiPort.interaction.closeWikilinkMenu(),
-    closeBlockMenu: () => options.documentUiPort.closeCompetingMenus(),
-    hideTableToolbarAnchor: () => options.documentUiPort.hideTableToolbarAnchor(),
-    emitEmptyOutline: () => {
-      options.documentOutputPort.emitOutline([])
-    },
-    onMountInit: async () => {
-      const chromeInitPromise = options.documentUiPort.initializeUi()
-      if (currentPath.value) {
-        const requestId = lifecycle.nextRequestId()
-        ensureSession(currentPath.value)
-        setActiveSession(currentPath.value)
-        await loadCurrentFile(currentPath.value, { requestId })
-      }
-      await chromeInitPromise
-    },
-    onUnmountCleanup: async () => {
-      await options.documentUiPort.disposeUi()
-      sessionStore.closeAll()
-      options.documentSessionPort.activeEditor.value = null
-    }
+    emitEmptyProperties: () => resetEmptyDocumentState(),
+    closeSlashMenu: () => uiInteraction.closeSlashMenu(),
+    closeWikilinkMenu: () => uiInteraction.closeWikilinkMenu(),
+    closeBlockMenu: () => ui.closeCompetingMenus(),
+    hideTableToolbarAnchor: () => ui.hideTableToolbarAnchor(),
+    emitEmptyOutline: () => undefined,
+    onMountInit: initializeDocumentRuntime,
+    onUnmountCleanup: disposeDocumentRuntime
   })
 
   return {
@@ -345,8 +437,8 @@ export function useEditorDocumentRuntime(options: UseEditorDocumentRuntimeOption
     saveCurrentFile,
     clearAutosaveTimer,
     scheduleAutosave,
-    nextRequestId: lifecycle.nextRequestId,
-    isCurrentRequest: lifecycle.isCurrentRequest,
+    nextRequestId: sessionState.nextRequestId,
+    isCurrentRequest: sessionState.isCurrentRequest,
     setDirty,
     setSaveError,
     currentTitle,
@@ -380,11 +472,11 @@ export function useEditorDocumentRuntime(options: UseEditorDocumentRuntimeOption
     togglePropertiesVisibility,
     onRawYamlInput,
     moveFrontmatterPathState,
-    isLoadingLargeDocument: options.documentUiPort.loading.isLoadingLargeDocument,
-    loadStageLabel: options.documentUiPort.loading.loadStageLabel,
-    loadProgressPercent: options.documentUiPort.loading.loadProgressPercent,
-    loadProgressIndeterminate: options.documentUiPort.loading.loadProgressIndeterminate,
-    loadDocumentStats: options.documentUiPort.loading.loadDocumentStats,
-    resetTransientDocumentUiState: options.documentUiPort.resetTransientUi
+    isLoadingLargeDocument: ui.loading.isLoadingLargeDocument,
+    loadStageLabel: ui.loading.loadStageLabel,
+    loadProgressPercent: ui.loading.loadProgressPercent,
+    loadProgressIndeterminate: ui.loading.loadProgressIndeterminate,
+    loadDocumentStats: ui.loading.loadDocumentStats,
+    resetTransientDocumentUiState: ui.resetTransientUi
   }
 }

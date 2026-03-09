@@ -3,6 +3,7 @@
 ## Ownership Map
 - Shell composition/orchestration boundary: `EditorView.vue`
 - Document/session runtime: `useEditorDocumentRuntime`
+  Internal organization should stay in a few local zones (`sessionState`, `documentPersistence`, `titleAndProperties`) rather than more public runtime layers.
 - Interaction runtime (Tiptap/slash/wikilink/caret): `useEditorInteractionRuntime`
   Internal organization should stay in a few local flow zones (`slashAndInsertion`, `wikilinkFlow`, `caretAndOutline`, `editorInputAndNavigation`) rather than more public runtime layers.
 - Chrome runtime (toolbars/overlays/layout/pulse): `useEditorChromeRuntime`
@@ -55,5 +56,6 @@
 - Flat runtime contracts that re-expose technical callbacks instead of stable ports.
 - Turning internal chrome sub-zones into new public APIs before there is a demonstrated ownership boundary.
 - Turning internal interaction flow zones into new public APIs before there is a demonstrated ownership boundary.
+- Turning internal document runtime sub-zones into new public APIs before there is a demonstrated ownership boundary.
 - Using Vue-only selectors (for example `:deep(...)`) in extracted plain CSS files.
 - Hiding the large-document overlay before async heavy node views (Mermaid/tables) have settled.
