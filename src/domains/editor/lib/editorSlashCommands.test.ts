@@ -8,6 +8,7 @@ describe('EDITOR_SLASH_COMMANDS', () => {
       'bullet',
       'checklist',
       'toc',
+      'toc-top-level',
       'table',
       'callout',
       'mermaid',
@@ -34,6 +35,16 @@ describe('EDITOR_SLASH_COMMANDS', () => {
       aliases: ['sommaire'],
       type: 'toc',
       data: {}
+    })
+  })
+
+  it('defines a top-level toc command for h1-only summaries', () => {
+    const toc = EDITOR_SLASH_COMMANDS.find((command) => command.id === 'toc-top-level')
+    expect(toc).toMatchObject({
+      label: 'Top-Level Table of Contents',
+      aliases: ['toc h1', 'sommaire h1'],
+      type: 'toc',
+      data: { maxLevel: 1 }
     })
   })
 })

@@ -65,10 +65,12 @@ export function useEditorSlashInsertion(options: UseEditorSlashInsertionOptions)
     } satisfies JSONContent
   }
 
-  function createTocContent(): JSONContent {
+  function createTocContent(maxLevel = 3): JSONContent {
     const headings = options.currentHeadings()
       .map((heading) => ({ level: heading.level, text: String(heading.text ?? '').trim() }))
-      .filter((heading): heading is { level: 1 | 2 | 3; text: string } => Boolean(heading.text))
+      .filter((heading): heading is { level: 1 | 2 | 3; text: string } =>
+        Boolean(heading.text) && heading.level <= maxLevel
+      )
 
     if (!headings.length) {
       return {
@@ -196,7 +198,7 @@ export function useEditorSlashInsertion(options: UseEditorSlashInsertionOptions)
         case 'delimiter':
           return { type: 'horizontalRule' }
         case 'toc':
-          return createTocContent()
+          return createTocContent(Number(data.maxLevel ?? 3))
         default:
           return { type: 'paragraph', content: [] }
       }

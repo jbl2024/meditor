@@ -44,6 +44,13 @@ export const EDITOR_SLASH_COMMANDS: SlashCommand[] = [
   { id: 'bullet', label: 'List', type: 'list', data: emptyListData('unordered') },
   { id: 'checklist', label: 'Checklist', type: 'list', data: emptyListData('checklist') },
   { id: 'toc', label: 'Table of Contents', aliases: ['sommaire'], type: 'toc', data: {} },
+  {
+    id: 'toc-top-level',
+    label: 'Top-Level Table of Contents',
+    aliases: ['toc h1', 'sommaire h1'],
+    type: 'toc',
+    data: { maxLevel: 1 }
+  },
   { id: 'table', label: 'Table', type: 'table', data: { withHeadings: true, content: [['', ''], ['', '']] } },
   { id: 'callout', label: 'Callout', type: 'callout', data: { kind: 'NOTE', message: '' } },
   { id: 'mermaid', label: 'Mermaid', type: 'mermaid', data: { code: 'flowchart TD\n  A[Start] --> B[End]' } },

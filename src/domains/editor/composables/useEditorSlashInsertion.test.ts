@@ -175,4 +175,47 @@ describe('useEditorSlashInsertion', () => {
       content: [{ type: 'listItem', content: [{ type: 'paragraph', content: [] }] }]
     })
   })
+
+  it('can insert an h1-only table of contents variant', () => {
+    const chain = createChain()
+    const editor = { chain: vi.fn(() => chain) } as any
+    const insertion = useEditorSlashInsertion({
+      getEditor: () => editor,
+      currentTextSelectionContext: () => ({ text: '/toc', nodeType: 'paragraph', from: 6, to: 10 }),
+      readSlashContext: () => ({ from: 6, to: 10 }),
+      currentHeadings: () => [
+        { level: 1 as const, text: 'Intro' },
+        { level: 2 as const, text: 'Architecture' },
+        { level: 1 as const, text: 'Appendix' }
+      ],
+      slugifyHeading: (heading) => heading.toLowerCase()
+    })
+
+    const ok = insertion.insertBlockFromDescriptor('toc', { maxLevel: 1 })
+
+    expect(ok).toBe(true)
+    expect(chain.insertContent).toHaveBeenCalledWith({
+      type: 'bulletList',
+      content: [
+        {
+          type: 'listItem',
+          content: [
+            {
+              type: 'paragraph',
+              content: [{ type: 'text', text: 'Intro', marks: [{ type: 'link', attrs: { href: '#intro' } }] }]
+            }
+          ]
+        },
+        {
+          type: 'listItem',
+          content: [
+            {
+              type: 'paragraph',
+              content: [{ type: 'text', text: 'Appendix', marks: [{ type: 'link', attrs: { href: '#appendix' } }] }]
+            }
+          ]
+        }
+      ]
+    })
+  })
 })
