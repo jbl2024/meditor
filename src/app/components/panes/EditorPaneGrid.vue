@@ -9,7 +9,7 @@ export type EditorPaneGridExposed = {
   saveNow: () => Promise<void>
   reloadCurrent: () => Promise<void>
   focusEditor: () => void
-  focusFirstContentBlock: () => Promise<void>
+  focusFirstContentBlock: () => void
   revealSnippet: (snippet: string) => Promise<void>
   revealOutlineHeading: (index: number) => Promise<void>
   revealAnchor: (anchor: WikilinkAnchor) => Promise<boolean>
@@ -248,8 +248,8 @@ function focusEditor() {
   ensureCall((editor) => editor.focusEditor(), undefined)
 }
 
-async function focusFirstContentBlock() {
-  await ensureCall((editor) => editor.focusFirstContentBlock(), Promise.resolve())
+function focusFirstContentBlock() {
+  ensureCall((editor) => editor.focusFirstContentBlock(), undefined)
 }
 
 async function revealSnippet(snippet: string) {

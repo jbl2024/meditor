@@ -372,7 +372,7 @@ function getSession(path: string): DocumentSession | null {
   return documentRuntime?.getSession(path) ?? null
 }
 
-async function focusFirstContentBlock() {
+function focusFirstContentBlock() {
   layout.focusFirstEditableBlock()
 }
 

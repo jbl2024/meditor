@@ -98,7 +98,7 @@ type EditorSurfaceExposed = {
   saveNow: () => Promise<void>
   reloadCurrent: () => Promise<void>
   focusEditor: () => void
-  focusFirstContentBlock: () => Promise<void>
+  focusFirstContentBlock: () => void
   revealSnippet: (snippet: string) => Promise<void>
   revealOutlineHeading: (index: number) => Promise<void>
   revealAnchor: (anchor: WikilinkAnchor) => Promise<boolean>
@@ -127,7 +127,7 @@ defineExpose<EditorSurfaceExposed>({
   saveNow: async () => await withEditor((editor) => editor.saveNow(), Promise.resolve()),
   reloadCurrent: async () => await withEditor((editor) => editor.reloadCurrent(), Promise.resolve()),
   focusEditor: () => withEditor((editor) => editor.focusEditor(), undefined),
-  focusFirstContentBlock: async () => await withEditor((editor) => editor.focusFirstContentBlock(), Promise.resolve()),
+  focusFirstContentBlock: () => withEditor((editor) => editor.focusFirstContentBlock(), undefined),
   revealSnippet: async (snippet: string) => await withEditor((editor) => editor.revealSnippet(snippet), Promise.resolve()),
   revealOutlineHeading: async (index: number) => await withEditor((editor) => editor.revealOutlineHeading(index), Promise.resolve()),
   revealAnchor: async (anchor: WikilinkAnchor) => await withEditor((editor) => editor.revealAnchor(anchor), Promise.resolve(false)),
