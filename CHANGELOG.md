@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.16.1] - 2026-03-10
+
+### Fixed
+- fix(quick-open): ignore accents in file search (2123e1c)
+
 ## [0.16.0] - 2026-03-09
 
 ### Added
