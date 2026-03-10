@@ -116,6 +116,26 @@ describe('useAppQuickOpen', () => {
     })
   })
 
+  it('matches file results accent-insensitively', () => {
+    const api = createQuickOpenHarness({
+      allWorkspaceFiles: ['/vault/notes/Café.md', '/vault/journal/Résumé.md']
+    })
+
+    api.quickOpenQuery.value = 'cafe'
+    expect(api.quickOpenResults.value[0]).toMatchObject({
+      kind: 'file',
+      path: '/vault/notes/Café.md',
+      label: 'notes/Café.md'
+    })
+
+    api.quickOpenQuery.value = 'resume'
+    expect(api.quickOpenResults.value[0]).toMatchObject({
+      kind: 'file',
+      path: '/vault/journal/Résumé.md',
+      label: 'journal/Résumé.md'
+    })
+  })
+
   it('limits file results to 80 entries', () => {
     const api = createQuickOpenHarness({
       allWorkspaceFiles: Array.from({ length: 100 }, (_, index) => `/vault/notes/note-${index}.md`)

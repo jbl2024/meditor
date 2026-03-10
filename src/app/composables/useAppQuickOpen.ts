@@ -54,6 +54,13 @@ export type UseAppQuickOpenOptions = {
   quickOpenActiveIndex?: Ref<number>
 }
 
+function normalizeSearchText(value: string) {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
+
 /**
  * Derives quick-open search results, action matches, and list navigation state.
  */
@@ -67,29 +74,30 @@ export function useAppQuickOpen(options: UseAppQuickOpenOptions) {
 
   const quickOpenResults = computed<QuickOpenResult[]>(() => {
     if (quickOpenIsActionMode.value) return []
-    const q = quickOpenQuery.value.trim().toLowerCase()
+    const rawQuery = quickOpenQuery.value.trim()
+    const q = normalizeSearchText(rawQuery)
     if (!q) return []
 
     const fileResults = quickOpenDataPort.allWorkspaceFiles.value
-      .filter((path) =>
-        path.toLowerCase().includes(q) ||
-        quickOpenDocumentPort.toRelativePath(path).toLowerCase().includes(q)
-      )
+      .filter((path) => {
+        const relativePath = quickOpenDocumentPort.toRelativePath(path)
+        return normalizeSearchText(path).includes(q) || normalizeSearchText(relativePath).includes(q)
+      })
       .map((path) => ({ kind: 'file' as const, path, label: quickOpenDocumentPort.toRelativePath(path) }))
       .slice(0, 80)
 
-    if (!quickOpenDocumentPort.isIsoDate(q) || !quickOpenDataPort.workingFolderPath.value) {
+    if (!quickOpenDocumentPort.isIsoDate(rawQuery) || !quickOpenDataPort.workingFolderPath.value) {
       return fileResults
     }
 
-    const path = quickOpenDocumentPort.dailyNotePath(quickOpenDataPort.workingFolderPath.value, q)
+    const path = quickOpenDocumentPort.dailyNotePath(quickOpenDataPort.workingFolderPath.value, rawQuery)
     const exists = quickOpenDataPort.allWorkspaceFiles.value.some((item) => item.toLowerCase() === path.toLowerCase())
     const dateResult: QuickOpenResult = {
       kind: 'daily',
-      date: q,
+      date: rawQuery,
       path,
       exists,
-      label: exists ? `Open daily note ${q}` : `Create daily note ${q}`
+      label: exists ? `Open daily note ${rawQuery}` : `Create daily note ${rawQuery}`
     }
 
     return [dateResult, ...fileResults]
