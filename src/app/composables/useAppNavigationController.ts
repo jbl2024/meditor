@@ -55,6 +55,7 @@ export type AppNavigationWorkspacePort = {
   setErrorMessage: (message: string) => void
   toRelativePath: (path: string) => string
   ensureAllFilesLoaded: () => Promise<void>
+  recordRecentNote: (path: string) => void
 }
 
 /** Editor-specific state used to enforce autosave and restore focus. */
@@ -262,6 +263,7 @@ export function useAppNavigationController(options: UseAppNavigationControllerOp
     if (navigation.recordHistory !== false) {
       historyPort.documentHistory.record(target)
     }
+    workspacePort.recordRecentNote(target)
     return true
   }
 
@@ -275,6 +277,7 @@ export function useAppNavigationController(options: UseAppNavigationControllerOp
     if (navigation.recordHistory !== false) {
       historyPort.documentHistory.record(target)
     }
+    workspacePort.recordRecentNote(target)
     return true
   }
 

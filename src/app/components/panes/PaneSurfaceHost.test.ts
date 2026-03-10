@@ -116,7 +116,8 @@ describe('PaneSurfaceHost', () => {
             mode: 'workspace-launchpad',
             workspaceLabel: 'vault',
             recentWorkspaces: [],
-            recentNotes: [],
+            recentViewedNotes: [],
+            recentUpdatedNotes: [],
             showWizardAction: false
           }
         })
@@ -208,7 +209,8 @@ describe('PaneSurfaceHost', () => {
               subtitle: '/vault',
               recencyLabel: 'opened yesterday'
             }],
-            recentNotes: [],
+            recentViewedNotes: [],
+            recentUpdatedNotes: [],
             showWizardAction: true
           }
         })

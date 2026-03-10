@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue'
 import {
   BoltIcon,
   CalendarDaysIcon,
@@ -21,16 +22,34 @@ type RecentNoteCard = {
   path: string
   title: string
   relativePath: string
-  updatedLabel: string
+  recencyLabel: string
 }
 
-defineProps<{
+const props = defineProps<{
   mode: 'no-workspace' | 'workspace-launchpad'
   workspaceLabel: string
   recentWorkspaces: RecentWorkspaceCard[]
-  recentNotes: RecentNoteCard[]
+  recentViewedNotes: RecentNoteCard[]
+  recentUpdatedNotes: RecentNoteCard[]
   showWizardAction: boolean
 }>()
+
+const activeRecentTab = ref<'viewed' | 'updated'>('viewed')
+const activeRecentNotes = computed(() =>
+  activeRecentTab.value === 'viewed'
+    ? props.recentViewedNotes
+    : props.recentUpdatedNotes
+)
+const activeRecentEmptyTitle = computed(() =>
+  activeRecentTab.value === 'viewed'
+    ? 'No recently viewed notes yet'
+    : 'No recently updated notes yet'
+)
+const activeRecentEmptyCopy = computed(() =>
+  activeRecentTab.value === 'viewed'
+    ? 'Open a note to keep your working context handy.'
+    : 'Edit a note to populate recent activity.'
+)
 
 const emit = defineEmits<{
   openWorkspace: []
@@ -59,7 +78,7 @@ function noteLooksLikeDaily(path: string, title: string): boolean {
 }
 
 function shortUpdatedLabel(value: string): string {
-  const normalized = value.trim().toLowerCase().replace(/^updated\s+/, '')
+  const normalized = value.trim().toLowerCase().replace(/^(updated|opened)\s+/, '')
   if (normalized.startsWith('yesterday')) return 'Yesterday'
   const hoursMatch = normalized.match(/^(\d+)\s+hours?\s+ago$/)
   if (hoursMatch) return `${hoursMatch[1]}h ago`
@@ -220,11 +239,33 @@ function shortUpdatedLabel(value: string): string {
       <article class="launchpad-card launchpad-card-wide">
         <div class="launchpad-section-head">
           <h3>Recent notes</h3>
-          <span v-if="recentNotes.length" class="launchpad-card-meta">{{ recentNotes.length }}</span>
+          <span v-if="activeRecentNotes.length" class="launchpad-card-meta">{{ activeRecentNotes.length }}</span>
         </div>
-        <div v-if="recentNotes.length" class="launchpad-table launchpad-table-scroll">
+        <div class="launchpad-segmented" role="tablist" aria-label="Recent note lists">
           <button
-            v-for="note in recentNotes"
+            type="button"
+            class="launchpad-segmented-tab"
+            :class="{ 'launchpad-segmented-tab-active': activeRecentTab === 'viewed' }"
+            :aria-selected="activeRecentTab === 'viewed'"
+            data-launchpad-tab="viewed"
+            @click="activeRecentTab = 'viewed'"
+          >
+            Viewed
+          </button>
+          <button
+            type="button"
+            class="launchpad-segmented-tab"
+            :class="{ 'launchpad-segmented-tab-active': activeRecentTab === 'updated' }"
+            :aria-selected="activeRecentTab === 'updated'"
+            data-launchpad-tab="updated"
+            @click="activeRecentTab = 'updated'"
+          >
+            Updated
+          </button>
+        </div>
+        <div v-if="activeRecentNotes.length" class="launchpad-table launchpad-table-scroll">
+          <button
+            v-for="note in activeRecentNotes"
             :key="note.path"
             type="button"
             class="launchpad-rich-row"
@@ -238,7 +279,7 @@ function shortUpdatedLabel(value: string): string {
                 </span>
                 <span class="launchpad-cell-title-text">{{ note.title }}</span>
               </span>
-              <span class="launchpad-rich-row-time">{{ shortUpdatedLabel(note.updatedLabel) }}</span>
+              <span class="launchpad-rich-row-time">{{ shortUpdatedLabel(note.recencyLabel) }}</span>
             </div>
             <div class="launchpad-rich-row-sub">
               <span class="launchpad-rich-row-location">
@@ -249,8 +290,8 @@ function shortUpdatedLabel(value: string): string {
           </button>
         </div>
         <div v-else class="launchpad-empty-block">
-          <p class="launchpad-empty-title">No notes yet</p>
-          <p class="launchpad-empty">Create your first note or open today&apos;s note.</p>
+          <p class="launchpad-empty-title">{{ activeRecentEmptyTitle }}</p>
+          <p class="launchpad-empty">{{ activeRecentEmptyCopy }}</p>
           <UiButton v-if="showWizardAction" variant="ghost" size="sm" @click="emit('openWizard')">Start with a setup wizard</UiButton>
         </div>
       </article>
@@ -436,6 +477,33 @@ function shortUpdatedLabel(value: string): string {
 .launchpad-cell-meta {
   font-size: 0.72rem;
   color: var(--text-dim);
+}
+
+.launchpad-segmented {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 12px 8px;
+  padding: 3px;
+  width: fit-content;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 82%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel-bg) 88%, var(--surface-bg));
+}
+
+.launchpad-segmented-tab {
+  border: 0;
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.launchpad-segmented-tab-active {
+  background: color-mix(in srgb, var(--accent-soft) 58%, var(--panel-bg));
+  color: color-mix(in srgb, var(--accent) 80%, var(--text-main));
 }
 
 .launchpad-table {

@@ -106,6 +106,13 @@ import {
   type RecentWorkspaceItem
 } from './lib/recentWorkspaces'
 import {
+  readRecentNotes,
+  removeRecentNote,
+  renameRecentNote,
+  upsertRecentNote,
+  writeRecentNotes
+} from './lib/recentNotes'
+import {
   buildWorkspaceSetupPlan,
   type WorkspaceSetupOption,
   type WorkspaceSetupUseCase
@@ -175,7 +182,7 @@ type LaunchpadRecentNote = {
   path: string
   title: string
   relativePath: string
-  updatedLabel: string
+  recencyLabel: string
 }
 
 const THEME_STORAGE_KEY = 'tomosona.theme.preference'
@@ -243,7 +250,8 @@ const shortcutsFilterQuery = ref('')
 const recentWorkspaces = ref<RecentWorkspaceItem[]>(typeof window === 'undefined'
   ? []
   : readRecentWorkspaces(RECENT_WORKSPACES_STORAGE_KEY))
-const recentNotes = ref<LaunchpadRecentNote[]>([])
+const recentViewedNotes = ref<LaunchpadRecentNote[]>([])
+const recentUpdatedNotes = ref<LaunchpadRecentNote[]>([])
 const previousNonCosmosMode = ref<SidebarMode>('explorer')
 const hydratedMultiPane = hydrateLayout(
   (() => {
@@ -268,8 +276,8 @@ const historyMenuStyle = ref<Record<string, string>>({})
 let historyMenuTimer: ReturnType<typeof setTimeout> | null = null
 let historyLongPressTarget: 'back' | 'forward' | null = null
 let unlistenWorkspaceFsChanged: (() => void) | null = null
-let recentNotesRequestToken = 0
-let recentNotesCacheKey = ''
+let recentUpdatedNotesRequestToken = 0
+let recentUpdatedNotesCacheKey = ''
 const recentNotesRefreshNonce = ref(0)
 const showDebugTools = import.meta.env.DEV
 
@@ -343,6 +351,7 @@ const workspaceController = useAppWorkspaceController({
 })
 const {
   allWorkspaceFiles,
+  loadingAllFiles,
   activeFileMetadata,
   toRelativePath,
   resetWorkspaceState,
@@ -888,6 +897,15 @@ function formatRelativeTime(tsMs: number | null, prefix = ''): string {
   return prefix ? `${prefix} just now` : 'just now'
 }
 
+function recentNotesStorageKey(workspaceRoot: string): string {
+  return `tomosona:recent-notes:${encodeURIComponent(normalizePathKey(workspaceRoot))}`
+}
+
+function activeRecentNotesStorageKey(): string {
+  const root = filesystem.workingFolderPath.value
+  return root ? recentNotesStorageKey(root) : ''
+}
+
 const launchpadRecentWorkspaces = computed<LaunchpadRecentWorkspace[]>(() =>
   recentWorkspaces.value.map((workspace) => ({
     path: workspace.path,
@@ -1158,7 +1176,8 @@ const navigationWorkspacePort = {
     filesystem.errorMessage.value = message
   },
   toRelativePath,
-  ensureAllFilesLoaded: loadAllFiles
+  ensureAllFilesLoaded: loadAllFiles,
+  recordRecentNote
 }
 
 const navigationEditorPort = {
@@ -1575,8 +1594,9 @@ async function closeWorkspace() {
   semanticLinksLoading.value = false
   favorites.reset()
   cosmos.clearState()
-  recentNotes.value = []
-  recentNotesCacheKey = ''
+  recentViewedNotes.value = []
+  recentUpdatedNotes.value = []
+  recentUpdatedNotesCacheKey = ''
   await closeWorkspaceInternal()
   closeOverflowMenu()
 }
@@ -1593,24 +1613,75 @@ function removeRecentWorkspaceEntry(path: string) {
   recentWorkspaces.value = removeRecentWorkspace(RECENT_WORKSPACES_STORAGE_KEY, path)
 }
 
+function syncLaunchpadViewedNotes() {
+  const storageKey = activeRecentNotesStorageKey()
+  if (!storageKey) {
+    recentViewedNotes.value = []
+    return
+  }
+
+  const entries = readRecentNotes(storageKey)
+  const canCleanMissingPaths = !loadingAllFiles.value && allWorkspaceFiles.value.length > 0
+  const knownPaths = new Set(allWorkspaceFiles.value.map((path) => normalizePathKey(path)))
+  const valid = canCleanMissingPaths
+    ? entries.filter((entry) => knownPaths.has(normalizePathKey(entry.path)))
+    : entries
+
+  if (canCleanMissingPaths && valid.length !== entries.length) {
+    writeRecentNotes(storageKey, valid)
+  }
+
+  recentViewedNotes.value = valid.map((item) => ({
+    path: item.path,
+    title: item.title,
+    relativePath: toRelativePath(item.path),
+    recencyLabel: formatRelativeTime(item.lastViewedAtMs, 'opened')
+  }))
+}
+
+function recordRecentNote(path: string) {
+  const storageKey = activeRecentNotesStorageKey()
+  if (!storageKey) return
+  upsertRecentNote(storageKey, {
+    path,
+    title: noteTitleFromPath(path),
+    lastViewedAtMs: Date.now()
+  })
+  syncLaunchpadViewedNotes()
+}
+
+function removeLaunchpadRecentNote(path: string) {
+  const storageKey = activeRecentNotesStorageKey()
+  if (!storageKey) return
+  removeRecentNote(storageKey, path)
+  syncLaunchpadViewedNotes()
+}
+
+function renameLaunchpadRecentNote(fromPath: string, toPath: string) {
+  const storageKey = activeRecentNotesStorageKey()
+  if (!storageKey) return
+  renameRecentNote(storageKey, fromPath, toPath, noteTitleFromPath(toPath))
+  syncLaunchpadViewedNotes()
+}
+
 function invalidateRecentNotes() {
-  recentNotesCacheKey = ''
+  recentUpdatedNotesCacheKey = ''
   recentNotesRefreshNonce.value += 1
 }
 
-async function refreshLaunchpadRecentNotes() {
+async function refreshLaunchpadUpdatedNotes() {
   const root = filesystem.workingFolderPath.value
   if (!root) {
-    recentNotes.value = []
-    recentNotesCacheKey = ''
+    recentUpdatedNotes.value = []
+    recentUpdatedNotesCacheKey = ''
     return
   }
 
   const fileSignature = allWorkspaceFiles.value.join('\n')
   const cacheKey = `${normalizePathKey(root)}::${recentNotesRefreshNonce.value}::${fileSignature}`
-  if (cacheKey === recentNotesCacheKey) return
+  if (cacheKey === recentUpdatedNotesCacheKey) return
 
-  const requestToken = ++recentNotesRequestToken
+  const requestToken = ++recentUpdatedNotesRequestToken
   const rows = await Promise.all(
     allWorkspaceFiles.value.map(async (path) => {
       try {
@@ -1626,9 +1697,9 @@ async function refreshLaunchpadRecentNotes() {
       }
     })
   )
-  if (requestToken !== recentNotesRequestToken) return
+  if (requestToken !== recentUpdatedNotesRequestToken) return
 
-  recentNotes.value = rows
+  recentUpdatedNotes.value = rows
     .filter((item): item is NonNullable<typeof item> => Boolean(item))
     .sort((left, right) => right.updatedAtMs - left.updatedAtMs || left.relativePath.localeCompare(right.relativePath))
     .slice(0, 7)
@@ -1636,9 +1707,14 @@ async function refreshLaunchpadRecentNotes() {
       path: item.path,
       title: item.title,
       relativePath: item.relativePath,
-      updatedLabel: formatRelativeTime(item.updatedAtMs, 'updated')
+      recencyLabel: formatRelativeTime(item.updatedAtMs, 'updated')
     }))
-  recentNotesCacheKey = cacheKey
+  recentUpdatedNotesCacheKey = cacheKey
+}
+
+async function refreshLaunchpadRecentNotes() {
+  syncLaunchpadViewedNotes()
+  await refreshLaunchpadUpdatedNotes()
 }
 
 function closeWorkspaceSetupWizard() {
@@ -1801,6 +1877,7 @@ function onExplorerSelection(paths: string[]) {
 function onExplorerPathsDeleted(paths: string[]) {
   for (const path of paths) {
     favorites.markFavoriteMissing(path)
+    removeLaunchpadRecentNote(path)
   }
 }
 
@@ -1821,6 +1898,18 @@ function syncFavoritesForWorkspaceChanges(changes: WorkspaceFsChange[]) {
     void favorites.renameFavorite(change.old_path, change.new_path).catch((err) => {
       filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not update favorite.'
     })
+  }
+}
+
+function syncViewedNotesForWorkspaceChanges(changes: WorkspaceFsChange[]) {
+  for (const change of changes) {
+    if (change.kind === 'removed' && change.path) {
+      removeLaunchpadRecentNote(change.path)
+      continue
+    }
+    if (change.kind === 'renamed' && change.old_path && change.new_path) {
+      renameLaunchpadRecentNote(change.old_path, change.new_path)
+    }
   }
 }
 
@@ -1850,6 +1939,7 @@ function applyPathRenameLocally(payload: { from: string; to: string }) {
   }
 
   replaceWorkspaceFilePath(fromPath, toPath)
+  renameLaunchpadRecentNote(fromPath, toPath)
 
   backlinks.value = backlinks.value.map((path) => (path === fromPath ? toPath : path))
 }
@@ -3365,8 +3455,9 @@ watch(
     backlinks.value = []
     semanticLinks.value = []
     virtualDocs.value = {}
-    recentNotes.value = []
-    recentNotesCacheKey = ''
+    recentViewedNotes.value = []
+    recentUpdatedNotes.value = []
+    recentUpdatedNotesCacheKey = ''
   }
 )
 
@@ -3450,6 +3541,7 @@ onMounted(() => {
     applyWorkspaceFsChanges(payload.changes)
     favorites.applyWorkspaceFsChanges(payload.changes)
     syncFavoritesForWorkspaceChanges(payload.changes)
+    syncViewedNotesForWorkspaceChanges(payload.changes)
     if (payload.changes.some((change) => change.kind === 'modified' || change.kind === 'created' || change.kind === 'removed' || change.kind === 'renamed')) {
       invalidateRecentNotes()
     }
@@ -3635,7 +3727,8 @@ onBeforeUnmount(() => {
               :launchpad="{
                 workspaceLabel: filesystem.workingFolderPath.value ? basenameLabel(filesystem.workingFolderPath.value) : '',
                 recentWorkspaces: launchpadRecentWorkspaces,
-                recentNotes,
+                recentViewedNotes,
+                recentUpdatedNotes,
                 showWizardAction: launchpadShowWizardAction
               }"
               @pane-focus="multiPane.setActivePane($event.paneId)"

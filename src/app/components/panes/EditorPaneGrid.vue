@@ -66,7 +66,8 @@ const props = defineProps<{
   launchpad: {
     workspaceLabel: string
     recentWorkspaces: Array<{ path: string; label: string; subtitle: string; recencyLabel: string }>
-    recentNotes: Array<{ path: string; title: string; relativePath: string; updatedLabel: string }>
+    recentViewedNotes: Array<{ path: string; title: string; relativePath: string; recencyLabel: string }>
+    recentUpdatedNotes: Array<{ path: string; title: string; relativePath: string; recencyLabel: string }>
     showWizardAction: boolean
   }
 }>()
@@ -348,7 +349,8 @@ onBeforeUnmount(() => {
           mode: secondBrain.workspacePath ? 'workspace-launchpad' : 'no-workspace',
           workspaceLabel: launchpad.workspaceLabel,
           recentWorkspaces: launchpad.recentWorkspaces,
-          recentNotes: launchpad.recentNotes,
+          recentViewedNotes: launchpad.recentViewedNotes,
+          recentUpdatedNotes: launchpad.recentUpdatedNotes,
           showWizardAction: launchpad.showWizardAction
         }"
         :cosmos="cosmos"

@@ -56,7 +56,8 @@ const props = defineProps<{
     mode: 'no-workspace' | 'workspace-launchpad'
     workspaceLabel: string
     recentWorkspaces: Array<{ path: string; label: string; subtitle: string; recencyLabel: string }>
-    recentNotes: Array<{ path: string; title: string; relativePath: string; updatedLabel: string }>
+    recentViewedNotes: Array<{ path: string; title: string; relativePath: string; recencyLabel: string }>
+    recentUpdatedNotes: Array<{ path: string; title: string; relativePath: string; recencyLabel: string }>
     showWizardAction: boolean
   }
 }>()
@@ -166,7 +167,8 @@ defineExpose<EditorSurfaceExposed>({
     :mode="launchpad.mode"
     :workspace-label="launchpad.workspaceLabel"
     :recent-workspaces="launchpad.recentWorkspaces"
-    :recent-notes="launchpad.recentNotes"
+    :recent-viewed-notes="launchpad.recentViewedNotes"
+    :recent-updated-notes="launchpad.recentUpdatedNotes"
     :show-wizard-action="launchpad.showWizardAction"
     @open-workspace="emit('launchpad-open-workspace')"
     @open-wizard="emit('launchpad-open-wizard')"
@@ -235,7 +237,8 @@ defineExpose<EditorSurfaceExposed>({
     :mode="launchpad.mode"
     :workspace-label="launchpad.workspaceLabel"
     :recent-workspaces="launchpad.recentWorkspaces"
-    :recent-notes="launchpad.recentNotes"
+    :recent-viewed-notes="launchpad.recentViewedNotes"
+    :recent-updated-notes="launchpad.recentUpdatedNotes"
     :show-wizard-action="launchpad.showWizardAction"
     @open-workspace="emit('launchpad-open-workspace')"
     @open-wizard="emit('launchpad-open-wizard')"

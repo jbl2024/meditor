@@ -11,6 +11,7 @@ function createController(options: { saveClearsDirty?: boolean } = {}) {
   const opened: Array<{ path: string; paneId?: string; reveal: boolean }> = []
   let activeTabType = 'document'
   const setErrorMessage = vi.fn()
+  const recordRecentNote = vi.fn()
   const focusEditor = vi.fn()
   const ensureAllFilesLoaded = vi.fn(async () => {
     allWorkspaceFiles.value = ['/vault/a.md']
@@ -31,7 +32,8 @@ function createController(options: { saveClearsDirty?: boolean } = {}) {
       allWorkspaceFiles,
       setErrorMessage,
       toRelativePath: (path) => path.replace('/vault/', ''),
-      ensureAllFilesLoaded
+      ensureAllFilesLoaded,
+      recordRecentNote
     },
     editorPort: {
       activeFilePath,
@@ -97,6 +99,7 @@ function createController(options: { saveClearsDirty?: boolean } = {}) {
     opened,
     documentHistory,
     setErrorMessage,
+    recordRecentNote,
     focusEditor,
     ensureAllFilesLoaded,
     applyCosmosHistorySnapshot,
@@ -115,7 +118,7 @@ describe('useAppNavigationController', () => {
   })
 
   it('saves the dirty active document before opening another tab', async () => {
-    const { controller, dirty, activeFilePath, documentHistory } = createController()
+    const { controller, dirty, activeFilePath, documentHistory, recordRecentNote } = createController()
 
     dirty.value = true
     const opened = await controller.openTabWithAutosave('/vault/b.md')
@@ -123,6 +126,7 @@ describe('useAppNavigationController', () => {
     expect(opened).toBe(true)
     expect(activeFilePath.value).toBe('/vault/b.md')
     expect(documentHistory.currentPath.value).toBe('/vault/b.md')
+    expect(recordRecentNote).toHaveBeenCalledWith('/vault/b.md')
   })
 
   it('records a debounced cosmos history snapshot', () => {
@@ -165,13 +169,24 @@ describe('useAppNavigationController', () => {
   })
 
   it('surfaces a save error when the active document stays dirty', async () => {
-    const { controller, dirty, setErrorMessage } = createController({ saveClearsDirty: false })
+    const { controller, dirty, setErrorMessage, recordRecentNote } = createController({ saveClearsDirty: false })
 
     dirty.value = true
     const opened = await controller.openTabWithAutosave('/vault/b.md')
 
     expect(opened).toBe(false)
     expect(setErrorMessage).toHaveBeenCalledWith('Could not save current note before switching tabs.')
+    expect(recordRecentNote).not.toHaveBeenCalled()
+  })
+
+  it('records recent notes when activating an existing tab', async () => {
+    const { controller, activeFilePath, recordRecentNote } = createController()
+
+    const opened = await controller.setActiveTabWithAutosave('/vault/b.md')
+
+    expect(opened).toBe(true)
+    expect(activeFilePath.value).toBe('/vault/b.md')
+    expect(recordRecentNote).toHaveBeenCalledWith('/vault/b.md')
   })
 
   it('focuses the editor after reopening a document from history', async () => {
