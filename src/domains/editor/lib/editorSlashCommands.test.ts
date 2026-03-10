@@ -7,6 +7,7 @@ describe('EDITOR_SLASH_COMMANDS', () => {
       'heading',
       'bullet',
       'checklist',
+      'toc',
       'table',
       'callout',
       'mermaid',
@@ -23,6 +24,16 @@ describe('EDITOR_SLASH_COMMANDS', () => {
     expect(checklist?.data).toMatchObject({
       style: 'checklist',
       items: [{ meta: { checked: false } }]
+    })
+  })
+
+  it('defines a toc command with slash-friendly aliases', () => {
+    const toc = EDITOR_SLASH_COMMANDS.find((command) => command.id === 'toc')
+    expect(toc).toMatchObject({
+      label: 'Table of Contents',
+      aliases: ['sommaire'],
+      type: 'toc',
+      data: {}
     })
   })
 })

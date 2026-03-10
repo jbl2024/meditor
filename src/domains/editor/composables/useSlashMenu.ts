@@ -52,7 +52,11 @@ export function useSlashMenu(options: UseSlashMenuOptions) {
     const query = slashQuery.value.trim().toLowerCase()
     const all = options.commands.value
     if (!query) return all
-    return all.filter((command) => command.label.toLowerCase().includes(query) || command.id.toLowerCase().includes(query))
+    return all.filter((command) =>
+      command.label.toLowerCase().includes(query) ||
+      command.id.toLowerCase().includes(query) ||
+      command.aliases?.some((alias) => alias.toLowerCase().includes(query))
+    )
   })
 
   function closeSlashMenu() {

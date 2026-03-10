@@ -137,7 +137,9 @@ export function useEditorInteractionRuntime(options: UseEditorInteractionRuntime
   const slashInsertion = useEditorSlashInsertion({
     getEditor: () => documentPort.activeEditor.value,
     currentTextSelectionContext: slashMenu.currentTextSelectionContext,
-    readSlashContext: slashMenu.readSlashContext
+    readSlashContext: slashMenu.readSlashContext,
+    currentHeadings: () => navigation.parseOutlineFromDoc(),
+    slugifyHeading
   })
 
   /**

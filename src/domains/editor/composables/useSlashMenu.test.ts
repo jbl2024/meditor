@@ -107,4 +107,19 @@ describe('useSlashMenu', () => {
       to: 6
     })
   })
+
+  it('matches slash commands by alias as well as label and id', () => {
+    const menu = useSlashMenu({
+      getEditor: () => createEditor('/som'),
+      commands: computed(() => [
+        { id: 'toc', label: 'Table of Contents', aliases: ['sommaire'], type: 'toc', data: {} },
+        { id: 'quote', label: 'Quote', type: 'quote', data: {} }
+      ]),
+      closeCompetingMenus: () => {}
+    })
+
+    menu.openSlashAtSelection('som')
+    expect(menu.visibleSlashCommands.value).toHaveLength(1)
+    expect(menu.visibleSlashCommands.value[0]?.id).toBe('toc')
+  })
 })

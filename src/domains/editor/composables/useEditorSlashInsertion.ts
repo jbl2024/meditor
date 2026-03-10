@@ -23,6 +23,8 @@ export type UseEditorSlashInsertionOptions = {
   getEditor: () => Editor | null
   currentTextSelectionContext: () => { text: string; nodeType: string; from: number; to: number } | null
   readSlashContext: () => SlashInsertionContext | null
+  currentHeadings: () => Array<{ level: 1 | 2 | 3; text: string }>
+  slugifyHeading: (heading: string) => string
 }
 
 /**
@@ -36,6 +38,81 @@ export type UseEditorSlashInsertionOptions = {
  * - Returns only insertion behavior; keyboard routing stays in input handlers.
  */
 export function useEditorSlashInsertion(options: UseEditorSlashInsertionOptions) {
+  /**
+   * Builds a static TOC from the headings currently present in the note.
+   * V1 intentionally inserts regular content only; it does not create a live block.
+   */
+  function createTocAnchorLink(heading: string): JSONContent {
+    const slug = options.slugifyHeading(heading)
+    return {
+      type: 'text',
+      text: heading,
+      marks: slug
+        ? [{ type: 'link', attrs: { href: `#${slug}` } }]
+        : []
+    }
+  }
+
+  function createTocListItem(heading: { level: 1 | 2 | 3; text: string }) {
+    return {
+      type: 'listItem',
+      content: [
+        {
+          type: 'paragraph',
+          content: [createTocAnchorLink(heading.text)]
+        }
+      ]
+    } satisfies JSONContent
+  }
+
+  function createTocContent(): JSONContent {
+    const headings = options.currentHeadings()
+      .map((heading) => ({ level: heading.level, text: String(heading.text ?? '').trim() }))
+      .filter((heading): heading is { level: 1 | 2 | 3; text: string } => Boolean(heading.text))
+
+    if (!headings.length) {
+      return {
+        type: 'bulletList',
+        content: [{ type: 'listItem', content: [{ type: 'paragraph', content: [] }] }]
+      }
+    }
+
+    const root: JSONContent[] = []
+    const stack: Array<{ level: number; item: JSONContent | null; items: JSONContent[] }> = [{ level: 0, item: null, items: root }]
+
+    for (const heading of headings) {
+      while (stack.length > 1 && stack[stack.length - 1]!.level >= heading.level) {
+        stack.pop()
+      }
+
+      const item = createTocListItem(heading)
+      stack[stack.length - 1]!.items.push(item)
+
+      const childItems: JSONContent[] = []
+      item.content = [...(item.content ?? []), { type: 'bulletList', content: childItems }]
+      stack.push({ level: heading.level, item, items: childItems })
+    }
+
+    const pruneNestedLists = (node: JSONContent) => {
+      if (!Array.isArray(node.content)) return
+      node.content = node.content
+        .map((child) => {
+          pruneNestedLists(child)
+          if (child.type === 'bulletList' && (!Array.isArray(child.content) || child.content.length === 0)) {
+            return null
+          }
+          return child
+        })
+        .filter((child): child is JSONContent => Boolean(child))
+    }
+
+    for (const item of root) {
+      pruneNestedLists(item)
+    }
+
+    return { type: 'bulletList', content: root }
+  }
+
   function focusInsertedQuote(editor: Editor) {
     if (typeof window === 'undefined') return
 
@@ -118,6 +195,8 @@ export function useEditorSlashInsertion(options: UseEditorSlashInsertionOptions)
           return { type: 'quoteBlock', attrs: { text: String(data.text ?? '') } }
         case 'delimiter':
           return { type: 'horizontalRule' }
+        case 'toc':
+          return createTocContent()
         default:
           return { type: 'paragraph', content: [] }
       }

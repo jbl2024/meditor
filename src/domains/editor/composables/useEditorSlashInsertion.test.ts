@@ -20,7 +20,9 @@ describe('useEditorSlashInsertion', () => {
     const insertion = useEditorSlashInsertion({
       getEditor: () => editor,
       currentTextSelectionContext: () => ({ text: '/li', nodeType: 'paragraph', from: 10, to: 13 }),
-      readSlashContext: () => ({ from: 10, to: 13 })
+      readSlashContext: () => ({ from: 10, to: 13 }),
+      currentHeadings: () => [],
+      slugifyHeading: (heading) => heading.toLowerCase()
     })
 
     const ok = insertion.insertBlockFromDescriptor('list', { style: 'ordered' })
@@ -36,7 +38,9 @@ describe('useEditorSlashInsertion', () => {
     const insertion = useEditorSlashInsertion({
       getEditor: () => editor,
       currentTextSelectionContext: () => ({ text: '/h2', nodeType: 'paragraph', from: 5, to: 8 }),
-      readSlashContext: () => null
+      readSlashContext: () => null,
+      currentHeadings: () => [],
+      slugifyHeading: (heading) => heading.toLowerCase()
     })
 
     const ok = insertion.insertBlockFromDescriptor('header', { level: 2, text: 'Roadmap' }, { replaceRange: { from: 5, to: 8 } })
@@ -55,7 +59,9 @@ describe('useEditorSlashInsertion', () => {
     const insertion = useEditorSlashInsertion({
       getEditor: () => null,
       currentTextSelectionContext: () => ({ text: '', nodeType: 'paragraph', from: 1, to: 1 }),
-      readSlashContext: () => null
+      readSlashContext: () => null,
+      currentHeadings: () => [],
+      slugifyHeading: (heading) => heading.toLowerCase()
     })
 
     expect(insertion.insertBlockFromDescriptor('code', {})).toBe(false)
@@ -67,7 +73,9 @@ describe('useEditorSlashInsertion', () => {
     const insertion = useEditorSlashInsertion({
       getEditor: () => editor,
       currentTextSelectionContext: () => ({ text: '/html', nodeType: 'paragraph', from: 2, to: 7 }),
-      readSlashContext: () => ({ from: 2, to: 7 })
+      readSlashContext: () => ({ from: 2, to: 7 }),
+      currentHeadings: () => [],
+      slugifyHeading: (heading) => heading.toLowerCase()
     })
 
     const ok = insertion.insertBlockFromDescriptor('html', { html: '<div>test</div>' })
@@ -77,6 +85,94 @@ describe('useEditorSlashInsertion', () => {
     expect(chain.insertContent).toHaveBeenCalledWith({
       type: 'htmlBlock',
       attrs: { html: '<div>test</div>' }
+    })
+  })
+
+  it('inserts a nested table of contents from current headings', () => {
+    const chain = createChain()
+    const editor = { chain: vi.fn(() => chain) } as any
+    const insertion = useEditorSlashInsertion({
+      getEditor: () => editor,
+      currentTextSelectionContext: () => ({ text: '/toc', nodeType: 'paragraph', from: 3, to: 7 }),
+      readSlashContext: () => ({ from: 3, to: 7 }),
+      currentHeadings: () => [
+        { level: 1 as const, text: 'Intro' },
+        { level: 2 as const, text: 'Architecture' },
+        { level: 2 as const, text: 'Roadmap' },
+        { level: 1 as const, text: 'Appendix' }
+      ],
+      slugifyHeading: (heading) => heading.toLowerCase()
+    })
+
+    const ok = insertion.insertBlockFromDescriptor('toc', {})
+
+    expect(ok).toBe(true)
+    expect(chain.deleteRange).toHaveBeenCalledWith({ from: 3, to: 7 })
+    expect(chain.insertContent).toHaveBeenCalledWith({
+      type: 'bulletList',
+      content: [
+        {
+          type: 'listItem',
+          content: [
+            {
+              type: 'paragraph',
+              content: [{ type: 'text', text: 'Intro', marks: [{ type: 'link', attrs: { href: '#intro' } }] }]
+            },
+            {
+              type: 'bulletList',
+              content: [
+                {
+                  type: 'listItem',
+                  content: [
+                    {
+                      type: 'paragraph',
+                      content: [{ type: 'text', text: 'Architecture', marks: [{ type: 'link', attrs: { href: '#architecture' } }] }]
+                    }
+                  ]
+                },
+                {
+                  type: 'listItem',
+                  content: [
+                    {
+                      type: 'paragraph',
+                      content: [{ type: 'text', text: 'Roadmap', marks: [{ type: 'link', attrs: { href: '#roadmap' } }] }]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          type: 'listItem',
+          content: [
+            {
+              type: 'paragraph',
+              content: [{ type: 'text', text: 'Appendix', marks: [{ type: 'link', attrs: { href: '#appendix' } }] }]
+            }
+          ]
+        }
+      ]
+    })
+  })
+
+  it('falls back to an empty bullet list when the note has no headings', () => {
+    const chain = createChain()
+    const editor = { chain: vi.fn(() => chain) } as any
+    const insertion = useEditorSlashInsertion({
+      getEditor: () => editor,
+      currentTextSelectionContext: () => ({ text: '/toc', nodeType: 'paragraph', from: 4, to: 8 }),
+      readSlashContext: () => ({ from: 4, to: 8 }),
+      currentHeadings: () => [],
+      slugifyHeading: (heading) => heading.toLowerCase()
+    })
+
+    const ok = insertion.insertBlockFromDescriptor('toc', {})
+
+    expect(ok).toBe(true)
+    expect(chain.insertContent).toHaveBeenCalledWith({
+      type: 'bulletList',
+      content: [{ type: 'listItem', content: [{ type: 'paragraph', content: [] }] }]
     })
   })
 })

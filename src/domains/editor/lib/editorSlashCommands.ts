@@ -12,6 +12,7 @@
 export type SlashCommand = {
   id: string
   label: string
+  aliases?: string[]
   type: string
   data: Record<string, unknown>
 }
@@ -42,6 +43,7 @@ export const EDITOR_SLASH_COMMANDS: SlashCommand[] = [
   { id: 'heading', label: 'Heading', type: 'header', data: { text: '', level: 2 } },
   { id: 'bullet', label: 'List', type: 'list', data: emptyListData('unordered') },
   { id: 'checklist', label: 'Checklist', type: 'list', data: emptyListData('checklist') },
+  { id: 'toc', label: 'Table of Contents', aliases: ['sommaire'], type: 'toc', data: {} },
   { id: 'table', label: 'Table', type: 'table', data: { withHeadings: true, content: [['', ''], ['', '']] } },
   { id: 'callout', label: 'Callout', type: 'callout', data: { kind: 'NOTE', message: '' } },
   { id: 'mermaid', label: 'Mermaid', type: 'mermaid', data: { code: 'flowchart TD\n  A[Start] --> B[End]' } },
