@@ -11,6 +11,7 @@ describe('useMermaidPreviewDialog', () => {
   let createObjectURLMock: ReturnType<typeof vi.fn>
   let revokeObjectURLMock: ReturnType<typeof vi.fn>
   let anchorClickMock: ReturnType<typeof vi.fn>
+  let originalCreateImageBitmap: unknown
 
   beforeEach(() => {
     originalCreateObjectURL = URL.createObjectURL
@@ -19,6 +20,7 @@ describe('useMermaidPreviewDialog', () => {
     originalCanvasGetContext = HTMLCanvasElement.prototype.getContext
     originalCanvasToBlob = HTMLCanvasElement.prototype.toBlob
     imageSrcSetter = Object.getOwnPropertyDescriptor(Image.prototype, 'src')
+    originalCreateImageBitmap = (globalThis as any).createImageBitmap
 
     createObjectURLMock = vi.fn(() => 'blob:mock')
     revokeObjectURLMock = vi.fn()
@@ -42,6 +44,7 @@ describe('useMermaidPreviewDialog', () => {
         })
       }
     })
+    Reflect.set(globalThis as object, 'createImageBitmap', undefined)
   })
 
   afterEach(() => {
@@ -53,6 +56,7 @@ describe('useMermaidPreviewDialog', () => {
     if (imageSrcSetter) {
       Object.defineProperty(Image.prototype, 'src', imageSrcSetter)
     }
+    Reflect.set(globalThis as object, 'createImageBitmap', originalCreateImageBitmap)
   })
 
   it('opens and closes preview state cleanly', () => {
@@ -93,6 +97,21 @@ describe('useMermaidPreviewDialog', () => {
     expect(dialog.mermaidPreviewDialog.value.exportError).toBe('')
   })
 
+  it('prefers createImageBitmap when available', async () => {
+    const close = vi.fn()
+    Reflect.set(globalThis as object, 'createImageBitmap', vi.fn(async () => ({
+      close
+    } as unknown as ImageBitmap)))
+    const dialog = useMermaidPreviewDialog()
+    dialog.openMermaidPreview({ svg: '<svg viewBox="0 0 12 8"></svg>', code: 'graph TD\nA-->B', templateId: 'flowchart' })
+
+    await dialog.exportMermaidPng()
+
+    expect((globalThis as any).createImageBitmap).toHaveBeenCalledTimes(1)
+    expect(close).toHaveBeenCalledTimes(1)
+    expect(dialog.mermaidPreviewDialog.value.exportError).toBe('')
+  })
+
   it('stores a clear error when png export is unavailable', async () => {
     HTMLCanvasElement.prototype.getContext = vi.fn(() => null) as unknown as typeof HTMLCanvasElement.prototype.getContext
     const dialog = useMermaidPreviewDialog()
@@ -101,5 +120,22 @@ describe('useMermaidPreviewDialog', () => {
     await dialog.exportMermaidPng()
 
     expect(dialog.mermaidPreviewDialog.value.exportError).toBe('PNG export is not available in this environment.')
+  })
+
+  it('reports a decoding-specific png export failure', async () => {
+    Object.defineProperty(Image.prototype, 'src', {
+      configurable: true,
+      set() {
+        queueMicrotask(() => {
+          ;(this as HTMLImageElement).onerror?.(new Event('error'))
+        })
+      }
+    })
+    const dialog = useMermaidPreviewDialog()
+    dialog.openMermaidPreview({ svg: '<svg viewBox="0 0 12 8"></svg>', code: 'graph TD\nA-->B', templateId: 'flowchart' })
+
+    await dialog.exportMermaidPng()
+
+    expect(dialog.mermaidPreviewDialog.value.exportError).toBe('PNG export failed while decoding SVG.')
   })
 })

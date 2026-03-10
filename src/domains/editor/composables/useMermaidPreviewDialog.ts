@@ -34,6 +34,33 @@ function parseSvgSize(svgMarkup: string, liveSvg?: SVGElement | null) {
   return { width: 1600, height: 900 }
 }
 
+function normalizeSvgMarkup(svgMarkup: string, width: number, height: number) {
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(svgMarkup, 'image/svg+xml')
+  const svg = doc.documentElement
+  if (!svg || svg.tagName.toLowerCase() !== 'svg') {
+    throw new Error('PNG export failed: invalid SVG markup.')
+  }
+
+  if (!svg.getAttribute('xmlns')) {
+    svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+  }
+  if (!svg.getAttribute('xmlns:xlink')) {
+    svg.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink')
+  }
+  if (!svg.getAttribute('width')) {
+    svg.setAttribute('width', String(Math.ceil(width)))
+  }
+  if (!svg.getAttribute('height')) {
+    svg.setAttribute('height', String(Math.ceil(height)))
+  }
+  if (!svg.getAttribute('viewBox')) {
+    svg.setAttribute('viewBox', `0 0 ${Math.ceil(width)} ${Math.ceil(height)}`)
+  }
+
+  return new XMLSerializer().serializeToString(svg)
+}
+
 function sanitizeFilenameSegment(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'diagram'
 }
@@ -99,6 +126,14 @@ export function useMermaidPreviewDialog() {
     mermaidPreviewDialog.value.exportError = ''
 
     const { width, height } = parseSvgSize(mermaidPreviewDialog.value.svg, previewSvg)
+    let normalizedSvg = ''
+    try {
+      normalizedSvg = normalizeSvgMarkup(mermaidPreviewDialog.value.svg, width, height)
+    } catch (err) {
+      mermaidPreviewDialog.value.exportError = err instanceof Error ? err.message : 'PNG export failed.'
+      return
+    }
+
     const canvas = document.createElement('canvas')
     canvas.width = Math.ceil(width)
     canvas.height = Math.ceil(height)
@@ -108,31 +143,47 @@ export function useMermaidPreviewDialog() {
       return
     }
 
-    const svgBlob = new Blob([mermaidPreviewDialog.value.svg], { type: 'image/svg+xml;charset=utf-8' })
+    const svgBlob = new Blob([normalizedSvg], { type: 'image/svg+xml;charset=utf-8' })
     const url = URL.createObjectURL(svgBlob)
 
     try {
-      await new Promise<void>((resolve, reject) => {
-        const image = new Image()
-        image.onload = () => {
-          context.clearRect(0, 0, canvas.width, canvas.height)
-          context.drawImage(image, 0, 0, canvas.width, canvas.height)
-          URL.revokeObjectURL(url)
-          resolve()
+      const createImageBitmapFn = (
+        globalThis as typeof globalThis & {
+          createImageBitmap?: (image: Blob) => Promise<ImageBitmap>
         }
-        image.onerror = () => {
-          URL.revokeObjectURL(url)
-          reject(new Error('PNG export failed.'))
+      ).createImageBitmap
+
+      if (typeof createImageBitmapFn === 'function') {
+        const bitmap = await createImageBitmapFn(svgBlob)
+        context.clearRect(0, 0, canvas.width, canvas.height)
+        context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+        if (typeof bitmap.close === 'function') {
+          bitmap.close()
         }
-        image.src = url
-      })
+        URL.revokeObjectURL(url)
+      } else {
+        await new Promise<void>((resolve, reject) => {
+          const image = new Image()
+          image.onload = () => {
+            context.clearRect(0, 0, canvas.width, canvas.height)
+            context.drawImage(image, 0, 0, canvas.width, canvas.height)
+            URL.revokeObjectURL(url)
+            resolve()
+          }
+          image.onerror = () => {
+            URL.revokeObjectURL(url)
+            reject(new Error('PNG export failed while decoding SVG.'))
+          }
+          image.src = url
+        })
+      }
 
       const blob = await new Promise<Blob | null>((resolve) => {
         canvas.toBlob((value) => resolve(value), 'image/png')
       })
 
       if (!blob) {
-        mermaidPreviewDialog.value.exportError = 'PNG export failed.'
+        mermaidPreviewDialog.value.exportError = 'PNG export failed while encoding PNG.'
         return
       }
 
