@@ -73,6 +73,30 @@ describe('EditorTitleField', () => {
     app.unmount()
   })
 
+  it('requests body focus on Enter', async () => {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+    const focusBody = vi.fn()
+
+    const app = createApp(defineComponent({
+      setup() {
+        return () => h(EditorTitleField, {
+          modelValue: 'Alpha',
+          onFocusBodyRequest: focusBody
+        })
+      }
+    }))
+
+    app.mount(root)
+    await flushUi()
+
+    const titleEl = root.querySelector('.editor-title-field') as HTMLElement
+    titleEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    expect(focusBody).toHaveBeenCalled()
+
+    app.unmount()
+  })
+
   it('does not overwrite the in-progress draft while focused', async () => {
     const root = document.createElement('div')
     document.body.appendChild(root)

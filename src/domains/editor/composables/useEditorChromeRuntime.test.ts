@@ -252,6 +252,24 @@ describe('useEditorChromeRuntime', () => {
     await runtime.dialogsAndLifecycle.onUnmountCleanup()
   })
 
+  it('ignores title-field key events so header Enter does not route through body editor handlers', async () => {
+    const { runtime, holder, interactionMocks } = createRuntimeHarness()
+    await runtime.dialogsAndLifecycle.onMountInit()
+
+    const title = document.createElement('div')
+    title.className = 'editor-title-field'
+    holder.value?.appendChild(title)
+
+    title.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    title.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', bubbles: true }))
+
+    expect(interactionMocks.markEditorInteraction).not.toHaveBeenCalled()
+    expect(interactionMocks.onEditorKeydown).not.toHaveBeenCalled()
+    expect(interactionMocks.onEditorKeyup).not.toHaveBeenCalled()
+
+    await runtime.dialogsAndLifecycle.onUnmountCleanup()
+  })
+
   it('onHolderCopy is a safe no-op without payload and writes all clipboard formats when present', async () => {
     const { runtime, holder, interactionMocks } = createRuntimeHarness()
     await runtime.dialogsAndLifecycle.onMountInit()

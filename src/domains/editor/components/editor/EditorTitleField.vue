@@ -62,7 +62,7 @@ function onBlur() {
 function onKeydown(event: KeyboardEvent) {
   if (event.key === 'Enter') {
     event.preventDefault()
-    rootEl.value?.blur()
+    emit('focus-body-request')
     return
   }
   if (event.key === 'Escape') {

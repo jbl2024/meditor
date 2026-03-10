@@ -373,16 +373,7 @@ function getSession(path: string): DocumentSession | null {
 }
 
 async function focusFirstContentBlock() {
-  const editor = activeEditor.value
-  if (!editor) return
-  let targetPos = 1
-  editor.state.doc.descendants((node, pos) => {
-    if (node.isTextblock) {
-      targetPos = pos + 1
-      return false
-    }
-  })
-  editor.chain().focus().setTextSelection(targetPos).run()
+  layout.focusFirstEditableBlock()
 }
 
 defineExpose({
@@ -460,7 +451,7 @@ defineExpose({
                 @commit="onTitleCommit"
                 @focus="titleEditorFocused = true"
                 @blur="titleEditorFocused = false"
-                @focus-body-request="focusEditor()"
+                @focus-body-request="void focusFirstContentBlock()"
               />
               <EditorPropertiesPanel
                 :expanded="propertiesExpanded(path)"

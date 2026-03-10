@@ -14,6 +14,7 @@ import { useEditorTableGeometry } from './useEditorTableGeometry'
 import { useEditorTableInteractions } from './useEditorTableInteractions'
 import { useEditorLayoutMetrics } from './useEditorLayoutMetrics'
 import { useEditorZoom } from './useEditorZoom'
+import { useEditorContentFocus } from './useEditorContentFocus'
 import { useMermaidPreviewDialog } from './useMermaidPreviewDialog'
 import { useMermaidReplaceDialog } from './useMermaidReplaceDialog'
 import { usePulseTransformation } from '../../pulse/composables/usePulseTransformation'
@@ -258,6 +259,10 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     resetZoom: resetEditorZoom,
     getZoom
   } = useEditorZoom()
+  const contentFocus = useEditorContentFocus({
+    holder: host.holder,
+    getEditor: () => host.getEditor()
+  })
 
   const { mermaidReplaceDialog, resolveMermaidReplaceDialog, requestMermaidReplaceConfirm } = useMermaidReplaceDialog()
   const {
@@ -289,10 +294,6 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   const dragHandleComputePositionConfig = {
     placement: 'left-start' as const,
     middleware: [dragHandleLockXMiddleware]
-  }
-
-  function focusEditor() {
-    host.getEditor()?.commands.focus()
   }
 
   function updateFormattingToolbar() {
@@ -580,11 +581,21 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   }
 
   const holderEvents = {
+    isTitleFieldEventTarget(target: EventTarget | null) {
+      const element = target instanceof Element
+        ? target
+        : target instanceof Node
+          ? target.parentElement
+          : null
+      return Boolean(element?.closest('.editor-title-field'))
+    },
+
     onHolderPointerDownMarkInteraction() {
       interaction.editorEvents.markEditorInteraction()
     },
 
     onHolderKeydown(event: KeyboardEvent) {
+      if (holderEvents.isTitleFieldEventTarget(event.target)) return
       interaction.editorEvents.markEditorInteraction()
       if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === 'f') {
         event.preventDefault()
@@ -593,6 +604,11 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
         return
       }
       interaction.editorEvents.onEditorKeydown(event)
+    },
+
+    onHolderKeyup(event: KeyboardEvent) {
+      if (holderEvents.isTitleFieldEventTarget(event.target)) return
+      interaction.editorEvents.onEditorKeyup()
     },
 
     onHolderContextMenu(event: MouseEvent) {
@@ -637,7 +653,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   function bindChromeEventListeners() {
     host.holder.value?.addEventListener('pointerdown', holderEvents.onHolderPointerDownMarkInteraction, true)
     host.holder.value?.addEventListener('keydown', holderEvents.onHolderKeydown, true)
-    host.holder.value?.addEventListener('keyup', interaction.editorEvents.onEditorKeyup, true)
+    host.holder.value?.addEventListener('keyup', holderEvents.onHolderKeyup, true)
     host.holder.value?.addEventListener('contextmenu', holderEvents.onHolderContextMenu, true)
     host.holder.value?.addEventListener('paste', holderEvents.onHolderPaste, true)
     host.holder.value?.addEventListener('copy', holderEvents.onHolderCopy, true)
@@ -652,7 +668,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   function unbindChromeEventListeners() {
     host.holder.value?.removeEventListener('pointerdown', holderEvents.onHolderPointerDownMarkInteraction, true)
     host.holder.value?.removeEventListener('keydown', holderEvents.onHolderKeydown, true)
-    host.holder.value?.removeEventListener('keyup', interaction.editorEvents.onEditorKeyup, true)
+    host.holder.value?.removeEventListener('keyup', holderEvents.onHolderKeyup, true)
     host.holder.value?.removeEventListener('contextmenu', holderEvents.onHolderContextMenu, true)
     host.holder.value?.removeEventListener('paste', holderEvents.onHolderPaste, true)
     host.holder.value?.removeEventListener('copy', holderEvents.onHolderCopy, true)
@@ -761,7 +777,8 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     zoomEditorBy,
     resetEditorZoom,
     getZoom,
-    focusEditor,
+    focusEditor: contentFocus.focusEditor,
+    focusFirstEditableBlock: contentFocus.focusFirstEditableBlock,
     updateGutterHitboxStyle: layoutMetrics.updateGutterHitboxStyle
   }
   const pulseAndDialogs = {
@@ -860,6 +877,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     zoomEditorBy: layoutAndZoom.zoomEditorBy,
     resetEditorZoom: layoutAndZoom.resetEditorZoom,
     focusEditor: layoutAndZoom.focusEditor,
+    focusFirstEditableBlock: layoutAndZoom.focusFirstEditableBlock,
     gutterHitboxStyle: layoutAndZoom.layoutMetrics.gutterHitboxStyle,
     onHolderScroll: layoutAndZoom.layoutMetrics.onHolderScroll,
     updateGutterHitboxStyle: layoutAndZoom.updateGutterHitboxStyle
