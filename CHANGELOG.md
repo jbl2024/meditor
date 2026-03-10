@@ -18,6 +18,17 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.16.3] - 2026-03-10
+
+### Changed
+- refactor(editor): make first-content focus path synchronous (701e140)
+
+### Fixed
+- fix(editor): add runtime API for first content block focus (75f38fc)
+- fix(indexing): defer derived view refresh during note open (99809f0)
+- fix(editor): preserve list enter behavior for selected wikilinks (c28d9da)
+- fix(mermaid): inline svg presentation attributes for csp-safe rendering (2da9626)
+
 ## [0.16.2] - 2026-03-10
 
 ### Added
