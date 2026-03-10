@@ -63,6 +63,13 @@ function emitExportSvg() {
   min-width: min(100%, 56rem);
 }
 
+.editor-mermaid-preview :deep(svg foreignObject p) {
+  margin: 0;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
 .editor-mermaid-preview-error {
   color: var(--danger);
   font-size: 0.875rem;

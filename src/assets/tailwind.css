@@ -1687,8 +1687,18 @@ html.dark {
   }
 
   .editor-holder .tomosona-mermaid-preview svg {
-    max-width: 100%;
+    display: block;
     height: auto;
+    margin: 0 auto;
+    max-width: none;
+    min-width: min(100%, 56rem);
+  }
+
+  .editor-holder .tomosona-mermaid-preview svg foreignObject p {
+    margin: 0;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
   }
 
   .editor-holder .tomosona-mermaid:not(.is-editing) .tomosona-mermaid-preview {

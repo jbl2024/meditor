@@ -51,6 +51,54 @@ type FontFaceSetLike = {
   removeEventListener?: (type: 'loadingdone' | 'loadingerror', listener: EventListener) => void
 }
 
+type CssDeclaration = {
+  property: string
+  value: string
+}
+
+const SVG_PRESENTATION_ATTRS = new Set([
+  'fill',
+  'stroke',
+  'stroke-width',
+  'stroke-dasharray',
+  'font-size',
+  'font-family',
+  'font-weight',
+  'font-style',
+  'text-anchor',
+  'dominant-baseline',
+  'opacity',
+  'color',
+  'rx',
+  'ry'
+])
+
+const HTML_INLINE_STYLE_ATTRS = new Set([
+  'background',
+  'background-color',
+  'color',
+  'display',
+  'font-family',
+  'font-size',
+  'font-style',
+  'font-weight',
+  'line-height',
+  'margin',
+  'margin-top',
+  'margin-right',
+  'margin-bottom',
+  'margin-left',
+  'padding',
+  'padding-top',
+  'padding-right',
+  'padding-bottom',
+  'padding-left',
+  'text-align',
+  'text-decoration',
+  'text-transform',
+  'white-space'
+])
+
 function runtimeState(): MermaidRuntimeState {
   const target = window as typeof window & { __tomosonaMermaidRuntime?: MermaidRuntimeState }
   if (!target.__tomosonaMermaidRuntime) {
@@ -94,7 +142,7 @@ function buildMermaidConfig(themeKey: 'light' | 'dark') {
         clusterBorder: '#64748b',
         edgeLabelBackground: '#282c34',
         fontFamily: 'Geist, Noto Sans, DejaVu Sans, sans-serif',
-        fontSize: '14px'
+        fontSize: '16px'
       }
     }
   }
@@ -119,7 +167,7 @@ function buildMermaidConfig(themeKey: 'light' | 'dark') {
       clusterBorder: '#cbd5e1',
       edgeLabelBackground: '#ffffff',
       fontFamily: 'Geist, Noto Sans, DejaVu Sans, sans-serif',
-      fontSize: '14px'
+      fontSize: '16px'
     }
   }
 }
@@ -144,6 +192,112 @@ async function waitForFontsReady(requestId: number) {
   return requestId === renderRequestId
 }
 
+function parseCssDeclarations(block: string) {
+  return block
+    .split(';')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => {
+      const separator = entry.indexOf(':')
+      if (separator < 0) return null
+      const property = entry.slice(0, separator).trim()
+      const value = entry.slice(separator + 1).trim()
+      if (!property || !value) return null
+      return { property, value }
+    })
+    .filter((entry): entry is CssDeclaration => entry !== null)
+}
+
+function normalizeSvgSelector(selector: string, rootId: string | null) {
+  const trimmed = selector.trim()
+  if (!trimmed || trimmed.startsWith('@')) return ''
+  if (!rootId) return trimmed
+  return trimmed.split(`#${rootId}`).join('').trim()
+}
+
+function mergeInlineStyles(element: Element, declarations: CssDeclaration[]) {
+  if (declarations.length === 0) return
+  const styleMap = new Map<string, string>()
+  for (const declaration of parseCssDeclarations(element.getAttribute('style') ?? '')) {
+    styleMap.set(declaration.property, declaration.value)
+  }
+  for (const declaration of declarations) {
+    styleMap.set(declaration.property, declaration.value)
+  }
+  const styleValue = Array.from(styleMap.entries())
+    .map(([property, value]) => `${property}: ${value}`)
+    .join('; ')
+  if (styleValue) {
+    element.setAttribute('style', styleValue)
+  }
+}
+
+function isHtmlForeignObjectElement(element: Element) {
+  return element.namespaceURI === 'http://www.w3.org/1999/xhtml'
+}
+
+function applyCssAsSvgAttributes(svg: SVGSVGElement, stylesheet: string) {
+  const rootId = svg.getAttribute('id')
+  const ruleRe = /([^{}]+)\{([^{}]+)\}/g
+  for (const match of stylesheet.matchAll(ruleRe)) {
+    const selectorGroup = match[1] ?? ''
+    const declarations = parseCssDeclarations(match[2] ?? '')
+    if (declarations.length === 0) continue
+
+    for (const selector of selectorGroup.split(',')) {
+      const normalizedSelector = normalizeSvgSelector(selector, rootId)
+      if (!normalizedSelector) continue
+
+      let elements: Element[] = []
+      try {
+        elements = Array.from(svg.querySelectorAll(normalizedSelector))
+      } catch {
+        continue
+      }
+
+      for (const element of elements) {
+        if (isHtmlForeignObjectElement(element)) {
+          mergeInlineStyles(element, declarations.filter((declaration) => HTML_INLINE_STYLE_ATTRS.has(declaration.property)))
+          continue
+        }
+
+        for (const declaration of declarations.filter((entry) => SVG_PRESENTATION_ATTRS.has(entry.property))) {
+          element.setAttribute(declaration.property, declaration.value)
+        }
+      }
+    }
+  }
+}
+
+function normalizeForeignObjectMarkup(svg: SVGSVGElement) {
+  const htmlParagraphs = Array.from(svg.querySelectorAll('foreignObject p'))
+  for (const paragraph of htmlParagraphs) {
+    mergeInlineStyles(paragraph, [
+      { property: 'margin', value: '0' },
+      { property: 'font-size', value: 'inherit' },
+      { property: 'font-family', value: 'inherit' },
+      { property: 'line-height', value: 'inherit' }
+    ])
+  }
+}
+
+function sanitizeRenderedSvg(markup: string) {
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(markup, 'image/svg+xml')
+  const svg = doc.documentElement as Element
+  if (svg.localName !== 'svg') return markup
+  const svgRoot = svg as unknown as SVGSVGElement
+
+  const styleElements = Array.from(svgRoot.querySelectorAll('style'))
+  for (const styleElement of styleElements) {
+    applyCssAsSvgAttributes(svgRoot, styleElement.textContent ?? '')
+    styleElement.remove()
+  }
+
+  normalizeForeignObjectMarkup(svgRoot)
+  return new XMLSerializer().serializeToString(svgRoot)
+}
+
 async function renderPreview() {
   const target = previewEl.value
   if (!target) return
@@ -162,10 +316,11 @@ async function renderPreview() {
   try {
     const id = `tomosona-mermaid-${instanceId}-${++renderCount}`
     const rendered = await mermaid.render(id, value)
+    const sanitizedSvg = sanitizeRenderedSvg(rendered.svg)
     // Invariant: stale async render completions must not mutate DOM after a newer request won.
     if (requestId !== renderRequestId) return
-    target.innerHTML = rendered.svg
-    renderedSvg.value = rendered.svg
+    target.innerHTML = sanitizedSvg
+    renderedSvg.value = sanitizedSvg
     error.value = ''
   } catch (err) {
     // Invariant: stale async failures should be ignored for the same reason as stale successes.

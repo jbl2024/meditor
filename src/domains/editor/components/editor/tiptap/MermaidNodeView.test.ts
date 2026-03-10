@@ -150,7 +150,8 @@ describe('MermaidNodeView', () => {
       darkMode: false,
       themeVariables: expect.objectContaining({
         primaryColor: '#ede9fe',
-        primaryBorderColor: '#a78bfa'
+        primaryBorderColor: '#a78bfa',
+        fontSize: '16px'
       })
     }))
     expect(mermaidRender).toHaveBeenCalledTimes(1)
@@ -175,7 +176,8 @@ describe('MermaidNodeView', () => {
       themeVariables: expect.objectContaining({
         primaryColor: '#3b4252',
         primaryBorderColor: '#a78bfa',
-        primaryTextColor: '#e5e7eb'
+        primaryTextColor: '#e5e7eb',
+        fontSize: '16px'
       })
     }))
     expect(mermaidRender).toHaveBeenCalledTimes(2)
@@ -214,6 +216,39 @@ describe('MermaidNodeView', () => {
     await flush()
 
     expect(mermaidRender).toHaveBeenCalledTimes(2)
+
+    harness.app.unmount()
+  })
+
+  it('converts embedded mermaid stylesheet rules into svg and html label attributes', async () => {
+    mermaidRender.mockResolvedValueOnce({
+      svg: [
+        '<svg id="mermaid-1" xmlns="http://www.w3.org/2000/svg">',
+        '<style>#mermaid-1 .messageText{fill:#123456;font-family:Geist;font-size:16px;text-anchor:middle;} #mermaid-1 p{margin:0;} #mermaid-1 .nodeLabel{white-space:nowrap;}</style>',
+        '<text class="messageText">Ping</text>',
+        '<foreignObject width="100" height="40">',
+        '<div xmlns="http://www.w3.org/1999/xhtml"><span class="nodeLabel"><p>Wrapped label</p></span></div>',
+        '</foreignObject>',
+        '</svg>'
+      ].join('')
+    })
+
+    const harness = mountHarness({ initialCode: 'sequenceDiagram\n  A->>B: Ping' })
+    await flush()
+
+    const preview = harness.root.querySelector('.tomosona-mermaid-preview') as HTMLDivElement
+    const text = preview.querySelector('text')
+    const paragraph = preview.querySelector('p')
+    const htmlLabel = preview.querySelector('.nodeLabel')
+    expect(preview.innerHTML).not.toContain('<style')
+    expect(text?.getAttribute('fill')).toBe('#123456')
+    expect(text?.getAttribute('font-family')).toBe('Geist')
+    expect(text?.getAttribute('font-size')).toBe('16px')
+    expect(text?.getAttribute('text-anchor')).toBe('middle')
+    expect(paragraph?.getAttribute('style')).toContain('margin: 0')
+    expect(paragraph?.getAttribute('style')).toContain('font-size: inherit')
+    expect(paragraph?.getAttribute('style')).toContain('line-height: inherit')
+    expect(htmlLabel?.getAttribute('style')).toContain('white-space: nowrap')
 
     harness.app.unmount()
   })
