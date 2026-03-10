@@ -75,6 +75,7 @@ function mountHarness(options?: {
   editable?: boolean
   initialCode?: string
   confirmReplace?: (payload: { templateLabel: string }) => Promise<boolean>
+  openPreview?: (payload: { svg: string; code: string; templateId: string }) => void
 }) {
   const root = document.createElement('div')
   document.body.appendChild(root)
@@ -93,7 +94,7 @@ function mountHarness(options?: {
         node: { attrs: { code: code.value } },
         updateAttributes,
         editor: { isEditable: editable },
-        extension: { options: { confirmReplace: options?.confirmReplace } }
+        extension: { options: { confirmReplace: options?.confirmReplace, openPreview: options?.openPreview } }
       })
     }
   })
@@ -369,6 +370,42 @@ describe('MermaidNodeView', () => {
 
     expect(beginHeavyRender).toHaveBeenCalledTimes(1)
     expect(endHeavyRender).toHaveBeenCalledTimes(1)
+
+    harness.app.unmount()
+  })
+
+  it('emits preview payload from the zoom button in read-only mode', async () => {
+    const openPreview = vi.fn()
+    const harness = mountHarness({ editable: false, openPreview })
+    await flush()
+
+    const buttons = Array.from(harness.root.querySelectorAll('button')) as HTMLButtonElement[]
+    const zoomButton = buttons.find((button) => button.textContent?.includes('Zoom'))
+    expect(zoomButton).toBeTruthy()
+
+    zoomButton?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+    await flush()
+
+    expect(openPreview).toHaveBeenCalledWith(expect.objectContaining({
+      code: 'flowchart TD\n  A --> B',
+      templateId: 'flowchart',
+      svg: expect.stringContaining('<svg')
+    }))
+
+    harness.app.unmount()
+  })
+
+  it('does not emit preview payload when rendering failed', async () => {
+    mermaidRender.mockRejectedValueOnce(new Error('boom'))
+    const openPreview = vi.fn()
+    const harness = mountHarness({ openPreview })
+    await flush()
+
+    const zoomButton = Array.from(harness.root.querySelectorAll('button')).find((button) => button.textContent?.includes('Zoom')) as HTMLButtonElement
+    zoomButton.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+    await flush()
+
+    expect(openPreview).not.toHaveBeenCalled()
 
     harness.app.unmount()
   })

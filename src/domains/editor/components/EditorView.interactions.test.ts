@@ -1,5 +1,19 @@
 import { createApp, defineComponent, h, nextTick, ref } from 'vue'
 import { describe, expect, it, vi } from 'vitest'
+
+const { mermaidRender } = vi.hoisted(() => ({
+  mermaidRender: vi.fn(async (id: string, source: string) => ({
+    svg: `<svg data-render-id="${id}"><text>${source}</text></svg>`
+  }))
+}))
+
+vi.mock('mermaid', () => ({
+  default: {
+    initialize: vi.fn(),
+    render: mermaidRender
+  }
+}))
+
 import EditorView from './EditorView.vue'
 
 async function flushUi() {
@@ -220,6 +234,50 @@ describe('EditorView interactions contract', () => {
     nextButton.click()
     await flushUi()
     expect(root.querySelector('.editor-find-toolbar-count')?.textContent).toContain('1/1')
+
+    app.unmount()
+    document.body.innerHTML = ''
+  })
+
+  it('opens the editor-level mermaid preview dialog from a rendered mermaid block', async () => {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+
+    const app = createApp(defineComponent({
+      setup() {
+        return () =>
+          h(EditorView, {
+            path: 'a.md',
+            openPaths: ['a.md'],
+            openFile: async () => '# Title\n\n```mermaid\nflowchart TD\n  A --> B\n```',
+            saveFile: async () => ({ persisted: true }),
+            renameFileFromTitle: async (valuePath: string, title: string) => ({ path: valuePath, title }),
+            loadLinkTargets: async () => ['a.md'],
+            loadLinkHeadings: async () => ['H1'],
+            loadPropertyTypeSchema: async () => ({}),
+            savePropertyTypeSchema: async () => {},
+            openLinkTarget: async () => true,
+            onStatus: () => {},
+            onOutline: () => {},
+            onProperties: () => {},
+            onPathRenamed: () => {}
+          })
+      }
+    }))
+
+    app.mount(root)
+    await flushUi()
+    await flushUi()
+
+    const zoomButton = Array.from(root.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Zoom') as HTMLButtonElement
+    expect(zoomButton).toBeTruthy()
+
+    zoomButton.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+    await flushUi()
+
+    expect(root.textContent).toContain('Preview the diagram at full size and export it as SVG or PNG.')
+    expect(root.querySelector('.editor-mermaid-preview svg')).toBeTruthy()
+    expect(mermaidRender).toHaveBeenCalled()
 
     app.unmount()
     document.body.innerHTML = ''

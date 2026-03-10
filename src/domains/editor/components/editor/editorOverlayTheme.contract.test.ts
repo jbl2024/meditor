@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import inlineToolbarSource from './EditorInlineFormatToolbar.vue?raw'
 import blockMenuSource from './EditorBlockMenu.vue?raw'
 import tableToolbarSource from './EditorTableToolbar.vue?raw'
+import mermaidPreviewDialogSource from './EditorMermaidPreviewDialog.vue?raw'
 import mermaidDialogSource from './EditorMermaidReplaceDialog.vue?raw'
 import largeDocOverlaySource from './EditorLargeDocOverlay.vue?raw'
 
@@ -27,6 +28,10 @@ describe('Editor overlay theme contracts', () => {
     expect(mermaidDialogSource).toContain('var(--button-primary-bg)')
     expect(mermaidDialogSource).toContain('var(--panel-border)')
     expect(mermaidDialogSource).not.toContain('dark:')
+
+    expect(mermaidPreviewDialogSource).toContain('var(--button-primary-bg)')
+    expect(mermaidPreviewDialogSource).toContain('var(--button-ghost-border)')
+    expect(mermaidPreviewDialogSource).not.toContain('dark:')
 
     expect(largeDocOverlaySource).toContain('var(--editor-overlay-backdrop)')
     expect(largeDocOverlaySource).toContain('var(--editor-progress-fill)')

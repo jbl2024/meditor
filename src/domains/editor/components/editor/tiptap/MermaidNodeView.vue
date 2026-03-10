@@ -10,12 +10,18 @@ import {
   toMermaidTemplateItems,
   type MermaidTemplateDropdownItem
 } from '../../../lib/tiptap/mermaidTemplates'
+import type { MermaidPreviewPayload } from '../../../composables/useMermaidPreviewDialog'
 
 const props = defineProps<{
   node: { attrs: { code?: string } }
   updateAttributes: (attrs: Record<string, unknown>) => void
   editor: { isEditable: boolean }
-  extension: { options?: { confirmReplace?: (payload: { templateLabel: string }) => Promise<boolean> } }
+  extension: {
+    options?: {
+      confirmReplace?: (payload: { templateLabel: string }) => Promise<boolean>
+      openPreview?: (payload: MermaidPreviewPayload) => void
+    }
+  }
 }>()
 
 const code = computed(() => String(props.node.attrs.code ?? ''))
@@ -26,6 +32,7 @@ const showTemplateMenu = ref(false)
 const templateQuery = ref('')
 const activeTemplateIndex = ref(0)
 const showCodeEditor = ref(false)
+const renderedSvg = ref('')
 const currentTemplateId = computed(() => resolveMermaidTemplateId(code.value))
 const templateItems = computed(() => toMermaidTemplateItems(MERMAID_TEMPLATES))
 const INDENT = '  '
@@ -144,6 +151,7 @@ async function renderPreview() {
   const value = code.value.trim()
   if (!value) {
     target.innerHTML = ''
+    renderedSvg.value = ''
     error.value = 'Diagram is empty.'
     return
   }
@@ -157,11 +165,13 @@ async function renderPreview() {
     // Invariant: stale async render completions must not mutate DOM after a newer request won.
     if (requestId !== renderRequestId) return
     target.innerHTML = rendered.svg
+    renderedSvg.value = rendered.svg
     error.value = ''
   } catch (err) {
     // Invariant: stale async failures should be ignored for the same reason as stale successes.
     if (requestId !== renderRequestId) return
     target.innerHTML = ''
+    renderedSvg.value = ''
     error.value = err instanceof Error ? err.message : 'Invalid Mermaid diagram.'
   } finally {
     endHeavyRender(renderToken)
@@ -271,6 +281,19 @@ function onEditorKeydown(event: KeyboardEvent) {
   showCodeEditor.value = false
 }
 
+function openZoomModal(event?: MouseEvent) {
+  if (event) {
+    event.preventDefault()
+    event.stopPropagation()
+  }
+  if (!renderedSvg.value || error.value) return
+  props.extension.options?.openPreview?.({
+    svg: renderedSvg.value,
+    code: code.value,
+    templateId: currentTemplateId.value || 'mermaid'
+  })
+}
+
 function applyTabIndentation(textarea: HTMLTextAreaElement, unindent: boolean) {
   const source = textarea.value
   const start = textarea.selectionStart ?? 0
@@ -342,8 +365,9 @@ function applyTabIndentation(textarea: HTMLTextAreaElement, unindent: boolean) {
   >
     <div class="tomosona-mermaid-header" contenteditable="false">
       <span class="tomosona-mermaid-title">Mermaid</span>
-      <div class="tomosona-mermaid-actions" v-if="editor.isEditable">
+      <div class="tomosona-mermaid-actions">
         <UiFilterableDropdown
+          v-if="editor.isEditable"
           class="tomosona-mermaid-template-select"
           :items="templateItems"
           :model-value="showTemplateMenu"
@@ -375,6 +399,14 @@ function applyTabIndentation(textarea: HTMLTextAreaElement, unindent: boolean) {
           </template>
         </UiFilterableDropdown>
         <button
+          type="button"
+          class="tomosona-mermaid-edit-btn"
+          @mousedown.stop.prevent="openZoomModal($event)"
+        >
+          Zoom
+        </button>
+        <button
+          v-if="editor.isEditable"
           type="button"
           class="tomosona-mermaid-edit-btn"
           @mousedown.stop.prevent="onEditorToggle($event)"

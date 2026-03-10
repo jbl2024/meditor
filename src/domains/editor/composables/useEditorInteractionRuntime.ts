@@ -14,6 +14,7 @@ import { buildWikilinkCandidates } from '../lib/tiptap/wikilinkCandidates'
 import { sanitizeExternalHref } from '../lib/markdownBlocks'
 import { normalizeBlockId, normalizeHeadingAnchor, slugifyHeading } from '../lib/wikilinks'
 import type { WikilinkCandidate } from '../lib/tiptap/plugins/wikilinkState'
+import type { MermaidPreviewPayload } from './useMermaidPreviewDialog'
 
 /**
  * Owns interactive editor behavior that depends on the active Tiptap instance:
@@ -71,6 +72,7 @@ export type EditorInteractionRuntimeIoPort = {
 export type EditorInteractionRuntimeEditorPort = {
   emitOutline: (payload: EditorHeadingNode[]) => void
   requestMermaidReplaceConfirm: (payload: { templateLabel: string }) => Promise<boolean>
+  openMermaidPreview: (payload: MermaidPreviewPayload) => void
 }
 
 /**
@@ -208,6 +210,7 @@ export function useEditorInteractionRuntime(options: UseEditorInteractionRuntime
     updateFormattingToolbar: () => chromePort.toolbars.updateFormattingToolbar(),
     onEditorDocChanged: (path) => documentPort.onEditorDocChanged(path),
     requestMermaidReplaceConfirm: editorPort.requestMermaidReplaceConfirm,
+    openMermaidPreview: editorPort.openMermaidPreview,
     getWikilinkCandidates,
     openLinkTargetWithAutosave,
     revealAnchor: navigation.revealAnchor,

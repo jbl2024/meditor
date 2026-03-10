@@ -217,6 +217,11 @@ describe('useEditorChromeRuntime', () => {
     }
     runtime.blockAndTable.blockMenuTarget.value = { pos: 3, node: null, dom: null } as any
     runtime.toolbars.findToolbar.openToolbar()
+    runtime.dialogsAndLifecycle.openMermaidPreview({
+      svg: '<svg viewBox="0 0 10 10"></svg>',
+      code: 'graph TD\nA-->B',
+      templateId: 'flowchart'
+    })
     await flushUi()
 
     runtime.dialogsAndLifecycle.resetTransientUiState()
@@ -227,6 +232,7 @@ describe('useEditorChromeRuntime', () => {
     expect(runtime.blockAndTable.blockMenuTarget.value).toBeNull()
     expect(runtime.blockAndTable.dragHandleUiState.value.activeTarget).toBeNull()
     expect(runtime.toolbars.findToolbar.open.value).toBe(false)
+    expect(runtime.dialogsAndLifecycle.mermaidPreviewDialog.value.visible).toBe(false)
   })
 
   it('onHolderKeydown opens find on Cmd/Ctrl+F and otherwise delegates to editor input', async () => {

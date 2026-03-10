@@ -153,7 +153,8 @@ function createRuntimeHarness(input?: {
     },
     interactionEditorPort: {
       emitOutline: vi.fn(),
-      requestMermaidReplaceConfirm: vi.fn(async () => true)
+      requestMermaidReplaceConfirm: vi.fn(async () => true),
+      openMermaidPreview: vi.fn()
     },
     interactionChromePort: {
       menus: {

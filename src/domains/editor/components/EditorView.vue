@@ -14,6 +14,7 @@ import EditorContextOverlays from './editor/EditorContextOverlays.vue'
 import EditorFindToolbar from './editor/EditorFindToolbar.vue'
 import EditorInlineFormatToolbar from './editor/EditorInlineFormatToolbar.vue'
 import EditorLargeDocOverlay from './editor/EditorLargeDocOverlay.vue'
+import EditorMermaidPreviewDialog from './editor/EditorMermaidPreviewDialog.vue'
 import EditorMermaidReplaceDialog from './editor/EditorMermaidReplaceDialog.vue'
 import EditorPropertiesPanel from './editor/EditorPropertiesPanel.vue'
 import EditorSlashOverlay from './editor/EditorSlashOverlay.vue'
@@ -133,7 +134,8 @@ interactionRuntime = useEditorInteractionRuntime({
   },
   interactionEditorPort: {
     emitOutline,
-    requestMermaidReplaceConfirm: chromeRuntime.dialogsAndLifecycle.requestMermaidReplaceConfirm
+    requestMermaidReplaceConfirm: chromeRuntime.dialogsAndLifecycle.requestMermaidReplaceConfirm,
+    openMermaidPreview: chromeRuntime.dialogsAndLifecycle.openMermaidPreview
   },
   interactionChromePort: {
     menus: {
@@ -338,7 +340,11 @@ const {
 } = pulse
 const {
   mermaidReplaceDialog,
-  resolveMermaidReplaceDialog
+  resolveMermaidReplaceDialog,
+  mermaidPreviewDialog,
+  closeMermaidPreview,
+  exportMermaidSvg,
+  exportMermaidPng
 } = dialogsAndLifecycle
 const {
   slashOpen,
@@ -683,6 +689,14 @@ defineExpose({
       :template-label="mermaidReplaceDialog.templateLabel"
       @cancel="resolveMermaidReplaceDialog(false)"
       @confirm="resolveMermaidReplaceDialog(true)"
+    />
+    <EditorMermaidPreviewDialog
+      :visible="mermaidPreviewDialog.visible"
+      :svg="mermaidPreviewDialog.svg"
+      :export-error="mermaidPreviewDialog.exportError"
+      @close="closeMermaidPreview()"
+      @export-svg="exportMermaidSvg()"
+      @export-png="void exportMermaidPng($event)"
     />
   </div>
 </template>

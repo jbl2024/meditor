@@ -14,6 +14,7 @@ import { useEditorTableGeometry } from './useEditorTableGeometry'
 import { useEditorTableInteractions } from './useEditorTableInteractions'
 import { useEditorLayoutMetrics } from './useEditorLayoutMetrics'
 import { useEditorZoom } from './useEditorZoom'
+import { useMermaidPreviewDialog } from './useMermaidPreviewDialog'
 import { useMermaidReplaceDialog } from './useMermaidReplaceDialog'
 import { usePulseTransformation } from '../../pulse/composables/usePulseTransformation'
 import { PULSE_ACTIONS_BY_SOURCE } from '../../pulse/lib/pulse'
@@ -259,6 +260,13 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   } = useEditorZoom()
 
   const { mermaidReplaceDialog, resolveMermaidReplaceDialog, requestMermaidReplaceConfirm } = useMermaidReplaceDialog()
+  const {
+    mermaidPreviewDialog,
+    openMermaidPreview,
+    closeMermaidPreview,
+    exportMermaidSvg,
+    exportMermaidPng
+  } = useMermaidPreviewDialog()
 
   const dragHandleLockXMiddleware: Middleware = {
     name: 'tomosonaLockXToContent',
@@ -524,6 +532,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     closeTransientMenus()
     resetDragHandleState()
     resetTransientCaches()
+    closeMermaidPreview()
   }
 
   const documentEvents = {
@@ -562,6 +571,10 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
       }
       if (event.key === 'Escape' && pulseOpen.value) {
         closePulsePanel()
+        return
+      }
+      if (event.key === 'Escape' && mermaidPreviewDialog.value.visible) {
+        closeMermaidPreview()
       }
     }
   }
@@ -760,7 +773,12 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     pulseSourceText,
     pulseSelectionRange,
     mermaidReplaceDialog,
+    mermaidPreviewDialog,
     requestMermaidReplaceConfirm,
+    openMermaidPreview,
+    closeMermaidPreview,
+    exportMermaidSvg,
+    exportMermaidPng,
     pulsePanelStyle,
     updatePulsePanelMetrics,
     openPulseForSelection,
@@ -867,8 +885,13 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   }
   const dialogsAndLifecycle = {
     mermaidReplaceDialog: pulseAndDialogs.mermaidReplaceDialog,
+    mermaidPreviewDialog: pulseAndDialogs.mermaidPreviewDialog,
     resolveMermaidReplaceDialog,
     requestMermaidReplaceConfirm: pulseAndDialogs.requestMermaidReplaceConfirm,
+    openMermaidPreview: pulseAndDialogs.openMermaidPreview,
+    closeMermaidPreview: pulseAndDialogs.closeMermaidPreview,
+    exportMermaidSvg: pulseAndDialogs.exportMermaidSvg,
+    exportMermaidPng: pulseAndDialogs.exportMermaidPng,
     resetTransientUiState,
     onMountInit,
     onUnmountCleanup

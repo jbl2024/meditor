@@ -2,6 +2,7 @@ import { Node, mergeAttributes } from '@tiptap/core'
 import { VueNodeViewRenderer } from '@tiptap/vue-3'
 import MermaidNodeView from '../../../components/editor/tiptap/MermaidNodeView.vue'
 import { TIPTAP_NODE_TYPES } from '../types'
+import type { MermaidPreviewPayload } from '../../../composables/useMermaidPreviewDialog'
 
 export const MermaidNode = Node.create({
   name: TIPTAP_NODE_TYPES.mermaid,
@@ -10,7 +11,8 @@ export const MermaidNode = Node.create({
 
   addOptions() {
     return {
-      confirmReplace: undefined as ((payload: { templateLabel: string }) => Promise<boolean>) | undefined
+      confirmReplace: undefined as ((payload: { templateLabel: string }) => Promise<boolean>) | undefined,
+      openPreview: undefined as ((payload: MermaidPreviewPayload) => void) | undefined
     }
   },
 
