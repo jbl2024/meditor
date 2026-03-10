@@ -14,6 +14,7 @@ type OpenDebugGlobal = {
 
 const tracesById = new Map<string, TraceRecord>()
 const pendingTraceByPath = new Map<string, string>()
+const activeTraceIds = new Set<string>()
 let traceCounter = 0
 let longTaskObserverInstalled = false
 
@@ -92,10 +93,11 @@ export function installOpenDebugLongTaskObserver() {
 
 /** Starts a new open trace and returns its stable trace id. */
 export function startOpenTrace(path: string, source: string): string | null {
-  if (!debugEnabled()) return null
   const normalizedPath = normalizePath(path)
   traceCounter += 1
   const id = `${Date.now().toString(36)}-${traceCounter.toString(36)}`
+  activeTraceIds.add(id)
+  if (!debugEnabled()) return id
   const record: TraceRecord = {
     id,
     path: normalizedPath,
@@ -109,6 +111,11 @@ export function startOpenTrace(path: string, source: string): string | null {
     path: normalizedPath
   })
   return id
+}
+
+/** Returns whether at least one document-open flow is still in flight. */
+export function hasActiveOpenTrace(): boolean {
+  return activeTraceIds.size > 0
 }
 
 /** Associates a pending open trace with a document path until the editor starts loading it. */
@@ -157,6 +164,7 @@ export function finishOpenTrace(
   payload: Record<string, unknown> = {}
 ) {
   if (!traceId) return
+  activeTraceIds.delete(traceId)
   const record = tracesById.get(traceId)
   if (!record) return
   tracesById.delete(traceId)

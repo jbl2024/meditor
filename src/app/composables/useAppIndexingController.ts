@@ -2,6 +2,7 @@ import { computed, getCurrentInstance, onBeforeUnmount, ref, type Ref } from 'vu
 import type { IndexLogEntry, IndexRuntimeStatus } from '../../shared/api/apiTypes'
 import { buildIndexActivityRows, type IndexLogFilter } from '../lib/indexActivity'
 import { formatTimestamp } from '../lib/appShellPaths'
+import { hasActiveOpenTrace } from '../../shared/lib/openTrace'
 
 /**
  * Module: useAppIndexingController
@@ -65,6 +66,7 @@ export type AppIndexingUiEffectsPort = {
   notifyInfo?: (message: string) => void
   notifySuccess?: (message: string) => void
   notifyError?: (message: string) => void
+  isBusyOpeningDocument?: () => boolean
 }
 
 /** Declares the cohesive ports required by the indexing controller. */
@@ -89,6 +91,8 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
     indexingUiEffectsPort
   } = options
   const semanticDebounceMs = 15_000
+  const indexedViewRefreshDebounceMs = 120
+  const indexedViewRefreshRetryMs = 120
   let reindexWorkerRunning = false
   let reindexGeneration = 0
   const pendingReindexPaths = new Set<string>()
@@ -97,6 +101,8 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
   let semanticReindexTimer: ReturnType<typeof setTimeout> | null = null
   let semanticReindexWorkerRunning = false
   let indexStatusPollTimer: ReturnType<typeof setInterval> | null = null
+  let indexedViewRefreshRequestVersion = 0
+  let indexedViewRefreshInFlight: Promise<number> | null = null
 
   const semanticIndexState = ref<SemanticIndexState>('idle')
   const indexRunKind = ref<IndexRunKind>('idle')
@@ -124,6 +130,38 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
       indexFinalizeCompleted.value = 2
     }
     return indexFinalizeCompleted.value
+  }
+
+  function shouldDelayIndexedViewRefresh(): boolean {
+    if (indexingUiEffectsPort?.isBusyOpeningDocument) {
+      return indexingUiEffectsPort.isBusyOpeningDocument()
+    }
+    return hasActiveOpenTrace()
+  }
+
+  /** Coalesces repeated backlinks/cosmos refresh requests so background indexing does not thrash the UI. */
+  async function refreshIndexedViewsDeferred(): Promise<number> {
+    indexedViewRefreshRequestVersion += 1
+    if (indexedViewRefreshInFlight) return indexedViewRefreshInFlight
+
+    indexedViewRefreshInFlight = (async () => {
+      let handledVersion = 0
+      while (handledVersion < indexedViewRefreshRequestVersion) {
+        await new Promise<void>((resolve) => setTimeout(resolve, indexedViewRefreshDebounceMs))
+        while (shouldDelayIndexedViewRefresh()) {
+          await new Promise<void>((resolve) => setTimeout(resolve, indexedViewRefreshRetryMs))
+        }
+        handledVersion = indexedViewRefreshRequestVersion
+        await refreshIndexedViews()
+      }
+      return indexFinalizeCompleted.value
+    })()
+
+    try {
+      return await indexedViewRefreshInFlight
+    } finally {
+      indexedViewRefreshInFlight = null
+    }
   }
 
   const indexStateLabel = computed(() => {
@@ -453,7 +491,7 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
         if (updated > 0) {
           try {
             await indexingApiPort.refreshSemanticEdgesCacheNow()
-            await refreshIndexedViews()
+            await refreshIndexedViewsDeferred()
           } catch {
             hadSemanticError = true
             console.warn('[index] semantic:refresh:error')
@@ -532,7 +570,7 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
       }
       indexRunPhase.value = 'refreshing_views'
       indexRunCurrentPath.value = ''
-      await refreshIndexedViews()
+      await refreshIndexedViewsDeferred()
       if (indexingShellPort.indexingState.value !== 'out_of_sync') {
         indexingShellPort.indexingState.value = 'indexed'
         indexRunPhase.value = 'done'
@@ -638,7 +676,7 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
         return
       }
       indexRunPhase.value = 'refreshing_views'
-      await refreshIndexedViews()
+      await refreshIndexedViewsDeferred()
       indexingShellPort.indexingState.value = 'indexed'
       semanticIndexState.value = 'idle'
       indexRunPhase.value = 'done'

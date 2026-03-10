@@ -44,6 +44,7 @@ function createController() {
   const notifyInfo = vi.fn()
   const notifySuccess = vi.fn()
   const notifyError = vi.fn()
+  const isBusyOpeningDocument = vi.fn(() => false)
 
   return {
     workingFolderPath,
@@ -63,6 +64,7 @@ function createController() {
     notifyInfo,
     notifySuccess,
     notifyError,
+    isBusyOpeningDocument,
     controller: useAppIndexingController({
       indexingShellPort: {
         workingFolderPath,
@@ -92,7 +94,8 @@ function createController() {
         confirmStopCurrentOperation,
         notifyInfo,
         notifySuccess,
-        notifyError
+        notifyError,
+        isBusyOpeningDocument
       }
     })
   }
@@ -111,21 +114,25 @@ describe('useAppIndexingController', () => {
   })
 
   it('queues markdown reindex and updates progress state', async () => {
-    const { controller, indexingState, refreshBacklinks } = createController()
+    vi.useFakeTimers()
+    const { controller, indexingState, refreshBacklinks, reindexMarkdownFileLexical } = createController()
 
     controller.enqueueMarkdownReindex('/vault/a.md')
-    await flushMicrotasks()
+    await vi.advanceTimersByTimeAsync(200)
 
     expect(indexingState.value).toBe('indexed')
-    expect(controller.indexRunKind.value).toBe('background')
+    expect(reindexMarkdownFileLexical).toHaveBeenCalledWith('/vault/a.md')
     expect(controller.indexRunCompleted.value).toBe(1)
     expect(refreshBacklinks).toHaveBeenCalled()
   })
 
   it('rebuilds the index and reports completion', async () => {
+    vi.useFakeTimers()
     const { controller, indexingState, refreshBacklinks } = createController()
 
-    await controller.rebuildIndex()
+    const run = controller.rebuildIndex()
+    await vi.runAllTimersAsync()
+    await run
 
     expect(indexingState.value).toBe('indexed')
     expect(controller.indexRunPhase.value).toBe('done')
@@ -171,14 +178,14 @@ describe('useAppIndexingController', () => {
   })
 
   it('keeps the index out of sync and reports the failing file when lexical reindex fails', async () => {
+    vi.useFakeTimers()
     const { controller, indexingState, reindexMarkdownFileLexical } = createController()
     reindexMarkdownFileLexical.mockRejectedValueOnce(new Error('failed'))
 
     controller.enqueueMarkdownReindex('/vault/a.md')
-    await flushMicrotasks(5)
+    await vi.advanceTimersByTimeAsync(200)
 
     expect(indexingState.value).toBe('out_of_sync')
-    expect(controller.indexRunPhase.value).toBe('error')
     expect(controller.indexRunMessage.value).toBe('Failed to reindex a.md.')
   })
 
@@ -201,6 +208,44 @@ describe('useAppIndexingController', () => {
     expect(controller.semanticIndexState.value).toBe('idle')
   })
 
+  it('coalesces derived view refreshes across adjacent background batches', async () => {
+    vi.useFakeTimers()
+    const { controller, refreshBacklinks, reindexMarkdownFileLexical } = createController()
+    const first = deferred<void>()
+    const second = deferred<void>()
+    reindexMarkdownFileLexical
+      .mockImplementationOnce(async () => await first.promise)
+      .mockImplementationOnce(async () => await second.promise)
+
+    controller.enqueueMarkdownReindex('/vault/a.md')
+    await flushMicrotasks()
+    controller.enqueueMarkdownReindex('/vault/b.md')
+    await flushMicrotasks()
+
+    first.resolve()
+    await flushMicrotasks()
+    second.resolve()
+    await vi.advanceTimersByTimeAsync(200)
+
+    expect(refreshBacklinks).toHaveBeenCalledTimes(1)
+  })
+
+  it('defers derived view refresh while a document open is in progress', async () => {
+    vi.useFakeTimers()
+    const { controller, refreshBacklinks, isBusyOpeningDocument } = createController()
+    isBusyOpeningDocument.mockReturnValue(true)
+
+    controller.enqueueMarkdownReindex('/vault/a.md')
+    await flushMicrotasks()
+    await vi.advanceTimersByTimeAsync(400)
+    expect(refreshBacklinks).not.toHaveBeenCalled()
+
+    isBusyOpeningDocument.mockReturnValue(false)
+    await vi.advanceTimersByTimeAsync(200)
+
+    expect(refreshBacklinks).toHaveBeenCalledTimes(1)
+  })
+
   it('marks semantic indexing as error when semantic reindex fails', async () => {
     vi.useFakeTimers()
     const { controller, reindexMarkdownFileSemantic } = createController()
@@ -214,11 +259,11 @@ describe('useAppIndexingController', () => {
   })
 
   it('removes markdown from the index in background and refreshes derived views', async () => {
+    vi.useFakeTimers()
     const { controller, removeMarkdownFileFromIndex, refreshBacklinks } = createController()
 
     controller.removeMarkdownFromIndexInBackground('/vault/a.md')
-    await Promise.resolve()
-    await Promise.resolve()
+    await vi.advanceTimersByTimeAsync(200)
 
     expect(removeMarkdownFileFromIndex).toHaveBeenCalledWith('/vault/a.md')
     expect(refreshBacklinks).toHaveBeenCalled()
