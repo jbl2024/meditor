@@ -63,6 +63,7 @@ struct WorkspaceWatcherState {
     session_id: u64,
     root: Option<PathBuf>,
     watcher: Option<RecommendedWatcher>,
+    started_at_ms: u64,
 }
 
 impl Default for WorkspaceWatcherState {
@@ -71,6 +72,7 @@ impl Default for WorkspaceWatcherState {
             session_id: 0,
             root: None,
             watcher: None,
+            started_at_ms: 0,
         }
     }
 }
@@ -190,6 +192,24 @@ fn maybe_is_dir(path: &Path) -> Option<bool> {
     }
 }
 
+fn file_modified_at_ms(path: &Path) -> Option<u64> {
+    fs::metadata(path)
+        .ok()
+        .and_then(|metadata| metadata.modified().ok())
+        .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
+        .map(|duration| duration.as_millis() as u64)
+}
+
+fn should_skip_initial_modify_event(path: &Path, watcher_started_at_ms: Option<u64>) -> bool {
+    let Some(started_at_ms) = watcher_started_at_ms else {
+        return false;
+    };
+    let Some(modified_at_ms) = file_modified_at_ms(path) else {
+        return false;
+    };
+    modified_at_ms.saturating_add(250) < started_at_ms
+}
+
 fn build_payload(
     session_id: u64,
     root_normalized: &str,
@@ -228,16 +248,34 @@ fn handle_notify_event(
     root_path: &Path,
     root_normalized: &str,
     matcher: Option<&Gitignore>,
+    watcher_started_at_ms: Option<u64>,
     event: notify::Event,
 ) {
-    let changes = map_notify_event_to_changes(root_path, root_normalized, matcher, event);
+    let changes = map_notify_event_to_changes_with_options(
+        root_path,
+        root_normalized,
+        matcher,
+        watcher_started_at_ms,
+        event,
+    );
     emit_changes(app_handle, session_id, root_normalized, changes);
 }
 
+#[cfg(test)]
 fn map_notify_event_to_changes(
     root_path: &Path,
     root_normalized: &str,
     matcher: Option<&Gitignore>,
+    event: notify::Event,
+) -> Vec<WorkspaceFsChange> {
+    map_notify_event_to_changes_with_options(root_path, root_normalized, matcher, None, event)
+}
+
+fn map_notify_event_to_changes_with_options(
+    root_path: &Path,
+    root_normalized: &str,
+    matcher: Option<&Gitignore>,
+    watcher_started_at_ms: Option<u64>,
     event: notify::Event,
 ) -> Vec<WorkspaceFsChange> {
     let mut changes: Vec<WorkspaceFsChange> = Vec::new();
@@ -397,6 +435,9 @@ fn map_notify_event_to_changes(
                 ) {
                     continue;
                 }
+                if should_skip_initial_modify_event(&path, watcher_started_at_ms) {
+                    continue;
+                }
                 let Some(normalized) = normalize_event_path(&path, root_path, root_normalized)
                 else {
                     continue;
@@ -422,6 +463,10 @@ fn map_notify_event_to_changes(
 pub(crate) fn start_workspace_watcher(app_handle: AppHandle, root_path: PathBuf) -> Result<()> {
     let root_canonical = fs::canonicalize(&root_path)?;
     let root_normalized = normalize_slashes(&root_canonical);
+    let started_at_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|value| value.as_millis() as u64)
+        .unwrap_or(0);
 
     let mut state = watcher_state()
         .lock()
@@ -430,6 +475,7 @@ pub(crate) fn start_workspace_watcher(app_handle: AppHandle, root_path: PathBuf)
     state.watcher = None;
     state.session_id = state.session_id.saturating_add(1);
     state.root = Some(root_canonical.clone());
+    state.started_at_ms = started_at_ms;
     let session_id = state.session_id;
 
     let callback_app_handle = app_handle.clone();
@@ -448,6 +494,7 @@ pub(crate) fn start_workspace_watcher(app_handle: AppHandle, root_path: PathBuf)
             &callback_root,
             &callback_root_normalized,
             callback_ignore_matcher.as_deref(),
+            Some(started_at_ms),
             event,
         );
     })
@@ -469,6 +516,7 @@ pub(crate) fn stop_workspace_watcher() -> Result<()> {
         .map_err(|_| AppError::OperationFailed)?;
     state.watcher = None;
     state.root = None;
+    state.started_at_ms = 0;
     Ok(())
 }
 
@@ -730,5 +778,24 @@ mod tests {
         assert_eq!(changes.len(), 1);
         assert_eq!(changes[0].kind, WorkspaceFsChangeKind::Modified);
         assert_eq!(changes[0].path, Some(normalize_slashes(&file)));
+    }
+
+    #[test]
+    fn skips_startup_modify_event_for_older_file() {
+        let (root, root_norm) = mk_root();
+        let file = root.join("notes/stale.md");
+        fs::create_dir_all(file.parent().expect("parent")).expect("create parent");
+        fs::write(&file, "updated").expect("create file");
+        let started_at_ms = file_modified_at_ms(&file).expect("modified time") + 5_000;
+
+        let changes = map_notify_event_to_changes_with_options(
+            &root,
+            &root_norm,
+            None,
+            Some(started_at_ms),
+            test_event(EventKind::Modify(ModifyKind::Any), vec![file]),
+        );
+
+        assert!(changes.is_empty());
     }
 }
