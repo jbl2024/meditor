@@ -3,6 +3,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import packageJson from '../package.json'
 
 const hoisted = vi.hoisted(() => ({
+  readAboutMetadata: vi.fn(async () => ({
+    version: packageJson.version,
+    build_commit: 'abc12345',
+    build_channel: 'development',
+    platform_label: 'macOS arm64',
+    app_support_dir: '/Users/test/.tomosona',
+    tauri_version: '2.10.2'
+  })),
+  openAppSupportDir: vi.fn(async () => {}),
   readAppSettings: vi.fn(async () => ({
     exists: true,
     path: '/Users/test/.tomosona/conf.json',
@@ -34,6 +43,12 @@ const hoisted = vi.hoisted(() => ({
     { id: 'gpt-5.3-codex', display_name: 'GPT-5.3 Codex' },
     { id: 'gpt-5.2-codex', display_name: 'GPT-5.2 Codex' }
   ])
+}))
+
+vi.mock('./shared/api/appApi', () => ({
+  readAboutMetadata: hoisted.readAboutMetadata,
+  openAppSupportDir: hoisted.openAppSupportDir,
+  openExternalWebUrl: vi.fn(async () => {})
 }))
 
 vi.mock('./shared/api/workspaceApi', () => ({
@@ -250,6 +265,10 @@ describe('App settings modal', () => {
     expect(mounted.root.querySelector('[data-modal="about"]')).toBeTruthy()
     expect(mounted.root.textContent).toContain('Tomosona')
     expect(mounted.root.textContent).toContain(`v${packageJson.version}`)
+    expect(mounted.root.textContent).toContain('abc12345')
+    expect(mounted.root.textContent).toContain('macOS arm64')
+    expect(mounted.root.textContent).toContain('/Users/test/.tomosona')
+    expect(mounted.root.textContent).toContain('Open Data Folder')
     mounted.app.unmount()
   })
 

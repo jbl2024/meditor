@@ -40,6 +40,15 @@ export type FileMetadata = {
   updated_at_ms: number | null
 }
 
+export type AboutMetadata = {
+  version: string
+  build_commit: string | null
+  build_channel: string
+  platform_label: string
+  app_support_dir: string
+  tauri_version: string | null
+}
+
 export type FavoriteEntry = {
   path: string
   added_at_ms: number

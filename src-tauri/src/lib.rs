@@ -6,6 +6,7 @@ mod echoes;
 mod favorites;
 mod fs_ops;
 mod index_schema;
+mod app_meta;
 mod markdown_index;
 mod search_index;
 mod second_brain;
@@ -259,6 +260,7 @@ pub fn run() {
     }
     semantic::set_index_logger(log_index);
     tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             select_working_folder,
             clear_working_folder,
@@ -278,6 +280,8 @@ pub fn run() {
             open_path_external,
             open_external_url,
             reveal_in_file_manager,
+            app_meta::read_about_metadata,
+            app_meta::open_app_support_dir,
             init_db,
             reindex_markdown_file_lexical,
             reindex_markdown_file_semantic,
