@@ -14,6 +14,11 @@ describe('workspacePaths', () => {
     expect(normalizeWorkspacePath('notes//nested///entry.md')).toBe('notes/nested/entry.md')
   })
 
+  it('normalizes Unicode-equivalent paths to NFC', () => {
+    expect(normalizeWorkspacePath('Exe\u0301cution/note.md')).toBe('Exécution/note.md')
+    expect(toWorkspacePathKey('Syste\u0300me/Plan.md')).toBe('système/plan.md')
+  })
+
   it('detects unix and windows absolute paths', () => {
     expect(isAbsoluteWorkspacePath('/vault/notes/a.md')).toBe(true)
     expect(isAbsoluteWorkspacePath('C:\\vault\\notes\\a.md')).toBe(true)

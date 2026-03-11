@@ -92,6 +92,7 @@ export function useAppWorkspaceController(options: UseAppWorkspaceControllerOpti
   const loadingAllFiles = ref(false)
   const activeFileMetadata = ref<FileMetadata | null>(null)
   let activeFileMetadataRequestToken = 0
+  const internalDirNames = new Set(['.tomosona', '.tomosona-trash'])
 
   /** Converts an absolute workspace path into a path relative to the current workspace root. */
   function toRelativePath(path: string): string {
@@ -192,6 +193,9 @@ export function useAppWorkspaceController(options: UseAppWorkspaceControllerOpti
     try {
       const files: string[] = []
       const queue: string[] = [workspaceShellPort.workingFolderPath.value]
+      const queuedDirs = new Set<string>([
+        workspaceDocumentPort.normalizePathKey(workspaceShellPort.workingFolderPath.value)
+      ])
 
       while (queue.length > 0) {
         const dir = queue.shift()
@@ -199,6 +203,15 @@ export function useAppWorkspaceController(options: UseAppWorkspaceControllerOpti
         const children = await workspaceFsPort.listChildren(dir)
         for (const child of children) {
           if (child.is_dir) {
+            const dirName = child.path.split('/').filter(Boolean).pop()?.trim() ?? ''
+            if (internalDirNames.has(dirName)) {
+              continue
+            }
+            const childKey = workspaceDocumentPort.normalizePathKey(child.path)
+            if (queuedDirs.has(childKey)) {
+              continue
+            }
+            queuedDirs.add(childKey)
             queue.push(child.path)
             continue
           }

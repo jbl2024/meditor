@@ -135,6 +135,32 @@ describe('useAppWorkspaceController', () => {
     expect(controller.allWorkspaceFiles.value).toEqual(['/vault/notes/a.md', '/vault/root.md'])
   })
 
+  it('skips internal application directories while scanning workspace files', async () => {
+    const { controller, listChildren } = createController()
+    listChildren.mockImplementation(async (path: string) => {
+      if (path === '/vault') {
+        return [
+          { path: '/vault/.tomosona', is_dir: true, is_markdown: false },
+          { path: '/vault/.tomosona-trash', is_dir: true, is_markdown: false },
+          { path: '/vault/notes', is_dir: true, is_markdown: false },
+          { path: '/vault/root.md', is_dir: false, is_markdown: true }
+        ]
+      }
+      if (path === '/vault/notes') {
+        return [{ path: '/vault/notes/a.md', is_dir: false, is_markdown: true }]
+      }
+      throw new Error(`unexpected path: ${path}`)
+    })
+
+    await controller.loadAllFiles()
+
+    expect(listChildren).toHaveBeenCalledWith('/vault')
+    expect(listChildren).toHaveBeenCalledWith('/vault/notes')
+    expect(listChildren).not.toHaveBeenCalledWith('/vault/.tomosona')
+    expect(listChildren).not.toHaveBeenCalledWith('/vault/.tomosona-trash')
+    expect(controller.allWorkspaceFiles.value).toEqual(['/vault/notes/a.md', '/vault/root.md'])
+  })
+
   it('creates and opens a missing daily note', async () => {
     const { controller } = createController()
     const openPath = vi.fn(async () => true)

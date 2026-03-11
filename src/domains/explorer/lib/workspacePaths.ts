@@ -20,6 +20,7 @@
  */
 export function normalizeWorkspacePath(path: string): string {
   return String(path ?? '')
+    .normalize('NFC')
     .trim()
     .replace(/\\/g, '/')
     .replace(/\/+/g, '/')
