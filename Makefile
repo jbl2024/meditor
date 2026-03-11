@@ -1,5 +1,9 @@
 .PHONY: help install dev tauri-dev tauri-dev-open-debug build tauri-build preflight preflight-full clean clean-frontend clean-tauri clean-deps prepare-release
 
+# VS Code installed via Snap injects GTK paths/modules that break WebKitGTK child
+# processes on some Ubuntu/Kubuntu setups. Clear them for Tauri launches.
+TAURI_ENV_CLEAN = env -u GIO_MODULE_DIR -u GTK_PATH -u GTK_EXE_PREFIX -u GTK_DATA_PREFIX -u GTK_MODULES -u GTK3_MODULES -u GTK4_MODULES
+
 help:
 	@echo "Available targets:"
 	@echo "  make install      Install dependencies"
@@ -23,10 +27,10 @@ dev:
 	npm run dev
 
 tauri-dev:
-	npm run tauri:dev
+	$(TAURI_ENV_CLEAN) npm run tauri:dev
 
 tauri-dev-open-debug:
-	TOMOSONA_DEBUG_OPEN=1 npm run tauri:dev
+	$(TAURI_ENV_CLEAN) TOMOSONA_DEBUG_OPEN=1 npm run tauri:dev
 
 build:
 	npm run build
