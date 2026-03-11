@@ -425,7 +425,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  padding: 0.12rem;
+  padding: 0;
   padding-right: 0.8rem;
   line-height: 1;
 }
