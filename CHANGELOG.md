@@ -18,6 +18,14 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.16.9] - 2026-03-11
+
+### Added
+- feat(about): enrich modal with support metadata and quick links (fe919c8)
+
+### Changed
+- ocs(editor): document release csp and wikilink list edge case (be28452)
+
 ## [0.16.8] - 2026-03-11
 
 ### Fixed
