@@ -23,6 +23,7 @@ function mountHarness(showDebugTools = false) {
           onToggle: () => events.push('toggle'),
           onOpenCommandPalette: () => events.push('palette'),
           onOpenShortcuts: () => events.push('shortcuts'),
+          onOpenAbout: () => events.push('about'),
           onOpenSettings: () => events.push('settings'),
           onOpenDesignSystemDebug: () => events.push('design-system'),
           onRebuildIndex: () => events.push('rebuild'),
@@ -52,11 +53,12 @@ describe('WorkspaceOverflowMenu', () => {
     const buttons = mounted.root.querySelectorAll<HTMLButtonElement>('.overflow-item')
 
     buttons[0]?.click()
-    buttons[5]?.click()
-    buttons[8]?.click()
+    buttons[2]?.click()
+    buttons[6]?.click()
+    buttons[9]?.click()
     await nextTick()
 
-    expect(mounted.events).toEqual(['palette', 'zoom-in', 'theme:light'])
+    expect(mounted.events).toEqual(['palette', 'about', 'zoom-in', 'theme:light'])
     expect(mounted.theme.value).toBe('light')
 
     mounted.app.unmount()

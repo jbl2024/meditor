@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Bars3Icon, BeakerIcon, Cog8ToothIcon, CommandLineIcon, ComputerDesktopIcon, MoonIcon, SunIcon } from '@heroicons/vue/24/outline'
+import { Bars3Icon, BeakerIcon, Cog8ToothIcon, CommandLineIcon, ComputerDesktopIcon, InformationCircleIcon, MoonIcon, SunIcon } from '@heroicons/vue/24/outline'
 import { computed, ref } from 'vue'
 import type { ThemePreference } from '../../composables/useAppTheme'
 import UiIconButton from '../../../shared/components/ui/UiIconButton.vue'
@@ -30,6 +30,7 @@ const emit = defineEmits<{
   toggle: []
   openCommandPalette: []
   openShortcuts: []
+  openAbout: []
   openSettings: []
   openDesignSystemDebug: []
   rebuildIndex: []
@@ -79,6 +80,10 @@ defineExpose({
           <line x1="4" y1="9" x2="8.5" y2="9" />
         </svg>
         Keyboard shortcuts
+      </button>
+      <button type="button" class="ui-menu-item overflow-item" @click="emit('openAbout')">
+        <InformationCircleIcon class="overflow-item-icon" />
+        About
       </button>
       <button type="button" class="ui-menu-item overflow-item" @click="emit('openSettings')">
         <Cog8ToothIcon class="overflow-item-icon" />

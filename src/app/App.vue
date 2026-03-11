@@ -6,6 +6,7 @@ import SidebarSurface from './components/app/SidebarSurface.vue'
 import IndexStatusModal from './components/app/IndexStatusModal.vue'
 import QuickOpenModal from './components/app/QuickOpenModal.vue'
 import ShortcutsModal from './components/app/ShortcutsModal.vue'
+import AboutModal from './components/app/AboutModal.vue'
 import TopbarNavigationControls from './components/app/TopbarNavigationControls.vue'
 import WorkspaceSetupWizardModal from './components/app/WorkspaceSetupWizardModal.vue'
 import WikilinkRewriteModal from './components/app/WikilinkRewriteModal.vue'
@@ -142,6 +143,7 @@ import {
   serializeLayout,
   useMultiPaneWorkspaceState
 } from './composables/useMultiPaneWorkspaceState'
+import packageJson from '../../package.json'
 
 type SearchHit = { path: string; snippet: string; score: number }
 type PropertyPreviewRow = { key: string; value: string }
@@ -242,6 +244,7 @@ const openDateModalError = ref('')
 const settingsModalVisible = ref(false)
 const designSystemDebugVisible = ref(false)
 const shortcutsModalVisible = ref(false)
+const aboutModalVisible = ref(false)
 const workspaceSetupWizardVisible = ref(false)
 const workspaceSetupWizardBusy = ref(false)
 const cosmosCommandLoadingVisible = ref(false)
@@ -280,6 +283,7 @@ let recentUpdatedNotesRequestToken = 0
 let recentUpdatedNotesCacheKey = ''
 const recentNotesRefreshNonce = ref(0)
 const showDebugTools = import.meta.env.DEV
+const appVersion = packageJson.version
 
 const resizeState = ref<{
   side: 'left' | 'right'
@@ -467,6 +471,7 @@ const modalController = useAppModalController({
   openDateModalVisible,
   settingsModalVisible,
   shortcutsModalVisible,
+  aboutModalVisible,
   workspaceSetupWizardVisible,
   wikilinkRewriteVisible: computed(() => Boolean(wikilinkRewritePrompt.value)),
   focusEditor: () => {
@@ -962,6 +967,18 @@ function closeOverflowMenu() {
   overflowMenuOpen.value = false
 }
 
+function openAboutModal() {
+  rememberFocusBeforeModalOpen()
+  aboutModalVisible.value = true
+}
+
+function closeAboutModal() {
+  aboutModalVisible.value = false
+  void nextTick(() => {
+    restoreFocusAfterModalClose()
+  })
+}
+
 function openShortcutsModal() {
   rememberFocusBeforeModalOpen()
   shortcutsFilterQuery.value = ''
@@ -981,6 +998,11 @@ function closeShortcutsModal() {
 function openShortcutsFromOverflow() {
   closeOverflowMenu()
   openShortcutsModal()
+}
+
+function openAboutFromOverflow() {
+  closeOverflowMenu()
+  openAboutModal()
 }
 
 function openSettingsFromOverflow() {
@@ -3148,6 +3170,12 @@ function onWindowKeydown(event: KeyboardEvent) {
     closeDesignSystemDebugModal()
     return
   }
+  if (isEscape && aboutModalVisible.value) {
+    event.preventDefault()
+    event.stopPropagation()
+    closeAboutModal()
+    return
+  }
   if (isEscape && shortcutsModalVisible.value) {
     event.preventDefault()
     event.stopPropagation()
@@ -3627,6 +3655,7 @@ onBeforeUnmount(() => {
       @toggle-overflow="toggleOverflowMenu"
       @open-command-palette="openCommandPalette"
       @open-shortcuts="openShortcutsFromOverflow"
+      @open-about="openAboutFromOverflow"
       @open-settings="openSettingsFromOverflow"
       @open-design-system-debug="openDesignSystemDebugFromOverflow"
       @rebuild-index="void rebuildIndexFromOverflow()"
@@ -3934,6 +3963,12 @@ onBeforeUnmount(() => {
       :sections="filteredShortcutSections"
       @close="closeShortcutsModal"
       @update:filter-query="shortcutsFilterQuery = $event"
+    />
+
+    <AboutModal
+      :visible="aboutModalVisible"
+      :version="appVersion"
+      @close="closeAboutModal"
     />
 
     <WikilinkRewriteModal

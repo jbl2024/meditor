@@ -50,6 +50,7 @@ function mountHarness() {
           onJoinPanes: () => {},
           onResetLayout: () => {},
           onOpenShortcuts: () => {},
+          onOpenAbout: () => {},
           onOpenSettings: () => {},
           onRebuildIndex: () => {},
           onCloseWorkspace: () => {},

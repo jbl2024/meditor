@@ -1,5 +1,6 @@
 import { createApp, defineComponent, h, nextTick } from 'vue'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import packageJson from '../package.json'
 
 const hoisted = vi.hoisted(() => ({
   readAppSettings: vi.fn(async () => ({
@@ -232,6 +233,23 @@ describe('App settings modal', () => {
     const payload = rawPayload as { embeddings: { mode: string } }
     expect(payload.embeddings.mode).toBe('external')
     expect((mounted.root.textContent ?? '').toLowerCase()).toContain('out of sync')
+    mounted.app.unmount()
+  })
+
+  it('opens about from overflow menu and shows the current version', async () => {
+    const mounted = mountApp()
+    await flushUi()
+
+    mounted.root.querySelector<HTMLButtonElement>('button[aria-label="View options"]')?.click()
+    await flushUi()
+
+    const aboutBtn = Array.from(mounted.root.querySelectorAll('button')).find((item) => item.textContent?.includes('About'))
+    aboutBtn?.click()
+    await flushUi()
+
+    expect(mounted.root.querySelector('[data-modal="about"]')).toBeTruthy()
+    expect(mounted.root.textContent).toContain('Tomosona')
+    expect(mounted.root.textContent).toContain(`v${packageJson.version}`)
     mounted.app.unmount()
   })
 

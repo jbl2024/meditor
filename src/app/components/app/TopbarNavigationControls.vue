@@ -76,6 +76,7 @@ const emit = defineEmits<{
   toggleOverflow: []
   openCommandPalette: []
   openShortcuts: []
+  openAbout: []
   openSettings: []
   openDesignSystemDebug: []
   rebuildIndex: []
@@ -293,12 +294,13 @@ defineExpose({
             :zoom-percent-label="zoomPercentLabel"
             :theme-preference="themePreference"
             :show-debug-tools="showDebugTools"
-            @toggle="emit('toggleOverflow')"
-            @open-command-palette="emit('openCommandPalette')"
-            @open-shortcuts="emit('openShortcuts')"
-            @open-settings="emit('openSettings')"
-            @open-design-system-debug="emit('openDesignSystemDebug')"
-            @rebuild-index="emit('rebuildIndex')"
+          @toggle="emit('toggleOverflow')"
+          @open-command-palette="emit('openCommandPalette')"
+          @open-shortcuts="emit('openShortcuts')"
+          @open-about="emit('openAbout')"
+          @open-settings="emit('openSettings')"
+          @open-design-system-debug="emit('openDesignSystemDebug')"
+          @rebuild-index="emit('rebuildIndex')"
             @close-workspace="emit('closeWorkspace')"
             @zoom-in="emit('zoomIn')"
             @zoom-out="emit('zoomOut')"
