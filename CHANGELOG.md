@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.16.8] - 2026-03-11
+
+### Fixed
+- fix(editor): split list items correctly from selected terminal wikilinks (01184d0)
+
 ## [0.16.7] - 2026-03-11
 
 ### Added
