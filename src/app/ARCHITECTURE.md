@@ -34,6 +34,7 @@
 - `useAppShellKeyboard`: global shortcut priority, `Escape` routing, pane/navigation shortcut dispatch.
 - `useAppShellSearch`: global search state, debounce, grouping, mode switching.
 - `useAppShellLaunchpad`: recent workspaces, recent notes, launchpad row derivation.
+- `useAppShellModals`: shell modal open/close flows, modal-local focus choreography, and local UI watchers.
 - `useAppShellHistoryUi`: back/forward menu long press, outside click, resize positioning.
 - `useAppShellWorkspaceLifecycle`: workspace restore, workspace close/reset, and global filesystem event orchestration.
 - Existing higher-level controllers remain domain or shell orchestrators:

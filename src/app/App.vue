@@ -128,6 +128,7 @@ import { useAppShellHistoryUi } from './composables/useAppShellHistoryUi'
 import { useAppShellCommands } from './composables/useAppShellCommands'
 import { useAppShellKeyboard } from './composables/useAppShellKeyboard'
 import { useAppShellLaunchpad } from './composables/useAppShellLaunchpad'
+import { useAppShellModals } from './composables/useAppShellModals'
 import { useAppShellSearch, type AppShellSearchHit } from './composables/useAppShellSearch'
 import { useAppShellWorkspaceLifecycle } from './composables/useAppShellWorkspaceLifecycle'
 import { useAppModalController } from './composables/useAppModalController'
@@ -727,6 +728,93 @@ const {
   quickOpenQuery,
   quickOpenActiveIndex
 })
+const shellModals = useAppShellModals({
+  statePort: {
+    quickOpenVisible,
+    quickOpenQuery,
+    quickOpenActiveIndex,
+    quickOpenItemCount,
+    cosmosCommandLoadingVisible,
+    newFileModalVisible,
+    newFilePathInput,
+    newFileModalError,
+    newFolderModalVisible,
+    newFolderPathInput,
+    newFolderModalError,
+    openDateModalVisible,
+    openDateInput,
+    openDateModalError,
+    settingsModalVisible,
+    designSystemDebugVisible,
+    shortcutsModalVisible,
+    shortcutsFilterQuery,
+    aboutModalVisible,
+    workspaceSetupWizardVisible,
+    workspaceSetupWizardBusy
+  },
+  actionPort: {
+    rememberFocusBeforeModalOpen,
+    restoreFocusAfterModalClose,
+    closeOverflowMenu,
+    resetQuickOpenState,
+    ensureAllFilesLoaded: loadAllFiles,
+    hasAllFilesLoaded: () => allWorkspaceFiles.value.length > 0,
+    syncEditorZoom
+  },
+  domPort: {
+    focusQuickOpenInput: () => {
+      document.querySelector<HTMLInputElement>('[data-quick-open-input="true"]')?.focus()
+    },
+    focusShortcutsFilterInput: () => {
+      document.querySelector<HTMLInputElement>('[data-shortcuts-filter="true"]')?.focus()
+    },
+    focusOpenDateInput: () => {
+      document.querySelector<HTMLInputElement>('[data-open-date-input="true"]')?.focus()
+    },
+    focusNewFileInput: () => {
+      document.querySelector<HTMLInputElement>('[data-new-file-input="true"]')?.focus()
+    },
+    focusNewFolderInput: () => {
+      document.querySelector<HTMLInputElement>('[data-new-folder-input="true"]')?.focus()
+    },
+    focusCosmosLoadingModal: () => {
+      document.querySelector<HTMLElement>('[data-modal="cosmos-command-loading"]')?.focus()
+    },
+    scrollQuickOpenActiveItemIntoView: () => {
+      if (!quickOpenVisible.value) return
+      void nextTick(() => {
+        const modalList = document.querySelector<HTMLElement>('[data-modal="quick-open"] .modal-list')
+        if (!modalList) return
+        const activeItem = modalList.querySelector<HTMLElement>('.modal-item.active')
+        activeItem?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'auto' })
+      })
+    }
+  },
+  currentIsoDate: () => formatIsoDate(new Date())
+})
+const {
+  closeAboutModal,
+  openShortcutsModal,
+  closeShortcutsModal,
+  openSettingsModal,
+  closeSettingsModal,
+  openDesignSystemDebugModal,
+  closeDesignSystemDebugModal,
+  openWorkspaceSetupWizard,
+  closeWorkspaceSetupWizard,
+  openQuickOpen,
+  closeQuickOpen,
+  openNewFileModal,
+  closeNewFileModal,
+  openNewFolderModal,
+  closeNewFolderModal,
+  openOpenDateModal,
+  closeOpenDateModal,
+  openShortcutsFromOverflow,
+  openAboutFromOverflow,
+  openSettingsFromOverflow,
+  openShortcutsFromPalette
+} = shellModals
 
 const shortcutSections = computed(() => {
   const mod = primaryModLabel.value
@@ -996,66 +1084,10 @@ function closeOverflowMenu() {
   overflowMenuOpen.value = false
 }
 
-function openAboutModal() {
-  rememberFocusBeforeModalOpen()
-  aboutModalVisible.value = true
-}
-
-function closeAboutModal() {
-  aboutModalVisible.value = false
-  void nextTick(() => {
-    restoreFocusAfterModalClose()
-  })
-}
-
-function openShortcutsModal() {
-  rememberFocusBeforeModalOpen()
-  shortcutsFilterQuery.value = ''
-  shortcutsModalVisible.value = true
-  void nextTick(() => {
-    document.querySelector<HTMLInputElement>('[data-shortcuts-filter=\"true\"]')?.focus()
-  })
-}
-
-function closeShortcutsModal() {
-  shortcutsModalVisible.value = false
-  void nextTick(() => {
-    restoreFocusAfterModalClose()
-  })
-}
-
-function openShortcutsFromOverflow() {
-  closeOverflowMenu()
-  openShortcutsModal()
-}
-
-function openAboutFromOverflow() {
-  closeOverflowMenu()
-  openAboutModal()
-}
-
-function openSettingsFromOverflow() {
-  closeOverflowMenu()
-  void openSettingsModal()
-}
-
 function openDesignSystemDebugFromOverflow() {
   if (!showDebugTools) return
   closeOverflowMenu()
-  rememberFocusBeforeModalOpen()
-  designSystemDebugVisible.value = true
-}
-
-function closeDesignSystemDebugModal() {
-  designSystemDebugVisible.value = false
-  void nextTick(() => {
-    restoreFocusAfterModalClose()
-  })
-}
-
-function openShortcutsFromPalette() {
-  openShortcutsModal()
-  return true
+  openDesignSystemDebugModal()
 }
 
 function clampEditorZoom(value: number): number {
@@ -1620,19 +1652,6 @@ async function openPulseContextInSecondBrain(payload: {
   }
 }
 
-function closeSettingsModal() {
-  settingsModalVisible.value = false
-  void nextTick(() => {
-    restoreFocusAfterModalClose()
-  })
-}
-
-async function openSettingsModal() {
-  rememberFocusBeforeModalOpen()
-  settingsModalVisible.value = true
-  await nextTick()
-}
-
 function onSettingsSaved(result: { path: string; embeddings_changed: boolean }) {
   filesystem.notifySuccess(`Settings saved at ${result.path}.`)
   if (result.embeddings_changed) {
@@ -1640,21 +1659,6 @@ function onSettingsSaved(result: { path: string; embeddings_changed: boolean }) 
     filesystem.notifyInfo('Embedding settings changed. Rebuild index to resync semantic search.')
   }
   closeSettingsModal()
-}
-
-function closeWorkspaceSetupWizard() {
-  workspaceSetupWizardVisible.value = false
-  workspaceSetupWizardBusy.value = false
-  void nextTick(() => {
-    restoreFocusAfterModalClose()
-  })
-}
-
-async function openWorkspaceSetupWizard() {
-  rememberFocusBeforeModalOpen()
-  workspaceSetupWizardVisible.value = true
-  workspaceSetupWizardBusy.value = false
-  await nextTick()
 }
 
 async function ensureRelativeFolder(relativePath: string) {
@@ -2222,22 +2226,8 @@ async function openYesterdayNote() {
 }
 
 async function openSpecificDateNote() {
-  rememberFocusBeforeModalOpen()
-  openDateInput.value = formatIsoDate(new Date())
-  openDateModalError.value = ''
-  openDateModalVisible.value = true
-  await nextTick()
-  document.querySelector<HTMLInputElement>('[data-open-date-input=\"true\"]')?.focus()
+  await openOpenDateModal()
   return true
-}
-
-function closeOpenDateModal() {
-  openDateModalVisible.value = false
-  openDateInput.value = ''
-  openDateModalError.value = ''
-  void nextTick(() => {
-    restoreFocusAfterModalClose()
-  })
 }
 
 async function submitOpenDateFromModal() {
@@ -2410,27 +2400,6 @@ async function loadWikilinkHeadings(target: string): Promise<string[]> {
   }
 }
 
-async function openQuickOpen(initialQuery = '') {
-  rememberFocusBeforeModalOpen()
-  quickOpenVisible.value = true
-  resetQuickOpenState(initialQuery)
-  if (!allWorkspaceFiles.value.length) {
-    await loadAllFiles()
-  }
-  await nextTick()
-  document.querySelector<HTMLInputElement>('[data-quick-open-input=\"true\"]')?.focus()
-}
-
-function closeQuickOpen(restoreFocusOrEvent: boolean | PointerEvent = true) {
-  const restoreFocus = typeof restoreFocusOrEvent === 'boolean' ? restoreFocusOrEvent : true
-  quickOpenVisible.value = false
-  resetQuickOpenState('')
-  if (!restoreFocus) return
-  void nextTick(() => {
-    restoreFocusAfterModalClose()
-  })
-}
-
 async function openQuickResult(item: QuickOpenResult) {
   if (item.kind === 'file') {
     const opened = await openTabWithAutosave(item.path)
@@ -2492,42 +2461,6 @@ async function createNewFileFromPalette() {
   const prefill = await suggestedNotePathPrefix()
   await openNewFileModal(prefill)
   return true
-}
-
-function closeNewFileModal() {
-  newFileModalVisible.value = false
-  newFilePathInput.value = ''
-  newFileModalError.value = ''
-  void nextTick(() => {
-    restoreFocusAfterModalClose()
-  })
-}
-
-async function openNewFileModal(prefill = '') {
-  rememberFocusBeforeModalOpen()
-  newFilePathInput.value = prefill
-  newFileModalError.value = ''
-  newFileModalVisible.value = true
-  await nextTick()
-  document.querySelector<HTMLInputElement>('[data-new-file-input=\"true\"]')?.focus()
-}
-
-function closeNewFolderModal() {
-  newFolderModalVisible.value = false
-  newFolderPathInput.value = ''
-  newFolderModalError.value = ''
-  void nextTick(() => {
-    restoreFocusAfterModalClose()
-  })
-}
-
-async function openNewFolderModal(prefill = '') {
-  rememberFocusBeforeModalOpen()
-  newFolderPathInput.value = prefill
-  newFolderModalError.value = ''
-  newFolderModalVisible.value = true
-  await nextTick()
-  document.querySelector<HTMLInputElement>('[data-new-folder-input=\"true\"]')?.focus()
 }
 
 async function suggestedNotePathPrefix(): Promise<string> {
@@ -2786,16 +2719,6 @@ function onNewFolderInputKeydown(event: KeyboardEvent) {
   }
 }
 
-function scrollQuickOpenActiveItemIntoView() {
-  if (!quickOpenVisible.value) return
-  void nextTick(() => {
-    const modalList = document.querySelector<HTMLElement>('[data-modal="quick-open"] .modal-list')
-    if (!modalList) return
-    const activeItem = modalList.querySelector<HTMLElement>('.modal-item.active')
-    activeItem?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'auto' })
-  })
-}
-
 async function saveActiveTab() {
   await editorRef.value?.saveNow()
 }
@@ -2822,54 +2745,6 @@ watch(
     persistPreviousNonCosmosMode()
   }
 )
-
-watch(quickOpenQuery, () => {
-  quickOpenActiveIndex.value = 0
-})
-
-watch(quickOpenActiveIndex, () => {
-  scrollQuickOpenActiveItemIntoView()
-})
-
-watch(quickOpenVisible, (visible) => {
-  if (!visible) return
-  scrollQuickOpenActiveItemIntoView()
-})
-
-watch(cosmosCommandLoadingVisible, (visible) => {
-  if (!visible) return
-  void nextTick(() => {
-    document.querySelector<HTMLElement>('[data-modal="cosmos-command-loading"]')?.focus()
-  })
-})
-
-watch(newFilePathInput, () => {
-  if (newFileModalError.value) {
-    newFileModalError.value = ''
-  }
-})
-
-watch(newFolderPathInput, () => {
-  if (newFolderModalError.value) {
-    newFolderModalError.value = ''
-  }
-})
-
-watch(openDateInput, () => {
-  if (openDateModalError.value) {
-    openDateModalError.value = ''
-  }
-})
-
-watch(quickOpenItemCount, (count) => {
-  if (count <= 0) {
-    quickOpenActiveIndex.value = 0
-    return
-  }
-  if (quickOpenActiveIndex.value >= count) {
-    quickOpenActiveIndex.value = count - 1
-  }
-})
 
 watch(
   () => filesystem.indexingState.value,
