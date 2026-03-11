@@ -30,6 +30,7 @@
 
 ## Shell Composables
 - `useAppModalController`: modal selector derivation, focus restore, tab trapping.
+- `useAppShellKeyboard`: global shortcut priority, `Escape` routing, pane/navigation shortcut dispatch.
 - `useAppShellSearch`: global search state, debounce, grouping, mode switching.
 - `useAppShellLaunchpad`: recent workspaces, recent notes, launchpad row derivation.
 - `useAppShellHistoryUi`: back/forward menu long press, outside click, resize positioning.

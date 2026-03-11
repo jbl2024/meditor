@@ -125,6 +125,7 @@ import {
   type SecondBrainHistorySnapshot
 } from './composables/useAppNavigationController'
 import { useAppShellHistoryUi } from './composables/useAppShellHistoryUi'
+import { useAppShellKeyboard } from './composables/useAppShellKeyboard'
 import { useAppShellLaunchpad } from './composables/useAppShellLaunchpad'
 import { useAppShellSearch, type AppShellSearchHit } from './composables/useAppShellSearch'
 import { useAppModalController } from './composables/useAppModalController'
@@ -1319,6 +1320,65 @@ const {
   onGlobalPointerDown: onGlobalPointerDownInternal,
   dispose: disposeHistoryUi
 } = historyUi
+const keyboard = useAppShellKeyboard({
+  isMacOs,
+  statePort: {
+    quickOpenVisible,
+    quickOpenIsActionMode,
+    historyMenuOpen,
+    overflowMenuOpen,
+    wikilinkRewriteVisible: computed(() => Boolean(wikilinkRewritePrompt.value)),
+    newFileModalVisible,
+    newFolderModalVisible,
+    openDateModalVisible,
+    settingsModalVisible,
+    designSystemDebugVisible,
+    aboutModalVisible,
+    shortcutsModalVisible,
+    workspaceSetupWizardVisible,
+    indexStatusModalVisible,
+    cosmosCommandLoadingVisible
+  },
+  guardsPort: {
+    hasBlockingModalOpen,
+    trapTabWithinActiveModal,
+    shouldBlockGlobalShortcutsFromTarget,
+    hasActiveTextSelectionInEditor
+  },
+  actionsPort: {
+    resolveWikilinkRewritePrompt,
+    closeNewFileModal,
+    closeNewFolderModal,
+    closeOpenDateModal,
+    closeSettingsModal,
+    closeDesignSystemDebugModal,
+    closeAboutModal,
+    closeShortcutsModal,
+    closeWorkspaceSetupWizard,
+    closeIndexStatusModal,
+    moveQuickOpenSelection,
+    onQuickOpenEnter,
+    closeHistoryMenu,
+    closeOverflowMenu,
+    closeQuickOpen,
+    goBackInHistory,
+    goForwardInHistory,
+    closeActiveTab,
+    openQuickOpen,
+    openCommandPalette,
+    openTodayNote,
+    openHomeView: openHomeViewFromPalette,
+    splitPane: splitPaneFromPalette,
+    focusPane: focusPaneFromPalette,
+    moveActiveTabToAdjacentPane: (direction) => multiPane.moveActiveTabToAdjacentPane(direction),
+    openNextTab: openNextTabWithAutosave,
+    openSearchPanel,
+    showExplorerForActiveFile,
+    toggleSidebar: () => workspace.toggleSidebar(),
+    toggleRightPane: () => workspace.toggleRightPane(),
+    saveActiveTab
+  }
+})
 
 function scheduleCosmosNodeFocus(nodeId: string, remainingAttempts = 12) {
   if (!nodeId || remainingAttempts <= 0) return
@@ -2070,6 +2130,17 @@ function onPaneTabCloseAll(payload: { paneId: string }) {
   const paths = documentPathsForPane(payload.paneId)
   multiPane.closeAllTabsInPane(payload.paneId)
   clearEditorStatusForPaths(paths)
+}
+
+function closeActiveTab() {
+  const paneId = multiPane.layout.value.activePaneId
+  const pane = multiPane.layout.value.panesById[paneId]
+  const tab = pane?.openTabs.find((item) => item.id === pane.activeTabId)
+  if (!tab) return
+  multiPane.closeTabInPane(paneId, tab.id)
+  if (tab.type === 'document') {
+    editorState.clearStatus(tab.path)
+  }
 }
 
 function onEditorStatus(payload: { path: string; dirty: boolean; saving: boolean; saveError: string }) {
@@ -2923,261 +2994,6 @@ async function saveActiveTab() {
   await editorRef.value?.saveNow()
 }
 
-function onWindowKeydown(event: KeyboardEvent) {
-  const isEscape = event.key === 'Escape' || event.key === 'Esc' || event.code === 'Escape'
-  if (isEscape && wikilinkRewritePrompt.value) {
-    event.preventDefault()
-    event.stopPropagation()
-    resolveWikilinkRewritePrompt(false)
-    return
-  }
-  if (isEscape && newFileModalVisible.value) {
-    event.preventDefault()
-    event.stopPropagation()
-    closeNewFileModal()
-    return
-  }
-  if (isEscape && newFolderModalVisible.value) {
-    event.preventDefault()
-    event.stopPropagation()
-    closeNewFolderModal()
-    return
-  }
-  if (isEscape && openDateModalVisible.value) {
-    event.preventDefault()
-    event.stopPropagation()
-    closeOpenDateModal()
-    return
-  }
-  if (isEscape && settingsModalVisible.value) {
-    event.preventDefault()
-    event.stopPropagation()
-    closeSettingsModal()
-    return
-  }
-  if (isEscape && designSystemDebugVisible.value) {
-    event.preventDefault()
-    event.stopPropagation()
-    closeDesignSystemDebugModal()
-    return
-  }
-  if (isEscape && aboutModalVisible.value) {
-    event.preventDefault()
-    event.stopPropagation()
-    closeAboutModal()
-    return
-  }
-  if (isEscape && shortcutsModalVisible.value) {
-    event.preventDefault()
-    event.stopPropagation()
-    closeShortcutsModal()
-    return
-  }
-  if (isEscape && workspaceSetupWizardVisible.value) {
-    event.preventDefault()
-    event.stopPropagation()
-    closeWorkspaceSetupWizard()
-    return
-  }
-  if (isEscape && indexStatusModalVisible.value) {
-    event.preventDefault()
-    event.stopPropagation()
-    closeIndexStatusModal()
-    return
-  }
-  if (isEscape && cosmosCommandLoadingVisible.value) {
-    event.preventDefault()
-    event.stopPropagation()
-    return
-  }
-  if (quickOpenVisible.value) {
-    if (event.key === 'ArrowDown') {
-      event.preventDefault()
-      event.stopPropagation()
-      moveQuickOpenSelection(1)
-      return
-    }
-    if (event.key === 'ArrowUp') {
-      event.preventDefault()
-      event.stopPropagation()
-      moveQuickOpenSelection(-1)
-      return
-    }
-    if (event.key === 'Enter') {
-      event.preventDefault()
-      event.stopPropagation()
-      onQuickOpenEnter()
-      return
-    }
-  }
-
-  if (isEscape) {
-    if (historyMenuOpen.value) {
-      event.preventDefault()
-      event.stopPropagation()
-      closeHistoryMenu()
-      return
-    }
-    if (overflowMenuOpen.value) {
-      event.preventDefault()
-      event.stopPropagation()
-      closeOverflowMenu()
-      return
-    }
-    if (quickOpenVisible.value) {
-      event.preventDefault()
-      event.stopPropagation()
-      closeQuickOpen()
-      return
-    }
-  }
-
-  if (trapTabWithinActiveModal(event)) {
-    event.stopPropagation()
-    return
-  }
-
-  const key = event.key.toLowerCase()
-  const isMod = event.metaKey || event.ctrlKey
-  const isBackHistoryShortcut = isMacOs
-    ? isMod && !event.altKey && !event.shiftKey && key === '['
-    : event.altKey && !event.metaKey && !event.ctrlKey && !event.shiftKey && key === 'arrowleft'
-  const isForwardHistoryShortcut = isMacOs
-    ? isMod && !event.altKey && !event.shiftKey && key === ']'
-    : event.altKey && !event.metaKey && !event.ctrlKey && !event.shiftKey && key === 'arrowright'
-
-  if (isMod && key === 'w') {
-    event.preventDefault()
-    const paneId = multiPane.layout.value.activePaneId
-    const pane = multiPane.layout.value.panesById[paneId]
-    const tab = pane?.openTabs.find((item) => item.id === pane.activeTabId)
-    if (tab) {
-      multiPane.closeTabInPane(paneId, tab.id)
-      if (tab.type === 'document') {
-        editorState.clearStatus(tab.path)
-      }
-    }
-    return
-  }
-
-  if (hasBlockingModalOpen()) return
-
-  if (shouldBlockGlobalShortcutsFromTarget(event.target)) return
-
-  if (isBackHistoryShortcut) {
-    event.preventDefault()
-    void goBackInHistory()
-    return
-  }
-
-  if (isForwardHistoryShortcut) {
-    event.preventDefault()
-    void goForwardInHistory()
-    return
-  }
-
-  if (!isMod) return
-
-  if (key === 'p' && !event.shiftKey) {
-    event.preventDefault()
-    void openQuickOpen()
-    return
-  }
-
-  if (key === 'p' && event.shiftKey) {
-    event.preventDefault()
-    openCommandPalette()
-    return
-  }
-
-  if (key === 'd') {
-    event.preventDefault()
-    void openTodayNote()
-    return
-  }
-
-  if (key === 'h' && event.shiftKey) {
-    event.preventDefault()
-    void openHomeViewFromPalette()
-    return
-  }
-
-  if (key === '\\' && !event.shiftKey) {
-    event.preventDefault()
-    void splitPaneFromPalette('row')
-    return
-  }
-
-  if (key === '\\' && event.shiftKey) {
-    event.preventDefault()
-    void splitPaneFromPalette('column')
-    return
-  }
-
-  if (key >= '1' && key <= '4') {
-    event.preventDefault()
-    const index = Number.parseInt(key, 10)
-    void focusPaneFromPalette(index)
-    return
-  }
-
-  if (event.altKey && event.shiftKey && key === 'arrowright') {
-    event.preventDefault()
-    void multiPane.moveActiveTabToAdjacentPane('next')
-    return
-  }
-
-  if (event.altKey && event.shiftKey && key === 'arrowleft') {
-    event.preventDefault()
-    void multiPane.moveActiveTabToAdjacentPane('previous')
-    return
-  }
-
-  if (key === 'tab') {
-    event.preventDefault()
-    void openNextTabWithAutosave()
-    return
-  }
-
-  if (key === 'f' && event.shiftKey) {
-    event.preventDefault()
-    openSearchPanel()
-    return
-  }
-
-  if (key === 'e') {
-    event.preventDefault()
-    void showExplorerForActiveFile({ focusTree: true })
-    return
-  }
-
-  if (key === 'b') {
-    if (hasActiveTextSelectionInEditor(event.target)) {
-      return
-    }
-    event.preventDefault()
-    workspace.toggleSidebar()
-    return
-  }
-
-  if (key === 'j') {
-    event.preventDefault()
-    workspace.toggleRightPane()
-    return
-  }
-
-  if (key === 's') {
-    event.preventDefault()
-    void saveActiveTab()
-    return
-  }
-
-  if (key === 'k') {
-    event.preventDefault()
-    openCommandPalette()
-  }
-}
-
 watch(themePreference, () => {
   persistThemePreference()
   applyTheme()
@@ -3317,7 +3133,6 @@ onMounted(() => {
   editorZoom.value = readStoredEditorZoom()
   installOpenDebugLongTaskObserver()
   mediaQuery?.addEventListener('change', onSystemThemeChanged)
-  window.addEventListener('keydown', onWindowKeydown, true)
   window.addEventListener('mousedown', onGlobalPointerDown, true)
   window.addEventListener('resize', onWindowResize)
   window.addEventListener('mousemove', onPointerMove)
@@ -3353,8 +3168,8 @@ onBeforeUnmount(() => {
   disposeShellSearch()
   disposeShellLaunchpad()
   disposeHistoryUi()
+  keyboard.dispose()
   mediaQuery?.removeEventListener('change', onSystemThemeChanged)
-  window.removeEventListener('keydown', onWindowKeydown, true)
   window.removeEventListener('mousedown', onGlobalPointerDown, true)
   window.removeEventListener('resize', onWindowResize)
   window.removeEventListener('mousemove', onPointerMove)
