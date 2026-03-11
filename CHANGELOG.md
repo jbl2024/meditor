@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.16.7] - 2026-03-11
+
+### Added
+- feat(app): add about modal to global overflow menu (3764a58)
+
 ## [0.16.6] - 2026-03-11
 
 ### Changed
