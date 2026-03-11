@@ -1,0 +1,14 @@
+/* Typography sources and Tailwind font-family aliases.
+ *
+ * Keep this file limited to font loading and family registration so theme work
+ * can evolve independently from token maintenance.
+ */
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap");
+
+@theme {
+  /* Application UI and editor default families. */
+  --font-sans: "Geist", "Noto Sans", "DejaVu Sans", sans-serif;
+
+  /* Monospace family used for code, status bars, and technical UI. */
+  --font-mono: "JetBrains Mono", "Iosevka", "DejaVu Sans Mono", monospace;
+}
