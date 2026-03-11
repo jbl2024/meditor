@@ -526,7 +526,14 @@ defineExpose({
                 @mousedown.stop
                 @click.stop.prevent="toggleBlockMenu"
               >
-                ⋮⋮
+                <span class="tomosona-block-grip-icon" aria-hidden="true">
+                  <span class="tomosona-block-grip-dot"></span>
+                  <span class="tomosona-block-grip-dot"></span>
+                  <span class="tomosona-block-grip-dot"></span>
+                  <span class="tomosona-block-grip-dot"></span>
+                  <span class="tomosona-block-grip-dot"></span>
+                  <span class="tomosona-block-grip-dot"></span>
+                </span>
               </button>
             </div>
           </DragHandleVue3>

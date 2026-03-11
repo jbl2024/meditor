@@ -449,7 +449,26 @@
 }
 
 .editor-holder .tomosona-block-grip-btn {
-  letter-spacing: -0.1rem;
+  padding: 0;
+}
+
+.editor-holder .tomosona-block-grip-icon {
+  display: grid;
+  grid-template-columns: repeat(2, 3px);
+  grid-auto-rows: 3px;
+  gap: 2px 4px;
+  align-content: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+}
+
+.editor-holder .tomosona-block-grip-dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.9;
 }
 
 .tomosona-table-trigger {
