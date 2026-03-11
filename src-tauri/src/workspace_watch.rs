@@ -95,7 +95,9 @@ fn path_parent(path: &str) -> Option<String> {
 }
 
 fn skip_file_name(file_name: &str) -> bool {
-    file_name == DB_FILE_NAME || file_name.starts_with("tomosona.sqlite-")
+    file_name == DB_FILE_NAME
+        || file_name.starts_with("tomosona.sqlite-")
+        || (file_name.starts_with('.') && file_name != "." && file_name != "..")
 }
 
 fn should_skip_path(path: &Path) -> bool {
@@ -604,6 +606,23 @@ mod tests {
             &root_norm,
             matcher.as_ref(),
             test_event(EventKind::Create(CreateKind::Any), vec![ignored]),
+        );
+
+        assert!(changes.is_empty());
+    }
+
+    #[test]
+    fn hidden_files_filter_watcher_events() {
+        let (root, root_norm) = mk_root();
+        let hidden = root.join(".DS_Store");
+        fs::write(&hidden, "x").expect("write hidden file");
+
+        let changes = map_notify_event_to_changes_with_options(
+            &root,
+            &root_norm,
+            None,
+            None,
+            test_event(EventKind::Modify(ModifyKind::Any), vec![hidden]),
         );
 
         assert!(changes.is_empty());

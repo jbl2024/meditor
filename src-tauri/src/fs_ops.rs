@@ -66,7 +66,9 @@ fn should_skip_file(path: &Path) -> bool {
         return false;
     };
 
-    file_name == DB_FILE_NAME || file_name.starts_with("tomosona.sqlite-")
+    file_name == DB_FILE_NAME
+        || file_name.starts_with("tomosona.sqlite-")
+        || (file_name.starts_with('.') && file_name != "." && file_name != "..")
 }
 
 fn should_skip_dir_name(name: &str) -> bool {
@@ -74,17 +76,14 @@ fn should_skip_dir_name(name: &str) -> bool {
 }
 
 #[cfg(windows)]
-fn is_windows_hidden_dir(path: &Path) -> bool {
-    if !path.is_dir() {
-        return false;
-    }
+fn is_windows_hidden(path: &Path) -> bool {
     fs::metadata(path)
         .map(|metadata| metadata.file_attributes() & FILE_ATTRIBUTE_HIDDEN != 0)
         .unwrap_or(false)
 }
 
 #[cfg(not(windows))]
-fn is_windows_hidden_dir(_path: &Path) -> bool {
+fn is_windows_hidden(_path: &Path) -> bool {
     false
 }
 
@@ -140,7 +139,7 @@ fn should_skip_dir(root: &Path, matcher: Option<&Gitignore>, path: &Path) -> boo
         if path.is_dir() && name.starts_with('.') && name != "." && name != ".." {
             return true;
         }
-        if is_windows_hidden_dir(path) {
+        if is_windows_hidden(path) {
             return true;
         }
     }
@@ -149,7 +148,7 @@ fn should_skip_dir(root: &Path, matcher: Option<&Gitignore>, path: &Path) -> boo
 }
 
 fn should_skip_non_dir_file(root: &Path, matcher: Option<&Gitignore>, path: &Path) -> bool {
-    if should_skip_file(path) {
+    if should_skip_file(path) || is_windows_hidden(path) {
         return true;
     }
 
@@ -1012,14 +1011,21 @@ mod tests {
 
         let tree = list_children(root.to_string_lossy().to_string()).expect("list tree");
         let names: Vec<String> = tree.into_iter().map(|node| node.name).collect();
-        assert_eq!(
-            names,
-            vec![
-                ".gitignore".to_string(),
-                ".tomosonaignore".to_string(),
-                "visible.md".to_string()
-            ]
-        );
+        assert_eq!(names, vec!["visible.md".to_string()]);
+        fs::remove_dir_all(dir).expect("cleanup");
+    }
+
+    #[test]
+    fn list_tree_excludes_hidden_files() {
+        let dir = make_temp_dir();
+        let _guard = activate_workspace(&dir);
+        let root = dir.as_path();
+        fs::write(root.join(".DS_Store"), "x").expect("write hidden file");
+        fs::write(root.join("visible.md"), "x").expect("write visible");
+
+        let tree = list_children(root.to_string_lossy().to_string()).expect("list tree");
+        let names: Vec<String> = tree.into_iter().map(|node| node.name).collect();
+        assert_eq!(names, vec!["visible.md".to_string()]);
         fs::remove_dir_all(dir).expect("cleanup");
     }
 
