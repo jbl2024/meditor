@@ -18,6 +18,15 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.17.1] - 2026-03-12
+
+### Changed
+- test(app): harden shell flow integration coverage (454c8b9)
+- docs(app): add targeted structure comments to App shell composer (b23b2d2)
+
+### Fixed
+- fix(editor): avoid zero-height autosize in quote and callout blocks (c977d3e)
+
 ## [0.17.0] - 2026-03-12
 
 ### Changed
