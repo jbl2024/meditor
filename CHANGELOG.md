@@ -18,6 +18,14 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.18.3] - 2026-03-12
+
+### Added
+- feat(second-brain): add markdown conversation copy action (438e61c)
+
+### Changed
+- style(second-brain): use icon button for conversation copy (4effd3c)
+
 ## [0.18.2] - 2026-03-12
 
 ### Fixed
