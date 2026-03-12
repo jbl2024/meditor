@@ -773,11 +773,11 @@ function shortUpdatedLabel(value: string): string {
   }
 }
 
-html[data-theme='light'] .launchpad-quick-panel {
+html[data-color-scheme='light'] .launchpad-quick-panel {
   background: color-mix(in srgb, var(--surface-muted) 92%, var(--surface-subtle));
 }
 
-html[data-theme='dark'] .launchpad-quick-panel,
+html[data-color-scheme='dark'] .launchpad-quick-panel,
 html.dark .launchpad-quick-panel {
   background: color-mix(in srgb, var(--panel-bg) 96%, var(--surface-bg));
 }

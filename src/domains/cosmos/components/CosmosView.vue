@@ -142,12 +142,12 @@ function hexToRgba(hex: string, alpha: number): string {
 }
 
 function isDarkTheme(): boolean {
-  return themeName() === 'dark'
+  return themeColorScheme() === 'dark'
 }
 
-function themeName(): 'light' | 'dark' {
+function themeColorScheme(): 'light' | 'dark' {
   const root = document.documentElement
-  return root.dataset.theme === 'dark' || root.classList.contains('dark') ? 'dark' : 'light'
+  return root.dataset.colorScheme === 'dark' || root.classList.contains('dark') ? 'dark' : 'light'
 }
 
 function readThemeVar(name: string, fallback: string): string {
@@ -652,7 +652,10 @@ function setupResizeObserver() {
 function setupThemeObserver() {
   themeObserver = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
-      if (mutation.type === 'attributes' && (mutation.attributeName === 'class' || mutation.attributeName === 'data-theme')) {
+      if (
+        mutation.type === 'attributes' &&
+        (mutation.attributeName === 'class' || mutation.attributeName === 'data-theme' || mutation.attributeName === 'data-color-scheme')
+      ) {
         applyThemeBackground()
         return
       }
@@ -661,7 +664,7 @@ function setupThemeObserver() {
 
   themeObserver.observe(document.documentElement, {
     attributes: true,
-    attributeFilter: ['class', 'data-theme']
+    attributeFilter: ['class', 'data-theme', 'data-color-scheme']
   })
 }
 

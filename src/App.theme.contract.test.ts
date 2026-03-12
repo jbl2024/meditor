@@ -18,12 +18,12 @@ describe('App theme contracts', () => {
     expect(editorViewSource).toContain('var(--text-dim)')
     expect(editorViewSource).not.toContain('dark:bg')
 
-    expect(rightPaneSource).toContain('var(--surface-raised)')
-    expect(rightPaneSource).toContain('var(--text-main)')
+    expect(rightPaneSource).toContain('var(--right-pane-card-bg)')
+    expect(rightPaneSource).toContain('var(--right-pane-text)')
     expect(rightPaneSource).not.toContain('.ide-root.dark .pane-card')
 
     expect(overflowMenuSource).toContain('UiMenu')
-    expect(overflowMenuSource).toContain("data-active")
+    expect(overflowMenuSource).toContain('Theme picker')
     expect(overflowMenuSource).not.toContain(':global(.ide-root.dark)')
 
     expect(multiPaneMenuSource).toContain('UiMenu')

@@ -5,6 +5,7 @@ import { useAppShellKeyboard } from './useAppShellKeyboard'
 function createKeyboard() {
   const state = {
     quickOpenVisible: ref(false),
+    themePickerVisible: ref(false),
     historyMenuOpen: ref<null | 'back' | 'forward'>(null),
     overflowMenuOpen: ref(false),
     wikilinkRewriteVisible: ref(false),
@@ -36,8 +37,11 @@ function createKeyboard() {
     closeShortcutsModal: vi.fn(),
     closeWorkspaceSetupWizard: vi.fn(),
     closeIndexStatusModal: vi.fn(),
+    closeThemePickerModal: vi.fn(),
     moveQuickOpenSelection: vi.fn(),
     onQuickOpenEnter: vi.fn(),
+    moveThemePickerSelection: vi.fn(),
+    onThemePickerEnter: vi.fn(),
     closeHistoryMenu: vi.fn(),
     closeOverflowMenu: vi.fn(),
     closeQuickOpen: vi.fn(),
@@ -104,6 +108,20 @@ describe('useAppShellKeyboard', () => {
     expect(actions.moveQuickOpenSelection).toHaveBeenNthCalledWith(1, 1)
     expect(actions.moveQuickOpenSelection).toHaveBeenNthCalledWith(2, -1)
     expect(actions.onQuickOpenEnter).toHaveBeenCalledTimes(1)
+    scope.stop()
+  })
+
+  it('navigates the theme picker with arrows and Enter while the modal is open', () => {
+    const { scope, state, actions } = createKeyboard()
+    state.themePickerVisible.value = true
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }))
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true }))
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+
+    expect(actions.moveThemePickerSelection).toHaveBeenNthCalledWith(1, 1)
+    expect(actions.moveThemePickerSelection).toHaveBeenNthCalledWith(2, -1)
+    expect(actions.onThemePickerEnter).toHaveBeenCalledTimes(1)
     scope.stop()
   })
 

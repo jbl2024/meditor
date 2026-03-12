@@ -5,6 +5,7 @@ import EditorRightPane from '../domains/editor/components/EditorRightPane.vue'
 import SidebarSurface from './components/app/SidebarSurface.vue'
 import IndexStatusModal from './components/app/IndexStatusModal.vue'
 import QuickOpenModal from './components/app/QuickOpenModal.vue'
+import ThemePickerModal from './components/app/ThemePickerModal.vue'
 import ShortcutsModal from './components/app/ShortcutsModal.vue'
 import AboutModal from './components/app/AboutModal.vue'
 import TopbarNavigationControls from './components/app/TopbarNavigationControls.vue'
@@ -140,6 +141,12 @@ import {
   type QuickOpenResult
 } from './composables/useAppQuickOpen'
 import { useAppTheme, type ThemePreference } from './composables/useAppTheme'
+import {
+  SYSTEM_DARK_THEME_ID,
+  SYSTEM_LIGHT_THEME_ID,
+  type AppThemeDefinition,
+  type ThemeId
+} from '../shared/lib/themeRegistry'
 import { useAppWorkspaceController } from './composables/useAppWorkspaceController'
 import { useEditorState } from '../domains/editor/composables/useEditorState'
 import { useEchoesDiscoverability } from '../domains/echoes/composables/useEchoesDiscoverability'
@@ -205,6 +212,9 @@ const filesystem = useFilesystemState()
 const documentHistory = useDocumentHistory()
 const {
   themePreference,
+  availableThemes,
+  activeTheme,
+  activeColorScheme,
   applyTheme,
   loadThemePreference,
   persistThemePreference,
@@ -215,6 +225,9 @@ const isMacOs = typeof navigator !== 'undefined' && /(Mac|iPhone|iPad|iPod)/i.te
 const quickOpenVisible = ref(false)
 const quickOpenQuery = ref('')
 const quickOpenActiveIndex = ref(0)
+const themePickerVisible = ref(false)
+const themePickerQuery = ref('')
+const themePickerActiveIndex = ref(0)
 const leftPaneWidth = ref(290)
 const rightPaneWidth = ref(300)
 const editorRef = ref<EditorViewExposed | null>(null)
@@ -484,6 +497,7 @@ const {
 } = indexing
 const modalController = useAppModalController({
   quickOpenVisible,
+  themePickerVisible,
   cosmosCommandLoadingVisible,
   indexStatusModalVisible,
   newFileModalVisible,
@@ -570,6 +584,52 @@ const searchModeOptions: Array<{ mode: SearchMode; label: string }> = [
   { mode: 'lexical', label: 'Lexical' }
 ]
 
+type ThemePickerItem =
+  | {
+      kind: 'system'
+      id: 'system'
+      label: string
+      meta: string
+      previewThemeIds: ThemeId[]
+    }
+  | {
+      kind: 'theme'
+      id: ThemeId
+      label: string
+      meta: string
+      colorScheme: AppThemeDefinition['colorScheme']
+      group: AppThemeDefinition['group']
+    }
+
+const systemThemeLabel = computed(() => {
+  return activeColorScheme.value === 'dark' ? 'System (Tomosona Dark)' : 'System (Tomosona Light)'
+})
+
+const themePickerItems = computed<ThemePickerItem[]>(() => {
+  const q = themePickerQuery.value.trim().toLowerCase()
+  const items: ThemePickerItem[] = [
+    {
+      kind: 'system',
+      id: 'system',
+      label: 'System',
+      meta: systemThemeLabel.value,
+      previewThemeIds: [SYSTEM_LIGHT_THEME_ID, SYSTEM_DARK_THEME_ID]
+    },
+    ...availableThemes.map((theme) => ({
+      kind: 'theme' as const,
+      id: theme.id,
+      label: theme.label,
+      meta: `${theme.group === 'official' ? 'Official' : 'Included'} • ${theme.colorScheme === 'dark' ? 'Dark' : 'Light'}`,
+      colorScheme: theme.colorScheme,
+      group: theme.group
+    }))
+  ]
+  if (!q) return items
+  return items.filter((item) => `${item.label} ${item.meta}`.toLowerCase().includes(q))
+})
+
+const themePickerItemCount = computed(() => themePickerItems.value.length)
+
 // Palette ranking is explicit so command ordering stays stable as shell
 // commands evolve and new actions are added over time.
 const paletteActionPriority: Record<string, number> = {
@@ -607,10 +667,15 @@ const paletteActionPriority: Record<string, number> = {
   'zoom-in': 31,
   'zoom-out': 32,
   'zoom-reset': 33,
-  'theme-light': 34,
-  'theme-dark': 35,
-  'theme-system': 36,
-  'close-workspace': 37
+  'theme-select': 34,
+  'theme-system': 35,
+  'theme-tomosona-light': 36,
+  'theme-tomosona-dark': 37,
+  'theme-github-light': 38,
+  'theme-tokyo-night': 39,
+  'theme-catppuccin-latte': 40,
+  'theme-catppuccin-mocha': 41,
+  'close-workspace': 42
 }
 
 const paletteActions = computed<PaletteAction[]>(() => [
@@ -681,9 +746,13 @@ const paletteActions = computed<PaletteAction[]>(() => [
   { id: 'zoom-in', label: 'Zoom In (Editor)', run: () => zoomInFromPalette() },
   { id: 'zoom-out', label: 'Zoom Out (Editor)', run: () => zoomOutFromPalette() },
   { id: 'zoom-reset', label: 'Reset Zoom (Editor)', run: () => resetZoomFromPalette() },
-  { id: 'theme-light', label: 'Theme: Light', run: () => setThemeFromPalette('light') },
-  { id: 'theme-dark', label: 'Theme: Dark', run: () => setThemeFromPalette('dark') },
+  { id: 'theme-select', label: 'Theme: Select Theme…', run: () => openThemePickerFromPalette() },
   { id: 'theme-system', label: 'Theme: System', run: () => setThemeFromPalette('system') },
+  ...availableThemes.map((theme) => ({
+    id: `theme-${theme.id}`,
+    label: `Theme: ${theme.label}`,
+    run: () => setThemeFromPalette(theme.id)
+  })),
   { id: 'open-today', label: 'Open Today', run: () => openTodayNote() },
   { id: 'open-yesterday', label: 'Open Yesterday', run: () => openYesterdayNote() },
   { id: 'open-specific-date', label: 'Open Specific Date', run: () => openSpecificDateNote() },
@@ -1579,6 +1648,7 @@ const keyboard = useAppShellKeyboard({
   statePort: {
     quickOpenVisible,
     quickOpenIsActionMode,
+    themePickerVisible,
     historyMenuOpen,
     overflowMenuOpen,
     wikilinkRewriteVisible: computed(() => Boolean(wikilinkRewritePrompt.value)),
@@ -1610,8 +1680,11 @@ const keyboard = useAppShellKeyboard({
     closeShortcutsModal,
     closeWorkspaceSetupWizard,
     closeIndexStatusModal,
+    closeThemePickerModal,
     moveQuickOpenSelection,
     onQuickOpenEnter,
+    moveThemePickerSelection,
+    onThemePickerEnter,
     closeHistoryMenu,
     closeOverflowMenu,
     closeQuickOpen,
@@ -1673,13 +1746,84 @@ function onHistoryTargetClick(targetIndex: number) {
   })()
 }
 
-function setThemeFromOverflow(next: ThemePreference) {
+function moveThemePickerSelection(delta: number) {
+  const count = themePickerItemCount.value
+  if (!count) return
+  themePickerActiveIndex.value = (themePickerActiveIndex.value + delta + count) % count
+}
+
+function syncThemePickerActiveIndex() {
+  if (themePickerItemCount.value <= 0) {
+    themePickerActiveIndex.value = 0
+    return
+  }
+  if (themePickerActiveIndex.value < 0 || themePickerActiveIndex.value >= themePickerItemCount.value) {
+    themePickerActiveIndex.value = 0
+  }
+}
+
+function focusThemePickerInput() {
+  document.querySelector<HTMLInputElement>('[data-theme-picker-input="true"]')?.focus()
+}
+
+function scrollThemePickerActiveItemIntoView() {
+  if (!themePickerVisible.value) return
+  void nextTick(() => {
+    const modalList = document.querySelector<HTMLElement>('[data-modal="theme-picker"] .modal-list')
+    if (!modalList) return
+    const activeItem = modalList.querySelector<HTMLElement>('.modal-item.active')
+    activeItem?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'auto' })
+  })
+}
+
+async function openThemePickerModal() {
+  rememberFocusBeforeModalOpen()
+  themePickerVisible.value = true
+  themePickerQuery.value = ''
+  themePickerActiveIndex.value = 0
+  await nextTick()
+  focusThemePickerInput()
+}
+
+function closeThemePickerModal() {
+  themePickerVisible.value = false
+  themePickerQuery.value = ''
+  themePickerActiveIndex.value = 0
+  void nextTick(() => {
+    restoreFocusAfterModalClose()
+  })
+}
+
+function applyThemePreference(next: ThemePreference) {
   themePreference.value = next
+}
+
+function selectThemeFromModal(next: ThemePreference) {
+  applyThemePreference(next)
+  closeThemePickerModal()
+}
+
+function onThemePickerEnter() {
+  const item = themePickerItems.value[themePickerActiveIndex.value]
+  if (!item) return
+  selectThemeFromModal(item.id)
+}
+
+function openThemePickerFromOverflow() {
   closeOverflowMenu()
+  void openThemePickerModal()
+}
+
+function openThemePickerFromPalette() {
+  if (quickOpenVisible.value) {
+    closeQuickOpen(false)
+  }
+  void openThemePickerModal()
+  return true
 }
 
 function setThemeFromPalette(next: ThemePreference) {
-  themePreference.value = next
+  applyThemePreference(next)
   return true
 }
 
@@ -2489,6 +2633,7 @@ async function runQuickOpenAction(id: string) {
         !settingsModalVisible.value &&
         !designSystemDebugVisible.value &&
         !shortcutsModalVisible.value &&
+        !themePickerVisible.value &&
         !workspaceSetupWizardVisible.value &&
         !cosmosCommandLoadingVisible.value
       ) {
@@ -2574,6 +2719,36 @@ function onQuickOpenInputKeydown(event: KeyboardEvent) {
   }
 }
 
+function onThemePickerInputKeydown(event: KeyboardEvent) {
+  if (event.metaKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+    event.stopPropagation()
+    return
+  }
+  if (event.key === 'ArrowDown') {
+    event.preventDefault()
+    event.stopPropagation()
+    moveThemePickerSelection(1)
+    return
+  }
+  if (event.key === 'ArrowUp') {
+    event.preventDefault()
+    event.stopPropagation()
+    moveThemePickerSelection(-1)
+    return
+  }
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    event.stopPropagation()
+    onThemePickerEnter()
+    return
+  }
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    event.stopPropagation()
+    closeThemePickerModal()
+  }
+}
+
 function onOpenDateInputKeydown(event: KeyboardEvent) {
   if (event.metaKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
     event.stopPropagation()
@@ -2637,6 +2812,21 @@ async function saveActiveTab() {
 watch(themePreference, () => {
   persistThemePreference()
   applyTheme()
+})
+
+watch(themePickerQuery, () => {
+  themePickerActiveIndex.value = 0
+})
+
+watch(themePickerActiveIndex, () => {
+  syncThemePickerActiveIndex()
+  scrollThemePickerActiveItemIntoView()
+})
+
+watch(themePickerVisible, (visible) => {
+  if (!visible) return
+  syncThemePickerActiveIndex()
+  scrollThemePickerActiveItemIntoView()
 })
 
 watch(
@@ -2758,7 +2948,7 @@ onBeforeUnmount(() => {
       :overflow-menu-open="overflowMenuOpen"
       :indexing-state="filesystem.indexingState.value"
       :zoom-percent-label="zoomPercentLabel"
-      :theme-preference="themePreference"
+      :active-theme-label="themePreference === 'system' ? systemThemeLabel : activeTheme.label"
       :show-debug-tools="showDebugTools"
       @history-button-click="onHistoryButtonClick"
       @history-button-context-menu="onHistoryButtonContextMenu"
@@ -2789,7 +2979,7 @@ onBeforeUnmount(() => {
       @zoom-in="zoomInFromOverflow"
       @zoom-out="zoomOutFromOverflow"
       @reset-zoom="resetZoomFromOverflow"
-      @set-theme="setThemeFromOverflow"
+      @open-theme-picker="openThemePickerFromOverflow"
     />
 
     <div class="body-row">
@@ -2992,6 +3182,19 @@ onBeforeUnmount(() => {
       @select-action="runQuickOpenAction"
       @select-result="openQuickResult"
       @set-active-index="setQuickOpenActiveIndex"
+    />
+
+    <ThemePickerModal
+      :visible="themePickerVisible"
+      :query="themePickerQuery"
+      :items="themePickerItems"
+      :active-index="themePickerActiveIndex"
+      :selected-preference="themePreference"
+      @close="closeThemePickerModal"
+      @update:query="themePickerQuery = $event"
+      @select="selectThemeFromModal"
+      @keydown="onThemePickerInputKeydown"
+      @set-active-index="themePickerActiveIndex = $event"
     />
 
     <div v-if="cosmosCommandLoadingVisible" class="modal-overlay">

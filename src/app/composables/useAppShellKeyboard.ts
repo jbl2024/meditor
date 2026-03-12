@@ -6,6 +6,7 @@ export type AppShellKeyboardHistoryMenuSide = 'back' | 'forward'
 export type AppShellKeyboardStatePort = {
   quickOpenVisible: Readonly<Ref<boolean>>
   quickOpenIsActionMode: Readonly<Ref<boolean>>
+  themePickerVisible: Readonly<Ref<boolean>>
   historyMenuOpen: Readonly<Ref<AppShellKeyboardHistoryMenuSide | null>>
   overflowMenuOpen: Readonly<Ref<boolean>>
   wikilinkRewriteVisible: Readonly<Ref<boolean>>
@@ -41,8 +42,11 @@ export type AppShellKeyboardActionsPort = {
   closeShortcutsModal: () => void
   closeWorkspaceSetupWizard: () => void
   closeIndexStatusModal: () => void
+  closeThemePickerModal: () => void
   moveQuickOpenSelection: (delta: number) => void
   onQuickOpenEnter: () => void
+  moveThemePickerSelection: (delta: number) => void
+  onThemePickerEnter: () => void
   closeHistoryMenu: () => void
   closeOverflowMenu: () => void
   closeQuickOpen: () => void
@@ -146,6 +150,11 @@ export function useAppShellKeyboard(options: UseAppShellKeyboardOptions) {
       options.actionsPort.closeIndexStatusModal()
       return true
     }
+    if (options.statePort.themePickerVisible.value) {
+      consume(event)
+      options.actionsPort.closeThemePickerModal()
+      return true
+    }
     if (options.statePort.cosmosCommandLoadingVisible.value) {
       consume(event)
       return true
@@ -192,9 +201,32 @@ export function useAppShellKeyboard(options: UseAppShellKeyboardOptions) {
     return false
   }
 
+  function handleThemePickerNavigation(event: KeyboardEvent): boolean {
+    if (!options.statePort.themePickerVisible.value) return false
+
+    if (event.key === 'ArrowDown') {
+      consume(event)
+      options.actionsPort.moveThemePickerSelection(1)
+      return true
+    }
+    if (event.key === 'ArrowUp') {
+      consume(event)
+      options.actionsPort.moveThemePickerSelection(-1)
+      return true
+    }
+    if (event.key === 'Enter') {
+      consume(event)
+      options.actionsPort.onThemePickerEnter()
+      return true
+    }
+
+    return false
+  }
+
   function onWindowKeydown(event: KeyboardEvent) {
     if (handleEscape(event)) return
     if (handleQuickOpenNavigation(event)) return
+    if (handleThemePickerNavigation(event)) return
 
     if (options.guardsPort.trapTabWithinActiveModal(event)) {
       event.stopPropagation()

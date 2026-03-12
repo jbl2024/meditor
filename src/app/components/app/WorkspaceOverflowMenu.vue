@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { Bars3Icon, BeakerIcon, Cog8ToothIcon, CommandLineIcon, ComputerDesktopIcon, InformationCircleIcon, MoonIcon, SunIcon } from '@heroicons/vue/24/outline'
+import { Bars3Icon, BeakerIcon, Cog8ToothIcon, CommandLineIcon, InformationCircleIcon, SwatchIcon } from '@heroicons/vue/24/outline'
 import { computed, ref } from 'vue'
-import type { ThemePreference } from '../../composables/useAppTheme'
 import UiIconButton from '../../../shared/components/ui/UiIconButton.vue'
 import UiMenu from '../../../shared/components/ui/UiMenu.vue'
 import UiMenuList from '../../../shared/components/ui/UiMenuList.vue'
@@ -21,7 +20,7 @@ const props = defineProps<{
   hasWorkspace: boolean
   indexingState: 'idle' | 'indexing' | 'indexed' | 'out_of_sync'
   zoomPercentLabel: string
-  themePreference: ThemePreference
+  activeThemeLabel: string
   showDebugTools?: boolean
 }>()
 
@@ -38,7 +37,7 @@ const emit = defineEmits<{
   zoomIn: []
   zoomOut: []
   resetZoom: []
-  setTheme: [value: ThemePreference]
+  openThemePicker: []
 }>()
 
 const wrapRef = ref<HTMLElement | null>(null)
@@ -131,31 +130,13 @@ defineExpose({
       <button
         type="button"
         class="ui-menu-item overflow-item"
-        :data-active="themePreference === 'light'"
-        @click="emit('setTheme', 'light')"
+        @click="emit('openThemePicker')"
       >
-        <SunIcon class="overflow-item-icon" />
-        Light
-      </button>
-      <button
-        type="button"
-        class="ui-menu-item overflow-item"
-        :data-active="themePreference === 'dark'"
-        @click="emit('setTheme', 'dark')"
-      >
-        <MoonIcon class="overflow-item-icon" />
-        Dark
-      </button>
-      <button
-        type="button"
-        class="ui-menu-item overflow-item"
-        :data-active="themePreference === 'system'"
-        @click="emit('setTheme', 'system')"
-      >
-        <ComputerDesktopIcon class="overflow-item-icon" />
-        System
+        <SwatchIcon class="overflow-item-icon" />
+        Theme picker
       </button>
       </UiMenuList>
+      <div class="overflow-zoom-state">Current theme: {{ activeThemeLabel }}</div>
     </UiMenu>
   </div>
 </template>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import appSource from '../../App.vue?raw'
 import quickOpenSource from './QuickOpenModal.vue?raw'
+import themePickerSource from './ThemePickerModal.vue?raw'
 import settingsSource from '../settings/SettingsModal.vue?raw'
 import indexStatusSource from './IndexStatusModal.vue?raw'
 
@@ -14,9 +15,13 @@ describe('App modal theme contracts', () => {
   })
 
   it('routes modal-specific surfaces through token-based styles', () => {
-    expect(quickOpenSource).toContain('var(--modal-chip-bg)')
-    expect(quickOpenSource).toContain('var(--modal-chip-active-bg)')
+    expect(quickOpenSource).toContain('var(--command-palette-item-bg)')
+    expect(quickOpenSource).toContain('var(--command-palette-item-active-bg)')
     expect(quickOpenSource).not.toContain(':global(.ide-root.dark)')
+
+    expect(themePickerSource).toContain('var(--command-palette-item-bg)')
+    expect(themePickerSource).toContain('var(--accent)')
+    expect(themePickerSource).not.toContain(':global(.ide-root.dark)')
 
     expect(settingsSource).toContain('var(--panel-border)')
     expect(settingsSource).toContain('var(--surface-bg)')

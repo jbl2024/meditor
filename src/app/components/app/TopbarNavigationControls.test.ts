@@ -28,7 +28,7 @@ function mountHarness() {
           overflowMenuOpen: false,
           indexingState: 'indexed',
           zoomPercentLabel: '100%',
-          themePreference: 'system',
+          activeThemeLabel: 'System (Tomosona Light)',
           onHistoryButtonClick: (side: 'back' | 'forward') => events.push(`history:${side}`),
           onHistoryTargetClick: (index: number) => events.push(`target:${index}`),
           onOpenToday: () => events.push('home'),
@@ -57,7 +57,7 @@ function mountHarness() {
           onZoomIn: () => {},
           onZoomOut: () => {},
           onResetZoom: () => {},
-          onSetTheme: () => {}
+          onOpenThemePicker: () => {}
         })
     }
   }))

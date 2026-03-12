@@ -1,0 +1,41 @@
+html[data-theme='catppuccin-latte'] {
+  color-scheme: light;
+
+  --color-surface-0: #eff1f5;
+  --color-surface-1: #ffffff;
+  --color-surface-2: #e6e9ef;
+  --color-surface-3: #ffffff;
+  --color-surface-4: #edf1f7;
+  --color-overlay-1: rgba(239, 241, 245, 0.94);
+  --color-overlay-2: rgba(255, 255, 255, 0.98);
+  --color-border-1: #ccd0da;
+  --color-border-2: #bcc0cc;
+  --color-border-3: #9ca0b0;
+  --color-text-1: #4c4f69;
+  --color-text-2: #5c5f77;
+  --color-text-3: #6c6f85;
+  --color-text-4: #8c8fa1;
+  --color-accent-1: #1e66f5;
+  --color-accent-2: #0d47bf;
+  --color-accent-soft: #dce0ff;
+  --color-accent-focus: rgba(30, 102, 245, 0.16);
+  --color-accent-contrast: #ffffff;
+  --color-danger-1: #d20f39;
+  --color-danger-2: #b80a32;
+  --color-danger-soft: rgba(210, 15, 57, 0.12);
+  --color-success-1: #40a02b;
+  --color-warning-1: #df8e1d;
+  --shadow-panel: 0 0 0 1px rgba(204, 208, 218, 0.92), 0 10px 24px rgba(76, 79, 105, 0.08);
+
+  --explorer-row-hover-bg: #e5e9f6;
+  --explorer-row-selected-bg: #dde3f3;
+  --explorer-row-focused-bg: #e5e9f6;
+  --explorer-row-active-bg: rgba(30, 102, 245, 0.11);
+  --explorer-row-active-text: #1e66f5;
+  --explorer-row-indicator: #1e66f5;
+  --properties-accent: #7287fd;
+  --cosmos-view-bg: linear-gradient(165deg, #ffffff 0%, #eff1f5 100%);
+  --sb-layout-bg: linear-gradient(135deg, #ffffff, #eff1f5 45%, #e0e6fb);
+  --sb-user-bg: #eef1f9;
+  --sb-assistant-bg: #dde4ff;
+}

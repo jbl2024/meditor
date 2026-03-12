@@ -117,7 +117,7 @@ function documentFonts(): FontFaceSetLike | null {
 
 function resolveThemeKey(): 'light' | 'dark' {
   const root = document.documentElement
-  return root.classList.contains('dark') || root.dataset.theme === 'dark' ? 'dark' : 'light'
+  return root.classList.contains('dark') || root.dataset.colorScheme === 'dark' ? 'dark' : 'light'
 }
 
 function buildMermaidConfig(themeKey: 'light' | 'dark') {
@@ -368,7 +368,7 @@ onMounted(() => {
   themeObserver = new MutationObserver(() => {
     void renderPreview()
   })
-  themeObserver.observe(root, { attributes: true, attributeFilter: ['class', 'data-theme'] })
+  themeObserver.observe(root, { attributes: true, attributeFilter: ['class', 'data-theme', 'data-color-scheme'] })
   const fonts = documentFonts()
   if (fonts?.addEventListener) {
     fontsReadyHandler = () => {

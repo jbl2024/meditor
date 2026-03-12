@@ -10,7 +10,6 @@ import {
 import { ref, type CSSProperties } from 'vue'
 import MultiPaneToolbarMenu from '../panes/MultiPaneToolbarMenu.vue'
 import WorkspaceOverflowMenu from './WorkspaceOverflowMenu.vue'
-import type { ThemePreference } from '../../composables/useAppTheme'
 import UiIconButton from '../../../shared/components/ui/UiIconButton.vue'
 import UiMenu from '../../../shared/components/ui/UiMenu.vue'
 import UiMenuList from '../../../shared/components/ui/UiMenuList.vue'
@@ -49,7 +48,7 @@ const props = defineProps<{
   overflowMenuOpen: boolean
   indexingState: 'idle' | 'indexing' | 'indexed' | 'out_of_sync'
   zoomPercentLabel: string
-  themePreference: ThemePreference
+  activeThemeLabel: string
   showDebugTools?: boolean
 }>()
 
@@ -84,7 +83,7 @@ const emit = defineEmits<{
   zoomIn: []
   zoomOut: []
   resetZoom: []
-  setTheme: [value: ThemePreference]
+  openThemePicker: []
 }>()
 
 const backHistoryMenuRef = ref<HTMLElement | null>(null)
@@ -292,11 +291,11 @@ defineExpose({
             :has-workspace="hasWorkspace"
             :indexing-state="indexingState"
             :zoom-percent-label="zoomPercentLabel"
-            :theme-preference="themePreference"
+            :active-theme-label="activeThemeLabel"
             :show-debug-tools="showDebugTools"
-          @toggle="emit('toggleOverflow')"
-          @open-command-palette="emit('openCommandPalette')"
-          @open-shortcuts="emit('openShortcuts')"
+            @toggle="emit('toggleOverflow')"
+            @open-command-palette="emit('openCommandPalette')"
+            @open-shortcuts="emit('openShortcuts')"
           @open-about="emit('openAbout')"
           @open-settings="emit('openSettings')"
           @open-design-system-debug="emit('openDesignSystemDebug')"
@@ -305,7 +304,7 @@ defineExpose({
             @zoom-in="emit('zoomIn')"
             @zoom-out="emit('zoomOut')"
             @reset-zoom="emit('resetZoom')"
-            @set-theme="emit('setTheme', $event)"
+            @open-theme-picker="emit('openThemePicker')"
           />
         </div>
       </div>

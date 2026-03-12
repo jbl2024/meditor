@@ -11,6 +11,7 @@ import type { Ref } from 'vue'
 /** Declares the reactive visibility state consumed by the app modal controller. */
 export type UseAppModalControllerOptions = {
   quickOpenVisible: Readonly<Ref<boolean>>
+  themePickerVisible: Readonly<Ref<boolean>>
   cosmosCommandLoadingVisible: Readonly<Ref<boolean>>
   indexStatusModalVisible: Readonly<Ref<boolean>>
   newFileModalVisible: Readonly<Ref<boolean>>
@@ -56,6 +57,7 @@ export function useAppModalController(options: UseAppModalControllerOptions) {
     if (options.openDateModalVisible.value) return '[data-modal="open-date"]'
     if (options.newFolderModalVisible.value) return '[data-modal="new-folder"]'
     if (options.newFileModalVisible.value) return '[data-modal="new-file"]'
+    if (options.themePickerVisible.value) return '[data-modal="theme-picker"]'
     if (options.quickOpenVisible.value) return '[data-modal="quick-open"]'
     return null
   }

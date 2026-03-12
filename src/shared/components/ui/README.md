@@ -634,7 +634,7 @@ Example:
 ## `UiThemeSwitcher`
 
 Purpose:
-- Small presentational theme preference switcher for `light`, `dark`, and `system`.
+- Legacy presentational theme preference switcher for the original `light`, `dark`, and `system` shell.
 
 Props:
 - `modelValue: 'light' | 'dark' | 'system'`
@@ -643,11 +643,12 @@ Events:
 - `update:modelValue`
 
 Use when:
-- a compact in-app theme switcher is needed
+- maintaining older local demos that still use the fixed three-option switcher
 
 Notes:
 - this component does not persist or resolve theme state on its own
 - parent code remains responsible for applying and storing the chosen preference
+- the app shell now uses a dedicated theme picker modal plus dynamic command-palette theme actions for named themes
 
 Example:
 

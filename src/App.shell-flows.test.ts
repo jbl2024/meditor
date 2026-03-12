@@ -304,6 +304,52 @@ describe('App shell flows', () => {
     mounted.app.unmount()
   })
 
+  it('applies a named theme directly from the command palette', async () => {
+    const mounted = mountApp()
+    await flushUi()
+
+    await runPaletteCommand(mounted.root, '>theme: tokyo night')
+
+    expect(document.documentElement.dataset.theme).toBe('tokyo-night')
+    expect(document.documentElement.dataset.colorScheme).toBe('dark')
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
+
+    mounted.app.unmount()
+  })
+
+  it('opens the theme picker from shell entrypoints and applies a selected theme', async () => {
+    const mounted = mountApp()
+    await flushUi()
+
+    await runPaletteCommand(mounted.root, '>theme: select theme')
+
+    const pickerInput = mounted.root.querySelector<HTMLInputElement>('[data-theme-picker-input="true"]')
+    expect(pickerInput).toBeTruthy()
+    if (!pickerInput) throw new Error('Expected theme picker input')
+
+    pickerInput.value = 'catppuccin mocha'
+    pickerInput.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushUi()
+
+    Array.from(mounted.root.querySelectorAll<HTMLButtonElement>('.theme-picker-item'))
+      .find((item) => item.textContent?.includes('Catppuccin Mocha'))
+      ?.click()
+    await flushUi()
+
+    expect(document.documentElement.dataset.theme).toBe('catppuccin-mocha')
+
+    mounted.root.querySelector<HTMLButtonElement>('button[aria-label="View options"]')?.click()
+    await flushUi()
+    Array.from(mounted.root.querySelectorAll<HTMLButtonElement>('.overflow-item'))
+      .find((item) => item.textContent?.includes('Theme picker'))
+      ?.click()
+    await flushUi()
+
+    expect(mounted.root.querySelector('[data-modal="theme-picker"]')).toBeTruthy()
+
+    mounted.app.unmount()
+  })
+
   it('closes the current workspace from the command palette and clears shell workspace UI', async () => {
     const mounted = mountApp()
     await flushUi()

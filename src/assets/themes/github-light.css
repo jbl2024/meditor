@@ -1,0 +1,43 @@
+html[data-theme='github-light'] {
+  color-scheme: light;
+
+  --color-surface-0: #f6f8fa;
+  --color-surface-1: #ffffff;
+  --color-surface-2: #f3f4f6;
+  --color-surface-3: #ffffff;
+  --color-surface-4: #f6f8fa;
+  --color-overlay-1: rgba(246, 248, 250, 0.94);
+  --color-overlay-2: rgba(255, 255, 255, 0.98);
+  --color-border-1: #d0d7de;
+  --color-border-2: #afb8c1;
+  --color-border-3: #8c959f;
+  --color-text-1: #1f2328;
+  --color-text-2: #57606a;
+  --color-text-3: #6e7781;
+  --color-text-4: #8c959f;
+  --color-accent-1: #0969da;
+  --color-accent-2: #0550ae;
+  --color-accent-soft: #ddf4ff;
+  --color-accent-focus: rgba(9, 105, 218, 0.16);
+  --color-accent-contrast: #ffffff;
+  --color-danger-1: #cf222e;
+  --color-danger-2: #a40e26;
+  --color-danger-soft: rgba(207, 34, 46, 0.12);
+  --color-success-1: #1a7f37;
+  --color-warning-1: #9a6700;
+  --shadow-panel: 0 0 0 1px rgba(208, 215, 222, 0.95), 0 8px 18px rgba(31, 35, 40, 0.08);
+  --shadow-overlay: 0 14px 28px rgba(31, 35, 40, 0.12);
+  --shadow-dropdown: 0 18px 36px rgba(31, 35, 40, 0.14);
+
+  --explorer-row-hover-bg: #eef2ff;
+  --explorer-row-selected-bg: #e7eefc;
+  --explorer-row-focused-bg: #edf2fa;
+  --explorer-row-active-bg: rgba(9, 105, 218, 0.1);
+  --explorer-row-active-text: #0550ae;
+  --explorer-row-indicator: #0969da;
+  --properties-accent: #0969da;
+  --cosmos-view-bg: linear-gradient(165deg, #ffffff 0%, #f6f8fa 100%);
+  --sb-layout-bg: linear-gradient(135deg, #ffffff, #f6f8fa 45%, #eef2ff);
+  --sb-user-bg: #f6f8fa;
+  --sb-assistant-bg: #ddf4ff;
+}

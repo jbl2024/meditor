@@ -4,11 +4,13 @@ import { useAppModalController } from './useAppModalController'
 
 function createController() {
   const quickOpenVisible = ref(false)
+  const themePickerVisible = ref(false)
   const newFileModalVisible = ref(false)
   const focusEditor = vi.fn()
 
   const controller = useAppModalController({
     quickOpenVisible,
+    themePickerVisible,
     cosmosCommandLoadingVisible: ref(false),
     indexStatusModalVisible: ref(false),
     newFileModalVisible,
@@ -24,6 +26,7 @@ function createController() {
 
   return {
     quickOpenVisible,
+    themePickerVisible,
     newFileModalVisible,
     focusEditor,
     controller
@@ -36,11 +39,14 @@ describe('useAppModalController', () => {
   })
 
   it('derives the active modal selector from visible state', () => {
-    const { controller, quickOpenVisible } = createController()
+    const { controller, quickOpenVisible, themePickerVisible } = createController()
 
     expect(controller.activeModalSelector()).toBeNull()
     quickOpenVisible.value = true
     expect(controller.activeModalSelector()).toBe('[data-modal="quick-open"]')
+    quickOpenVisible.value = false
+    themePickerVisible.value = true
+    expect(controller.activeModalSelector()).toBe('[data-modal="theme-picker"]')
   })
 
   it('restores focus to the opener after modal close', () => {

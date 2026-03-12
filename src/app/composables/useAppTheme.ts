@@ -1,15 +1,23 @@
 import { computed, ref } from 'vue'
-import { APP_THEMES, getAppThemeById, type ThemeId } from '../../shared/lib/themeRegistry'
+import {
+  APP_THEMES,
+  SYSTEM_DARK_THEME_ID,
+  SYSTEM_LIGHT_THEME_ID,
+  getAppThemeById,
+  isThemeId,
+  type ThemeColorScheme,
+  type ThemeId
+} from '../../shared/lib/themeRegistry'
 
 /**
  * Module: useAppTheme
  *
  * Purpose:
- * - Own app theme preference persistence and DOM class synchronization.
+ * - Own app theme preference persistence and DOM class/data-attribute synchronization.
  */
 
 /** Stores the explicit user choice or the sentinel value that follows the OS. */
-export type ThemePreference = 'light' | 'dark' | 'system'
+export type ThemePreference = ThemeId | 'system'
 
 /** Configures storage and environment hooks for the app theme controller. */
 export type UseAppThemeOptions = {
@@ -18,7 +26,18 @@ export type UseAppThemeOptions = {
   matchMedia?: () => boolean
 }
 
-/** Owns theme preference state and synchronizes `.dark` on the provided root. */
+function isThemePreference(value: unknown): value is ThemePreference {
+  return value === 'system' || isThemeId(value)
+}
+
+function normalizePersistedThemePreference(value: string | null): ThemePreference | null {
+  if (value === 'light') return SYSTEM_LIGHT_THEME_ID
+  if (value === 'dark') return SYSTEM_DARK_THEME_ID
+  if (isThemePreference(value)) return value
+  return null
+}
+
+/** Owns theme preference state and synchronizes theme metadata on the provided root. */
 export function useAppTheme(options: UseAppThemeOptions = {}) {
   const storageKey = options.storageKey ?? 'tomosona.theme.preference'
   const themePreference = ref<ThemePreference>('system')
@@ -28,27 +47,28 @@ export function useAppTheme(options: UseAppThemeOptions = {}) {
     window.matchMedia('(prefers-color-scheme: dark)').matches
   )
 
-  const resolvedTheme = computed<ThemeId>(() => {
+  const activeThemeId = computed<ThemeId>(() => {
     if (themePreference.value === 'system') {
-      return isSystemDark() ? 'dark' : 'light'
+      return isSystemDark() ? SYSTEM_DARK_THEME_ID : SYSTEM_LIGHT_THEME_ID
     }
     return themePreference.value
   })
 
-  const activeThemeId = computed<ThemeId>(() => resolvedTheme.value)
   const activeTheme = computed(() => getAppThemeById(activeThemeId.value))
+  const activeColorScheme = computed<ThemeColorScheme>(() => activeTheme.value.colorScheme)
 
   /** Applies the resolved theme to the configured root element. */
   function applyTheme() {
     const root = options.root ?? document.documentElement
-    root.classList.toggle('dark', activeTheme.value.colorScheme === 'dark')
+    root.classList.toggle('dark', activeColorScheme.value === 'dark')
     root.dataset.theme = activeThemeId.value
+    root.dataset.colorScheme = activeColorScheme.value
   }
 
   /** Loads the persisted preference, defaulting back to `system` when absent or invalid. */
   function loadThemePreference() {
-    const saved = window.localStorage.getItem(storageKey)
-    if (saved === 'light' || saved === 'dark' || saved === 'system') {
+    const saved = normalizePersistedThemePreference(window.localStorage.getItem(storageKey))
+    if (saved) {
       themePreference.value = saved
       return
     }
@@ -77,9 +97,9 @@ export function useAppTheme(options: UseAppThemeOptions = {}) {
   return {
     availableThemes: APP_THEMES,
     themePreference,
-    resolvedTheme,
-    activeTheme,
     activeThemeId,
+    activeTheme,
+    activeColorScheme,
     applyTheme,
     loadThemePreference,
     persistThemePreference,

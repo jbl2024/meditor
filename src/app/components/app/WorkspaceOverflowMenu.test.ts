@@ -7,7 +7,6 @@ function mountHarness(showDebugTools = false) {
   document.body.appendChild(root)
 
   const open = ref(true)
-  const theme = ref<'light' | 'dark' | 'system'>('system')
   const events: string[] = []
 
   const app = createApp(defineComponent({
@@ -18,7 +17,7 @@ function mountHarness(showDebugTools = false) {
           hasWorkspace: true,
           indexingState: 'indexed',
           zoomPercentLabel: '100%',
-          themePreference: theme.value,
+          activeThemeLabel: 'System (Tomosona Light)',
           showDebugTools,
           onToggle: () => events.push('toggle'),
           onOpenCommandPalette: () => events.push('palette'),
@@ -31,16 +30,13 @@ function mountHarness(showDebugTools = false) {
           onZoomIn: () => events.push('zoom-in'),
           onZoomOut: () => events.push('zoom-out'),
           onResetZoom: () => events.push('zoom-reset'),
-          onSetTheme: (value: 'light' | 'dark' | 'system') => {
-            theme.value = value
-            events.push(`theme:${value}`)
-          }
+          onOpenThemePicker: () => events.push('theme-picker')
         })
     }
   }))
 
   app.mount(root)
-  return { app, root, events, theme }
+  return { app, root, events }
 }
 
 describe('WorkspaceOverflowMenu', () => {
@@ -58,8 +54,7 @@ describe('WorkspaceOverflowMenu', () => {
     buttons[9]?.click()
     await nextTick()
 
-    expect(mounted.events).toEqual(['palette', 'about', 'zoom-in', 'theme:light'])
-    expect(mounted.theme.value).toBe('light')
+    expect(mounted.events).toEqual(['palette', 'about', 'zoom-in', 'theme-picker'])
 
     mounted.app.unmount()
   })

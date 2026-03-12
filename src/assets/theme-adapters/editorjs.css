@@ -1,6 +1,6 @@
 /* EditorJS injects unlayered styles at runtime.
    Keep these theme adapters unlayered so they win in the cascade. */
-html[data-theme='dark'] .ce-popover,
+html[data-color-scheme='dark'] .ce-popover,
 html.dark .ce-popover,
 .dark .ce-popover {
   --color-border: var(--menu-border);
@@ -17,7 +17,7 @@ html.dark .ce-popover,
   --color-background-item-hover: var(--editor-menu-hover-bg);
 }
 
-html[data-theme='dark'] .ce-popover__container,
+html[data-color-scheme='dark'] .ce-popover__container,
 html.dark .ce-popover__container,
 .dark .ce-popover__container {
   background: var(--editor-menu-bg);
@@ -25,50 +25,50 @@ html.dark .ce-popover__container,
   box-shadow: var(--menu-shadow);
 }
 
-html[data-theme='dark'] .cdx-search-field,
+html[data-color-scheme='dark'] .cdx-search-field,
 html.dark .cdx-search-field,
 .dark .cdx-search-field {
   background: var(--editor-code-bg);
   border-color: var(--menu-border);
 }
 
-html[data-theme='dark'] .cdx-search-field__icon svg,
+html[data-color-scheme='dark'] .cdx-search-field__icon svg,
 html.dark .cdx-search-field__icon svg,
 .dark .cdx-search-field__icon svg,
-html[data-theme='dark'] .cdx-search-field__input,
+html[data-color-scheme='dark'] .cdx-search-field__input,
 html.dark .cdx-search-field__input,
 .dark .cdx-search-field__input,
-html[data-theme='dark'] .cdx-search-field__input::placeholder,
+html[data-color-scheme='dark'] .cdx-search-field__input::placeholder,
 html.dark .cdx-search-field__input::placeholder,
 .dark .cdx-search-field__input::placeholder {
   color: var(--text-faint);
 }
 
-html[data-theme='dark'] .ce-popover-item,
+html[data-color-scheme='dark'] .ce-popover-item,
 html.dark .ce-popover-item,
 .dark .ce-popover-item,
-html[data-theme='dark'] .ce-popover-item__title,
+html[data-color-scheme='dark'] .ce-popover-item__title,
 html.dark .ce-popover-item__title,
 .dark .ce-popover-item__title,
-html[data-theme='dark'] .ce-popover-item__icon,
+html[data-color-scheme='dark'] .ce-popover-item__icon,
 html.dark .ce-popover-item__icon,
 .dark .ce-popover-item__icon {
   color: var(--editor-menu-text-strong);
 }
 
-html[data-theme='dark'] .ce-popover-item:hover,
+html[data-color-scheme='dark'] .ce-popover-item:hover,
 html.dark .ce-popover-item:hover,
 .dark .ce-popover-item:hover,
-html[data-theme='dark'] .ce-popover-item--active,
+html[data-color-scheme='dark'] .ce-popover-item--active,
 html.dark .ce-popover-item--active,
 .dark .ce-popover-item--active,
-html[data-theme='dark'] .ce-popover-item--focused,
+html[data-color-scheme='dark'] .ce-popover-item--focused,
 html.dark .ce-popover-item--focused,
 .dark .ce-popover-item--focused {
   background: var(--editor-menu-hover-bg);
 }
 
-html[data-theme='dark'] .editor-wikilink-dropdown,
+html[data-color-scheme='dark'] .editor-wikilink-dropdown,
 html.dark .editor-wikilink-dropdown,
 .dark .editor-wikilink-dropdown {
   --ui-dropdown-bg: var(--menu-bg);
@@ -78,14 +78,14 @@ html.dark .editor-wikilink-dropdown,
   --ui-dropdown-hover: var(--menu-hover-bg);
 }
 
-html[data-theme='dark'] .editor-wikilink-dropdown .ui-filterable-dropdown-option,
+html[data-color-scheme='dark'] .editor-wikilink-dropdown .ui-filterable-dropdown-option,
 html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-option,
 .dark .editor-wikilink-dropdown .ui-filterable-dropdown-option {
   color: var(--text-main);
 }
 
-html[data-theme='dark'] .editor-wikilink-dropdown .ui-filterable-dropdown-option:hover,
-html[data-theme='dark'] .editor-wikilink-dropdown .ui-filterable-dropdown-option[data-active='true'],
+html[data-color-scheme='dark'] .editor-wikilink-dropdown .ui-filterable-dropdown-option:hover,
+html[data-color-scheme='dark'] .editor-wikilink-dropdown .ui-filterable-dropdown-option[data-active='true'],
 html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-option:hover,
 html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-option[data-active='true'],
 .dark .editor-wikilink-dropdown .ui-filterable-dropdown-option:hover,
@@ -94,7 +94,7 @@ html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-option[data-active='
   box-shadow: none;
 }
 
-html[data-theme='dark'] .editor-wikilink-dropdown .ui-filterable-dropdown-empty,
+html[data-color-scheme='dark'] .editor-wikilink-dropdown .ui-filterable-dropdown-empty,
 html.dark .editor-wikilink-dropdown .ui-filterable-dropdown-empty,
 .dark .editor-wikilink-dropdown .ui-filterable-dropdown-empty {
   color: var(--text-dim);
