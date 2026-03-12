@@ -18,6 +18,15 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.18.0] - 2026-03-12
+
+### Added
+- feat(theme): add atelier-inspired light theme variants (582650b)
+- feat(theme): add acier sable rose and midnight rail themes (53fb6fa)
+- feat(theme): add live preview to theme picker (36fd742)
+- feat(theme): add named themes with picker modal and palette actions (834db7d)
+- feat(app): add mixed quick open browse state (0e231ee)
+
 ## [0.17.1] - 2026-03-12
 
 ### Changed
