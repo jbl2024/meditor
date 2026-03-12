@@ -130,6 +130,7 @@ import { useAppShellKeyboard } from './composables/useAppShellKeyboard'
 import { useAppShellLaunchpad } from './composables/useAppShellLaunchpad'
 import { useAppShellModals } from './composables/useAppShellModals'
 import { useAppShellSearch, type AppShellSearchHit } from './composables/useAppShellSearch'
+import { useAppShellWorkspaceEntries } from './composables/useAppShellWorkspaceEntries'
 import { useAppShellWorkspaceLifecycle } from './composables/useAppShellWorkspaceLifecycle'
 import { useAppModalController } from './composables/useAppModalController'
 import { useAppSecondBrainBridge } from './composables/useAppSecondBrainBridge'
@@ -815,6 +816,51 @@ const {
   openSettingsFromOverflow,
   openShortcutsFromPalette
 } = shellModals
+const workspaceEntries = useAppShellWorkspaceEntries({
+  statePort: {
+    workingFolderPath: filesystem.workingFolderPath,
+    activeFilePath,
+    newFilePathInput,
+    newFileModalError,
+    newFolderPathInput,
+    newFolderModalError,
+    openDateInput,
+    openDateModalError
+  },
+  documentPort: {
+    normalizeRelativeNotePath,
+    hasForbiddenEntryNameChars,
+    isReservedEntryName,
+    parentPrefixForModal,
+    parseIsoDateInput
+  },
+  fsPort: {
+    listChildren,
+    pathExists,
+    createEntry,
+    ensureParentFolders,
+    openTabWithAutosave: (path) => openTabWithAutosave(path),
+    upsertWorkspaceFilePath,
+    openDailyNote: (date) => openDailyNote(date, openTabWithAutosave)
+  },
+  modalPort: {
+    openNewFileModal,
+    closeNewFileModal,
+    openNewFolderModal,
+    closeNewFolderModal,
+    openOpenDateModal,
+    closeOpenDateModal
+  }
+})
+const {
+  createNewFileFromPalette,
+  openSpecificDateNote,
+  ensureParentDirectoriesForRelativePath,
+  onExplorerRequestCreate,
+  submitNewFileFromModal,
+  submitNewFolderFromModal,
+  submitOpenDateFromModal
+} = workspaceEntries
 
 const shortcutSections = computed(() => {
   const mod = primaryModLabel.value
@@ -2225,23 +2271,6 @@ async function openYesterdayNote() {
   return await openDailyNote(formatIsoDate(value), openTabWithAutosave)
 }
 
-async function openSpecificDateNote() {
-  await openOpenDateModal()
-  return true
-}
-
-async function submitOpenDateFromModal() {
-  const isoDate = parseIsoDateInput(openDateInput.value.trim())
-  if (!isoDate) {
-    openDateModalError.value = 'Invalid date. Use YYYY-MM-DD (example: 2026-02-22).'
-    return false
-  }
-  const opened = await openDailyNote(isoDate, openTabWithAutosave)
-  if (!opened) return false
-  closeOpenDateModal()
-  return true
-}
-
 async function openWikilinkTarget(target: string) {
   const root = filesystem.workingFolderPath.value
   if (!root) return false
@@ -2457,158 +2486,6 @@ async function runQuickOpenAction(id: string) {
   }
 }
 
-async function createNewFileFromPalette() {
-  const prefill = await suggestedNotePathPrefix()
-  await openNewFileModal(prefill)
-  return true
-}
-
-async function suggestedNotePathPrefix(): Promise<string> {
-  const root = filesystem.workingFolderPath.value
-  if (!root) return ''
-
-  try {
-    const rootChildren = await listChildren(root)
-    if (rootChildren.some((entry) => entry.is_dir && entry.name.toLowerCase() === 'notes')) {
-      return 'notes/'
-    }
-  } catch {
-    // Fall back to active path below.
-  }
-
-  const activePath = activeFilePath.value
-  if (!activePath) return ''
-  return parentPrefixForModal(activePath.replace(/\/[^/]+$/, ''), root)
-}
-
-async function ensureParentDirectoriesForRelativePath(relativePath: string): Promise<string> {
-  const root = filesystem.workingFolderPath.value
-  if (!root) {
-    throw new Error('Working folder is not set.')
-  }
-
-  const parts = relativePath.split('/').filter(Boolean)
-  if (parts.length <= 1) return root
-
-  let current = root
-  for (const segment of parts.slice(0, -1)) {
-    const next = `${current}/${segment}`
-    const exists = await pathExists(next)
-    if (!exists) {
-      await createEntry(current, segment, 'folder', 'fail')
-    }
-    current = next
-  }
-
-  return current
-}
-
-function onExplorerRequestCreate(payload: { parentPath: string; entryKind: 'file' | 'folder' }) {
-  const prefill = parentPrefixForModal(payload.parentPath, filesystem.workingFolderPath.value)
-  if (payload.entryKind === 'folder') {
-    void openNewFolderModal(prefill)
-    return
-  }
-  void openNewFileModal(prefill)
-}
-
-async function submitNewFileFromModal() {
-  const root = filesystem.workingFolderPath.value
-  if (!root) {
-    newFileModalError.value = 'Working folder is not set.'
-    return false
-  }
-
-  const normalized = normalizeRelativeNotePath(newFilePathInput.value)
-  if (!normalized || normalized.endsWith('/')) {
-    newFileModalError.value = 'Invalid file path.'
-    return false
-  }
-  if (normalized.startsWith('../') || normalized === '..') {
-    newFileModalError.value = 'Path must stay inside the workspace.'
-    return false
-  }
-
-  const parts = normalized.split('/').filter(Boolean)
-  if (parts.some((part) => hasForbiddenEntryNameChars(part))) {
-    newFileModalError.value = 'File names cannot include < > : " \\ | ? *'
-    return false
-  }
-
-  const rawName = parts[parts.length - 1]
-  const stem = rawName.replace(/\.(md|markdown)$/i, '')
-  if (!stem) {
-    newFileModalError.value = 'File name is required.'
-    return false
-  }
-  if (isReservedEntryName(stem)) {
-    newFileModalError.value = 'That file name is reserved by the OS.'
-    return false
-  }
-  const name = /\.(md|markdown)$/i.test(rawName) ? rawName : `${rawName}.md`
-  const relativeWithExt = parts.length > 1
-    ? `${parts.slice(0, -1).join('/')}/${name}`
-    : name
-  const fullPath = `${root}/${relativeWithExt}`
-  const parentPath = parts.length > 1 ? `${root}/${parts.slice(0, -1).join('/')}` : root
-
-  try {
-    await ensureParentFolders(fullPath)
-    const created = await createEntry(parentPath, name, 'file', 'fail')
-    const opened = await openTabWithAutosave(created)
-    if (!opened) return false
-    upsertWorkspaceFilePath(created)
-    closeNewFileModal()
-    return true
-  } catch (err) {
-    newFileModalError.value = err instanceof Error ? err.message : 'Could not create file.'
-    return false
-  }
-}
-
-async function submitNewFolderFromModal() {
-  const root = filesystem.workingFolderPath.value
-  if (!root) {
-    newFolderModalError.value = 'Working folder is not set.'
-    return false
-  }
-
-  const normalized = normalizeRelativeNotePath(newFolderPathInput.value)
-  if (!normalized || normalized.endsWith('/')) {
-    newFolderModalError.value = 'Invalid folder path.'
-    return false
-  }
-  if (normalized.startsWith('../') || normalized === '..') {
-    newFolderModalError.value = 'Path must stay inside the workspace.'
-    return false
-  }
-
-  const parts = normalized.split('/').filter(Boolean)
-  if (parts.some((part) => hasForbiddenEntryNameChars(part))) {
-    newFolderModalError.value = 'Folder names cannot include < > : " \\ | ? *'
-    return false
-  }
-
-  const name = parts[parts.length - 1]
-  if (!name) {
-    newFolderModalError.value = 'Folder name is required.'
-    return false
-  }
-  if (isReservedEntryName(name)) {
-    newFolderModalError.value = 'That folder name is reserved by the OS.'
-    return false
-  }
-
-  try {
-    const parentPath = await ensureParentDirectoriesForRelativePath(normalized)
-    await createEntry(parentPath, name, 'folder', 'fail')
-    closeNewFolderModal()
-    return true
-  } catch (err) {
-    newFolderModalError.value = err instanceof Error ? err.message : 'Could not create folder.'
-    return false
-  }
-}
 
 function documentPathsForPane(paneId: string): string[] {
   const pane = multiPane.layout.value.panesById[paneId]
