@@ -156,6 +156,7 @@ import { useAppWorkspaceController } from './composables/useAppWorkspaceControll
 import { useEditorState } from '../domains/editor/composables/useEditorState'
 import { useEchoesDiscoverability } from '../domains/echoes/composables/useEchoesDiscoverability'
 import { useEchoesPack } from '../domains/echoes/composables/useEchoesPack'
+import { useConstitutedContext } from '../domains/editor/composables/useConstitutedContext'
 import { useCosmosController } from '../domains/cosmos/composables/useCosmosController'
 import { useFilesystemState } from './composables/useFilesystemState'
 import { useWorkspaceState, type SidebarMode } from './composables/useWorkspaceState'
@@ -304,8 +305,25 @@ const resizeState = ref<{
 const paneCount = computed(() => Object.keys(multiPane.layout.value.panesById).length)
 const activeFilePath = computed(() => multiPane.getActiveDocumentPath())
 const activeStatus = computed(() => editorState.getStatus(activeFilePath.value))
+const activeNoteTitle = computed(() => activeFilePath.value ? noteTitleFromPath(activeFilePath.value) : 'No active note')
+const activeStateLabel = computed(() => (
+  activeStatus.value.saving
+    ? 'saving'
+    : virtualDocs.value[activeFilePath.value]
+      ? 'unsaved'
+      : activeStatus.value.dirty
+        ? 'editing'
+        : 'saved'
+))
 const noteEchoes = useEchoesPack(activeFilePath, { limit: 5 })
 const noteEchoesDiscoverability = useEchoesDiscoverability()
+const constitutedContext = useConstitutedContext({
+  resolveItem: (path) => ({
+    path,
+    title: noteTitleFromPath(path)
+  })
+})
+const contextActionLoading = ref(false)
 const cosmos = useCosmosController({
   workingFolderPath: filesystem.workingFolderPath,
   activeTabPath: activeFilePath,
@@ -1052,6 +1070,19 @@ const metadataRows = computed(() => {
     { label: 'Updated', value: formatTimestamp(activeFileMetadata.value?.updated_at_ms ?? null) }
   ]
 })
+const backlinkCount = computed(() => backlinks.value.length)
+const semanticLinkCount = computed(() => semanticLinks.value.length)
+const activeNoteInContext = computed(() => {
+  const path = activeFilePath.value.trim()
+  return path ? constitutedContext.contains(path) : false
+})
+const contextItems = computed(() => constitutedContext.items.value)
+const noteEchoesForPanel = computed(() =>
+  noteEchoes.items.value.map((item) => ({
+    ...item,
+    isInContext: constitutedContext.contains(item.path)
+  }))
+)
 const cosmosSelectedNodeForPanel = computed(() => {
   if (!cosmos.selectedNode.value) return null
   return {
@@ -1854,6 +1885,99 @@ function openThemePickerFromPalette() {
 function setThemeFromPalette(next: ThemePreference) {
   applyThemePreference(next)
   return true
+}
+
+function addPathToConstitutedContext(path: string) {
+  const anchorPath = activeFilePath.value.trim()
+  if (!anchorPath || !path.trim()) return
+  constitutedContext.add(path, anchorPath, (itemPath) => ({
+    path: itemPath,
+    title: noteTitleFromPath(itemPath)
+  }))
+}
+
+function removePathFromConstitutedContext(path: string) {
+  constitutedContext.remove(path)
+}
+
+function toggleActiveNoteInConstitutedContext() {
+  const path = activeFilePath.value.trim()
+  if (!path) return
+  if (constitutedContext.contains(path)) {
+    constitutedContext.remove(path)
+    return
+  }
+  addPathToConstitutedContext(path)
+}
+
+async function openConstitutedContextInSecondBrain(prompt?: string) {
+  if (!filesystem.hasWorkspace.value) {
+    filesystem.errorMessage.value = 'Open a workspace first.'
+    return false
+  }
+
+  const normalized = normalizeContextPathsForUpdate(
+    filesystem.workingFolderPath.value,
+    constitutedContext.paths.value
+  )
+  const seedPath = normalized[0] || activeFilePath.value
+  if (!seedPath) {
+    filesystem.errorMessage.value = 'No note context available for Second Brain.'
+    return false
+  }
+
+  contextActionLoading.value = true
+  try {
+    const sessionId = await secondBrainBridge.resolveSecondBrainSessionForPath(seedPath)
+    await replaceSessionContext(sessionId, normalized)
+    setSecondBrainSessionId(sessionId, { bumpNonce: true })
+    setSecondBrainPrompt(prompt?.trim() ?? '', { bumpNonce: true })
+    await openSecondBrainViewFromPalette()
+    return true
+  } catch (err) {
+    filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not open Second Brain with this context.'
+    return false
+  } finally {
+    contextActionLoading.value = false
+  }
+}
+
+async function openConstitutedContextInCosmos() {
+  if (!constitutedContext.paths.value.length) return false
+  const opened = await openCosmosViewFromPalette()
+  if (!opened) return false
+
+  const targetPath = constitutedContext.paths.value[0]
+  const targetKey = normalizePathKey(targetPath.trim())
+  let match = cosmos.graph.value.nodes.find((node) =>
+    normalizePathKey(node.path) === targetKey || normalizePathKey(node.id) === targetKey
+  )
+  if (!match) {
+    await cosmos.refreshGraph()
+    match = cosmos.graph.value.nodes.find((node) =>
+      normalizePathKey(node.path) === targetKey || normalizePathKey(node.id) === targetKey
+    )
+  }
+  if (!match) {
+    if (cosmos.error.value) {
+      filesystem.notifyError(cosmos.error.value)
+      return false
+    }
+    filesystem.notifyError('Context anchor is not available in the current graph index.')
+    return true
+  }
+
+  cosmos.selectNode(match.id)
+  scheduleCosmosNodeFocus(match.id)
+  recordCosmosHistorySnapshot()
+  return true
+}
+
+async function openConstitutedContextInPulse() {
+  if (!constitutedContext.paths.value.length) return false
+  return await openConstitutedContextInSecondBrain(
+    'Transform the current constituted context into a useful written output. Use Pulse from the Second Brain context surface.'
+  )
 }
 
 async function openPulseContextInSecondBrain(payload: {
@@ -2946,6 +3070,7 @@ watch(
 watch(
   () => activeFilePath.value,
   (path) => {
+    constitutedContext.resetForAnchor(path ?? '')
     const isInitialRun = activeNoteEffectsRequestToken === 0
     if (isInitialRun) {
       activeNoteEffectsRequestToken += 1
@@ -3166,12 +3291,21 @@ onBeforeUnmount(() => {
             v-if="workspace.rightPaneVisible.value"
             :width="rightPaneWidth"
             :active-note-path="activeFilePath"
+            :active-note-title="activeNoteTitle"
+            :active-state-label="activeStateLabel"
+            :backlink-count="backlinkCount"
+            :semantic-link-count="semanticLinkCount"
+            :active-note-in-context="activeNoteInContext"
             :can-toggle-favorite="Boolean(activeFilePath && isMarkdownPath(activeFilePath))"
             :is-favorite="Boolean(activeFilePath && favorites.isFavorite(activeFilePath))"
-            :echoes-items="noteEchoes.items.value"
+            :echoes-items="noteEchoesForPanel"
             :echoes-loading="noteEchoes.loading.value"
             :echoes-error="noteEchoes.error.value"
             :echoes-hint-visible="noteEchoesDiscoverability.hintVisible.value"
+            :context-mode="constitutedContext.mode.value"
+            :context-items="contextItems"
+            :can-reason-on-context="!constitutedContext.isEmpty.value"
+            :is-launching-context-action="contextActionLoading"
             :outline="editorState.activeOutline.value"
             :semantic-links="semanticLinks"
             :semantic-links-loading="semanticLinksLoading"
@@ -3182,9 +3316,20 @@ onBeforeUnmount(() => {
             :property-parse-error-count="propertyParseErrorCount"
             :to-relative-path="toRelativePath"
             @toggle-favorite="void toggleActiveNoteFavoriteFromRightPane()"
+            @active-note-add-to-context="toggleActiveNoteInConstitutedContext()"
+            @active-note-remove-from-context="toggleActiveNoteInConstitutedContext()"
             @echoes-open="void onBacklinkOpen($event)"
+            @echoes-add-to-context="addPathToConstitutedContext($event)"
+            @echoes-remove-from-context="removePathFromConstitutedContext($event)"
             @outline-click="void onOutlineHeadingClick($event)"
             @backlink-open="void onBacklinkOpen($event)"
+            @context-open="void onBacklinkOpen($event)"
+            @context-remove="removePathFromConstitutedContext($event)"
+            @context-preserve="constitutedContext.preserve()"
+            @context-clear="constitutedContext.clear()"
+            @context-open-second-brain="void openConstitutedContextInSecondBrain()"
+            @context-open-cosmos="void openConstitutedContextInCosmos()"
+            @context-open-pulse="void openConstitutedContextInPulse()"
           />
         </div>
       </section>

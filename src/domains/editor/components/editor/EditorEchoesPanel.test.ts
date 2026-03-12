@@ -3,39 +3,63 @@ import { describe, expect, it, vi } from 'vitest'
 import EditorEchoesPanel from './EditorEchoesPanel.vue'
 
 describe('EditorEchoesPanel', () => {
-  it('renders helper and emits open', () => {
+  it('renders suggestion cards and emits open/add/remove intents', () => {
     const root = document.createElement('div')
     document.body.appendChild(root)
     const onOpen = vi.fn()
+    const onAdd = vi.fn()
+    const onRemove = vi.fn()
 
     const app = createApp(defineComponent({
       setup() {
         return () => h(EditorEchoesPanel, {
-          items: [{
-            path: '/vault/notes/a.md',
-            title: 'Note A',
-            reasonLabel: 'Direct link',
-            reasonLabels: ['Direct link', 'Semantically related'],
-            score: 1,
-            signalSources: ['direct', 'semantic']
-          }],
+          items: [
+            {
+              path: '/vault/notes/a.md',
+              title: 'Note A',
+              reasonLabel: 'Direct link',
+              reasonLabels: ['Direct link'],
+              score: 1,
+              signalSources: ['direct'],
+              isInContext: false
+            },
+            {
+              path: '/vault/notes/b.md',
+              title: 'Note B',
+              reasonLabel: 'Semantically related',
+              reasonLabels: ['Semantically related'],
+              score: 0.9,
+              signalSources: ['semantic'],
+              isInContext: true
+            }
+          ],
           loading: false,
           error: '',
           hintVisible: true,
           toRelativePath: (path: string) => path.replace('/vault/', ''),
-          onOpen
+          onOpen,
+          onAdd,
+          onRemove
         })
       }
     }))
 
     app.mount(root)
     expect(root.textContent).toContain('Echoes')
-    expect(root.textContent).toContain("Relevant notes around what you're working on now.")
-    expect(root.querySelectorAll('.echoes-reason-icon')).toHaveLength(2)
-    expect(root.querySelector('[title="Direct link"]')).toBeTruthy()
-    expect(root.querySelector('[title="Semantically related"]')).toBeTruthy()
-    ;(root.querySelector('.echoes-item') as HTMLButtonElement).click()
+    expect(root.textContent).toContain('Suggestions autour de cette note.')
+    expect(root.textContent).toContain('lien direct')
+    expect(root.textContent).toContain('proximite semantique')
+
+    const actionButtons = Array.from(root.querySelectorAll('.echoes-action-btn')) as HTMLButtonElement[]
+    actionButtons[0].click()
+    actionButtons[1].click()
+    actionButtons[2].click()
+    actionButtons[3].click()
+
     expect(onOpen).toHaveBeenCalledWith('/vault/notes/a.md')
+    expect(onAdd).toHaveBeenCalledWith('/vault/notes/a.md')
+    expect(onOpen).toHaveBeenCalledWith('/vault/notes/b.md')
+    expect(onRemove).toHaveBeenCalledWith('/vault/notes/b.md')
     app.unmount()
   })
 

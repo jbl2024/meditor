@@ -1,17 +1,18 @@
 <script setup lang="ts">
 /**
  * Presentational Echoes panel for the note-side context surface.
+ *
+ * The component renders explainable suggestions and emits only user intents.
  */
-import {
-  ArrowUturnLeftIcon,
-  ClockIcon,
-  LinkIcon,
-  SparklesIcon
-} from '@heroicons/vue/24/outline'
 import type { EchoesItem } from '../../../echoes/lib/echoes'
+import UiButton from '../../../../shared/components/ui/UiButton.vue'
+
+type EditorEchoesListItem = EchoesItem & {
+  isInContext: boolean
+}
 
 const props = defineProps<{
-  items: EchoesItem[]
+  items: EditorEchoesListItem[]
   loading: boolean
   error: string
   hintVisible: boolean
@@ -20,6 +21,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   open: [path: string]
+  add: [path: string]
+  remove: [path: string]
 }>()
 
 function compactRelativePath(path: string): string {
@@ -29,66 +32,82 @@ function compactRelativePath(path: string): string {
   return `.../${segments.slice(-2).join('/')}`
 }
 
-function reasonIcon(reason: string) {
+function reasonLabel(reason: string) {
   switch (reason) {
     case 'Direct link':
-      return LinkIcon
+      return 'lien direct'
     case 'Backlink':
-      return ArrowUturnLeftIcon
+      return 'backlink'
     case 'Semantically related':
-      return SparklesIcon
+      return 'proximite semantique'
     case 'Recently active':
-      return ClockIcon
+      return 'activite recente'
     default:
-      return LinkIcon
+      return reason.toLowerCase()
   }
+}
+
+function onContextClick(item: EditorEchoesListItem) {
+  if (item.isInContext) {
+    emit('remove', item.path)
+    return
+  }
+  emit('add', item.path)
 }
 </script>
 
 <template>
   <section class="pane-card pane-section">
-    <h3 class="section-title">Echoes</h3>
-    <p v-if="hintVisible" class="echoes-helper">Relevant notes around what you're working on now.</p>
+    <div class="echoes-head">
+      <div>
+        <h3 class="section-title">Echoes</h3>
+        <p v-if="hintVisible" class="echoes-helper">Suggestions autour de cette note.</p>
+      </div>
+      <span v-if="!loading && !error && items.length" class="echoes-count">{{ items.length }} suggestion{{ items.length > 1 ? 's' : '' }}</span>
+    </div>
+
     <div v-if="loading" class="empty-state">Loading...</div>
     <div v-else-if="error" class="empty-state">{{ error }}</div>
     <div v-else-if="!items.length" class="empty-state">
       Echoes surfaces nearby notes when Tomosona finds strong local context.
     </div>
-    <button
+
+    <article
       v-for="item in items"
       v-else
       :key="`echo-${item.path}`"
-      type="button"
-      class="echoes-item"
-      :title="props.toRelativePath(item.path)"
-      @click="emit('open', item.path)"
+      class="echoes-card"
+      :data-in-context="item.isInContext"
     >
-      <span class="echoes-item-main">
-        <span class="echoes-item-title">{{ item.title }}</span>
-        <span class="echoes-item-path">{{ compactRelativePath(item.path) }}</span>
-      </span>
-      <span class="echoes-item-meta">
-        <span class="echoes-item-reasons">
-          <span class="echoes-reason-icon-wrap" :title="item.reasonLabel">
-            <component
-              :is="reasonIcon(item.reasonLabel)"
-              class="echoes-reason-icon"
-            />
-          </span>
-          <span
-            v-for="reason in item.reasonLabels.filter((reason) => reason !== item.reasonLabel).slice(0, 1)"
-            :key="`${item.path}-${reason}`"
-            class="echoes-reason-icon-wrap"
-            :title="reason"
-          >
-            <component
-              :is="reasonIcon(reason)"
-              class="echoes-reason-icon echoes-reason-icon-secondary"
-            />
-          </span>
-        </span>
-      </span>
-    </button>
+      <div class="echoes-card-copy">
+        <strong class="echoes-item-title">{{ item.title }}</strong>
+        <span class="echoes-item-reason">{{ reasonLabel(item.reasonLabel) }}</span>
+        <span class="echoes-item-path" :title="props.toRelativePath(item.path)">{{ compactRelativePath(item.path) }}</span>
+      </div>
+      <div class="echoes-card-actions">
+        <UiButton
+          variant="secondary"
+          size="sm"
+          class-name="echoes-action-btn"
+          @click="emit('open', item.path)"
+        >
+          Ouvrir
+        </UiButton>
+        <UiButton
+          :variant="item.isInContext ? 'secondary' : 'ghost'"
+          size="sm"
+          class="echoes-action-btn echoes-action-btn-context"
+          :class-name="[
+            'echoes-action-btn',
+            'echoes-action-btn-context',
+            item.isInContext ? 'echoes-action-btn-context--active' : ''
+          ].filter(Boolean).join(' ')"
+          @click="onContextClick(item)"
+        >
+          {{ item.isInContext ? 'Retirer' : '+ Contexte' }}
+        </UiButton>
+      </div>
+    </article>
   </section>
 </template>
 
@@ -110,13 +129,35 @@ function reasonIcon(reason: string) {
   position: relative;
 }
 
+.echoes-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
 .section-title {
-  margin: 2px 0 6px;
+  margin: 2px 0 2px;
   font-size: 11px;
   letter-spacing: 0.11em;
   text-transform: uppercase;
   font-weight: 600;
   color: var(--echoes-title);
+}
+
+.echoes-helper {
+  margin: 0;
+  color: var(--echoes-copy);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.echoes-count {
+  color: var(--echoes-title);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .empty-state {
@@ -128,44 +169,31 @@ function reasonIcon(reason: string) {
   background: var(--echoes-empty-bg);
 }
 
-.echoes-helper {
-  margin: 0 0 8px;
-  color: var(--echoes-copy);
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.echoes-item {
+.echoes-card {
   display: flex;
-  width: 100%;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
   gap: 10px;
-  border: 0;
-  text-align: left;
-  background: transparent;
-  padding: 8px 8px;
+  padding: 10px;
+  margin: 8px 0 0;
   border-radius: 10px;
-  margin: 4px 0;
-  transition:
-    background-color 140ms ease,
-    box-shadow 140ms ease;
-}
-
-.echoes-item:hover {
-  background: var(--echoes-item-hover-bg);
+  background: var(--echoes-empty-bg);
   box-shadow: inset 0 0 0 1px var(--echoes-item-hover-border);
 }
 
-.echoes-item-main {
+.echoes-card[data-in-context='true'] {
+  box-shadow: inset 0 0 0 1px var(--right-pane-accent, var(--echoes-item-hover-border));
+}
+
+.echoes-card-copy {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 
 .echoes-item-title,
-.echoes-item-path {
+.echoes-item-path,
+.echoes-item-reason {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -173,9 +201,13 @@ function reasonIcon(reason: string) {
 }
 
 .echoes-item-title {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 14px;
   color: var(--echoes-item-title);
+}
+
+.echoes-item-reason {
+  font-size: 12px;
+  color: var(--echoes-copy);
 }
 
 .echoes-item-path {
@@ -183,32 +215,21 @@ function reasonIcon(reason: string) {
   color: var(--echoes-item-path);
 }
 
-.echoes-item-meta {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex: 0 0 auto;
+.echoes-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
-.echoes-item-reasons {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+.echoes-action-btn {
+  min-height: 2rem;
 }
 
-.echoes-reason-icon-wrap {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.echoes-action-btn-context {
+  color: var(--right-pane-favorite);
 }
 
-.echoes-reason-icon {
-  width: 16px;
-  height: 16px;
-  color: var(--echoes-icon);
-}
-
-.echoes-reason-icon-secondary {
-  color: var(--echoes-icon-secondary);
+.echoes-action-btn-context--active {
+  color: var(--right-pane-text);
 }
 </style>

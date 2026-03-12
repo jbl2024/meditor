@@ -3,33 +3,48 @@
  * EditorRightPane
  *
  * Purpose:
- * - Render the right-side outline/backlinks/metadata/properties panel.
+ * - Render the note-side context workflow: note -> Echoes -> constituted context
+ *   -> Second Brain / Cosmos / Pulse.
  *
  * Boundaries:
  * - Stateless rendering component.
- * - Emits user intents (`outline-click`, `backlink-open`) and relies on parent
- *   for navigation and data loading.
+ * - Emits user intents and relies on the shell for navigation, state updates,
+ *   and cross-surface orchestration.
  */
 import { computed, ref, watch } from 'vue'
 import { ChevronRightIcon, StarIcon as StarOutlineIcon } from '@heroicons/vue/24/outline'
 import { StarIcon as StarSolidIcon } from '@heroicons/vue/24/solid'
-import type { EchoesItem } from '../../echoes/lib/echoes'
 import EditorEchoesPanel from './editor/EditorEchoesPanel.vue'
+import UiButton from '../../../shared/components/ui/UiButton.vue'
+import UiIconButton from '../../../shared/components/ui/UiIconButton.vue'
+import type { ConstitutedContextItem, ConstitutedContextMode } from '../composables/useConstitutedContext'
+import type { EchoesItem } from '../../echoes/lib/echoes'
 
 type HeadingNode = { level: 1 | 2 | 3; text: string }
 type PropertyPreviewRow = { key: string; value: string }
 type MetadataRow = { label: string; value: string }
 type SemanticLinkRow = { path: string; score: number | null; direction: 'incoming' | 'outgoing' }
+type ContextEchoesItem = EchoesItem & { isInContext: boolean }
 
 const props = defineProps<{
   width: number
   activeNotePath: string
+  activeNoteTitle: string
+  activeStateLabel: string
+  backlinkCount: number
+  semanticLinkCount: number
+  activeNoteInContext: boolean
   canToggleFavorite: boolean
   isFavorite: boolean
-  echoesItems: EchoesItem[]
+  echoesItems: ContextEchoesItem[]
   echoesLoading: boolean
   echoesError: string
   echoesHintVisible: boolean
+  contextMode: ConstitutedContextMode
+  contextItems: ConstitutedContextItem[]
+  contextError?: string
+  canReasonOnContext: boolean
+  isLaunchingContextAction: boolean
   outline: HeadingNode[]
   semanticLinks: SemanticLinkRow[]
   semanticLinksLoading: boolean
@@ -43,15 +58,33 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'toggle-favorite': []
+  'active-note-add-to-context': []
+  'active-note-remove-from-context': []
   'echoes-open': [path: string]
+  'echoes-add-to-context': [path: string]
+  'echoes-remove-from-context': [path: string]
   'outline-click': [payload: { index: number; heading: HeadingNode }]
   'backlink-open': [path: string]
+  'context-open': [path: string]
+  'context-remove': [path: string]
+  'context-preserve': []
+  'context-clear': []
+  'context-open-second-brain': []
+  'context-open-cosmos': []
+  'context-open-pulse': []
 }>()
 
 const outlineExpanded = ref(false)
-const semanticExpanded = ref(true)
-const backlinksExpanded = ref(true)
+const semanticExpanded = ref(false)
+const backlinksExpanded = ref(false)
+const metadataExpanded = ref(false)
+const propertiesExpanded = ref(false)
 const hasEchoesContent = computed(() => props.echoesItems.length > 0 && !props.echoesLoading && !props.echoesError)
+const contextTitle = computed(() => props.contextMode === 'preserved' ? 'Contexte conserve' : 'Contexte de cette note')
+const contextEmptyCopy = computed(() => {
+  if (props.contextMode === 'preserved') return 'Aucune note ajoutee.'
+  return 'Ajoutez des notes depuis Echoes ou la note active.'
+})
 
 watch(
   hasEchoesContent,
@@ -68,15 +101,23 @@ watch(
     <section class="pane-card pane-toolbar">
       <div class="pane-toolbar-row">
         <div class="pane-toolbar-copy">
-          <h3 class="section-title pane-toolbar-title">Active Note</h3>
-          <p class="pane-toolbar-path" :title="props.activeNotePath || 'No active note'">
-            {{ props.activeNotePath ? props.toRelativePath(props.activeNotePath) : 'No active note' }}
+          <h3 class="section-title pane-toolbar-title">Note Active</h3>
+          <p class="pane-toolbar-note-title">{{ props.activeNoteTitle || 'No active note' }}</p>
+          <p class="pane-toolbar-meta">
+            {{ props.activeStateLabel }}
+            <template v-if="props.activeNotePath">
+              <span>· {{ props.backlinkCount }} backlinks</span>
+              <span>· {{ props.semanticLinkCount }} semantic links</span>
+            </template>
           </p>
         </div>
-        <button
-          type="button"
-          class="favorite-toggle-btn"
-          :class="{ 'favorite-toggle-btn--active': props.isFavorite }"
+        <UiIconButton
+          variant="ghost"
+          size="sm"
+          :class-name="[
+            'favorite-toggle-btn',
+            props.isFavorite ? 'favorite-toggle-btn--active' : ''
+          ].filter(Boolean).join(' ')"
           :disabled="!props.canToggleFavorite"
           :title="props.isFavorite ? 'Remove from Favorites' : 'Add to Favorites'"
           :aria-label="props.isFavorite ? 'Remove from Favorites' : 'Add to Favorites'"
@@ -84,8 +125,18 @@ watch(
         >
           <StarSolidIcon v-if="props.isFavorite" />
           <StarOutlineIcon v-else />
-        </button>
+        </UiIconButton>
       </div>
+
+      <UiButton
+        variant="secondary"
+        size="sm"
+        class-name="primary-context-btn"
+        :disabled="!props.activeNotePath"
+        @click="props.activeNoteInContext ? emit('active-note-remove-from-context') : emit('active-note-add-to-context')"
+      >
+        {{ props.activeNoteInContext ? 'Retirer du contexte' : 'Ajouter au contexte' }}
+      </UiButton>
     </section>
 
     <EditorEchoesPanel
@@ -95,15 +146,86 @@ watch(
       :hint-visible="props.echoesHintVisible"
       :to-relative-path="props.toRelativePath"
       @open="emit('echoes-open', $event)"
+      @add="emit('echoes-add-to-context', $event)"
+      @remove="emit('echoes-remove-from-context', $event)"
     />
+
+    <section class="pane-card pane-section context-card">
+      <div class="context-head">
+        <div>
+          <h3 class="section-title">{{ contextTitle }}</h3>
+          <p v-if="props.contextItems.length" class="context-count">
+            {{ props.contextItems.length }} note{{ props.contextItems.length > 1 ? 's' : '' }}
+          </p>
+        </div>
+        <div class="context-actions" v-if="props.contextItems.length">
+          <UiButton
+            v-if="props.contextMode === 'local'"
+            variant="ghost"
+            size="sm"
+            class-name="context-chip-btn"
+            @click="emit('context-preserve')"
+          >
+            Conserver
+          </UiButton>
+          <UiButton variant="ghost" size="sm" class-name="context-chip-btn" @click="emit('context-clear')">Vider</UiButton>
+        </div>
+      </div>
+
+      <div v-if="props.contextError" class="empty-state">{{ props.contextError }}</div>
+      <div v-else-if="!props.contextItems.length" class="empty-state">{{ contextEmptyCopy }}</div>
+      <div v-else class="context-list">
+        <div v-for="item in props.contextItems" :key="item.path" class="context-row">
+          <UiButton variant="ghost" size="sm" class-name="context-open-btn" @click="emit('context-open', item.path)">
+            <span class="context-row-title">{{ item.title }}</span>
+            <span class="context-row-path">{{ props.toRelativePath(item.path) }}</span>
+          </UiButton>
+          <UiButton variant="ghost" size="sm" class-name="context-remove-btn" @click="emit('context-remove', item.path)">Retirer</UiButton>
+        </div>
+      </div>
+    </section>
+
+    <section class="pane-card pane-section action-card">
+      <UiButton
+        variant="primary"
+        size="md"
+        class-name="context-primary-cta"
+        :disabled="!props.canReasonOnContext || props.isLaunchingContextAction"
+        :loading="props.isLaunchingContextAction"
+        @click="emit('context-open-second-brain')"
+      >
+        Raisonner sur ce contexte
+      </UiButton>
+
+      <div class="context-secondary-actions">
+        <UiButton
+          variant="ghost"
+          size="sm"
+          class-name="context-link-btn"
+          :disabled="!props.canReasonOnContext || props.isLaunchingContextAction"
+          @click="emit('context-open-cosmos')"
+        >
+          Explorer dans Cosmos
+        </UiButton>
+        <UiButton
+          variant="ghost"
+          size="sm"
+          class-name="context-link-btn"
+          :disabled="!props.canReasonOnContext || props.isLaunchingContextAction"
+          @click="emit('context-open-pulse')"
+        >
+          Transformer avec Pulse
+        </UiButton>
+      </div>
+    </section>
 
     <section class="pane-card pane-section">
       <button type="button" class="section-toggle" @click="outlineExpanded = !outlineExpanded">
-        <h3 class="section-title">Outline</h3>
+        <h3 class="section-title">Plan</h3>
         <ChevronRightIcon class="section-toggle-chevron" :class="{ expanded: outlineExpanded }" />
       </button>
       <template v-if="outlineExpanded">
-        <div v-if="!props.outline.length" class="empty-state">No headings</div>
+        <div v-if="!props.outline.length" class="empty-state">Aucun titre</div>
         <button
           v-for="(heading, idx) in props.outline"
           :key="`${heading.text}-${idx}`"
@@ -119,12 +241,12 @@ watch(
 
     <section class="pane-card pane-section">
       <button type="button" class="section-toggle" @click="semanticExpanded = !semanticExpanded">
-        <h3 class="section-title">Semantic Links</h3>
+        <h3 class="section-title">Liens Semantiques</h3>
         <ChevronRightIcon class="section-toggle-chevron" :class="{ expanded: semanticExpanded }" />
       </button>
       <template v-if="semanticExpanded">
         <div v-if="props.semanticLinksLoading" class="empty-state">Loading...</div>
-        <div v-else-if="!props.semanticLinks.length" class="empty-state">No semantic links</div>
+        <div v-else-if="!props.semanticLinks.length" class="empty-state">Aucun lien semantique</div>
         <button
           v-for="item in props.semanticLinks"
           :key="`semantic-${item.path}`"
@@ -161,8 +283,11 @@ watch(
     </section>
 
     <section class="pane-card pane-section">
-      <h3 class="section-title">Metadata</h3>
-      <div class="metadata-grid">
+      <button type="button" class="section-toggle" @click="metadataExpanded = !metadataExpanded">
+        <h3 class="section-title">Metadata</h3>
+        <ChevronRightIcon class="section-toggle-chevron" :class="{ expanded: metadataExpanded }" />
+      </button>
+      <div v-if="metadataExpanded" class="metadata-grid">
         <div v-for="row in props.metadataRows" :key="row.label" class="meta-row">
           <span class="meta-label">{{ row.label }}</span>
           <span class="meta-value" :title="row.value">{{ row.value }}</span>
@@ -171,17 +296,22 @@ watch(
     </section>
 
     <section class="pane-card pane-section">
-      <h3 class="section-title">Properties</h3>
-      <div v-if="props.propertyParseErrorCount > 0" class="empty-state">
-        {{ props.propertyParseErrorCount }} parse error{{ props.propertyParseErrorCount > 1 ? 's' : '' }}
-      </div>
-      <div v-else-if="!props.propertiesPreview.length" class="empty-state">No properties</div>
-      <div v-else class="metadata-grid">
-        <div v-for="row in props.propertiesPreview" :key="row.key" class="meta-row">
-          <span class="meta-label">{{ row.key }}</span>
-          <span class="meta-value" :title="row.value">{{ row.value }}</span>
+      <button type="button" class="section-toggle" @click="propertiesExpanded = !propertiesExpanded">
+        <h3 class="section-title">Properties</h3>
+        <ChevronRightIcon class="section-toggle-chevron" :class="{ expanded: propertiesExpanded }" />
+      </button>
+      <template v-if="propertiesExpanded">
+        <div v-if="props.propertyParseErrorCount > 0" class="empty-state">
+          {{ props.propertyParseErrorCount }} parse error{{ props.propertyParseErrorCount > 1 ? 's' : '' }}
         </div>
-      </div>
+        <div v-else-if="!props.propertiesPreview.length" class="empty-state">No properties</div>
+        <div v-else class="metadata-grid">
+          <div v-for="row in props.propertiesPreview" :key="row.key" class="meta-row">
+            <span class="meta-label">{{ row.key }}</span>
+            <span class="meta-value" :title="row.value">{{ row.value }}</span>
+          </div>
+        </div>
+      </template>
     </section>
   </aside>
 </template>
@@ -222,7 +352,7 @@ watch(
 
 .pane-toolbar-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
 }
@@ -238,13 +368,17 @@ watch(
   margin-bottom: 0;
 }
 
-.pane-toolbar-path {
+.pane-toolbar-note-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--right-pane-text);
+}
+
+.pane-toolbar-meta {
   margin: 0;
   font-size: 12px;
   color: var(--right-pane-text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .section-title {
@@ -257,49 +391,114 @@ watch(
 }
 
 .favorite-toggle-btn {
-  width: 24px;
-  height: 24px;
   flex: 0 0 auto;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
   color: var(--right-pane-text-soft);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition:
-    background-color 140ms ease,
-    border-color 140ms ease,
-    color 140ms ease,
-    box-shadow 140ms ease,
-    transform 90ms ease;
-}
-
-.favorite-toggle-btn:hover:not(:disabled) {
-  background: var(--right-pane-item-hover);
-  color: var(--right-pane-text);
-}
-
-.favorite-toggle-btn:active:not(:disabled) {
-  transform: translateY(1px);
-}
-
-.favorite-toggle-btn:disabled {
-  opacity: 0.45;
-  cursor: default;
 }
 
 .favorite-toggle-btn--active {
   color: var(--right-pane-favorite);
 }
 
-.favorite-toggle-btn--active:hover:not(:disabled) {
-  color: var(--right-pane-favorite-hover);
-}
-
 .favorite-toggle-btn :deep(svg) {
   width: 14px;
   height: 14px;
+}
+
+.primary-context-btn,
+.context-primary-cta {
+  width: 100%;
+  margin-top: 10px;
+}
+
+.context-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.context-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.context-count {
+  margin: 0;
+  color: var(--right-pane-text-dim);
+  font-size: 12px;
+}
+
+.context-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.context-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.context-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.context-open-btn {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: auto;
+}
+
+.context-open-btn:hover,
+.pane-item:hover {
+  background: var(--right-pane-item-hover);
+  color: var(--right-pane-text);
+}
+
+.context-row-title,
+.context-row-path {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-row-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--right-pane-text);
+}
+
+.context-row-path {
+  font-size: 11px;
+  color: var(--right-pane-text-dim);
+}
+
+.context-open-btn:deep(.ui-button) {
+  justify-content: flex-start;
+  min-height: 2.25rem;
+  height: auto;
+}
+
+.context-open-btn:deep(.ui-button__spinner),
+.context-open-btn:deep(.ui-button__icon) {
+  display: none;
+}
+
+.action-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.context-secondary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .pane-item {
@@ -348,16 +547,8 @@ watch(
   border-radius: 999px;
   padding: 2px 6px;
   font-weight: 600;
-}
-
-.semantic-link-direction {
   color: var(--right-pane-text-soft);
   background: var(--right-pane-item-hover);
-}
-
-.pane-item:hover {
-  background: var(--right-pane-item-hover);
-  color: var(--right-pane-text);
 }
 
 .metadata-grid {
@@ -422,5 +613,4 @@ watch(
 .section-toggle-chevron.expanded {
   transform: rotate(90deg);
 }
-
 </style>
