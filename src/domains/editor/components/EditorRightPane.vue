@@ -189,7 +189,7 @@ watch(
           <UiButton
             variant="ghost"
             size="sm"
-            class-name="context-open-btn"
+            class-name="context-open-btn !justify-start !text-left"
             :title="props.toRelativePath(item.path)"
             @click="emit('context-open', item.path)"
           >
