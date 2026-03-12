@@ -1,0 +1,51 @@
+html[data-theme='ardoise-rosee'] {
+  color-scheme: light;
+
+  --color-surface-0: #f3f2f4;
+  --color-surface-1: #faf9fb;
+  --color-surface-2: #e6e1e5;
+  --color-surface-3: #fdfdfe;
+  --color-surface-4: #efebef;
+  --color-border-1: #d1c9d0;
+  --color-border-2: #b4a8b2;
+  --color-border-3: #928490;
+  --color-text-1: #211d22;
+  --color-text-2: #4d4550;
+  --color-text-3: #746a74;
+  --color-text-4: #978b97;
+  --color-accent-1: #c58c93;
+  --color-accent-2: #a86f77;
+  --color-accent-soft: #f0dde0;
+  --color-accent-focus: rgba(197, 140, 147, 0.18);
+  --color-accent-contrast: #ffffff;
+
+  --shell-chrome-bg: #c9ccd3;
+  --shell-chrome-border: #acb2bc;
+  --shell-chrome-text: #414b59;
+  --shell-chrome-text-strong: #252d38;
+  --left-rail-bg: #6b7485;
+  --left-rail-border: #586172;
+  --left-rail-text: rgba(237, 241, 247, 0.82);
+  --left-rail-text-strong: #ffffff;
+  --left-rail-hover-bg: rgba(255, 255, 255, 0.1);
+  --left-rail-active-bg: rgba(255, 255, 255, 0.15);
+  --left-rail-active-border: rgba(244, 240, 244, 0.24);
+  --left-rail-active-text: #ffffff;
+  --left-rail-active-indicator: #efc8cd;
+  --left-sidebar-bg: #d7d0d6;
+  --left-sidebar-border: #b7acb5;
+  --left-sidebar-title: #7d717d;
+  --left-sidebar-text: #4b434d;
+  --left-sidebar-text-strong: #211d22;
+  --left-sidebar-link: #a86f77;
+  --left-sidebar-link-hover: #8d5962;
+  --topbar-bg: #b8bec8;
+  --topbar-border: #9ea5b0;
+  --topbar-text: #2b3441;
+  --topbar-text-strong: #1b2330;
+  --explorer-row-hover-bg: rgba(197, 140, 147, 0.08);
+  --explorer-row-selected-bg: rgba(197, 140, 147, 0.14);
+  --explorer-row-active-bg: rgba(197, 140, 147, 0.16);
+  --explorer-row-active-text: #8c5c63;
+  --explorer-row-indicator: #c58c93;
+}

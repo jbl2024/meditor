@@ -1,0 +1,52 @@
+html[data-theme='atelier-rose'] {
+  color-scheme: light;
+
+  --color-surface-0: #f5f0ee;
+  --color-surface-1: #fbf8f7;
+  --color-surface-2: #eadedb;
+  --color-surface-3: #fefcfb;
+  --color-surface-4: #f1e7e4;
+  --color-border-1: #d6c7c2;
+  --color-border-2: #baa59d;
+  --color-border-3: #987f75;
+  --color-text-1: #261d1b;
+  --color-text-2: #574843;
+  --color-text-3: #7c6a64;
+  --color-text-4: #9a8780;
+  --color-accent-1: #c98274;
+  --color-accent-2: #b26a5d;
+  --color-accent-soft: #f2ded9;
+  --color-accent-focus: rgba(201, 130, 116, 0.18);
+  --color-accent-contrast: #ffffff;
+  --shadow-panel: 0 0 0 1px rgba(214, 199, 194, 0.92), 0 10px 24px rgba(61, 39, 35, 0.08);
+
+  --shell-chrome-bg: #d7c1bb;
+  --shell-chrome-border: #bea29a;
+  --shell-chrome-text: #503f3a;
+  --shell-chrome-text-strong: #2c221f;
+  --left-rail-bg: #8f6f74;
+  --left-rail-border: #785b60;
+  --left-rail-text: rgba(249, 241, 239, 0.82);
+  --left-rail-text-strong: #ffffff;
+  --left-rail-hover-bg: rgba(255, 255, 255, 0.1);
+  --left-rail-active-bg: rgba(255, 255, 255, 0.15);
+  --left-rail-active-border: rgba(255, 244, 242, 0.24);
+  --left-rail-active-text: #ffffff;
+  --left-rail-active-indicator: #f6d1ca;
+  --left-sidebar-bg: #d6c0bb;
+  --left-sidebar-border: #b99f97;
+  --left-sidebar-title: #816862;
+  --left-sidebar-text: #4e403b;
+  --left-sidebar-text-strong: #261d1b;
+  --left-sidebar-link: #a95d53;
+  --left-sidebar-link-hover: #8e4c43;
+  --topbar-bg: #c98274;
+  --topbar-border: #b26a5d;
+  --topbar-text: rgba(255, 246, 244, 0.88);
+  --topbar-text-strong: #ffffff;
+  --explorer-row-hover-bg: rgba(201, 130, 116, 0.08);
+  --explorer-row-selected-bg: rgba(201, 130, 116, 0.14);
+  --explorer-row-active-bg: #cf8778;
+  --explorer-row-active-text: #ffffff;
+  --explorer-row-indicator: #b66f62;
+}

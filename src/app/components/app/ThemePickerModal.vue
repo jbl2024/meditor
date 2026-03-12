@@ -194,6 +194,31 @@ function itemSwatches(item: ThemePickerItem): string[] {
   --swatch-accent: #c88758;
 }
 
+.theme-picker-swatch[data-theme-preview='atelier-rose'] {
+  --swatch-surface: #d6c0bb;
+  --swatch-accent: #c98274;
+}
+
+.theme-picker-swatch[data-theme-preview='ardoise-rosee'] {
+  --swatch-surface: #c9ccd3;
+  --swatch-accent: #c58c93;
+}
+
+.theme-picker-swatch[data-theme-preview='brume-terracotta'] {
+  --swatch-surface: #d8d7d3;
+  --swatch-accent: #c47253;
+}
+
+.theme-picker-swatch[data-theme-preview='bleu-datelier'] {
+  --swatch-surface: #cad8e5;
+  --swatch-accent: #3d6794;
+}
+
+.theme-picker-swatch[data-theme-preview='cuivre-pale'] {
+  --swatch-surface: #e5d5c8;
+  --swatch-accent: #c88d63;
+}
+
 .theme-picker-swatch[data-theme-preview='harbor-light'] {
   --swatch-surface: #d9e4f2;
   --swatch-accent: #16324f;

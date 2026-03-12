@@ -1,0 +1,51 @@
+html[data-theme='brume-terracotta'] {
+  color-scheme: light;
+
+  --color-surface-0: #f4f3f1;
+  --color-surface-1: #fbfaf8;
+  --color-surface-2: #e6e2dc;
+  --color-surface-3: #fefdfb;
+  --color-surface-4: #f0ede8;
+  --color-border-1: #d3cdc5;
+  --color-border-2: #b7aca1;
+  --color-border-3: #93867b;
+  --color-text-1: #25201b;
+  --color-text-2: #564d45;
+  --color-text-3: #7a6f65;
+  --color-text-4: #9c9085;
+  --color-accent-1: #c47253;
+  --color-accent-2: #a95d40;
+  --color-accent-soft: #f1ddd3;
+  --color-accent-focus: rgba(196, 114, 83, 0.18);
+  --color-accent-contrast: #ffffff;
+
+  --shell-chrome-bg: #d8d7d3;
+  --shell-chrome-border: #bcbab3;
+  --shell-chrome-text: #4c4f53;
+  --shell-chrome-text-strong: #252a31;
+  --left-rail-bg: #8f979f;
+  --left-rail-border: #79828a;
+  --left-rail-text: rgba(244, 247, 250, 0.82);
+  --left-rail-text-strong: #ffffff;
+  --left-rail-hover-bg: rgba(255, 255, 255, 0.1);
+  --left-rail-active-bg: rgba(255, 255, 255, 0.14);
+  --left-rail-active-border: rgba(249, 240, 235, 0.22);
+  --left-rail-active-text: #ffffff;
+  --left-rail-active-indicator: #edb49f;
+  --left-sidebar-bg: #ddd5cb;
+  --left-sidebar-border: #beb2a5;
+  --left-sidebar-title: #85796c;
+  --left-sidebar-text: #4b433b;
+  --left-sidebar-text-strong: #25201b;
+  --left-sidebar-link: #a95d40;
+  --left-sidebar-link-hover: #8d4b31;
+  --topbar-bg: #c47253;
+  --topbar-border: #ab5f43;
+  --topbar-text: rgba(255, 245, 240, 0.88);
+  --topbar-text-strong: #ffffff;
+  --explorer-row-hover-bg: rgba(196, 114, 83, 0.08);
+  --explorer-row-selected-bg: rgba(196, 114, 83, 0.14);
+  --explorer-row-active-bg: rgba(196, 114, 83, 0.16);
+  --explorer-row-active-text: #9d5238;
+  --explorer-row-indicator: #c47253;
+}

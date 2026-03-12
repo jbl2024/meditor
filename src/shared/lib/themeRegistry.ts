@@ -5,6 +5,11 @@ export type ThemeId =
   | 'tomosona-light'
   | 'tomosona-dark'
   | 'acier-sable-rose'
+  | 'atelier-rose'
+  | 'ardoise-rosee'
+  | 'brume-terracotta'
+  | 'bleu-datelier'
+  | 'cuivre-pale'
   | 'harbor-light'
   | 'midnight-rail'
   | 'github-light'
@@ -43,6 +48,36 @@ export const APP_THEMES: readonly AppThemeDefinition[] = [
   {
     id: 'acier-sable-rose',
     label: 'Acier & Sable Rose',
+    colorScheme: 'light',
+    group: 'community'
+  },
+  {
+    id: 'atelier-rose',
+    label: 'Atelier Rose',
+    colorScheme: 'light',
+    group: 'community'
+  },
+  {
+    id: 'ardoise-rosee',
+    label: 'Ardoise Rosee',
+    colorScheme: 'light',
+    group: 'community'
+  },
+  {
+    id: 'brume-terracotta',
+    label: 'Brume & Terracotta',
+    colorScheme: 'light',
+    group: 'community'
+  },
+  {
+    id: 'bleu-datelier',
+    label: "Bleu d'Atelier",
+    colorScheme: 'light',
+    group: 'community'
+  },
+  {
+    id: 'cuivre-pale',
+    label: 'Cuivre Pale',
     colorScheme: 'light',
     group: 'community'
   },
