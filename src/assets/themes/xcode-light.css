@@ -1,0 +1,85 @@
+html[data-theme='xcode-light'] {
+  color-scheme: light;
+
+  --color-surface-0: #f3f6fa;
+  --color-surface-1: #ffffff;
+  --color-surface-2: #e8edf4;
+  --color-surface-3: #ffffff;
+  --color-surface-4: #f0f4f9;
+  --color-overlay-1: rgba(243, 246, 250, 0.95);
+  --color-overlay-2: rgba(255, 255, 255, 0.98);
+  --color-border-1: #d5dde7;
+  --color-border-2: #bac7d5;
+  --color-border-3: #95a7ba;
+  --color-text-1: #1f2a36;
+  --color-text-2: #4b5b6b;
+  --color-text-3: #6f7f8f;
+  --color-text-4: #90a0b1;
+  --color-accent-1: #2f6fbd;
+  --color-accent-2: #245c9d;
+  --color-accent-soft: #dce9f8;
+  --color-accent-focus: rgba(47, 111, 189, 0.16);
+  --color-accent-contrast: #ffffff;
+  --color-danger-1: #c14949;
+  --color-danger-2: #9e3838;
+  --color-danger-soft: rgba(193, 73, 73, 0.12);
+  --color-success-1: #2e8a57;
+  --color-warning-1: #ad7a24;
+  --shadow-panel: 0 0 0 1px rgba(213, 221, 231, 0.94), 0 10px 24px rgba(25, 38, 52, 0.08);
+
+  --shell-chrome-bg: #e8edf4;
+  --shell-chrome-border: #c4d0dc;
+  --shell-chrome-text: #506172;
+  --shell-chrome-text-strong: #223241;
+  --shell-command-bg: rgba(255, 255, 255, 0.74);
+  --shell-command-hover-bg: rgba(255, 255, 255, 0.92);
+  --shell-command-border: rgba(111, 131, 151, 0.34);
+  --shell-divider: rgba(123, 140, 158, 0.28);
+  --shell-splitter: rgba(149, 167, 186, 0.42);
+  --shell-status-bg: #e8edf4;
+  --shell-status-text: #506172;
+  --shell-status-divider: rgba(123, 140, 158, 0.32);
+
+  --left-rail-bg: #dde5ee;
+  --left-rail-border: #c0ccd9;
+  --left-rail-text: #647688;
+  --left-rail-text-strong: #223241;
+  --left-rail-hover-bg: rgba(47, 111, 189, 0.08);
+  --left-rail-active-bg: rgba(47, 111, 189, 0.1);
+  --left-rail-active-border: rgba(47, 111, 189, 0.18);
+  --left-rail-active-text: #2f6fbd;
+  --left-rail-active-indicator: #2f6fbd;
+
+  --left-sidebar-bg: #eef3f8;
+  --left-sidebar-border: #ccd6e1;
+  --left-sidebar-title: #6b7d8d;
+  --left-sidebar-text: #4b5b6b;
+  --left-sidebar-text-strong: #223241;
+  --left-sidebar-link: #2f6fbd;
+  --left-sidebar-link-hover: #245c9d;
+
+  --topbar-bg: #e8edf4;
+  --topbar-border: #c4d0dc;
+  --topbar-text: #506172;
+  --topbar-text-strong: #223241;
+  --topbar-command-bg: rgba(255, 255, 255, 0.74);
+  --topbar-command-border: rgba(111, 131, 151, 0.34);
+  --topbar-command-hover-bg: rgba(255, 255, 255, 0.92);
+  --topbar-command-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42);
+  --topbar-command-shortcut: #7a8897;
+
+  --explorer-row-hover-bg: rgba(47, 111, 189, 0.07);
+  --explorer-row-hover-text: #223241;
+  --explorer-row-selected-bg: rgba(47, 111, 189, 0.12);
+  --explorer-row-selected-text: #223241;
+  --explorer-row-focused-bg: rgba(47, 111, 189, 0.1);
+  --explorer-row-active-bg: rgba(47, 111, 189, 0.14);
+  --explorer-row-active-text: #2f6fbd;
+  --explorer-row-indicator: #2f6fbd;
+  --explorer-toolbar-hover-bg: rgba(47, 111, 189, 0.08);
+  --properties-accent: #2f6fbd;
+  --cosmos-view-bg: linear-gradient(165deg, #ffffff 0%, #f2f6fb 100%);
+  --sb-layout-bg: linear-gradient(135deg, #ffffff, #f2f6fb 45%, #e2ebf5);
+  --sb-user-bg: #f3f7fb;
+  --sb-assistant-bg: #dce9f8;
+}

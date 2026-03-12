@@ -12,6 +12,8 @@ export type ThemeId =
   | 'cuivre-pale'
   | 'harbor-light'
   | 'midnight-rail'
+  | 'xcode-light'
+  | 'xcode-dark'
   | 'github-light'
   | 'tokyo-night'
   | 'catppuccin-latte'
@@ -91,6 +93,18 @@ export const APP_THEMES: readonly AppThemeDefinition[] = [
     id: 'midnight-rail',
     label: 'Midnight Rail',
     colorScheme: 'light',
+    group: 'community'
+  },
+  {
+    id: 'xcode-light',
+    label: 'Xcode Light',
+    colorScheme: 'light',
+    group: 'community'
+  },
+  {
+    id: 'xcode-dark',
+    label: 'Xcode Dark',
+    colorScheme: 'dark',
     group: 'community'
   },
   {

@@ -20,6 +20,8 @@ describe('theme registry', () => {
       'cuivre-pale',
       'harbor-light',
       'midnight-rail',
+      'xcode-light',
+      'xcode-dark',
       'github-light',
       'tokyo-night',
       'catppuccin-latte',

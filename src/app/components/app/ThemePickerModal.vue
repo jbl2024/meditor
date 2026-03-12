@@ -229,6 +229,16 @@ function itemSwatches(item: ThemePickerItem): string[] {
   --swatch-accent: #17344f;
 }
 
+.theme-picker-swatch[data-theme-preview='xcode-light'] {
+  --swatch-surface: #e8edf4;
+  --swatch-accent: #2f6fbd;
+}
+
+.theme-picker-swatch[data-theme-preview='xcode-dark'] {
+  --swatch-surface: #1f2329;
+  --swatch-accent: #4ba3ff;
+}
+
 .theme-picker-swatch[data-theme-preview='github-light'] {
   --swatch-surface: #f6f8fa;
   --swatch-accent: #0969da;
