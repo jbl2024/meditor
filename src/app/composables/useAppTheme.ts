@@ -57,12 +57,29 @@ export function useAppTheme(options: UseAppThemeOptions = {}) {
   const activeTheme = computed(() => getAppThemeById(activeThemeId.value))
   const activeColorScheme = computed<ThemeColorScheme>(() => activeTheme.value.colorScheme)
 
+  function resolveThemePreference(preference: ThemePreference): ThemeId {
+    if (preference === 'system') {
+      return isSystemDark() ? SYSTEM_DARK_THEME_ID : SYSTEM_LIGHT_THEME_ID
+    }
+    return preference
+  }
+
+  function applyResolvedThemeId(themeId: ThemeId) {
+    const root = options.root ?? document.documentElement
+    const theme = getAppThemeById(themeId)
+    root.classList.toggle('dark', theme.colorScheme === 'dark')
+    root.dataset.theme = theme.id
+    root.dataset.colorScheme = theme.colorScheme
+  }
+
   /** Applies the resolved theme to the configured root element. */
   function applyTheme() {
-    const root = options.root ?? document.documentElement
-    root.classList.toggle('dark', activeColorScheme.value === 'dark')
-    root.dataset.theme = activeThemeId.value
-    root.dataset.colorScheme = activeColorScheme.value
+    applyResolvedThemeId(activeThemeId.value)
+  }
+
+  /** Applies a transient preview without mutating or persisting the user preference. */
+  function applyThemePreview(preference: ThemePreference) {
+    applyResolvedThemeId(resolveThemePreference(preference))
   }
 
   /** Loads the persisted preference, defaulting back to `system` when absent or invalid. */
@@ -101,6 +118,7 @@ export function useAppTheme(options: UseAppThemeOptions = {}) {
     activeTheme,
     activeColorScheme,
     applyTheme,
+    applyThemePreview,
     loadThemePreference,
     persistThemePreference,
     setThemePreference,

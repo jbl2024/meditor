@@ -350,6 +350,33 @@ describe('App shell flows', () => {
     mounted.app.unmount()
   })
 
+  it('previews hovered themes and restores the committed theme when the picker closes', async () => {
+    const mounted = mountApp()
+    await flushUi()
+
+    await runPaletteCommand(mounted.root, '>theme: tokyo night')
+    expect(document.documentElement.dataset.theme).toBe('tokyo-night')
+
+    await runPaletteCommand(mounted.root, '>theme: select theme')
+
+    const harborButton = Array.from(mounted.root.querySelectorAll<HTMLButtonElement>('.theme-picker-item'))
+      .find((item) => item.textContent?.includes('Harbor Light'))
+    expect(harborButton).toBeTruthy()
+    harborButton?.dispatchEvent(new Event('mouseenter', { bubbles: true }))
+    await flushUi()
+
+    expect(document.documentElement.dataset.theme).toBe('harbor-light')
+    expect(document.documentElement.dataset.colorScheme).toBe('light')
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+    await flushUi()
+
+    expect(document.documentElement.dataset.theme).toBe('tokyo-night')
+    expect(document.documentElement.dataset.colorScheme).toBe('dark')
+
+    mounted.app.unmount()
+  })
+
   it('closes the current workspace from the command palette and clears shell workspace UI', async () => {
     const mounted = mountApp()
     await flushUi()

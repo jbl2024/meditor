@@ -216,6 +216,7 @@ const {
   activeTheme,
   activeColorScheme,
   applyTheme,
+  applyThemePreview,
   loadThemePreference,
   persistThemePreference,
   onSystemThemeChanged
@@ -228,6 +229,7 @@ const quickOpenActiveIndex = ref(0)
 const themePickerVisible = ref(false)
 const themePickerQuery = ref('')
 const themePickerActiveIndex = ref(0)
+const themePickerHasPreview = ref(false)
 const leftPaneWidth = ref(290)
 const rightPaneWidth = ref(300)
 const editorRef = ref<EditorViewExposed | null>(null)
@@ -1750,6 +1752,7 @@ function moveThemePickerSelection(delta: number) {
   const count = themePickerItemCount.value
   if (!count) return
   themePickerActiveIndex.value = (themePickerActiveIndex.value + delta + count) % count
+  previewThemePickerItemAtIndex(themePickerActiveIndex.value)
 }
 
 function syncThemePickerActiveIndex() {
@@ -1776,19 +1779,35 @@ function scrollThemePickerActiveItemIntoView() {
   })
 }
 
+function previewThemePickerItem(next: ThemePreference) {
+  themePickerHasPreview.value = true
+  applyThemePreview(next)
+}
+
+function previewThemePickerItemAtIndex(index: number) {
+  const item = themePickerItems.value[index]
+  if (!item) return
+  previewThemePickerItem(item.id)
+}
+
 async function openThemePickerModal() {
   rememberFocusBeforeModalOpen()
   themePickerVisible.value = true
   themePickerQuery.value = ''
   themePickerActiveIndex.value = 0
+  themePickerHasPreview.value = false
   await nextTick()
   focusThemePickerInput()
 }
 
-function closeThemePickerModal() {
+function closeThemePickerModal(restoreTheme = true) {
+  if (restoreTheme && themePickerHasPreview.value) {
+    applyTheme()
+  }
   themePickerVisible.value = false
   themePickerQuery.value = ''
   themePickerActiveIndex.value = 0
+  themePickerHasPreview.value = false
   void nextTick(() => {
     restoreFocusAfterModalClose()
   })
@@ -1800,7 +1819,7 @@ function applyThemePreference(next: ThemePreference) {
 
 function selectThemeFromModal(next: ThemePreference) {
   applyThemePreference(next)
-  closeThemePickerModal()
+  closeThemePickerModal(false)
 }
 
 function onThemePickerEnter() {
@@ -3193,6 +3212,7 @@ onBeforeUnmount(() => {
       @close="closeThemePickerModal"
       @update:query="themePickerQuery = $event"
       @select="selectThemeFromModal"
+      @preview="previewThemePickerItem"
       @keydown="onThemePickerInputKeydown"
       @set-active-index="themePickerActiveIndex = $event"
     />

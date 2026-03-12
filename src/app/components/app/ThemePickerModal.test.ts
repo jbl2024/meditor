@@ -41,6 +41,9 @@ function mountHarness() {
             selectedPreference.value = value
             events.push(`select:${value}`)
           },
+          onPreview: (value: ThemePreference) => {
+            events.push(`preview:${value}`)
+          },
           'onUpdate:query': (value: string) => {
             query.value = value
             events.push(`query:${value}`)
@@ -74,10 +77,12 @@ describe('ThemePickerModal', () => {
 
     const button = Array.from(mounted.root.querySelectorAll<HTMLButtonElement>('.theme-picker-item'))
       .find((item) => item.textContent?.includes('Tokyo Night'))
+    button?.dispatchEvent(new Event('mouseenter', { bubbles: true }))
     button?.click()
     await nextTick()
 
     expect(mounted.events).toContain('query:tokyo')
+    expect(mounted.events).toContain('preview:tokyo-night')
     expect(mounted.events).toContain('select:tokyo-night')
     expect(mounted.selectedPreference.value).toBe('tokyo-night')
 

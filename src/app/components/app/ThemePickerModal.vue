@@ -31,6 +31,7 @@ const emit = defineEmits<{
   close: []
   'update:query': [value: string]
   select: [value: ThemePreference]
+  preview: [value: ThemePreference]
   keydown: [event: KeyboardEvent]
   'set-active-index': [index: number]
 }>()
@@ -73,6 +74,7 @@ function itemSwatches(item: ThemePickerItem): string[] {
           :class="{ active: activeIndex === index }"
           :data-selected="selectedPreference === item.id"
           @click="emit('select', item.id)"
+          @mouseenter="emit('preview', item.id)"
           @mousemove="emit('set-active-index', index)"
         >
           <span class="theme-picker-item-main">
