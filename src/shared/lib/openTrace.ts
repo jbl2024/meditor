@@ -110,6 +110,45 @@ function formatMs(value: number): string {
   return `${value.toFixed(value >= 100 ? 0 : 1)}ms`
 }
 
+function compactPath(path: unknown): string {
+  if (typeof path !== 'string') return ''
+  const normalized = normalizePath(path)
+  const segments = normalized.split('/').filter(Boolean)
+  if (segments.length <= 3) return normalized
+  return segments.slice(-3).join('/')
+}
+
+function formatConsoleValue(value: unknown): string {
+  if (typeof value === 'number') return Number.isFinite(value) ? `${value}` : ''
+  if (typeof value === 'boolean') return value ? 'true' : 'false'
+  if (typeof value === 'string') return value
+  return ''
+}
+
+function buildConsoleSuffix(payload: Record<string, unknown>): string {
+  const fields: string[] = []
+  const pushField = (label: string, value: unknown, formatter: (value: unknown) => string = formatConsoleValue) => {
+    const formatted = formatter(value)
+    if (!formatted) return
+    fields.push(`${label}=${formatted}`)
+  }
+
+  pushField('trace', payload.trace_id)
+  pushField('span', payload.span_id)
+  pushField('path', payload.path, compactPath)
+  pushField('source', payload.source)
+  pushField('duration', payload.duration_ms, (value) => typeof value === 'number' ? formatMs(value) : '')
+  pushField('elapsed', payload.elapsed_ms, (value) => typeof value === 'number' ? formatMs(value) : '')
+  pushField('total', payload.total_ms)
+  pushField('stage', payload.stage)
+  pushField('status', payload.status)
+  pushField('chars', payload.chars)
+  pushField('blocks', payload.block_count)
+  pushField('pane', payload.target_pane)
+  pushField('reveal_only', payload.reveal_only)
+  return fields.length > 0 ? ` ${fields.join(' ')}` : ''
+}
+
 function emitTrace(level: 'log' | 'warn' | 'error', message: string, payload: Record<string, unknown>) {
   const recentPayload = Object.prototype.hasOwnProperty.call(payload, 'message')
     ? {
@@ -127,7 +166,7 @@ function emitTrace(level: 'log' | 'warn' | 'error', message: string, payload: Re
     ...recentPayload
   })
   if (!debugEnabled()) return
-  console[level](`[open-trace] ${message}`, payload)
+  console[level](`[open-trace] ${message}${buildConsoleSuffix(recentPayload)}`, payload)
 }
 
 function levelForOutcome(outcome: OpenTraceOutcome): 'log' | 'warn' | 'error' {
