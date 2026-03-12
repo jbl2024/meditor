@@ -162,7 +162,7 @@ watch(
 
     <section class="pane-card pane-section context-card">
       <div class="context-head">
-        <div>
+        <div class="context-head-copy">
           <h3 class="section-title">{{ contextTitle }}</h3>
           <p v-if="props.contextItems.length" class="context-count">
             {{ props.contextItems.length }} note{{ props.contextItems.length > 1 ? 's' : '' }}
@@ -186,11 +186,16 @@ watch(
       <div v-else-if="!props.contextItems.length" class="empty-state">{{ contextEmptyCopy }}</div>
       <div v-else class="context-list">
         <div v-for="item in props.contextItems" :key="item.path" class="context-row">
-          <UiButton variant="ghost" size="sm" class-name="context-open-btn" @click="emit('context-open', item.path)">
+          <UiButton
+            variant="ghost"
+            size="sm"
+            class-name="context-open-btn"
+            :title="props.toRelativePath(item.path)"
+            @click="emit('context-open', item.path)"
+          >
             <span class="context-row-title">{{ item.title }}</span>
-            <span class="context-row-path">{{ props.toRelativePath(item.path) }}</span>
           </UiButton>
-          <UiButton variant="ghost" size="sm" class-name="context-remove-btn" @click="emit('context-remove', item.path)">Remove</UiButton>
+          <UiButton variant="ghost" size="sm" class-name="context-remove-btn" @click="emit('context-remove', item.path)">×</UiButton>
         </div>
       </div>
     </section>
@@ -428,43 +433,58 @@ watch(
 .context-card {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .context-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
+}
+
+.context-head-copy {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
 }
 
 .context-count {
   margin: 0;
   color: var(--right-pane-text-dim);
-  font-size: 12px;
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 .context-actions {
   display: flex;
-  gap: 8px;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.context-chip-btn {
+  min-height: 1.75rem;
+  padding-inline: 0.5rem;
 }
 
 .context-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
 }
 
 .context-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: flex-start;
+  gap: 4px;
 }
 
 .context-open-btn {
   flex: 1 1 auto;
   min-width: 0;
-  height: auto;
+  margin-top: 0;
 }
 
 .context-open-btn:hover,
@@ -483,7 +503,7 @@ watch(
 }
 
 .context-row-title {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--right-pane-text);
 }
@@ -495,13 +515,28 @@ watch(
 
 .context-open-btn:deep(.ui-button) {
   justify-content: flex-start;
-  min-height: 2.25rem;
-  height: auto;
+  text-align: left;
+  min-height: 1.85rem;
+  height: 1.85rem;
+  padding-inline: 0.45rem;
+}
+
+.context-open-btn:deep(.ui-button > span:last-child) {
+  width: 100%;
+  text-align: left;
 }
 
 .context-open-btn:deep(.ui-button__spinner),
 .context-open-btn:deep(.ui-button__icon) {
   display: none;
+}
+
+.context-remove-btn {
+  min-width: 1.85rem;
+  width: 1.85rem;
+  padding-inline: 0;
+  margin-top: 0;
+  color: var(--right-pane-text-dim);
 }
 
 .action-card {
