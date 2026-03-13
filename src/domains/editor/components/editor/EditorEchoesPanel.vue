@@ -80,6 +80,13 @@ const visibleItems = computed<EchoesRenderItem[]>(() => {
   })
 })
 
+function addVisibleItemsToContext() {
+  for (const item of visibleItems.value) {
+    if (item.isInContext) continue
+    emit('add', item.path)
+  }
+}
+
 function onContextClick(item: EditorEchoesListItem) {
   if (item.isInContext) {
     emit('remove', item.path)
@@ -104,7 +111,14 @@ function onCardClick(item: EditorEchoesListItem) {
         </span>
         <h3 class="section-title">Echoes</h3>
       </div>
-      <span v-if="!loading && !error && items.length" class="echoes-count">{{ items.length }} suggestion{{ items.length > 1 ? 's' : '' }}</span>
+      <button
+        v-if="!loading && !error && items.length"
+        type="button"
+        class="echoes-count"
+        @click="addVisibleItemsToContext"
+      >
+        {{ items.length }} suggestion{{ items.length > 1 ? 's' : '' }}
+      </button>
     </div>
     <p v-if="hintVisible" class="echoes-helper">Suggestions around this note.</p>
 
@@ -166,7 +180,7 @@ function onCardClick(item: EditorEchoesListItem) {
             <PlusIcon class="echoes-action-icon" />
             Add
           </template>
-          <template v-else>Added</template>
+          <template v-else>Remove</template>
         </UiButton>
       </div>
     </article>
@@ -261,6 +275,14 @@ function onCardClick(item: EditorEchoesListItem) {
   border-radius: 999px;
   background: color-mix(in srgb, var(--surface-subtle) 82%, var(--surface-bg));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--right-pane-card-border) 90%, transparent);
+  transition: background-color 140ms ease, box-shadow 140ms ease, color 140ms ease;
+}
+
+.echoes-count:hover,
+.echoes-count:focus-visible {
+  color: var(--echoes-item-title);
+  background: color-mix(in srgb, var(--surface-subtle) 70%, var(--right-pane-item-hover));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--right-pane-card-border) 72%, var(--echoes-card-hover-border));
 }
 
 .empty-state {

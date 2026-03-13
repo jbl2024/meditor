@@ -51,6 +51,8 @@ describe('EditorEchoesPanel', () => {
     expect(signalBadges[0].title).toBe('direct link')
     expect(signalBadges[1].title).toBe('semantic similarity')
 
+    const countChip = root.querySelector('.echoes-count') as HTMLButtonElement
+    countChip.click()
     const openButtons = Array.from(root.querySelectorAll('.echoes-open-btn')) as HTMLButtonElement[]
     openButtons[0].click()
     openButtons[1].click()
@@ -65,7 +67,9 @@ describe('EditorEchoesPanel', () => {
     expect(onOpen).toHaveBeenCalledWith('/vault/notes/b.md')
     expect(onOpen).toHaveBeenCalledTimes(4)
     expect(root.querySelector('.echoes-title-btn')).toBeNull()
-    expect(onAdd).toHaveBeenCalledWith('/vault/notes/a.md')
+    expect(actionButtons[1].textContent).toContain('Remove')
+    expect(onAdd).toHaveBeenNthCalledWith(1, '/vault/notes/a.md')
+    expect(onAdd).toHaveBeenNthCalledWith(2, '/vault/notes/a.md')
     expect(onRemove).toHaveBeenCalledWith('/vault/notes/b.md')
     expect(root.textContent).not.toContain('notes/a.md')
     app.unmount()
