@@ -162,7 +162,7 @@ watch(
     <section class="pane-card pane-section context-card">
       <div class="context-head">
         <div class="context-head-copy">
-          <h3 class="section-title">Context for This Note</h3>
+          <h3 class="section-title">Note Context</h3>
           <p v-if="hasLocalContext" class="context-count">
             {{ props.localContextItems.length }} note{{ props.localContextItems.length > 1 ? 's' : '' }}
           </p>

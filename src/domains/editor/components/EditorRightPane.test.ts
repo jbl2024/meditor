@@ -85,7 +85,7 @@ describe('EditorRightPane', () => {
     expect(sectionTitles.slice(0, 6)).toEqual([
       'Active Note',
       'Echoes',
-      'Context for This Note',
+      'Note Context',
       'Pinned Context',
       'Outline',
       'Semantic Links'
