@@ -126,7 +126,13 @@ function onCardClick(item: EditorEchoesListItem) {
       <div v-if="item.dividerBefore" class="echoes-divider" aria-hidden="true"></div>
       <div class="echoes-card-accent" aria-hidden="true"></div>
       <div class="echoes-card-copy">
-        <strong class="echoes-item-title" :title="props.toRelativePath(item.path)">{{ item.title }}</strong>
+        <strong
+          class="echoes-item-title"
+          :class="{ 'echoes-item-title--in-context': item.isInContext }"
+          :title="props.toRelativePath(item.path)"
+        >
+          {{ item.title }}
+        </strong>
         <span
           class="echoes-signal"
           :class="item.signalTone"
@@ -371,6 +377,10 @@ function onCardClick(item: EditorEchoesListItem) {
   white-space: normal;
 }
 
+.echoes-item-title--in-context {
+  color: var(--text-dim);
+}
+
 .echoes-signal {
   display: inline-flex;
   align-items: center;
@@ -468,8 +478,6 @@ function onCardClick(item: EditorEchoesListItem) {
 
 .echoes-action-btn--active {
   color: var(--right-pane-text);
-  background: color-mix(in srgb, var(--right-pane-item-hover) 84%, var(--surface-bg));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--right-pane-card-border) 72%, transparent);
 }
 
 @keyframes echoes-pulse {
