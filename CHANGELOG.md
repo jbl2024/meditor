@@ -18,6 +18,22 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.19.1] - 2026-03-13
+
+### Added
+- feat(editor): add all echoes suggestions from count chip (35e56ae)
+
+### Changed
+- style(editor): shorten note context heading (bd854b5)
+- style(editor): soften echoes in-context state (774c704)
+- style(editor): tighten context actions and echoes spacing (d6c59de)
+- refactor(editor): restyle echoes panel to match grouped card layout (c915368)
+
+### Fixed
+- fix(editor): open echoes notes on card click (1f4a2c0)
+- fix(open): defer echoes loading until note open completes (439391c)
+- fix(editor): separate note context from pinned context (377e8ed)
+
 ## [0.19.0] - 2026-03-12
 
 ### Added
