@@ -832,7 +832,11 @@ pub(crate) fn remove_markdown_file_from_index_sync(path: String) -> Result<()> {
     tx.commit()?;
 
     if let Err(err) = refresh_semantic_edges_cache(&conn, &root) {
-        log_index(&format!("semantic_edges:refresh_error err={err}"));
+        log_index(&format!(
+            "semantic_edges:refresh_error phase=remove_markdown_refresh err={} err_debug={:?}",
+            err,
+            err
+        ));
     }
     log_index(&format!("reindex:removed path={path_for_db}"));
     Ok(())

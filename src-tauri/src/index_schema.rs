@@ -13,8 +13,9 @@ use serde::Serialize;
 
 use crate::{
     active_workspace_root, ensure_within_root, has_hidden_dir_component, index_log_buffer,
-    log_index, open_db, reindex_markdown_file_lexical_sync, reindex_markdown_file_semantic_sync,
-    semantic, AppError, Result, INDEX_CANCEL_REQUESTED, INDEX_LOG_CAPACITY, INDEX_SCHEMA_VERSION,
+    log_index, next_index_run_id, open_db, reindex_markdown_file_lexical_sync,
+    reindex_markdown_file_semantic_sync, semantic, AppError, Result, INDEX_CANCEL_REQUESTED,
+    INDEX_LOG_CAPACITY, INDEX_SCHEMA_VERSION,
 };
 
 #[derive(Clone, Serialize)]
@@ -38,6 +39,32 @@ pub(crate) struct IndexRuntimeStatus {
     pub model_last_finished_at_ms: Option<u64>,
     pub model_last_duration_ms: Option<u64>,
     pub model_last_error: Option<String>,
+}
+
+fn sanitize_log_value(value: &str) -> String {
+    value
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-' | '/' | ':') {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+fn sqlite_error_tokens(err: &rusqlite::Error) -> String {
+    let mut tokens = vec![format!("err={}", sanitize_log_value(&err.to_string()))];
+    if let rusqlite::Error::SqliteFailure(code, message) = err {
+        tokens.push(format!("sqlite_code={:?}", code.code));
+        tokens.push(format!("sqlite_extended={}", code.extended_code));
+        if let Some(message) = message {
+            tokens.push(format!("sqlite_msg={}", sanitize_log_value(message)));
+        }
+    }
+    tokens.push(format!("err_debug={}", sanitize_log_value(&format!("{err:?}"))));
+    tokens.join(" ")
 }
 
 pub(crate) fn ensure_index_schema(conn: &Connection) -> Result<()> {
@@ -255,6 +282,7 @@ pub(crate) fn min_max_normalize(values: &[f64]) -> Vec<f64> {
 
 pub(crate) fn refresh_semantic_edges_cache(conn: &Connection, root_canonical: &Path) -> Result<()> {
     let started_at = Instant::now();
+    let run_id = next_index_run_id();
     let mut source_paths: Vec<String> = {
         let mut stmt = conn.prepare("SELECT path FROM note_embeddings_vec ORDER BY path")?;
         let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
@@ -266,14 +294,26 @@ pub(crate) fn refresh_semantic_edges_cache(conn: &Connection, root_canonical: &P
     };
     source_paths.sort_by_key(|item| item.to_lowercase());
     log_index(&format!(
-        "semantic_edges:refresh_start sources={} top_k={} threshold={}",
+        "semantic_edges:refresh_start run_id={} phase=scan_sources sources={} top_k={} threshold={}",
+        run_id,
         source_paths.len(),
         crate::SEMANTIC_TOP_K_PER_NOTE,
         crate::SEMANTIC_THRESHOLD
     ));
 
+    log_index(&format!(
+        "semantic_edges:refresh_phase run_id={} phase=clear_cache",
+        run_id
+    ));
     conn.execute("DELETE FROM semantic_edges", [])
-        .map_err(AppError::Sqlite)?;
+        .map_err(|err| {
+            log_index(&format!(
+                "semantic_edges:refresh_error run_id={} phase=clear_cache {}",
+                run_id,
+                sqlite_error_tokens(&err)
+            ));
+            AppError::Sqlite(err)
+        })?;
     let updated_at_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|value| value.as_millis() as i64)
@@ -288,7 +328,15 @@ pub(crate) fn refresh_semantic_edges_cache(conn: &Connection, root_canonical: &P
     let mut total_skipped_existing_link = 0usize;
     let mut total_skipped_missing_target_key = 0usize;
 
-    for source_path in source_paths {
+    let source_count = source_paths.len();
+    for (source_index, source_path) in source_paths.into_iter().enumerate() {
+        log_index(&format!(
+            "semantic_edges:refresh_phase run_id={} phase=query_neighbors source_index={} source_total={} source_path={}",
+            run_id,
+            source_index + 1,
+            source_count,
+            source_path
+        ));
         let mut stmt = conn.prepare(
             r#"
             SELECT path, distance
@@ -297,16 +345,40 @@ pub(crate) fn refresh_semantic_edges_cache(conn: &Connection, root_canonical: &P
             ORDER BY distance ASC
             LIMIT ?2
         "#,
-        )?;
+        ).map_err(|err| {
+            log_index(&format!(
+                "semantic_edges:refresh_error run_id={} phase=prepare_query source_path={} {}",
+                run_id,
+                source_path,
+                sqlite_error_tokens(&err)
+            ));
+            AppError::Sqlite(err)
+        })?;
         let mut rows = stmt.query(params![
             source_path.clone(),
             crate::SEMANTIC_TOP_K_PER_NOTE + 1
-        ])?;
+        ]).map_err(|err| {
+            log_index(&format!(
+                "semantic_edges:refresh_error run_id={} phase=run_query source_path={} {}",
+                run_id,
+                source_path,
+                sqlite_error_tokens(&err)
+            ));
+            AppError::Sqlite(err)
+        })?;
         sources_with_vector += 1;
         sources_query_ok += 1;
 
         let mut added_for_source = 0i64;
-        while let Some(row) = rows.next()? {
+        while let Some(row) = rows.next().map_err(|err| {
+            log_index(&format!(
+                "semantic_edges:refresh_error run_id={} phase=read_query_row source_path={} {}",
+                run_id,
+                source_path,
+                sqlite_error_tokens(&err)
+            ));
+            AppError::Sqlite(err)
+        })? {
             total_candidates += 1;
             let target_path: String = row.get(0)?;
             let distance: f32 = row.get(1)?;
@@ -347,7 +419,18 @@ pub(crate) fn refresh_semantic_edges_cache(conn: &Connection, root_canonical: &P
                     semantic::embedding_model_name(),
                     updated_at_ms
                 ],
-            )?;
+            )
+            .map_err(|err| {
+                log_index(&format!(
+                    "semantic_edges:refresh_error run_id={} phase=insert_edge source_path={} target_path={} score={} {}",
+                    run_id,
+                    source_path,
+                    target_path,
+                    score,
+                    sqlite_error_tokens(&err)
+                ));
+                AppError::Sqlite(err)
+            })?;
             total_added += 1;
             added_for_source += 1;
             if added_for_source >= crate::SEMANTIC_TOP_K_PER_NOTE {
@@ -357,7 +440,8 @@ pub(crate) fn refresh_semantic_edges_cache(conn: &Connection, root_canonical: &P
     }
 
     log_index(&format!(
-        "semantic_edges:refresh_done sources_with_vector={} sources_query_ok={} candidates={} added={} skip_self={} skip_threshold={} skip_existing_link={} skip_missing_target_key={} missing_vectors={} total_ms={}",
+        "semantic_edges:refresh_done run_id={} phase=done sources_with_vector={} sources_query_ok={} candidates={} added={} skip_self={} skip_threshold={} skip_existing_link={} skip_missing_target_key={} missing_vectors={} total_ms={}",
+        run_id,
         sources_with_vector,
         sources_query_ok,
         total_candidates,
@@ -518,4 +602,25 @@ pub(crate) fn list_markdown_files_via_find(root: &Path) -> Result<Vec<PathBuf>> 
     let mut files = Vec::new();
     walk(root, root, &mut files)?;
     Ok(files)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{sanitize_log_value, sqlite_error_tokens};
+
+    #[test]
+    fn sanitize_log_value_replaces_whitespace_and_symbols() {
+        assert_eq!(
+            sanitize_log_value("UNIQUE constraint failed: semantic_edges(source_path, target_path)"),
+            "UNIQUE_constraint_failed:_semantic_edges_source_path__target_path_"
+        );
+    }
+
+    #[test]
+    fn sqlite_error_tokens_include_debug_details_for_non_sqlite_failure_variants() {
+        let tokens = sqlite_error_tokens(&rusqlite::Error::InvalidQuery);
+
+        assert!(tokens.contains("err="));
+        assert!(tokens.contains("err_debug=InvalidQuery"));
+    }
 }

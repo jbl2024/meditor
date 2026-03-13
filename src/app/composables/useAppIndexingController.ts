@@ -1,6 +1,6 @@
 import { computed, getCurrentInstance, onBeforeUnmount, ref, type Ref } from 'vue'
 import type { IndexLogEntry, IndexRuntimeStatus } from '../../shared/api/apiTypes'
-import { buildIndexActivityRows, type IndexLogFilter } from '../lib/indexActivity'
+import { buildIndexActivityRows, type IndexActivityRow, type IndexLogFilter } from '../lib/indexActivity'
 import { formatTimestamp } from '../lib/appShellPaths'
 import { hasActiveOpenTrace } from '../../shared/lib/openTrace'
 
@@ -184,25 +184,25 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
       if (indexRunPhase.value === 'refreshing_views') {
         const total = Math.max(1, indexFinalizeTotal.value)
         const completed = Math.min(indexFinalizeCompleted.value, total)
-        return `finalizing ${completed}/${total}`
+        return `refreshing views ${completed}/${total}`
       }
       const total = Math.max(indexRunTotal.value, indexRunCompleted.value + pendingReindexCount.value)
-      if (total <= 0) return 'processing queued files'
-      return `${indexRunCompleted.value}/${total} files`
+      if (total <= 0) return 'waiting for queued files'
+      return `indexing files ${indexRunCompleted.value}/${total}`
     }
     if (indexRunKind.value === 'rebuild') {
       if (indexRunPhase.value === 'refreshing_views') {
         const total = Math.max(1, indexFinalizeTotal.value)
         const completed = Math.min(indexFinalizeCompleted.value, total)
-        return `finalizing ${completed}/${total}`
+        return `refreshing views ${completed}/${total}`
       }
-      return 'rebuilding workspace index'
+      return 'rebuilding lexical and semantic index'
     }
     if (indexRunKind.value === 'rename') {
       if (indexRunPhase.value === 'refreshing_views') {
         const total = Math.max(1, indexFinalizeTotal.value)
         const completed = Math.min(indexFinalizeCompleted.value, total)
-        return `finalizing ${completed}/${total}`
+        return `refreshing views ${completed}/${total}`
       }
       return 'rewriting wikilinks'
     }
@@ -277,7 +277,7 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
     if (indexRunPhase.value === 'refreshing_views') {
       const total = Math.max(1, indexFinalizeTotal.value)
       const completed = Math.min(indexFinalizeCompleted.value, total)
-      return `Finalizing ${completed}/${total} tasks`
+      return `Refreshing derived views ${completed}/${total}`
     }
     const total = indexProgressTotal.value
     if (total <= 0) return indexProgressLabel.value
@@ -299,12 +299,64 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
     return status.model_init_attempts <= 1 && status.model_state !== 'ready'
   })
 
+  const indexActivityRows = computed(() => buildIndexActivityRows(indexLogEntries.value, indexingShellPort.toRelativePath))
+
+  const indexCurrentActivity = computed<IndexActivityRow | null>(() => {
+    for (const row of indexActivityRows.value) {
+      if (row.state === 'running') return row
+    }
+    return null
+  })
+
+  const indexCurrentOperationLabel = computed(() => {
+    const row = indexCurrentActivity.value
+    if (row) return row.title
+    if (indexRunning.value) return indexProgressLabel.value
+    if (semanticIndexState.value === 'running') return 'Refreshing semantic links'
+    if (semanticIndexState.value === 'pending') return 'Semantic indexing queued'
+    return ''
+  })
+
+  const indexCurrentOperationDetail = computed(() => {
+    const row = indexCurrentActivity.value
+    if (row?.detail) return row.detail
+    if (indexRunMessage.value && (indexRunning.value || semanticIndexState.value === 'error')) return indexRunMessage.value
+    if (semanticIndexState.value === 'running') return 'Updating note embeddings and semantic links.'
+    if (semanticIndexState.value === 'pending') return `${pendingSemanticReindexAt.size} file${pendingSemanticReindexAt.size === 1 ? '' : 's'} waiting for semantic refresh.`
+    return ''
+  })
+
+  const indexCurrentOperationPath = computed(() => {
+    const row = indexCurrentActivity.value
+    if (row?.path) return row.path
+    if (indexRunCurrentPath.value) return indexingShellPort.toRelativePath(indexRunCurrentPath.value)
+    return ''
+  })
+
+  const indexCurrentOperationStatusLabel = computed(() => {
+    if (indexCurrentActivity.value?.state === 'running') return 'In progress'
+    if (semanticIndexState.value === 'pending') return 'Queued'
+    if (semanticIndexState.value === 'error' || indexRunPhase.value === 'error') return 'Attention'
+    if (indexRunning.value) return 'In progress'
+    return 'Idle'
+  })
+
+  const latestIndexError = computed(() => {
+    for (const row of indexActivityRows.value) {
+      if (row.state === 'error') return row
+    }
+    return null
+  })
+
   const indexAlert = computed(() => {
     if (indexRunPhase.value === 'error') {
       return {
         level: 'error' as const,
         title: 'Index run interrupted',
-        message: indexRunMessage.value || 'An indexing step failed. You can retry a full rebuild.'
+        message:
+          indexRunMessage.value ||
+          latestIndexError.value?.detail ||
+          'An indexing step failed. You can retry a full rebuild.'
       }
     }
     if (indexingShellPort.indexingState.value === 'out_of_sync') {
@@ -318,18 +370,19 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
       return {
         level: 'warning' as const,
         title: 'Semantic indexing warning',
-        message: 'Lexical index is up to date, but semantic vectors need attention.'
+        message:
+          latestIndexError.value?.detail ||
+          'Lexical index is up to date, but semantic vectors need attention.'
       }
     }
     return null
   })
 
-  const indexActivityRows = computed(() => buildIndexActivityRows(indexLogEntries.value, indexingShellPort.toRelativePath))
-
   const filteredIndexActivityRows = computed(() => {
-    if (indexLogFilter.value === 'all') return indexActivityRows.value
-    if (indexLogFilter.value === 'errors') return indexActivityRows.value.filter((row) => row.state === 'error')
-    return indexActivityRows.value.filter((row) => (row.durationMs ?? 0) > 1000)
+    const finishedRows = indexActivityRows.value.filter((row) => row.state !== 'running')
+    if (indexLogFilter.value === 'all') return finishedRows
+    if (indexLogFilter.value === 'errors') return finishedRows.filter((row) => row.state === 'error')
+    return finishedRows.filter((row) => (row.durationMs ?? 0) > 1000)
   })
 
   const indexErrorCount = computed(() => indexActivityRows.value.filter((row) => row.state === 'error').length)
@@ -783,6 +836,11 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
     indexModelStateClass,
     indexShowWarmupNote,
     indexAlert,
+    indexCurrentActivity,
+    indexCurrentOperationLabel,
+    indexCurrentOperationDetail,
+    indexCurrentOperationPath,
+    indexCurrentOperationStatusLabel,
     indexActivityRows,
     filteredIndexActivityRows,
     indexErrorCount,

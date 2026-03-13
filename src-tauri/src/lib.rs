@@ -22,7 +22,10 @@ use std::{
     collections::{HashMap, VecDeque},
     io::Write,
     process::{Command, Stdio},
-    sync::{atomic::AtomicBool, Mutex, OnceLock},
+    sync::{
+        atomic::{AtomicBool, AtomicU64, Ordering},
+        Mutex, OnceLock,
+    },
     time::{SystemTime, UNIX_EPOCH},
 };
 use thiserror::Error;
@@ -96,6 +99,7 @@ const INDEX_LOG_CAPACITY: usize = 400;
 const INDEX_SCHEMA_VERSION: i64 = 2;
 static INDEX_CANCEL_REQUESTED: AtomicBool = AtomicBool::new(false);
 static SQLITE_VEC_PROBE_LOGGED: OnceLock<()> = OnceLock::new();
+static INDEX_RUN_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 static INDEX_LOGS: OnceLock<Mutex<VecDeque<IndexLogEntry>>> = OnceLock::new();
 
@@ -104,6 +108,10 @@ pub(crate) fn now_ms() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|value| value.as_millis() as u64)
         .unwrap_or(0)
+}
+
+pub(crate) fn next_index_run_id() -> u64 {
+    INDEX_RUN_SEQUENCE.fetch_add(1, Ordering::Relaxed)
 }
 
 fn index_log_buffer() -> &'static Mutex<VecDeque<IndexLogEntry>> {

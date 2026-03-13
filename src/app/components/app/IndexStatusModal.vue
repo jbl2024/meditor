@@ -22,6 +22,10 @@ defineProps<{
   progressLabel: string
   progressSummary: string
   currentPathLabel: string
+  currentOperationLabel: string
+  currentOperationDetail: string
+  currentOperationPath: string
+  currentOperationStatusLabel: string
   modelStateClass: string
   modelStatusLabel: string
   showWarmupNote: boolean
@@ -79,6 +83,16 @@ const emit = defineEmits<{
           </div>
         </section>
 
+        <section class="index-current-card">
+          <div class="index-current-head">
+            <p class="index-current-label">Current operation</p>
+            <span class="index-current-state">{{ currentOperationStatusLabel }}</span>
+          </div>
+          <p class="index-current-title">{{ currentOperationLabel || 'No active indexing task' }}</p>
+          <p v-if="currentOperationPath" class="index-current-path">{{ currentOperationPath }}</p>
+          <p v-if="currentOperationDetail" class="index-current-detail">{{ currentOperationDetail }}</p>
+        </section>
+
         <section class="index-model-card">
           <div class="index-model-head">
             <p class="index-model-label">Embedding model</p>
@@ -114,7 +128,7 @@ const emit = defineEmits<{
         <div class="index-status-sections">
           <div class="index-log-panel">
             <div class="index-log-header">
-              <p class="index-log-title">Recent indexing activity</p>
+              <p class="index-log-title">Recent completed steps</p>
               <div class="index-log-filters" role="tablist" aria-label="Index log filters">
                 <button
                   type="button"
@@ -198,6 +212,7 @@ const emit = defineEmits<{
 }
 
 .index-overview,
+.index-current-card,
 .index-model-card,
 .index-log-panel {
   border: 1px solid var(--index-card-border);
@@ -210,11 +225,55 @@ const emit = defineEmits<{
   margin-bottom: 10px;
 }
 
+.index-current-card {
+  padding: 12px;
+  margin-bottom: 10px;
+}
+
 .index-overview-main {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.index-current-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.index-current-label {
+  margin: 0;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted-foreground, #6b7280);
+}
+
+.index-current-state {
+  font-size: 0.78rem;
+  color: var(--muted-foreground, #6b7280);
+}
+
+.index-current-title,
+.index-current-path,
+.index-current-detail {
+  margin: 6px 0 0;
+}
+
+.index-current-title {
+  font-weight: 600;
+}
+
+.index-current-path {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.9rem;
+}
+
+.index-current-detail {
+  color: var(--muted-foreground, #6b7280);
 }
 
 .index-overview-progress-inline {

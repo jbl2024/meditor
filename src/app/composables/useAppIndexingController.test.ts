@@ -111,6 +111,7 @@ describe('useAppIndexingController', () => {
 
     expect(controller.indexStateLabel.value).toBe('indexed')
     expect(controller.indexStatusBadgeLabel.value).toBe('Ready')
+    expect(controller.indexCurrentOperationLabel.value).toBe('')
   })
 
   it('queues markdown reindex and updates progress state', async () => {
@@ -187,6 +188,43 @@ describe('useAppIndexingController', () => {
 
     expect(indexingState.value).toBe('out_of_sync')
     expect(controller.indexRunMessage.value).toBe('Failed to reindex a.md.')
+  })
+
+  it('surfaces the live semantic refresh step from backend activity logs', async () => {
+    const { controller, readIndexLogs } = createController()
+    readIndexLogs.mockResolvedValueOnce([
+      {
+        ts_ms: 1_000,
+        message: 'semantic_edges:refresh_start run_id=3 phase=scan_sources sources=10 top_k=3 threshold=0.62'
+      },
+      {
+        ts_ms: 1_100,
+        message: 'semantic_edges:refresh_phase run_id=3 phase=query_neighbors source_index=4 source_total=10 source_path=/vault/Area/Note.md'
+      }
+    ])
+
+    await controller.refreshIndexModalData()
+
+    expect(controller.indexCurrentOperationLabel.value).toBe('Refreshing semantic links')
+    expect(controller.indexCurrentOperationDetail.value).toBe('scan 4/10 · Area/Note.md')
+    expect(controller.indexCurrentOperationPath.value).toBe('Area/Note.md')
+    expect(controller.filteredIndexActivityRows.value).toEqual([])
+  })
+
+  it('uses detailed semantic error activity in the modal alert', async () => {
+    const { controller, readIndexLogs } = createController()
+    controller.semanticIndexState.value = 'error'
+    readIndexLogs.mockResolvedValueOnce([
+      {
+        ts_ms: 1_000,
+        message: 'semantic_edges:refresh_error run_id=3 phase=insert_edge source_path=/vault/Area/Note.md sqlite_code=ConstraintViolation sqlite_msg=UNIQUE_constraint_failed'
+      }
+    ])
+
+    await controller.refreshIndexModalData()
+
+    expect(controller.indexAlert.value?.message).toContain('phase insert edge')
+    expect(controller.indexAlert.value?.message).toContain('sqlite ConstraintViolation')
   })
 
   it('runs semantic refresh work only for due paths and refreshes backlinks once', async () => {

@@ -252,14 +252,42 @@ ORDER BY source_path, target_key
 LIMIT 30;
 "
 
+run_query "13_semantic_edges_counts" "Semantic edge counts and freshness" "
+SELECT
+  COUNT(*) AS semantic_edges_total,
+  COUNT(DISTINCT source_path) AS semantic_edge_sources,
+  COUNT(DISTINCT target_path) AS semantic_edge_targets,
+  MIN(updated_at_ms) AS min_updated_at_ms,
+  MAX(updated_at_ms) AS max_updated_at_ms
+FROM semantic_edges;
+"
+
+run_query "14_semantic_edges_top_sources" "Semantic edge sources with highest fan-out" "
+SELECT source_path, COUNT(*) AS outgoing_edges, MAX(updated_at_ms) AS last_updated_at_ms
+FROM semantic_edges
+GROUP BY source_path
+ORDER BY outgoing_edges DESC, source_path
+LIMIT 30;
+"
+
+run_query "15_semantic_edges_missing_note_embeddings" "Semantic edges pointing to paths without note embeddings" "
+SELECT e.source_path, e.target_path
+FROM semantic_edges e
+LEFT JOIN note_embeddings src ON src.path = e.source_path
+LEFT JOIN note_embeddings dst ON dst.path = e.target_path
+WHERE src.path IS NULL OR dst.path IS NULL
+ORDER BY e.source_path, e.target_path
+LIMIT 50;
+"
+
 if [[ "$vec_cli_ready" == "1" ]]; then
-  run_query "13_vec_row_count" "Vector table row count parity" "
+  run_query "16_vec_row_count" "Vector table row count parity" "
 SELECT
   (SELECT COUNT(*) FROM note_embeddings) AS note_embeddings_n,
   (SELECT COUNT(*) FROM note_embeddings_vec) AS note_embeddings_vec_n;
 "
 
-  run_query "14_vec_missing_paths" "Paths missing from vec index" "
+  run_query "17_vec_missing_paths" "Paths missing from vec index" "
 SELECT n.path
 FROM note_embeddings n
 LEFT JOIN note_embeddings_vec v ON v.path = n.path
@@ -267,9 +295,17 @@ WHERE v.path IS NULL
 LIMIT 50;
 "
 
+  run_query "18_vec_orphan_paths" "Paths present in vec index but missing note_embeddings" "
+SELECT v.path
+FROM note_embeddings_vec v
+LEFT JOIN note_embeddings n ON n.path = v.path
+WHERE n.path IS NULL
+LIMIT 50;
+"
+
   if [[ -n "$sample_path" ]]; then
     escaped_sample_path="${sample_path//\'/\'\'}"
-    run_query "15_vec_knn_sample" "KNN sample from most recent note embedding" "
+    run_query "19_vec_knn_sample" "KNN sample from most recent note embedding" "
 SELECT path, distance
 FROM note_embeddings_vec
 WHERE embedding MATCH (SELECT embedding FROM note_embeddings_vec WHERE path = '$escaped_sample_path')
@@ -277,22 +313,29 @@ WHERE embedding MATCH (SELECT embedding FROM note_embeddings_vec WHERE path = '$
 ORDER BY distance;
 "
   else
-    run_skipped "15_vec_knn_sample" "KNN sample from most recent note embedding" "no rows in note_embeddings."
+    run_skipped "19_vec_knn_sample" "KNN sample from most recent note embedding" "no rows in note_embeddings."
   fi
 else
-  run_skipped "13_vec_row_count" "Vector table row count parity" "sqlite3 CLI cannot use vec0 module; app runtime may still support vec operations." "
+  run_skipped "16_vec_row_count" "Vector table row count parity" "sqlite3 CLI cannot use vec0 module; app runtime may still support vec operations." "
 SELECT
   (SELECT COUNT(*) FROM note_embeddings) AS note_embeddings_n,
   (SELECT COUNT(*) FROM note_embeddings_vec) AS note_embeddings_vec_n;
 "
-  run_skipped "14_vec_missing_paths" "Paths missing from vec index" "sqlite3 CLI cannot use vec0 module; app runtime may still support vec operations." "
+  run_skipped "17_vec_missing_paths" "Paths missing from vec index" "sqlite3 CLI cannot use vec0 module; app runtime may still support vec operations." "
 SELECT n.path
 FROM note_embeddings n
 LEFT JOIN note_embeddings_vec v ON v.path = n.path
 WHERE v.path IS NULL
 LIMIT 50;
 "
-  run_skipped "15_vec_knn_sample" "KNN sample from most recent note embedding" "sqlite3 CLI cannot use vec0 module; app runtime may still support vec operations." "
+  run_skipped "18_vec_orphan_paths" "Paths present in vec index but missing note_embeddings" "sqlite3 CLI cannot use vec0 module; app runtime may still support vec operations." "
+SELECT v.path
+FROM note_embeddings_vec v
+LEFT JOIN note_embeddings n ON n.path = v.path
+WHERE n.path IS NULL
+LIMIT 50;
+"
+  run_skipped "19_vec_knn_sample" "KNN sample from most recent note embedding" "sqlite3 CLI cannot use vec0 module; app runtime may still support vec operations." "
 SELECT path, distance
 FROM note_embeddings_vec
 WHERE embedding MATCH (SELECT embedding FROM note_embeddings_vec WHERE path = '<sample_path>')
@@ -301,7 +344,7 @@ ORDER BY distance;
 "
 fi
 
-run_query "16_integrity" "SQLite integrity checks" "
+run_query "20_integrity" "SQLite integrity checks" "
 PRAGMA quick_check;
 PRAGMA foreign_key_check;
 "

@@ -519,6 +519,10 @@ const {
   indexModelStateClass,
   indexShowWarmupNote,
   indexAlert,
+  indexCurrentOperationLabel,
+  indexCurrentOperationDetail,
+  indexCurrentOperationPath,
+  indexCurrentOperationStatusLabel,
   filteredIndexActivityRows,
   indexErrorCount,
   indexSlowCount,
@@ -3394,6 +3398,10 @@ onBeforeUnmount(() => {
       :progress-label="indexProgressLabel"
       :progress-summary="indexProgressSummary"
       :current-path-label="indexRunCurrentPath ? toRelativePath(indexRunCurrentPath) : ''"
+      :current-operation-label="indexCurrentOperationLabel"
+      :current-operation-detail="indexCurrentOperationDetail"
+      :current-operation-path="indexCurrentOperationPath"
+      :current-operation-status-label="indexCurrentOperationStatusLabel"
       :model-state-class="indexModelStateClass"
       :model-status-label="indexModelStatusLabel"
       :show-warmup-note="indexShowWarmupNote"
