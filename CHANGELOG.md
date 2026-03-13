@@ -18,6 +18,15 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.19.4] - 2026-03-13
+
+### Changed
+- perf(echoes): use filename stems for suggestion titles (6ed49e7)
+- perf(echoes): defer title reads and log stage timings (58592e4)
+
+### Fixed
+- fix(tauri): run echoes pack computation off the IPC thread (e063aac)
+
 ## [0.19.3] - 2026-03-13
 
 ### Fixed
