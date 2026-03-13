@@ -4,8 +4,14 @@
  *
  * The component renders explainable suggestions and emits only user intents.
  */
+import {
+  ArrowTopRightOnSquareIcon,
+  PlusIcon,
+} from '@heroicons/vue/24/outline'
+import { computed } from 'vue'
 import type { EchoesItem } from '../../../echoes/lib/echoes'
 import UiButton from '../../../../shared/components/ui/UiButton.vue'
+import UiIconButton from '../../../../shared/components/ui/UiIconButton.vue'
 
 type EditorEchoesListItem = EchoesItem & {
   isInContext: boolean
@@ -25,20 +31,54 @@ const emit = defineEmits<{
   remove: [path: string]
 }>()
 
-function reasonLabel(reason: string) {
+type EchoesRenderItem = EditorEchoesListItem & {
+  signalLabel: string
+  signalTone: string
+  dividerBefore: boolean
+}
+
+function reasonMeta(reason: string) {
   switch (reason) {
     case 'Direct link':
-      return 'direct link'
+      return {
+        label: 'direct link',
+        tone: 'echoes-signal--direct'
+      }
     case 'Backlink':
-      return 'backlink'
+      return {
+        label: 'backlink',
+        tone: 'echoes-signal--backlink'
+      }
     case 'Semantically related':
-      return 'semantic similarity'
+      return {
+        label: 'semantic similarity',
+        tone: 'echoes-signal--semantic'
+      }
     case 'Recently active':
-      return 'recent activity'
+      return {
+        label: 'recent activity',
+        tone: 'echoes-signal--recent'
+      }
     default:
-      return reason.toLowerCase()
+      return {
+        label: reason.toLowerCase(),
+        tone: 'echoes-signal--default'
+      }
   }
 }
+
+const visibleItems = computed<EchoesRenderItem[]>(() => {
+  return props.items.slice(0, 5).map((item, index, list) => {
+    const meta = reasonMeta(item.reasonLabel)
+    const previous = index > 0 ? reasonMeta(list[index - 1].reasonLabel) : null
+    return {
+      ...item,
+      signalLabel: meta.label,
+      signalTone: meta.tone,
+      dividerBefore: previous != null && previous.tone !== meta.tone
+    }
+  })
+})
 
 function onContextClick(item: EditorEchoesListItem) {
   if (item.isInContext) {
@@ -56,12 +96,17 @@ function onCardClick(item: EditorEchoesListItem) {
 <template>
   <section class="pane-card pane-section">
     <div class="echoes-head">
-      <div>
+      <div class="echoes-heading">
+        <span class="echoes-mark" aria-hidden="true">
+          <span class="echoes-mark-bar echoes-mark-bar--short"></span>
+          <span class="echoes-mark-bar echoes-mark-bar--tall"></span>
+          <span class="echoes-mark-bar echoes-mark-bar--mid"></span>
+        </span>
         <h3 class="section-title">Echoes</h3>
-        <p v-if="hintVisible" class="echoes-helper">Suggestions around this note.</p>
       </div>
       <span v-if="!loading && !error && items.length" class="echoes-count">{{ items.length }} suggestion{{ items.length > 1 ? 's' : '' }}</span>
     </div>
+    <p v-if="hintVisible" class="echoes-helper">Suggestions around this note.</p>
 
     <div v-if="loading" class="empty-state">Loading...</div>
     <div v-else-if="error" class="empty-state">{{ error }}</div>
@@ -70,27 +115,40 @@ function onCardClick(item: EditorEchoesListItem) {
     </div>
 
     <article
-      v-for="item in items"
+      v-for="item in visibleItems"
       v-else
       :key="`echo-${item.path}`"
       class="echoes-card"
       :data-in-context="item.isInContext"
+      :data-signal-tone="item.signalTone"
       @click="onCardClick(item)"
     >
+      <div v-if="item.dividerBefore" class="echoes-divider" aria-hidden="true"></div>
+      <div class="echoes-card-accent" aria-hidden="true"></div>
       <div class="echoes-card-copy">
-        <button
-          type="button"
-          class="echoes-title-btn"
-          :title="props.toRelativePath(item.path)"
-          @click.stop="emit('open', item.path)"
+        <strong class="echoes-item-title" :title="props.toRelativePath(item.path)">{{ item.title }}</strong>
+        <span
+          class="echoes-signal"
+          :class="item.signalTone"
+          :title="item.signalLabel"
+          :aria-label="item.signalLabel"
         >
-          <strong class="echoes-item-title">{{ item.title }}</strong>
-        </button>
-        <span class="echoes-item-reason">{{ reasonLabel(item.reasonLabel) }}</span>
+          {{ item.signalLabel }}
+        </span>
       </div>
       <div class="echoes-card-actions">
-        <UiButton
+        <UiIconButton
           variant="ghost"
+          size="sm"
+          class-name="echoes-open-btn"
+          :title="`Open ${props.toRelativePath(item.path)}`"
+          :aria-label="`Open ${props.toRelativePath(item.path)}`"
+          @click.stop="emit('open', item.path)"
+        >
+          <ArrowTopRightOnSquareIcon />
+        </UiIconButton>
+        <UiButton
+          variant="secondary"
           size="sm"
           :class-name="[
             'echoes-action-btn',
@@ -98,7 +156,11 @@ function onCardClick(item: EditorEchoesListItem) {
           ].filter(Boolean).join(' ')"
           @click.stop="onContextClick(item)"
         >
-          {{ item.isInContext ? 'Added' : '+' }}
+          <template v-if="!item.isInContext">
+            <PlusIcon class="echoes-action-icon" />
+            Add
+          </template>
+          <template v-else>Added</template>
         </UiButton>
       </div>
     </article>
@@ -108,15 +170,15 @@ function onCardClick(item: EditorEchoesListItem) {
 <style scoped>
 .pane-card {
   position: relative;
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--echoes-card-bg);
-  padding: 10px 8px 8px 10px;
-  box-shadow: inset 0 0 0 1px var(--echoes-card-border);
+  padding: 16px;
+  box-shadow: inset 0 0 0 1px var(--right-pane-card-border);
   transition: box-shadow 160ms ease, background-color 160ms ease;
 }
 
 .pane-card:hover {
-  box-shadow: inset 0 0 0 1px var(--echoes-card-hover-border);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--right-pane-card-border) 88%, var(--echoes-card-hover-border));
 }
 
 .pane-section {
@@ -125,33 +187,74 @@ function onCardClick(item: EditorEchoesListItem) {
 
 .echoes-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 12px;
+}
+
+.echoes-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.echoes-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--text-faint);
+}
+
+.echoes-mark-bar {
+  width: 4px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.45;
+  animation: echoes-pulse 2.2s ease-in-out infinite;
+}
+
+.echoes-mark-bar--short {
+  height: 6px;
+  animation-delay: 0s;
+}
+
+.echoes-mark-bar--tall {
+  height: 12px;
+  animation-delay: 0.16s;
+}
+
+.echoes-mark-bar--mid {
+  height: 8px;
+  animation-delay: 0.32s;
 }
 
 .section-title {
-  margin: 2px 0 2px;
-  font-size: 11px;
-  letter-spacing: 0.11em;
+  margin: 0;
+  font-size: 10px;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
   font-weight: 600;
   color: var(--echoes-title);
 }
 
 .echoes-helper {
-  margin: 0;
+  margin: 8px 0 2px;
   color: var(--echoes-copy);
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.4;
 }
 
 .echoes-count {
   color: var(--echoes-title);
-  font-size: 12px;
+  font-size: 11px;
+  font-family: var(--font-code);
+  letter-spacing: 0.08em;
   font-weight: 600;
   white-space: nowrap;
+  padding: 0.38rem 0.82rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-subtle) 82%, var(--surface-bg));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--right-pane-card-border) 90%, transparent);
 }
 
 .empty-state {
@@ -164,14 +267,15 @@ function onCardClick(item: EditorEchoesListItem) {
 }
 
 .echoes-card {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
-  margin: 8px 0 0;
-  border-radius: 10px;
-  background: var(--echoes-empty-bg);
-  box-shadow: inset 0 0 0 1px var(--echoes-item-hover-border);
+  margin: 0;
+  border-radius: 12px;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px transparent;
   transition:
     background-color 140ms ease,
     box-shadow 140ms ease,
@@ -179,16 +283,68 @@ function onCardClick(item: EditorEchoesListItem) {
   cursor: pointer;
 }
 
+.echoes-card + .echoes-card {
+  margin-top: 4px;
+}
+
 .echoes-card:hover {
-  background: color-mix(in srgb, var(--echoes-empty-bg) 72%, var(--right-pane-item-hover));
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--right-pane-favorite) 22%, var(--echoes-item-hover-border)),
-    0 4px 14px color-mix(in srgb, var(--right-pane-border) 35%, transparent);
-  transform: translateY(-1px);
+  background: var(--right-pane-item-hover);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--right-pane-card-border) 48%, transparent);
 }
 
 .echoes-card[data-in-context='true'] {
   box-shadow: inset 0 0 0 1px var(--right-pane-accent, var(--echoes-item-hover-border));
+  background: color-mix(in srgb, var(--right-pane-item-hover) 84%, transparent);
+}
+
+.echoes-card[data-signal-tone='echoes-signal--backlink']:hover,
+.echoes-card[data-signal-tone='echoes-signal--backlink'][data-in-context='true'] {
+  --echoes-item-hover-border: color-mix(in srgb, var(--accent) 78%, var(--text-soft));
+}
+
+.echoes-card[data-signal-tone='echoes-signal--semantic']:hover,
+.echoes-card[data-signal-tone='echoes-signal--semantic'][data-in-context='true'] {
+  --echoes-item-hover-border: color-mix(in srgb, var(--success) 78%, var(--text-soft));
+}
+
+.echoes-card[data-signal-tone='echoes-signal--recent']:hover,
+.echoes-card[data-signal-tone='echoes-signal--recent'][data-in-context='true'] {
+  --echoes-item-hover-border: color-mix(in srgb, var(--warning) 82%, var(--text-soft));
+}
+
+.echoes-card[data-signal-tone='echoes-signal--direct']:hover,
+.echoes-card[data-signal-tone='echoes-signal--default']:hover,
+.echoes-card[data-signal-tone='echoes-signal--direct'][data-in-context='true'],
+.echoes-card[data-signal-tone='echoes-signal--default'][data-in-context='true'] {
+  --echoes-item-hover-border: color-mix(in srgb, var(--accent) 70%, var(--text-soft));
+}
+
+.echoes-divider {
+  position: absolute;
+  top: -8px;
+  left: 12px;
+  right: 12px;
+  height: 1px;
+  background: color-mix(in srgb, var(--right-pane-card-border) 88%, transparent);
+}
+
+.echoes-card-accent {
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 999px;
+  background: transparent;
+  opacity: 0;
+  transition: opacity 140ms ease, background-color 140ms ease;
+}
+
+.echoes-card:hover .echoes-card-accent,
+.echoes-card:focus-within .echoes-card-accent,
+.echoes-card[data-in-context='true'] .echoes-card-accent {
+  opacity: 1;
+  background: var(--echoes-item-hover-border);
 }
 
 .echoes-card-copy {
@@ -196,31 +352,22 @@ function onCardClick(item: EditorEchoesListItem) {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
   align-items: flex-start;
   text-align: left;
-}
-
-.echoes-title-btn {
-  min-width: 0;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  text-align: left;
-  cursor: pointer;
+  gap: 3px;
 }
 
 .echoes-item-title,
-.echoes-item-reason {
+.echoes-signal {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .echoes-item-title {
-  font-size: 12.5px;
-  line-height: 1.3;
-  font-weight: 600;
+  font-size: 11.5px;
+  line-height: 1.2;
+  font-weight: 500;
   color: var(--echoes-item-title);
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -229,38 +376,114 @@ function onCardClick(item: EditorEchoesListItem) {
   white-space: normal;
 }
 
-.echoes-title-btn:hover .echoes-item-title {
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.echoes-item-reason {
-  font-size: 11px;
-  line-height: 1.25;
-  color: var(--echoes-copy);
+.echoes-signal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.28rem;
+  padding: 0.06rem 0.42rem;
+  border-radius: 0.38rem;
+  box-shadow: inset 0 0 0 1px transparent;
+  font-size: 8.5px;
+  font-family: var(--font-code);
+  font-weight: 550;
+  line-height: 1.1;
+  letter-spacing: 0.04em;
   white-space: nowrap;
 }
 
-.echoes-card-actions {
-  flex: 0 0 auto;
+.echoes-signal--backlink {
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface-bg));
+  color: color-mix(in srgb, var(--accent) 80%, var(--text-main));
 }
 
-.echoes-action-btn {
-  min-width: 2rem;
-  height: 2rem;
-  padding-inline: 0.5rem;
-  font-weight: 700;
-  opacity: 0.82;
-  transform: scale(0.98);
+.echoes-signal--semantic {
+  background: color-mix(in srgb, var(--success) 14%, var(--surface-bg));
+  color: color-mix(in srgb, var(--success) 82%, var(--text-main));
+}
+
+.echoes-signal--recent {
+  background: color-mix(in srgb, var(--warning) 16%, var(--surface-bg));
+  color: color-mix(in srgb, var(--warning) 86%, var(--text-main));
+}
+
+.echoes-signal--direct,
+.echoes-signal--default {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface-bg));
+  color: color-mix(in srgb, var(--accent) 74%, var(--text-main));
+}
+
+.echoes-card-actions {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(calc(-50% - 2px));
   transition: opacity 140ms ease, transform 140ms ease;
 }
 
-.echoes-card:hover .echoes-action-btn {
+.echoes-card:hover .echoes-card-actions,
+.echoes-card:focus-within .echoes-card-actions,
+.echoes-card[data-in-context='true'] .echoes-card-actions {
   opacity: 1;
-  transform: scale(1);
+  pointer-events: auto;
+  transform: translateY(-50%);
+}
+
+.echoes-action-btn {
+  min-width: 1.8rem;
+  height: 1.8rem;
+  padding-inline: 0.56rem;
+  font-size: 11px;
+  font-weight: 500;
+  gap: 0.28rem;
+  border-radius: 0.5rem;
+}
+
+.echoes-open-btn {
+  color: var(--echoes-icon-secondary);
+  background: transparent;
+  box-shadow: none;
+  border-color: transparent;
+  width: 1.8rem;
+  min-width: 1.8rem;
+  height: 1.8rem;
+  border-radius: 0.5rem;
+}
+
+.echoes-open-btn:hover,
+.echoes-open-btn:focus-visible {
+  color: var(--echoes-item-title);
+  border-color: transparent;
+}
+
+.echoes-open-btn:deep(svg) {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+.echoes-action-icon {
+  width: 0.82rem;
+  height: 0.82rem;
+  flex: 0 0 auto;
 }
 
 .echoes-action-btn--active {
   color: var(--right-pane-text);
+}
+
+@keyframes echoes-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+
+  50% {
+    opacity: 0.8;
+  }
 }
 </style>

@@ -47,12 +47,13 @@ describe('EditorEchoesPanel', () => {
     app.mount(root)
     expect(root.textContent).toContain('Echoes')
     expect(root.textContent).toContain('Suggestions around this note.')
-    expect(root.textContent).toContain('direct link')
-    expect(root.textContent).toContain('semantic similarity')
+    const signalBadges = Array.from(root.querySelectorAll('.echoes-signal')) as HTMLSpanElement[]
+    expect(signalBadges[0].title).toBe('direct link')
+    expect(signalBadges[1].title).toBe('semantic similarity')
 
-    const titleButtons = Array.from(root.querySelectorAll('.echoes-title-btn')) as HTMLButtonElement[]
-    titleButtons[0].click()
-    titleButtons[1].click()
+    const openButtons = Array.from(root.querySelectorAll('.echoes-open-btn')) as HTMLButtonElement[]
+    openButtons[0].click()
+    openButtons[1].click()
     const cards = Array.from(root.querySelectorAll('.echoes-card')) as HTMLDivElement[]
     cards[0].click()
     const actionButtons = Array.from(root.querySelectorAll('.echoes-action-btn')) as HTMLButtonElement[]
@@ -60,6 +61,7 @@ describe('EditorEchoesPanel', () => {
 
     expect(onOpen).toHaveBeenCalledWith('/vault/notes/a.md')
     expect(onOpen).toHaveBeenCalledWith('/vault/notes/b.md')
+    expect(root.querySelector('.echoes-title-btn')).toBeNull()
     expect(onAdd).toHaveBeenCalledWith('/vault/notes/a.md')
     expect(onRemove).toHaveBeenCalledWith('/vault/notes/b.md')
     expect(root.textContent).not.toContain('notes/a.md')
