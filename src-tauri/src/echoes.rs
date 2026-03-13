@@ -137,7 +137,6 @@ struct PathResolver {
     path_by_unique_basename: HashMap<String, Option<String>>,
 }
 
-#[tauri::command]
 /// Computes a compact Echoes pack for a single markdown anchor note.
 pub fn compute_echoes_pack(payload: ComputeEchoesPackPayload) -> Result<EchoesPackDto> {
     let started_at = Instant::now();

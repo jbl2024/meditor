@@ -329,6 +329,13 @@ fn update_wikilinks_for_rename(
     update_wikilinks_for_rename_impl(old_path, new_path)
 }
 
+#[tauri::command]
+async fn compute_echoes_pack(payload: echoes::ComputeEchoesPackPayload) -> Result<echoes::EchoesPackDto> {
+    tauri::async_runtime::spawn_blocking(move || echoes::compute_echoes_pack(payload))
+        .await
+        .map_err(|_| AppError::OperationFailed)?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     if db::init_sqlite_runtime() {
@@ -381,7 +388,7 @@ pub fn run() {
             favorites::add_favorite,
             favorites::remove_favorite,
             favorites::rename_favorite,
-            echoes::compute_echoes_pack,
+            compute_echoes_pack,
             settings::read_app_settings,
             settings::write_app_settings,
             second_brain::read_second_brain_config_status,
