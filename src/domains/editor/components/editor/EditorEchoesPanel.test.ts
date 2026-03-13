@@ -56,11 +56,14 @@ describe('EditorEchoesPanel', () => {
     openButtons[1].click()
     const cards = Array.from(root.querySelectorAll('.echoes-card')) as HTMLDivElement[]
     cards[0].click()
+    cards[1].click()
     const actionButtons = Array.from(root.querySelectorAll('.echoes-action-btn')) as HTMLButtonElement[]
+    actionButtons[0].click()
     actionButtons[1].click()
 
     expect(onOpen).toHaveBeenCalledWith('/vault/notes/a.md')
     expect(onOpen).toHaveBeenCalledWith('/vault/notes/b.md')
+    expect(onOpen).toHaveBeenCalledTimes(4)
     expect(root.querySelector('.echoes-title-btn')).toBeNull()
     expect(onAdd).toHaveBeenCalledWith('/vault/notes/a.md')
     expect(onRemove).toHaveBeenCalledWith('/vault/notes/b.md')

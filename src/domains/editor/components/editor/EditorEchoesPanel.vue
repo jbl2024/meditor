@@ -89,7 +89,7 @@ function onContextClick(item: EditorEchoesListItem) {
 }
 
 function onCardClick(item: EditorEchoesListItem) {
-  onContextClick(item)
+  emit('open', item.path)
 }
 </script>
 
