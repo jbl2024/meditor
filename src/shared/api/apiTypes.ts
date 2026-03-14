@@ -85,6 +85,7 @@ export type PathMoveRewriteResult = {
   updated_files: number
   reindexed_files: number
   moved_markdown_files: number
+  expanded_markdown_moves: PathMove[]
 }
 
 export type SecondBrainConfigStatus = {

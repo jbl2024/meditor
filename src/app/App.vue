@@ -529,7 +529,9 @@ const workspaceMutationEffects = useWorkspaceMutationEffects({
   allWorkspaceFiles,
   favoriteItems: favorites.items,
   filesystemErrorMessage: filesystem.errorMessage,
-  applyLocalPathMoves: applyPathMovesLocally,
+  getImmediatePathCandidates: () => multiPane.getOpenDocumentPaths(),
+  applyImmediateLocalPathMoves: applyImmediatePathMovesLocally,
+  applyDeferredLocalPathMoves: applyDeferredPathMovesLocally,
   renameFavorite: (fromPath, toPath) => favorites.renameFavorite(fromPath, toPath),
   updateWikilinksForRename,
   updateWikilinksForPathMoves,
@@ -2160,7 +2162,28 @@ async function openFile(path: string) {
   return await readTextFile(path)
 }
 
-function applyPathMovesLocally(moves: PathMove[], expandedMarkdownMoves: PathMove[]) {
+function applyImmediatePathMovesLocally(moves: PathMove[], expandedMarkdownMoves: PathMove[]) {
+  const normalizedMoves = sortPathMoves(moves)
+  if (!normalizedMoves.length) return
+
+  for (const move of expandedMarkdownMoves) {
+    multiPane.replacePath(move.from, move.to)
+    documentHistory.replacePath(move.from, move.to)
+    editorState.movePath(move.from, move.to)
+    renameLaunchpadRecentNote(move.from, move.to)
+
+    if (virtualDocs.value[move.from]) {
+      const nextVirtual = { ...virtualDocs.value }
+      nextVirtual[move.to] = nextVirtual[move.from]
+      delete nextVirtual[move.from]
+      virtualDocs.value = nextVirtual
+    }
+  }
+
+  backlinks.value = backlinks.value.map((path) => rewritePathWithMoves(path, normalizedMoves))
+}
+
+function applyDeferredPathMovesLocally(moves: PathMove[], expandedMarkdownMoves: PathMove[]) {
   const normalizedMoves = sortPathMoves(moves)
   if (!normalizedMoves.length) return
 
@@ -2181,8 +2204,6 @@ function applyPathMovesLocally(moves: PathMove[], expandedMarkdownMoves: PathMov
       virtualDocs.value = nextVirtual
     }
   }
-
-  backlinks.value = backlinks.value.map((path) => rewritePathWithMoves(path, normalizedMoves))
 }
 
 function onEditorPathRenamed(payload: { from: string; to: string; manual: boolean }) {

@@ -2,6 +2,7 @@ import type { Ref } from 'vue'
 import type { FavoriteEntry, PathMove, PathMoveRewriteResult } from '../../shared/api/apiTypes'
 import { expandPathMoves, rewritePathWithMoves, sortPathMoves } from '../lib/pathMoves'
 import type { WorkspaceMutationResult } from './useAppIndexingController'
+import { createWorkspaceMutationScheduler } from './workspaceMutationScheduler'
 
 /**
  * Module: useWorkspaceMutationEffects
@@ -11,8 +12,8 @@ import type { WorkspaceMutationResult } from './useAppIndexingController'
  *
  * Boundaries:
  * - Explorer and DnD only emit completed move intents.
- * - This composable coordinates local path rewrites, favorite updates,
- *   batch wikilink repair, and derived-surface invalidation.
+ * - This composable coordinates immediate local path patches, batch wikilink
+ *   repair, and deferred workspace-wide state refreshes.
  */
 
 export type UseWorkspaceMutationEffectsOptions = {
@@ -20,7 +21,9 @@ export type UseWorkspaceMutationEffectsOptions = {
   allWorkspaceFiles: Readonly<Ref<string[]>>
   favoriteItems: Readonly<Ref<FavoriteEntry[]>>
   filesystemErrorMessage: Ref<string>
-  applyLocalPathMoves: (moves: PathMove[], expandedMarkdownMoves: PathMove[]) => void
+  getImmediatePathCandidates: () => string[]
+  applyImmediateLocalPathMoves: (moves: PathMove[], expandedMarkdownMoves: PathMove[]) => void
+  applyDeferredLocalPathMoves: (moves: PathMove[], expandedMarkdownMoves: PathMove[]) => void
   renameFavorite: (fromPath: string, toPath: string) => Promise<void>
   updateWikilinksForRename: (fromPath: string, toPath: string) => Promise<{ updated_files: number }>
   updateWikilinksForPathMoves: (moves: PathMove[]) => Promise<PathMoveRewriteResult>
@@ -48,6 +51,7 @@ async function renameFavoritesForMoves(
 
 export function useWorkspaceMutationEffects(options: UseWorkspaceMutationEffectsOptions) {
   let mutationQueue = Promise.resolve()
+  const deferredScheduler = createWorkspaceMutationScheduler()
 
   function enqueueMutation<T>(task: () => Promise<T>): Promise<T> {
     const run = mutationQueue.catch(() => undefined).then(task)
@@ -55,15 +59,22 @@ export function useWorkspaceMutationEffects(options: UseWorkspaceMutationEffects
     return run
   }
 
-  function applyLocalMoves(moves: PathMove[]) {
+  function applyImmediateLocalMoves(moves: PathMove[]) {
     const normalizedMoves = normalizeMoves(moves)
     if (!normalizedMoves.length) {
       return { normalizedMoves, expandedMarkdownMoves: [] as PathMove[] }
     }
 
-    const expandedMarkdownMoves = expandPathMoves(normalizedMoves, options.allWorkspaceFiles.value)
-    options.applyLocalPathMoves(normalizedMoves, expandedMarkdownMoves)
+    const expandedMarkdownMoves = expandPathMoves(normalizedMoves, options.getImmediatePathCandidates())
+    options.applyImmediateLocalPathMoves(normalizedMoves, expandedMarkdownMoves)
     return { normalizedMoves, expandedMarkdownMoves }
+  }
+
+  async function scheduleDeferredLocalSync(moves: PathMove[], expandedMarkdownMoves: PathMove[]) {
+    await deferredScheduler.schedule(() => {
+      options.applyDeferredLocalPathMoves(moves, expandedMarkdownMoves)
+      options.bumpEchoesRefreshToken()
+    })
   }
 
   async function handlePathRenamedNow(payload: { from: string; to: string }) {
@@ -81,12 +92,12 @@ export function useWorkspaceMutationEffects(options: UseWorkspaceMutationEffects
 
     await options.runWorkspaceMutation(async () => {
       const result = await options.updateWikilinksForRename(payload.from, payload.to)
+      await scheduleDeferredLocalSync(normalizedMoves, normalizedMoves)
       return {
         updatedFiles: result.updated_files,
         reindexedFiles: result.updated_files
       }
     })
-    options.bumpEchoesRefreshToken()
   }
 
   async function handlePathsMovedNow(moves: PathMove[]) {
@@ -102,25 +113,25 @@ export function useWorkspaceMutationEffects(options: UseWorkspaceMutationEffects
 
     await options.runWorkspaceMutation(async () => {
       const result = await options.updateWikilinksForPathMoves(normalizedMoves)
+      await scheduleDeferredLocalSync(normalizedMoves, result.expanded_markdown_moves)
       return {
         updatedFiles: result.updated_files,
         reindexedFiles: result.reindexed_files
       }
     })
-    options.bumpEchoesRefreshToken()
   }
 
   function handlePathRenamed(payload: { from: string; to: string }) {
     const root = options.workingFolderPath.value
     if (!root) return Promise.resolve()
-    applyLocalMoves([{ from: payload.from, to: payload.to }])
+    applyImmediateLocalMoves([{ from: payload.from, to: payload.to }])
     return enqueueMutation(() => handlePathRenamedNow(payload))
   }
 
   function handlePathsMoved(moves: PathMove[]) {
     const root = options.workingFolderPath.value
     if (!root) return Promise.resolve()
-    const { normalizedMoves } = applyLocalMoves(moves)
+    const { normalizedMoves } = applyImmediateLocalMoves(moves)
     if (!normalizedMoves.length) return Promise.resolve()
     return enqueueMutation(() => handlePathsMovedNow(moves))
   }

@@ -249,6 +249,14 @@ export function useMultiPaneWorkspaceState(initial: MultiPaneLayout = createInit
     return tab.path
   }
 
+  function getOpenDocumentPaths(): string[] {
+    return Object.values(layout.value.panesById).flatMap((pane) =>
+      pane.openTabs
+        .filter((tab): tab is Extract<PaneTab, { type: 'document' }> => tab.type === 'document')
+        .map((tab) => tab.path)
+    )
+  }
+
   function setActivePane(paneId: PaneId) {
     if (!layout.value.panesById[paneId]) return
     layout.value = {
@@ -800,6 +808,7 @@ export function useMultiPaneWorkspaceState(initial: MultiPaneLayout = createInit
     joinAllPanes,
     getActiveTab,
     getActiveDocumentPath,
+    getOpenDocumentPaths,
     // Compatibility
     openPathInPane,
     setActivePathInPane,

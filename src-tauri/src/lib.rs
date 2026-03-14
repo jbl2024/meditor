@@ -803,6 +803,13 @@ mod tests {
         assert_eq!(result.updated_files, 1);
         assert_eq!(result.moved_markdown_files, 1);
         assert!(result.reindexed_files >= 2);
+        assert_eq!(result.expanded_markdown_moves.len(), 1);
+        assert!(result.expanded_markdown_moves[0]
+            .from_path
+            .ends_with("/journal/foo.md"));
+        assert!(result.expanded_markdown_moves[0]
+            .to_path
+            .ends_with("/archive/foo.md"));
         let updated = fs::read_to_string(workspace.join("index.md")).expect("read updated note");
         assert!(updated.contains("[[archive/foo]]"));
 
@@ -839,6 +846,17 @@ mod tests {
 
         assert_eq!(result.updated_files, 1);
         assert_eq!(result.moved_markdown_files, 2);
+        let expanded_pairs = result
+            .expanded_markdown_moves
+            .iter()
+            .map(|item| (item.from_path.clone(), item.to_path.clone()))
+            .collect::<Vec<_>>();
+        assert!(expanded_pairs.iter().any(|(from, to)| {
+            from.ends_with("/journal/a.md") && to.ends_with("/archive/journal/a.md")
+        }));
+        assert!(expanded_pairs.iter().any(|(from, to)| {
+            from.ends_with("/journal/sub/b.md") && to.ends_with("/archive/journal/sub/b.md")
+        }));
         let updated = fs::read_to_string(workspace.join("index.md")).expect("read updated note");
         assert!(updated.contains("[[archive/journal/a]]"));
         assert!(updated.contains("[[archive/journal/sub/b]]"));

@@ -778,6 +778,7 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
       indexRunTotal.value = completed
       indexRunCompleted.value = completed
       indexRunPhase.value = 'refreshing_views'
+      await new Promise<void>((resolve) => setTimeout(resolve, 0))
       await refreshIndexedViewsDeferred()
       indexingShellPort.indexingState.value = 'indexed'
       semanticIndexState.value = 'idle'

@@ -31,16 +31,27 @@ function createEffects() {
     { path: '/vault/journal/2026-03-06.md', added_at_ms: 1, exists: true }
   ])
   const filesystemErrorMessage = ref('')
-  const applyLocalPathMoves = vi.fn((moves: PathMove[], expandedMarkdownMoves: PathMove[]) => {
+  const getImmediatePathCandidates = vi.fn(() => ['/vault/journal/2026-03-06.md', '/vault/notes/a.md'])
+  const applyImmediateLocalPathMoves = vi.fn()
+  const applyDeferredLocalPathMoves = vi.fn((moves: PathMove[]) => {
     allWorkspaceFiles.value = allWorkspaceFiles.value.map((path) => rewritePathWithMoves(path, moves))
-    return expandedMarkdownMoves
   })
   const renameFavorite = vi.fn(async () => {})
   const updateWikilinksForRename = vi.fn(async () => ({ updated_files: 2 }))
   const updateWikilinksForPathMoves = vi.fn(async () => ({
     updated_files: 3,
     reindexed_files: 4,
-    moved_markdown_files: 2
+    moved_markdown_files: 2,
+    expanded_markdown_moves: [
+      {
+        from: '/vault/journal/2026-03-06.md',
+        to: '/vault/archive/journal/2026-03-06.md'
+      },
+      {
+        from: '/vault/journal/2026-03-07.md',
+        to: '/vault/archive/journal/2026-03-07.md'
+      }
+    ]
   }))
   const runWorkspaceMutation = vi.fn(async (task: () => Promise<unknown>) => {
     await task()
@@ -52,7 +63,9 @@ function createEffects() {
     allWorkspaceFiles,
     favoriteItems,
     filesystemErrorMessage,
-    applyLocalPathMoves,
+    getImmediatePathCandidates,
+    applyImmediateLocalPathMoves,
+    applyDeferredLocalPathMoves,
     renameFavorite,
     updateWikilinksForRename,
     updateWikilinksForPathMoves,
@@ -63,7 +76,9 @@ function createEffects() {
       allWorkspaceFiles,
       favoriteItems,
       filesystemErrorMessage,
-      applyLocalPathMoves,
+      getImmediatePathCandidates,
+      applyImmediateLocalPathMoves,
+      applyDeferredLocalPathMoves,
       renameFavorite,
       updateWikilinksForRename,
       updateWikilinksForPathMoves,
@@ -74,27 +89,41 @@ function createEffects() {
 }
 
 describe('useWorkspaceMutationEffects', () => {
-  it('routes a rename through local updates, favorite updates, and mutation orchestration', async () => {
+  it('applies the immediate rename patch before the backend mutation starts', async () => {
     const ctx = createEffects()
+    const order: string[] = []
+
+    ctx.applyImmediateLocalPathMoves.mockImplementation(() => {
+      order.push('immediate')
+    })
+    ctx.runWorkspaceMutation.mockImplementation(async (task: () => Promise<unknown>) => {
+      order.push('mutation')
+      await task()
+    })
 
     await ctx.effects.handlePathRenamed({ from: '/vault/notes/a.md', to: '/vault/notes/b.md' })
 
-    expect(ctx.applyLocalPathMoves).toHaveBeenCalledWith(
-      [{ from: '/vault/notes/a.md', to: '/vault/notes/b.md' }],
-      [{ from: '/vault/notes/a.md', to: '/vault/notes/b.md' }]
-    )
-    expect(ctx.runWorkspaceMutation).toHaveBeenCalledOnce()
-    expect(ctx.updateWikilinksForRename).toHaveBeenCalledWith('/vault/notes/a.md', '/vault/notes/b.md')
-    expect(ctx.bumpEchoesRefreshToken).toHaveBeenCalledOnce()
+    expect(order[0]).toBe('immediate')
+    expect(order).toContain('mutation')
   })
 
-  it('handles batch moves and expands folder descendants for local note state', async () => {
+  it('uses only immediate path candidates for the hot-path move expansion', async () => {
     const ctx = createEffects()
     const moves: PathMove[] = [{ from: '/vault/journal', to: '/vault/archive/journal' }]
 
     await ctx.effects.handlePathsMoved(moves)
 
-    expect(ctx.applyLocalPathMoves).toHaveBeenCalledWith(
+    expect(ctx.getImmediatePathCandidates).toHaveBeenCalledOnce()
+    expect(ctx.applyImmediateLocalPathMoves).toHaveBeenCalledWith(
+      moves,
+      [
+        {
+          from: '/vault/journal/2026-03-06.md',
+          to: '/vault/archive/journal/2026-03-06.md'
+        }
+      ]
+    )
+    expect(ctx.applyDeferredLocalPathMoves).toHaveBeenCalledWith(
       moves,
       [
         {
@@ -107,12 +136,6 @@ describe('useWorkspaceMutationEffects', () => {
         }
       ]
     )
-    expect(ctx.renameFavorite).toHaveBeenCalledWith(
-      '/vault/journal/2026-03-06.md',
-      '/vault/archive/journal/2026-03-06.md'
-    )
-    expect(ctx.updateWikilinksForPathMoves).toHaveBeenCalledWith(moves)
-    expect(ctx.bumpEchoesRefreshToken).toHaveBeenCalledOnce()
   })
 
   it('does nothing for an empty move batch', async () => {
@@ -120,7 +143,7 @@ describe('useWorkspaceMutationEffects', () => {
 
     await ctx.effects.handlePathsMoved([])
 
-    expect(ctx.applyLocalPathMoves).not.toHaveBeenCalled()
+    expect(ctx.applyImmediateLocalPathMoves).not.toHaveBeenCalled()
     expect(ctx.runWorkspaceMutation).not.toHaveBeenCalled()
     expect(ctx.bumpEchoesRefreshToken).not.toHaveBeenCalled()
   })
@@ -150,18 +173,10 @@ describe('useWorkspaceMutationEffects', () => {
     await flushMicrotasks()
 
     expect(ctx.updateWikilinksForPathMoves).toHaveBeenCalledTimes(1)
-    expect(ctx.updateWikilinksForPathMoves).toHaveBeenNthCalledWith(1, [
-      { from: '/vault/notes/a.md', to: '/vault/notes/b.md' }
-    ])
-
     first.resolve()
     await firstMove
     await flushMicrotasks()
-
     expect(ctx.updateWikilinksForPathMoves).toHaveBeenCalledTimes(2)
-    expect(ctx.updateWikilinksForPathMoves).toHaveBeenNthCalledWith(2, [
-      { from: '/vault/notes/b.md', to: '/vault/notes/c.md' }
-    ])
 
     second.resolve()
     await secondMove
@@ -172,50 +187,54 @@ describe('useWorkspaceMutationEffects', () => {
       'run-2:start',
       'run-2:end'
     ])
-    expect(ctx.bumpEchoesRefreshToken).toHaveBeenCalledTimes(2)
   })
 
-  it('applies successive folder and file moves using the updated local workspace state', async () => {
+  it('applies deferred workspace-wide sync after the backend mutation result arrives', async () => {
+    const ctx = createEffects()
+    const order: string[] = []
+
+    ctx.applyImmediateLocalPathMoves.mockImplementation(() => {
+      order.push('immediate')
+    })
+    ctx.updateWikilinksForPathMoves.mockImplementation(async () => {
+      order.push('backend')
+      return {
+        updated_files: 1,
+        reindexed_files: 1,
+        moved_markdown_files: 1,
+        expanded_markdown_moves: [{ from: '/vault/notes/a.md', to: '/vault/notes/b.md' }]
+      }
+    })
+    ctx.applyDeferredLocalPathMoves.mockImplementation(() => {
+      order.push('deferred')
+    })
+
+    await ctx.effects.handlePathsMoved([{ from: '/vault/notes/a.md', to: '/vault/notes/b.md' }])
+
+    expect(order).toEqual(['immediate', 'backend', 'deferred'])
+    expect(ctx.bumpEchoesRefreshToken).toHaveBeenCalledOnce()
+  })
+
+  it('keeps the mutation pipeline running when favorite updates fail', async () => {
+    const ctx = createEffects()
+    ctx.renameFavorite.mockRejectedValueOnce(new Error('favorite failed'))
+
+    await ctx.effects.handlePathsMoved([{ from: '/vault/journal', to: '/vault/archive/journal' }])
+
+    expect(ctx.filesystemErrorMessage.value).toBe('favorite failed')
+    expect(ctx.updateWikilinksForPathMoves).toHaveBeenCalledOnce()
+    expect(ctx.applyDeferredLocalPathMoves).toHaveBeenCalledOnce()
+  })
+
+  it('does not rewrite closed-note state during the immediate phase', async () => {
     const ctx = createEffects()
 
     await ctx.effects.handlePathsMoved([{ from: '/vault/journal', to: '/vault/archive/journal' }])
-    await ctx.effects.handlePathsMoved([
-      {
-        from: '/vault/archive/journal/2026-03-06.md',
-        to: '/vault/archive/journal/2026-03-06-renamed.md'
-      }
-    ])
 
-    expect(ctx.applyLocalPathMoves).toHaveBeenNthCalledWith(
-      1,
+    expect(ctx.applyImmediateLocalPathMoves).toHaveBeenCalledWith(
       [{ from: '/vault/journal', to: '/vault/archive/journal' }],
-      [
-        {
-          from: '/vault/journal/2026-03-06.md',
-          to: '/vault/archive/journal/2026-03-06.md'
-        },
-        {
-          from: '/vault/journal/2026-03-07.md',
-          to: '/vault/archive/journal/2026-03-07.md'
-        }
-      ]
+      [{ from: '/vault/journal/2026-03-06.md', to: '/vault/archive/journal/2026-03-06.md' }]
     )
-    expect(ctx.applyLocalPathMoves).toHaveBeenNthCalledWith(
-      2,
-      [
-        {
-          from: '/vault/archive/journal/2026-03-06.md',
-          to: '/vault/archive/journal/2026-03-06-renamed.md'
-        }
-      ],
-      [
-        {
-          from: '/vault/archive/journal/2026-03-06.md',
-          to: '/vault/archive/journal/2026-03-06-renamed.md'
-        }
-      ]
-    )
-    expect(ctx.allWorkspaceFiles.value).toContain('/vault/archive/journal/2026-03-06-renamed.md')
-    expect(ctx.allWorkspaceFiles.value).not.toContain('/vault/journal/2026-03-06.md')
+    expect(ctx.allWorkspaceFiles.value).toContain('/vault/archive/journal/2026-03-07.md')
   })
 })

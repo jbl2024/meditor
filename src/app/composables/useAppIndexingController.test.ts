@@ -157,6 +157,23 @@ describe('useAppIndexingController', () => {
     expect(refreshBacklinks).toHaveBeenCalledOnce()
   })
 
+  it('yields once before refreshing derived views after a workspace mutation', async () => {
+    vi.useFakeTimers()
+    const { controller, refreshBacklinks } = createController()
+
+    const run = controller.runWorkspaceMutation(async () => ({
+      updatedFiles: 1,
+      reindexedFiles: 1
+    }))
+    await flushMicrotasks()
+
+    expect(refreshBacklinks).not.toHaveBeenCalled()
+    await vi.runAllTimersAsync()
+    await run
+
+    expect(refreshBacklinks).toHaveBeenCalledOnce()
+  })
+
   it('marks the index out of sync when a workspace mutation fails', async () => {
     const { controller, indexingState } = createController()
 

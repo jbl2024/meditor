@@ -68,7 +68,7 @@ pub(crate) struct WikilinkRewriteResult {
     pub updated_files: usize,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub(crate) struct PathMoveInput {
     #[serde(alias = "fromPath")]
     pub from_path: String,
@@ -81,6 +81,7 @@ pub(crate) struct PathMoveRewriteResult {
     pub updated_files: usize,
     pub reindexed_files: usize,
     pub moved_markdown_files: usize,
+    pub expanded_markdown_moves: Vec<PathMoveInput>,
 }
 
 fn should_log_open_perf(elapsed_ms: u128) -> bool {
@@ -458,7 +459,7 @@ pub(crate) fn update_wikilinks_for_rename(
 fn collect_note_moves_for_path_move(
     root_canonical: &Path,
     path_move: &PathMoveInput,
-) -> Result<Vec<(String, String, PathBuf)>> {
+) -> Result<Vec<(String, String, PathBuf, PathBuf)>> {
     let old_path = {
         let mut path = PathBuf::from(path_move.from_path.trim());
         if !path.is_absolute() {
@@ -489,7 +490,7 @@ fn collect_note_moves_for_path_move(
             if old_target_key.is_empty() || old_target_key == normalize_note_key(root_canonical, &new_file)? {
                 continue;
             }
-            expanded.push((old_target_key, new_target, new_file));
+            expanded.push((old_target_key, new_target, old_file, new_file));
         }
         return Ok(expanded);
     }
@@ -504,14 +505,14 @@ fn collect_note_moves_for_path_move(
         return Ok(Vec::new());
     }
 
-    Ok(vec![(old_target_key, new_target, new_path)])
+    Ok(vec![(old_target_key, new_target, old_path, new_path)])
 }
 
 pub(crate) fn update_wikilinks_for_path_moves(
     moves: Vec<PathMoveInput>,
 ) -> Result<PathMoveRewriteResult> {
     let root_canonical = active_workspace_root()?;
-    let mut note_moves: Vec<(String, String, PathBuf)> = Vec::new();
+    let mut note_moves: Vec<(String, String, PathBuf, PathBuf)> = Vec::new();
 
     for path_move in moves {
         note_moves.extend(collect_note_moves_for_path_move(&root_canonical, &path_move)?);
@@ -522,6 +523,7 @@ pub(crate) fn update_wikilinks_for_path_moves(
             updated_files: 0,
             reindexed_files: 0,
             moved_markdown_files: 0,
+            expanded_markdown_moves: Vec::new(),
         });
     }
 
@@ -542,7 +544,7 @@ pub(crate) fn update_wikilinks_for_path_moves(
 
         let mut updated_markdown = markdown;
         let mut changed = false;
-        for (old_target_key, new_target, _) in &note_moves {
+        for (old_target_key, new_target, _, _) in &note_moves {
             let (rewritten, rewritten_changed) =
                 rewrite_wikilinks_for_note(&updated_markdown, old_target_key, new_target);
             updated_markdown = rewritten;
@@ -558,7 +560,7 @@ pub(crate) fn update_wikilinks_for_path_moves(
         changed_files += 1;
     }
 
-    for (_, _, moved_note_path) in &note_moves {
+    for (_, _, _, moved_note_path) in &note_moves {
         reindex_paths.insert(moved_note_path.to_string_lossy().to_string());
     }
 
@@ -575,5 +577,12 @@ pub(crate) fn update_wikilinks_for_path_moves(
         updated_files: changed_files,
         reindexed_files: reindex_paths.len(),
         moved_markdown_files,
+        expanded_markdown_moves: note_moves
+            .into_iter()
+            .map(|(_, _, old_note_path, moved_note_path)| PathMoveInput {
+                from_path: old_note_path.to_string_lossy().to_string(),
+                to_path: moved_note_path.to_string_lossy().to_string(),
+            })
+            .collect(),
     })
 }
