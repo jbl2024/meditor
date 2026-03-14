@@ -2,6 +2,7 @@ import { createApp, defineComponent, h, nextTick, ref } from 'vue'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import ExplorerTree from './ExplorerTree.vue'
 import type { TreeNode } from '../../../shared/api/apiTypes'
+import { openPathExternal } from '../../../shared/api/workspaceApi'
 
 const unlistenWorkspaceFsChanged = vi.fn()
 const listChildren = vi.fn()
@@ -131,6 +132,34 @@ describe('ExplorerTree', () => {
       behavior: 'smooth'
     })
     rectSpy.mockRestore()
+
+    mounted.app.unmount()
+  })
+
+  it('keeps file-targeted actions enabled on row context menu', async () => {
+    listChildren.mockImplementation(async (dirPath: string) => {
+      if (dirPath === '/vault') {
+        return [fileNode('/vault/a.md')]
+      }
+      return []
+    })
+
+    const mounted = await mountHarness('/vault/a.md')
+    const row = mounted.root.querySelector('[data-explorer-path="/vault/a.md"]') as HTMLElement
+    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 120, clientY: 80 }))
+    await nextTick()
+
+    const openExternalButton = Array.from(document.body.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Open externally'
+    ) as HTMLButtonElement | undefined
+
+    expect(openExternalButton).toBeDefined()
+    expect(openExternalButton?.disabled).toBe(false)
+
+    openExternalButton?.click()
+    await nextTick()
+
+    expect(openPathExternal).toHaveBeenCalledWith('/vault/a.md')
 
     mounted.app.unmount()
   })

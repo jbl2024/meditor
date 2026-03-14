@@ -50,7 +50,7 @@ function iconForNode(node: TreeNode) {
     :style="{ paddingLeft: `${depth * 14 + 8}px` }"
     @click="emit('click', $event, node)"
     @dblclick="emit('doubleclick', node)"
-    @contextmenu.prevent="emit('contextmenu', { event: $event, node })"
+    @contextmenu.prevent.stop="emit('contextmenu', { event: $event, node })"
   >
     <span
       v-if="active"
