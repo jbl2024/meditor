@@ -711,6 +711,7 @@ defineExpose({
 
 .editor-holder {
   background: var(--surface-bg);
+  overscroll-behavior: contain;
 }
 
 .editor-header-shell {

@@ -389,6 +389,7 @@ watch(
   flex-direction: column;
   gap: 10px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 12px 10px 14px;
 }
 

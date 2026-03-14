@@ -3761,7 +3761,7 @@ onBeforeUnmount(() => {
   flex: 1;
   min-width: 0;
   min-height: 0;
-  background: var(--surface-bg);
+  background: var(--shell-chrome-bg);
 }
 
 .toast {

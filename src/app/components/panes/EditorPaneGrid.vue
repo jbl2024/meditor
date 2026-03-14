@@ -393,8 +393,9 @@ onBeforeUnmount(() => {
   height: 100%;
   display: grid;
   gap: 0;
-  padding: 6px;
+  padding: 2px;
   box-sizing: border-box;
+  background: transparent;
 }
 
 .editor-pane {
@@ -418,7 +419,7 @@ onBeforeUnmount(() => {
   content: '';
   position: absolute;
   inset: 0;
-  background: var(--workspace-pane-resizer);
+  background: var(--shell-chrome-bg);
 }
 
 .pane-resizer-col {
