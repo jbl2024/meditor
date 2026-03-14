@@ -55,18 +55,26 @@ export function useWorkspaceMutationEffects(options: UseWorkspaceMutationEffects
     return run
   }
 
+  function applyLocalMoves(moves: PathMove[]) {
+    const normalizedMoves = normalizeMoves(moves)
+    if (!normalizedMoves.length) {
+      return { normalizedMoves, expandedMarkdownMoves: [] as PathMove[] }
+    }
+
+    const expandedMarkdownMoves = expandPathMoves(normalizedMoves, options.allWorkspaceFiles.value)
+    options.applyLocalPathMoves(normalizedMoves, expandedMarkdownMoves)
+    return { normalizedMoves, expandedMarkdownMoves }
+  }
+
   async function handlePathRenamedNow(payload: { from: string; to: string }) {
     const root = options.workingFolderPath.value
     if (!root) return
 
-    const moves = normalizeMoves([{ from: payload.from, to: payload.to }])
-    if (!moves.length) return
-
-    const expandedMarkdownMoves = expandPathMoves(moves, options.allWorkspaceFiles.value)
-    options.applyLocalPathMoves(moves, expandedMarkdownMoves)
+    const normalizedMoves = normalizeMoves([{ from: payload.from, to: payload.to }])
+    if (!normalizedMoves.length) return
 
     try {
-      await renameFavoritesForMoves(moves, options.favoriteItems.value, options.renameFavorite)
+      await renameFavoritesForMoves(normalizedMoves, options.favoriteItems.value, options.renameFavorite)
     } catch (err) {
       options.filesystemErrorMessage.value = err instanceof Error ? err.message : 'Could not update favorite.'
     }
@@ -86,9 +94,6 @@ export function useWorkspaceMutationEffects(options: UseWorkspaceMutationEffects
     const normalizedMoves = normalizeMoves(moves)
     if (!root || !normalizedMoves.length) return
 
-    const expandedMarkdownMoves = expandPathMoves(normalizedMoves, options.allWorkspaceFiles.value)
-    options.applyLocalPathMoves(normalizedMoves, expandedMarkdownMoves)
-
     try {
       await renameFavoritesForMoves(normalizedMoves, options.favoriteItems.value, options.renameFavorite)
     } catch (err) {
@@ -106,10 +111,17 @@ export function useWorkspaceMutationEffects(options: UseWorkspaceMutationEffects
   }
 
   function handlePathRenamed(payload: { from: string; to: string }) {
+    const root = options.workingFolderPath.value
+    if (!root) return Promise.resolve()
+    applyLocalMoves([{ from: payload.from, to: payload.to }])
     return enqueueMutation(() => handlePathRenamedNow(payload))
   }
 
   function handlePathsMoved(moves: PathMove[]) {
+    const root = options.workingFolderPath.value
+    if (!root) return Promise.resolve()
+    const { normalizedMoves } = applyLocalMoves(moves)
+    if (!normalizedMoves.length) return Promise.resolve()
     return enqueueMutation(() => handlePathsMovedNow(moves))
   }
 

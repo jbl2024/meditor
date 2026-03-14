@@ -96,11 +96,10 @@ export function useEditorDocumentRuntime(options: UseEditorDocumentRuntimeOption
   const ui = options.documentUiPort
   const uiInteraction = ui.interaction
 
-  const currentPath = computed(() => input.path.value?.trim() || '')
-
   const sessionStore = useDocumentEditorSessions({
     createEditor: (path) => session.createSessionEditor(path)
   })
+  const currentPath = computed(() => sessionStore.getActivePath(MAIN_PANE_ID) || input.path.value?.trim() || '')
   const lifecycle = useEditorSessionLifecycle({
     emitStatus: (payload) => output.emitStatus(payload),
     saveCurrentFile: (manual) => saveCurrentFile(manual),
@@ -274,7 +273,12 @@ export function useEditorDocumentRuntime(options: UseEditorDocumentRuntimeOption
   }
 
   const mountedSessions = useEditorMountedSessions({
-    openPaths: computed(() => options.documentInputPort.openPaths.value ?? []),
+    openPaths: computed(() => {
+      const propPaths = options.documentInputPort.openPaths.value ?? []
+      const activePath = sessionStore.getActivePath(MAIN_PANE_ID)
+      if (!activePath) return propPaths
+      return propPaths.includes(activePath) ? propPaths : [...propPaths, activePath]
+    }),
     currentPath,
     ensureSession
   })

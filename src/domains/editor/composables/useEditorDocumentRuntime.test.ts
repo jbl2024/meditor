@@ -234,6 +234,29 @@ describe('useEditorDocumentRuntime', () => {
     harness.app.unmount()
   })
 
+  it('keeps the renamed session rendered and active before parent props catch up', async () => {
+    const harness = createHarness({
+      path: 'a.md',
+      openPaths: ['a.md'],
+      openFile: async () => '# A\n\nAlpha',
+      renameFileFromTitle: async () => ({ path: 'b.md', title: 'Renamed' })
+    })
+
+    harness.app.mount(document.createElement('div'))
+    await flushUi()
+
+    await harness.runtime.saveCurrentFile(false)
+    await flushMicrotasks()
+
+    expect(harness.emitPathRenamed).toHaveBeenCalledWith({ from: 'a.md', to: 'b.md', manual: false })
+    expect(harness.runtime.currentPath.value).toBe('b.md')
+    expect(harness.runtime.renderPaths.value).toContain('b.md')
+    expect(harness.runtime.getSession('b.md')).toBeTruthy()
+    expect(harness.activeEditor.value).toBe(harness.runtime.getSession('b.md')?.editor ?? null)
+
+    harness.app.unmount()
+  })
+
   it('cancels in-flight loads when the runtime unmounts', async () => {
     const aLoad = deferred<string>()
     const harness = createHarness({
