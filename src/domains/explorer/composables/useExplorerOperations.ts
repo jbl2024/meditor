@@ -34,6 +34,7 @@ export type ExplorerConfirmPrompt = {
   detail: string
   intent: 'delete' | 'move_folders'
   payload: string[]
+  targetDir?: string
 }
 
 /** Declares dependencies required by explorer entry operations. */
@@ -247,6 +248,56 @@ export function useExplorerOperations(options: UseExplorerOperationsOptions) {
     )
   }
 
+  /**
+   * Runs a direct move operation without going through clipboard state.
+   * Drag and drop reuses this path so folder confirmations, conflict handling,
+   * refresh behavior, and selection updates stay aligned with paste.
+   */
+  async function executeMove(targetDir: string, sourcePaths: string[]) {
+    if (!options.folderPath.value || !targetDir || !sourcePaths.length) return
+
+    const movedPaths: string[] = []
+
+    await runWithConflictModal(
+      async (strategy) => {
+        for (const source of sourcePaths) {
+          const moved = await moveEntry(source, targetDir, strategy)
+          movedPaths.push(moved)
+        }
+
+        await options.refreshLoadedDirs()
+        options.setSelection(movedPaths)
+        options.focusedPath.value = movedPaths[0] ?? ''
+        options.emitSelection(movedPaths)
+      },
+      'Name conflict while moving',
+      'Choose how to handle conflicts.'
+    )
+  }
+
+  /**
+   * Runs a direct move operation without going through clipboard state.
+   * Drag and drop reuses this path so folder confirmations, conflict handling,
+   * refresh behavior, and selection updates stay aligned with paste.
+   */
+  async function movePaths(targetDir: string, sourcePaths: string[]) {
+    if (!options.folderPath.value || !targetDir || !sourcePaths.length) return
+
+    const hasFolderMove = sourcePaths.some((path) => options.nodeByPath.value[path]?.is_dir)
+    if (hasFolderMove) {
+      confirmPrompt.value = {
+        title: 'Move selected folders?',
+        detail: 'Moving folders can affect many files. Confirm this operation.',
+        intent: 'move_folders',
+        payload: sourcePaths,
+        targetDir
+      }
+      return
+    }
+
+    await executeMove(targetDir, sourcePaths)
+  }
+
   async function runPaste(targetPath?: string | null) {
     if (!options.folderPath.value || !clipboard.value) return
 
@@ -263,7 +314,8 @@ export function useExplorerOperations(options: UseExplorerOperationsOptions) {
         title: 'Move selected folders?',
         detail: 'Moving folders can affect many files. Confirm this operation.',
         intent: 'move_folders',
-        payload: sourcePaths
+        payload: sourcePaths,
+        targetDir
       }
       return
     }
@@ -332,6 +384,11 @@ export function useExplorerOperations(options: UseExplorerOperationsOptions) {
     }
 
     if (prompt.intent === 'move_folders') {
+      if (prompt.targetDir) {
+        await executeMove(prompt.targetDir, prompt.payload)
+        return
+      }
+
       const target = targetPath || options.focusedPath.value || options.folderPath.value
       const targetNode = options.nodeByPath.value[target]
       const targetDir = targetNode?.is_dir ? target : getParentPath(target)
@@ -355,6 +412,7 @@ export function useExplorerOperations(options: UseExplorerOperationsOptions) {
     executeDelete,
     runDuplicate,
     setClipboard,
+    movePaths,
     runPaste,
     executePaste,
     openNode,

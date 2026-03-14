@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { DnDProvider } from '@vue-dnd-kit/core'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { MagnifyingGlassIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import type { EntryKind, TreeNode } from '../../../shared/api/apiTypes'
@@ -10,6 +11,7 @@ import ExplorerContextMenu, { type MenuAction } from './ExplorerContextMenu.vue'
 import ExplorerItem from './ExplorerItem.vue'
 import ExplorerToolbar from './ExplorerToolbar.vue'
 import { useSelectionManager } from './composables/useSelectionManager'
+import { useExplorerDnD } from '../composables/useExplorerDnD'
 import { useExplorerFsSync } from '../composables/useExplorerFsSync'
 import { useExplorerKeyboard } from '../composables/useExplorerKeyboard'
 import { useExplorerOperations } from '../composables/useExplorerOperations'
@@ -107,6 +109,19 @@ const operations = useExplorerOperations({
   refreshLoadedDirs: fsSync.refreshLoadedDirs
 })
 
+const dnd = useExplorerDnD({
+  folderPath: computed(() => props.folderPath),
+  nodeByPath: treeState.nodeByPath,
+  parentByPath: treeState.parentByPath,
+  selectionPaths,
+  focusedPath: treeState.focusedPath,
+  editingPath: operations.editingPath,
+  hasActiveFilter,
+  setSelection: selectionManager.setSelection,
+  emitSelection: (paths) => emit('select', paths),
+  movePaths: operations.movePaths
+})
+
 function ensureFocusedPath(defaultToFirst = true) {
   if (treeState.focusedPath.value && visibleNodePaths.value.includes(treeState.focusedPath.value)) {
     return treeState.focusedPath.value
@@ -187,6 +202,12 @@ function clearFilter() {
 }
 
 function handleRowClick(event: MouseEvent, node: TreeNode) {
+  if (dnd.shouldSuppressPointerInteraction()) {
+    event.preventDefault()
+    event.stopPropagation()
+    return
+  }
+
   const ordered = visibleNodePaths.value
   const isToggle = isMac ? event.metaKey : event.ctrlKey
 
@@ -216,6 +237,10 @@ function handleRowClick(event: MouseEvent, node: TreeNode) {
 }
 
 function handleDoubleClick(node: TreeNode) {
+  if (dnd.shouldSuppressPointerInteraction()) {
+    return
+  }
+
   if (node.is_dir) return
   if (node.is_markdown) {
     emit('open', node.path)
@@ -244,6 +269,10 @@ function onTreeContextMenu(event: MouseEvent) {
 }
 
 function clearSelectionIfBackground(event: MouseEvent) {
+  if (dnd.shouldSuppressPointerInteraction()) {
+    return
+  }
+
   if (event.target === event.currentTarget) {
     selectionManager.clearSelection()
     emit('select', [])
@@ -361,106 +390,109 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 flex-col gap-2">
-    <ExplorerToolbar
-      :disabled="!folderPath"
-      :search-open="isFilterVisible"
-      @create-file="operations.requestCreate(folderPath, 'file')"
-      @create-folder="operations.requestCreate(folderPath, 'folder')"
-      @expand-all="treeState.expandAllDirs"
-      @collapse-all="treeState.collapseAllDirs"
-      @refresh="fsSync.refreshLoadedDirs"
-      @toggle-search="toggleFilterVisibility"
-    />
-
-    <div v-if="isFilterVisible || hasFilterText" class="explorer-filter-shell">
-      <MagnifyingGlassIcon class="explorer-filter-icon h-3.5 w-3.5" />
-      <UiInput
-        ref="filterInputRef"
-        v-model="filterQuery"
-        size="sm"
-        class-name="explorer-filter !pl-8 pr-8"
-        placeholder="Filter files and folders..."
+  <DnDProvider :auto-scroll-viewport="true" preview-to="body">
+    <div class="flex h-full min-h-0 flex-col gap-2">
+      <ExplorerToolbar
+        :disabled="!folderPath"
+        :search-open="isFilterVisible"
+        @create-file="operations.requestCreate(folderPath, 'file')"
+        @create-folder="operations.requestCreate(folderPath, 'folder')"
+        @expand-all="treeState.expandAllDirs"
+        @collapse-all="treeState.collapseAllDirs"
+        @refresh="fsSync.refreshLoadedDirs"
+        @toggle-search="toggleFilterVisibility"
       />
-      <button
-        v-if="hasFilterText"
-        type="button"
-        class="explorer-filter-clear"
-        aria-label="Clear filter"
-        title="Clear filter"
-        @click="clearFilter"
-      >
-        <XMarkIcon class="h-3.5 w-3.5" />
-      </button>
-    </div>
 
-    <div
-      ref="treeRef"
-      tabindex="0"
-      class="min-h-0 flex-1 overflow-auto bg-transparent p-0.5 outline-none focus-visible:ring-0"
-      @keydown="keyboard.onTreeKeydown"
-      @contextmenu.prevent="onTreeContextMenu"
-      @click="clearSelectionIfBackground"
-    >
-      <p v-if="!folderPath" class="explorer-empty-state px-2 py-1 text-xs">Select a working folder to start.</p>
-      <p v-else-if="!filteredRows.length" class="explorer-empty-state px-2 py-1 text-xs">
-        <template v-if="hasActiveFilter">No matching files or folders.</template>
-        <template v-else>No files or folders. Use New file or New folder.</template>
-      </p>
-
-      <template v-else>
-        <ExplorerItem
-          v-for="row in filteredRows"
-          :key="row.path"
-          :node="treeState.nodeByPath.value[row.path]"
-          :depth="row.depth"
-          :expanded="treeState.expandedPaths.value.has(row.path)"
-          :selected="selectionManager.isSelected(row.path)"
-          :active="activePath === row.path"
-          :focused="treeState.focusedPath.value === row.path"
-          :cut-pending="Boolean(operations.clipboard.value?.mode === 'cut' && operations.clipboard.value.paths.includes(row.path))"
-          :editing="operations.editingPath.value === row.path"
-          :rename-value="operations.editingValue.value"
-          :context-active="contextPathSet.has(row.path)"
-          @toggle="treeState.toggleExpand"
-          @click="handleRowClick"
-          @doubleclick="handleDoubleClick"
-          @contextmenu="onNodeContextMenu"
-          @rowaction="onRowAction"
-          @rename-update="operations.editingValue.value = $event"
-          @rename-confirm="operations.confirmRename"
-          @rename-cancel="operations.cancelRename"
+      <div v-if="isFilterVisible || hasFilterText" class="explorer-filter-shell">
+        <MagnifyingGlassIcon class="explorer-filter-icon h-3.5 w-3.5" />
+        <UiInput
+          ref="filterInputRef"
+          v-model="filterQuery"
+          size="sm"
+          class-name="explorer-filter !pl-8 pr-8"
+          placeholder="Filter files and folders..."
         />
-      </template>
+        <button
+          v-if="hasFilterText"
+          type="button"
+          class="explorer-filter-clear"
+          aria-label="Clear filter"
+          title="Clear filter"
+          @click="clearFilter"
+        >
+          <XMarkIcon class="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      <div
+        ref="treeRef"
+        tabindex="0"
+        class="min-h-0 flex-1 overflow-auto bg-transparent p-0.5 outline-none focus-visible:ring-0"
+        @keydown="keyboard.onTreeKeydown"
+        @contextmenu.prevent="onTreeContextMenu"
+        @click="clearSelectionIfBackground"
+      >
+        <p v-if="!folderPath" class="explorer-empty-state px-2 py-1 text-xs">Select a working folder to start.</p>
+        <p v-else-if="!filteredRows.length" class="explorer-empty-state px-2 py-1 text-xs">
+          <template v-if="hasActiveFilter">No matching files or folders.</template>
+          <template v-else>No files or folders. Use New file or New folder.</template>
+        </p>
+
+        <template v-else>
+          <ExplorerItem
+            v-for="row in filteredRows"
+            :key="row.path"
+            :node="treeState.nodeByPath.value[row.path]"
+            :depth="row.depth"
+            :expanded="treeState.expandedPaths.value.has(row.path)"
+            :selected="selectionManager.isSelected(row.path)"
+            :active="activePath === row.path"
+            :focused="treeState.focusedPath.value === row.path"
+            :cut-pending="Boolean(operations.clipboard.value?.mode === 'cut' && operations.clipboard.value.paths.includes(row.path))"
+            :editing="operations.editingPath.value === row.path"
+            :rename-value="operations.editingValue.value"
+            :context-active="contextPathSet.has(row.path)"
+            :dnd="dnd"
+            @toggle="treeState.toggleExpand"
+            @click="handleRowClick"
+            @doubleclick="handleDoubleClick"
+            @contextmenu="onNodeContextMenu"
+            @rowaction="onRowAction"
+            @rename-update="operations.editingValue.value = $event"
+            @rename-confirm="operations.confirmRename"
+            @rename-cancel="operations.cancelRename"
+          />
+        </template>
+      </div>
+
+      <ExplorerContextMenu
+        v-if="contextMenu"
+        :x="contextMenu.x"
+        :y="contextMenu.y"
+        :can-open="Boolean(contextMenu.targetPath)"
+        :can-paste="operations.canPaste.value"
+        :can-rename="Boolean(contextMenu.targetPath)"
+        :can-delete="Boolean(contextMenu.targetPath)"
+        @action="onContextAction"
+      />
+
+      <ExplorerConflictDialog
+        v-if="operations.conflictPrompt.value"
+        :title="operations.conflictPrompt.value.title"
+        :detail="operations.conflictPrompt.value.detail"
+        @cancel="operations.closeConflictPrompt"
+        @resolve="operations.resolveConflict"
+      />
+
+      <ExplorerConfirmDialog
+        v-if="operations.confirmPrompt.value"
+        :title="operations.confirmPrompt.value.title"
+        :detail="operations.confirmPrompt.value.detail"
+        @cancel="operations.cancelConfirmPrompt"
+        @confirm="operations.confirmPromptAction(currentContextTarget())"
+      />
     </div>
-
-    <ExplorerContextMenu
-      v-if="contextMenu"
-      :x="contextMenu.x"
-      :y="contextMenu.y"
-      :can-open="Boolean(contextMenu.targetPath)"
-      :can-paste="operations.canPaste.value"
-      :can-rename="Boolean(contextMenu.targetPath)"
-      :can-delete="Boolean(contextMenu.targetPath)"
-      @action="onContextAction"
-    />
-
-    <ExplorerConflictDialog
-      v-if="operations.conflictPrompt.value"
-      :title="operations.conflictPrompt.value.title"
-      :detail="operations.conflictPrompt.value.detail"
-      @cancel="operations.closeConflictPrompt"
-      @resolve="operations.resolveConflict"
-    />
-
-    <ExplorerConfirmDialog
-      v-if="operations.confirmPrompt.value"
-      :title="operations.confirmPrompt.value.title"
-      :detail="operations.confirmPrompt.value.detail"
-      @cancel="operations.cancelConfirmPrompt"
-      @confirm="operations.confirmPromptAction(currentContextTarget())"
-    />
-  </div>
+  </DnDProvider>
 </template>
 
 <style scoped>

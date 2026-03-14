@@ -63,6 +63,22 @@ async function mountHarness(initialActivePath = '/vault/a.md') {
 describe('ExplorerTree', () => {
   beforeEach(() => {
     vi.useFakeTimers()
+    class MockIntersectionObserver {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+
+    Object.defineProperty(window, 'IntersectionObserver', {
+      value: MockIntersectionObserver,
+      writable: true,
+      configurable: true
+    })
+    Object.defineProperty(globalThis, 'IntersectionObserver', {
+      value: MockIntersectionObserver,
+      writable: true,
+      configurable: true
+    })
   })
 
   afterEach(() => {

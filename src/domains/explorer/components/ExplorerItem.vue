@@ -1,7 +1,11 @@
 <script setup lang="ts">
+import { makeDraggable, makeDroppable, type IPlacement } from '@vue-dnd-kit/core'
+import { computed, ref } from 'vue'
 import ExplorerRenameInput from './ExplorerRenameInput.vue'
 import type { TreeNode } from '../../../shared/api/apiTypes'
 import { DocumentIcon, DocumentTextIcon, FolderIcon, FolderOpenIcon, PhotoIcon } from '@heroicons/vue/24/outline'
+import type { ExplorerDnDController } from '../composables/useExplorerDnD'
+import type { ExplorerDropIntent } from '../lib/explorerDndRules'
 
 const props = defineProps<{
   node: TreeNode
@@ -14,6 +18,7 @@ const props = defineProps<{
   editing: boolean
   renameValue: string
   contextActive?: boolean
+  dnd?: ExplorerDnDController
 }>()
 
 const emit = defineEmits<{
@@ -34,10 +39,92 @@ function iconForNode(node: TreeNode) {
   if (ext === 'png' || ext === 'jpg' || ext === 'jpeg' || ext === 'gif' || ext === 'webp' || ext === 'svg') return PhotoIcon
   return DocumentIcon
 }
+
+const rowRef = ref<HTMLElement | null>(null)
+
+makeDraggable(
+  rowRef,
+  {
+    disabled: computed(() => !props.dnd?.isRowDraggable(props.node.path)),
+    dragHandle: '.explorer-item-drag-handle',
+    activation: {
+      distance: {
+        x: 6,
+        y: 6,
+        condition: 'both'
+      }
+    },
+    placementMargins: {
+      top: 6,
+      bottom: 6
+    },
+    events: {
+      onSelfDragStart: () => {
+        props.dnd?.handleDragStart(props.node.path)
+      },
+      onSelfDragEnd: () => {
+        props.dnd?.handleDragEnd()
+      },
+      onSelfDragCancel: () => {
+        props.dnd?.handleDragEnd()
+      },
+      onDragEnd: async (event) => {
+        props.dnd?.syncDraggedPaths(event.draggedItems.map((item) => String(item.item)))
+        const hoveredPlacement = event.hoveredDraggable?.placement as IPlacement | undefined
+        const dropZonePlacement = event.dropZone?.placement as IPlacement | undefined
+
+        if (dropZonePlacement || !hoveredPlacement) {
+          return
+        }
+
+        await props.dnd?.handleDropResolved(props.node.path, hoveredPlacement)
+      }
+    }
+  },
+  () => {
+    const paths = props.dnd?.buildDragPayload(props.node.path) ?? [props.node.path]
+    return [Math.max(paths.indexOf(props.node.path), 0), paths]
+  }
+)
+
+const droppable = makeDroppable(
+  rowRef,
+  {
+    disabled: computed(() => !props.dnd?.isRowDropEnabled(props.node.path)),
+    events: {
+      onEnter: (event) => {
+        props.dnd?.syncDraggedPaths(event.draggedItems.map((item) => String(item.item)))
+      },
+      onDrop: async (event) => {
+        props.dnd?.syncDraggedPaths(event.draggedItems.map((item) => String(item.item)))
+        const dropZonePlacement = event.dropZone?.placement as IPlacement | undefined
+        const hoveredPlacement = event.hoveredDraggable?.placement as IPlacement | undefined
+        const placement = dropZonePlacement ?? hoveredPlacement
+        await props.dnd?.handleDropResolved(props.node.path, placement)
+      },
+      onLeave: () => {}
+    }
+  },
+  () => [props.node.path]
+)
+
+const dndState = computed(() => props.dnd?.rowDropState(
+  props.node.path,
+  droppable.isDragOver.value as IPlacement | undefined,
+  droppable.isAllowed.value
+) ?? {
+  active: false,
+  intent: null as ExplorerDropIntent,
+  allowed: false,
+  blocked: false,
+  dragging: false,
+  dragGroup: false
+})
 </script>
 
 <template>
   <div
+    ref="rowRef"
     :data-explorer-path="node.path"
     class="explorer-item group relative flex items-center gap-1.5 rounded-md px-2 py-1 text-[13px] leading-[1.35] transition-colors"
     :class="[
@@ -45,9 +132,19 @@ function iconForNode(node: TreeNode) {
       active ? 'explorer-item--active font-medium' : '',
       focused ? 'explorer-item--focused' : '',
       cutPending ? 'opacity-45' : 'opacity-100',
-      editing ? 'cursor-default' : 'cursor-pointer select-none explorer-item--interactive'
+      editing ? 'cursor-default' : 'cursor-pointer select-none explorer-item--interactive',
+      dndState.dragging ? 'explorer-item--dragging' : '',
+      dndState.dragGroup ? 'explorer-item--drag-group' : '',
+      dndState.active && dndState.allowed ? 'explorer-item--drop-active' : '',
+      dndState.active && dndState.blocked ? 'explorer-item--drop-blocked' : '',
+      dndState.intent === 'inside' ? 'explorer-item--drop-inside' : '',
+      dndState.intent === 'before' ? 'explorer-item--drop-before' : '',
+      dndState.intent === 'after' ? 'explorer-item--drop-after' : ''
     ]"
     :style="{ paddingLeft: `${depth * 14 + 8}px` }"
+    :data-drop-intent="dndState.intent ?? undefined"
+    :data-drop-allowed="dndState.allowed ? 'true' : undefined"
+    :data-drop-blocked="dndState.blocked ? 'true' : undefined"
     @click="emit('click', $event, node)"
     @dblclick="emit('doubleclick', node)"
     @contextmenu.prevent.stop="emit('contextmenu', { event: $event, node })"
@@ -65,7 +162,7 @@ function iconForNode(node: TreeNode) {
       <component :is="iconForNode(node)" class="h-4 w-4" />
     </button>
 
-    <div class="min-w-0 flex-1">
+    <div class="explorer-item-drag-handle min-w-0 flex-1">
       <ExplorerRenameInput
         v-if="editing"
         :model-value="renameValue"
@@ -102,6 +199,18 @@ function iconForNode(node: TreeNode) {
   color: var(--explorer-row-text);
 }
 
+.explorer-item::before,
+.explorer-item::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
 .explorer-item--selected {
   background: var(--explorer-row-selected-bg);
   color: var(--explorer-row-selected-text);
@@ -119,6 +228,42 @@ function iconForNode(node: TreeNode) {
 .explorer-item--interactive:hover {
   background: var(--explorer-row-hover-bg);
   color: var(--explorer-row-hover-text);
+}
+
+.explorer-item--dragging {
+  opacity: 0.72;
+}
+
+.explorer-item--drag-group {
+  box-shadow: inset 0 0 0 1px var(--explorer-row-indicator);
+}
+
+.explorer-item--drop-active.explorer-item--drop-inside {
+  background: var(--explorer-row-hover-bg);
+  box-shadow: inset 0 0 0 1px var(--explorer-row-indicator);
+}
+
+.explorer-item--drop-before::before,
+.explorer-item--drop-after::after {
+  border-top: 2px solid var(--explorer-row-indicator);
+  opacity: 1;
+}
+
+.explorer-item--drop-before::before {
+  top: 0;
+}
+
+.explorer-item--drop-after::after {
+  bottom: 0;
+}
+
+.explorer-item--drop-blocked {
+  box-shadow: inset 0 0 0 1px var(--danger);
+}
+
+.explorer-item--drop-blocked::before,
+.explorer-item--drop-blocked::after {
+  border-top-color: var(--danger);
 }
 
 .explorer-item-indicator {

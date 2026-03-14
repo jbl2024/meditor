@@ -127,4 +127,28 @@ describe('useExplorerOperations', () => {
     expect(moveEntry).toHaveBeenCalledWith('/vault/a.md', '/vault/folder', 'fail')
     expect(ops.clipboard.value).toBeNull()
   })
+
+  it('moves paths directly and updates selection to moved targets', async () => {
+    moveEntry.mockResolvedValueOnce('/vault/folder/a.md')
+    const { ops, selected, focusedPath } = createOperations()
+
+    await ops.movePaths('/vault/folder', ['/vault/a.md'])
+
+    expect(moveEntry).toHaveBeenCalledWith('/vault/a.md', '/vault/folder', 'fail')
+    expect(selected.value).toEqual(['/vault/folder/a.md'])
+    expect(focusedPath.value).toBe('/vault/folder/a.md')
+  })
+
+  it('prompts before moving folders directly', async () => {
+    const { ops } = createOperations()
+
+    await ops.movePaths('/vault', ['/vault/folder'])
+
+    expect(ops.confirmPrompt.value).toMatchObject({
+      intent: 'move_folders',
+      payload: ['/vault/folder'],
+      targetDir: '/vault'
+    })
+    expect(moveEntry).not.toHaveBeenCalled()
+  })
 })
