@@ -154,6 +154,32 @@ export function useExplorerTreeState(options: UseExplorerTreeStateOptions) {
     persistExpandedState()
   }
 
+  /**
+   * Loads every directory under the current workspace without changing the
+   * user's expansion state. Explorer filtering uses this to search beyond the
+   * rows that happen to be expanded right now.
+   */
+  async function preloadAllDirs() {
+    if (!options.folderPath.value) return
+
+    const queue: string[] = [options.folderPath.value]
+    const visited = new Set<string>()
+
+    while (queue.length) {
+      const dir = queue.shift()
+      if (!dir || visited.has(dir)) continue
+      visited.add(dir)
+      await loadChildren(dir)
+
+      const children = childrenByDir.value[dir] ?? []
+      for (const child of children) {
+        if (child.is_dir) {
+          queue.push(child.path)
+        }
+      }
+    }
+  }
+
   function collapseAllDirs() {
     expandedPaths.value = new Set()
     persistExpandedState()
@@ -268,6 +294,7 @@ export function useExplorerTreeState(options: UseExplorerTreeStateOptions) {
     toggleExpand,
     expandAllDirs,
     collapseAllDirs,
+    preloadAllDirs,
     focusTree,
     initializeExplorer,
     revealPath,

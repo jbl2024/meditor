@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { ref } from 'vue'
+
 /** Physical size supported by the shared text input primitive. */
 export type UiInputSize = 'sm' | 'md' | 'lg'
 
@@ -18,10 +20,19 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   (event: 'update:modelValue', value: string): void
 }>()
+
+const rootEl = ref<HTMLInputElement | null>(null)
+
+defineExpose({
+  rootEl,
+  focus: () => rootEl.value?.focus(),
+  select: () => rootEl.value?.select()
+})
 </script>
 
 <template>
   <input
+    ref="rootEl"
     :value="props.modelValue"
     :placeholder="placeholder"
     :aria-invalid="invalid ? 'true' : undefined"

@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { MagnifyingGlassIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import type { EntryKind, TreeNode } from '../../../shared/api/apiTypes'
 import { listenWorkspaceFsChanged, openPathExternal } from '../../../shared/api/workspaceApi'
+import UiInput from '../../../shared/components/ui/UiInput.vue'
 import ExplorerConfirmDialog from './ExplorerConfirmDialog.vue'
 import ExplorerConflictDialog from './ExplorerConflictDialog.vue'
 import ExplorerContextMenu, { type MenuAction } from './ExplorerContextMenu.vue'
@@ -12,6 +14,7 @@ import { useExplorerFsSync } from '../composables/useExplorerFsSync'
 import { useExplorerKeyboard } from '../composables/useExplorerKeyboard'
 import { useExplorerOperations } from '../composables/useExplorerOperations'
 import { useExplorerTreeState } from '../composables/useExplorerTreeState'
+import { filterExplorerRows } from '../lib/explorerFilter'
 
 const props = defineProps<{
   folderPath: string
@@ -32,6 +35,11 @@ const emit = defineEmits<{
 
 const treeRef = ref<HTMLElement | null>(null)
 const contextMenu = ref<{ x: number; y: number; targetPath: string | null } | null>(null)
+const filterQuery = ref('')
+const debouncedFilterQuery = ref('')
+const filterInputRef = ref<InstanceType<typeof UiInput> | null>(null)
+const isFilterVisible = ref(false)
+let filterDebounceTimer: ReturnType<typeof window.setTimeout> | null = null
 
 const selectionManager = useSelectionManager()
 const isMac = navigator.platform.toLowerCase().includes('mac')
@@ -51,6 +59,18 @@ const treeState = useExplorerTreeState({
     selectSingle: selectionManager.selectSingle
   }
 })
+
+const filteredRows = computed(() => filterExplorerRows(
+  debouncedFilterQuery.value,
+  treeState.visibleRows.value,
+  {
+    rootPath: props.folderPath,
+    childrenByDir: treeState.childrenByDir.value
+  }
+))
+const visibleNodePaths = computed(() => filteredRows.value.map((row) => row.path))
+const hasActiveFilter = computed(() => debouncedFilterQuery.value.trim().length > 0)
+const hasFilterText = computed(() => filterQuery.value.trim().length > 0)
 
 const fsSync = useExplorerFsSync({
   folderPath: computed(() => props.folderPath),
@@ -88,12 +108,12 @@ const operations = useExplorerOperations({
 })
 
 function ensureFocusedPath(defaultToFirst = true) {
-  if (treeState.focusedPath.value && treeState.visibleNodePaths.value.includes(treeState.focusedPath.value)) {
+  if (treeState.focusedPath.value && visibleNodePaths.value.includes(treeState.focusedPath.value)) {
     return treeState.focusedPath.value
   }
 
-  if (defaultToFirst && treeState.visibleNodePaths.value.length) {
-    treeState.focusedPath.value = treeState.visibleNodePaths.value[0]
+  if (defaultToFirst && visibleNodePaths.value.length) {
+    treeState.focusedPath.value = visibleNodePaths.value[0]
     return treeState.focusedPath.value
   }
 
@@ -103,7 +123,7 @@ function ensureFocusedPath(defaultToFirst = true) {
 const keyboard = useExplorerKeyboard({
   folderPath: computed(() => props.folderPath),
   focusedPath: treeState.focusedPath,
-  visibleNodePaths: treeState.visibleNodePaths,
+  visibleNodePaths,
   parentByPath: treeState.parentByPath,
   childrenByDir: treeState.childrenByDir,
   nodeByPath: treeState.nodeByPath,
@@ -140,8 +160,34 @@ function closeContextMenu() {
   contextMenu.value = null
 }
 
+function focusFilterInput() {
+  window.setTimeout(() => {
+    filterInputRef.value?.focus()
+    filterInputRef.value?.select()
+  }, 0)
+}
+
+function toggleFilterVisibility() {
+  if (isFilterVisible.value && hasFilterText.value) {
+    focusFilterInput()
+    return
+  }
+
+  isFilterVisible.value = !isFilterVisible.value
+  if (isFilterVisible.value) {
+    focusFilterInput()
+  }
+}
+
+function clearFilter() {
+  filterQuery.value = ''
+  debouncedFilterQuery.value = ''
+  isFilterVisible.value = true
+  focusFilterInput()
+}
+
 function handleRowClick(event: MouseEvent, node: TreeNode) {
-  const ordered = treeState.visibleNodePaths.value
+  const ordered = visibleNodePaths.value
   const isToggle = isMac ? event.metaKey : event.ctrlKey
 
   if (event.shiftKey) {
@@ -273,6 +319,25 @@ watch(
   { immediate: true }
 )
 
+watch(filterQuery, (next) => {
+  if (filterDebounceTimer) {
+    window.clearTimeout(filterDebounceTimer)
+  }
+
+  filterDebounceTimer = window.setTimeout(() => {
+    debouncedFilterQuery.value = next
+    filterDebounceTimer = null
+  }, 180)
+})
+
+watch(
+  () => debouncedFilterQuery.value,
+  async (query) => {
+    if (!query.trim() || !props.folderPath) return
+    await treeState.preloadAllDirs()
+  }
+)
+
 defineExpose({
   revealPathInView: treeState.revealPathInView
 })
@@ -281,10 +346,16 @@ onMounted(() => {
   window.addEventListener('click', closeContextMenu)
   fsSync.start()
   treeState.focusTree()
+  if (hasFilterText.value) {
+    isFilterVisible.value = true
+  }
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('click', closeContextMenu)
+  if (filterDebounceTimer) {
+    window.clearTimeout(filterDebounceTimer)
+  }
   fsSync.stop()
 })
 </script>
@@ -293,12 +364,35 @@ onBeforeUnmount(() => {
   <div class="flex h-full min-h-0 flex-col gap-2">
     <ExplorerToolbar
       :disabled="!folderPath"
+      :search-open="isFilterVisible"
       @create-file="operations.requestCreate(folderPath, 'file')"
       @create-folder="operations.requestCreate(folderPath, 'folder')"
       @expand-all="treeState.expandAllDirs"
       @collapse-all="treeState.collapseAllDirs"
       @refresh="fsSync.refreshLoadedDirs"
+      @toggle-search="toggleFilterVisibility"
     />
+
+    <div v-if="isFilterVisible || hasFilterText" class="explorer-filter-shell">
+      <MagnifyingGlassIcon class="explorer-filter-icon h-3.5 w-3.5" />
+      <UiInput
+        ref="filterInputRef"
+        v-model="filterQuery"
+        size="sm"
+        class-name="explorer-filter !pl-8 pr-8"
+        placeholder="Filter files and folders..."
+      />
+      <button
+        v-if="hasFilterText"
+        type="button"
+        class="explorer-filter-clear"
+        aria-label="Clear filter"
+        title="Clear filter"
+        @click="clearFilter"
+      >
+        <XMarkIcon class="h-3.5 w-3.5" />
+      </button>
+    </div>
 
     <div
       ref="treeRef"
@@ -309,13 +403,14 @@ onBeforeUnmount(() => {
       @click="clearSelectionIfBackground"
     >
       <p v-if="!folderPath" class="explorer-empty-state px-2 py-1 text-xs">Select a working folder to start.</p>
-      <p v-else-if="!treeState.visibleRows.value.length" class="explorer-empty-state px-2 py-1 text-xs">
-        No files or folders. Use New file or New folder.
+      <p v-else-if="!filteredRows.length" class="explorer-empty-state px-2 py-1 text-xs">
+        <template v-if="hasActiveFilter">No matching files or folders.</template>
+        <template v-else>No files or folders. Use New file or New folder.</template>
       </p>
 
       <template v-else>
         <ExplorerItem
-          v-for="row in treeState.visibleRows.value"
+          v-for="row in filteredRows"
           :key="row.path"
           :node="treeState.nodeByPath.value[row.path]"
           :depth="row.depth"
@@ -369,6 +464,51 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.explorer-filter-shell {
+  position: relative;
+}
+
+.explorer-filter-icon {
+  position: absolute;
+  left: 0.7rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-dim);
+  pointer-events: none;
+}
+
+.explorer-filter {
+  min-width: 0;
+}
+
+.explorer-filter-clear {
+  position: absolute;
+  right: 0.35rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-dim);
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.explorer-filter-clear:hover {
+  background: var(--explorer-toolbar-hover-bg);
+  color: var(--menu-text-strong);
+}
+
+.explorer-filter-clear:focus-visible {
+  outline: none;
+  background: var(--explorer-toolbar-hover-bg);
+  color: var(--menu-text-strong);
+}
+
 .explorer-empty-state {
   color: var(--text-dim);
 }

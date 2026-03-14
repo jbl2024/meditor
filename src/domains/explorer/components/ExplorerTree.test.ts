@@ -1,5 +1,5 @@
 import { createApp, defineComponent, h, nextTick, ref } from 'vue'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ExplorerTree from './ExplorerTree.vue'
 import type { TreeNode } from '../../../shared/api/apiTypes'
 import { openPathExternal } from '../../../shared/api/workspaceApi'
@@ -61,7 +61,12 @@ async function mountHarness(initialActivePath = '/vault/a.md') {
 }
 
 describe('ExplorerTree', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
   afterEach(() => {
+    vi.useRealTimers()
     vi.restoreAllMocks()
     listChildren.mockReset()
     unlistenWorkspaceFsChanged.mockReset()
@@ -160,6 +165,111 @@ describe('ExplorerTree', () => {
     await nextTick()
 
     expect(openPathExternal).toHaveBeenCalledWith('/vault/a.md')
+
+    mounted.app.unmount()
+  })
+
+  it('debounces fuzzy filtering and keeps ancestor rows for matches', async () => {
+    listChildren.mockImplementation(async (dirPath: string) => {
+      if (dirPath === '/vault') {
+        return [
+          {
+            name: 'features',
+            path: '/vault/features',
+            is_dir: true,
+            is_markdown: false,
+            has_children: true
+          },
+          fileNode('/vault/inbox.md')
+        ]
+      }
+      if (dirPath === '/vault/features') {
+        return [fileNode('/vault/features/echoes.md')]
+      }
+      return []
+    })
+
+    const mounted = await mountHarness('/vault/inbox.md')
+    const toggleButton = mounted.root.querySelector('button[aria-label="Toggle filter"]') as HTMLButtonElement
+    toggleButton.click()
+    await nextTick()
+    const input = mounted.root.querySelector('input[placeholder="Filter files and folders..."]') as HTMLInputElement
+
+    input.value = 'ech'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+
+    expect(mounted.root.querySelector('[data-explorer-path="/vault/features/echoes.md"]')).toBeNull()
+
+    await vi.advanceTimersByTimeAsync(180)
+    await nextTick()
+    await nextTick()
+
+    expect(mounted.root.querySelector('[data-explorer-path="/vault/features"]')).toBeTruthy()
+    expect(mounted.root.querySelector('[data-explorer-path="/vault/features/echoes.md"]')).toBeTruthy()
+    expect(mounted.root.querySelector('[data-explorer-path="/vault/inbox.md"]')).toBeNull()
+
+    mounted.app.unmount()
+  })
+
+  it('toggles the filter field from the toolbar and keeps it open while text exists', async () => {
+    listChildren.mockImplementation(async (dirPath: string) => {
+      if (dirPath === '/vault') {
+        return [fileNode('/vault/a.md')]
+      }
+      return []
+    })
+
+    const mounted = await mountHarness('/vault/a.md')
+    const toggleButton = mounted.root.querySelector('button[aria-label="Toggle filter"]') as HTMLButtonElement
+
+    expect(mounted.root.querySelector('input[placeholder="Filter files and folders..."]')).toBeNull()
+
+    toggleButton.click()
+    await nextTick()
+
+    const input = mounted.root.querySelector('input[placeholder="Filter files and folders..."]') as HTMLInputElement
+    expect(input).toBeTruthy()
+
+    input.value = 'a'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+
+    toggleButton.click()
+    await nextTick()
+
+    expect(mounted.root.querySelector('input[placeholder="Filter files and folders..."]')).toBeTruthy()
+
+    mounted.app.unmount()
+  })
+
+  it('clears the filter from the inline clear button', async () => {
+    listChildren.mockImplementation(async (dirPath: string) => {
+      if (dirPath === '/vault') {
+        return [fileNode('/vault/a.md')]
+      }
+      return []
+    })
+
+    const mounted = await mountHarness('/vault/a.md')
+    const toggleButton = mounted.root.querySelector('button[aria-label="Toggle filter"]') as HTMLButtonElement
+
+    toggleButton.click()
+    await nextTick()
+
+    const input = mounted.root.querySelector('input[placeholder="Filter files and folders..."]') as HTMLInputElement
+    input.value = 'abc'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+
+    const clearButton = mounted.root.querySelector('button[aria-label="Clear filter"]') as HTMLButtonElement
+    expect(clearButton).toBeTruthy()
+
+    clearButton.click()
+    await nextTick()
+
+    expect(input.value).toBe('')
+    expect(mounted.root.querySelector('button[aria-label="Clear filter"]')).toBeNull()
 
     mounted.app.unmount()
   })

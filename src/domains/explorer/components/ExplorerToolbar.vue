@@ -4,11 +4,13 @@ import {
   ChevronDoubleDownIcon,
   ChevronDoubleUpIcon,
   DocumentPlusIcon,
-  FolderPlusIcon
+  FolderPlusIcon,
+  MagnifyingGlassIcon
 } from '@heroicons/vue/24/outline'
 
 defineProps<{
   disabled: boolean
+  searchOpen?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -17,6 +19,7 @@ const emit = defineEmits<{
   expandAll: []
   collapseAll: []
   refresh: []
+  toggleSearch: []
 }>()
 </script>
 
@@ -72,6 +75,17 @@ const emit = defineEmits<{
     >
       <ArrowPathIcon class="h-3.5 w-3.5" />
     </button>
+    <button
+      type="button"
+      class="explorer-toolbar-btn inline-flex h-6.5 w-6.5 items-center justify-center rounded-md border border-transparent transition disabled:opacity-40 disabled:hover:bg-transparent"
+      :class="{ 'explorer-toolbar-btn--active': searchOpen }"
+      title="Toggle filter"
+      aria-label="Toggle filter"
+      :disabled="disabled"
+      @click="emit('toggleSearch')"
+    >
+      <MagnifyingGlassIcon class="h-3.5 w-3.5" />
+    </button>
   </div>
 </template>
 
@@ -85,6 +99,11 @@ const emit = defineEmits<{
 }
 
 .explorer-toolbar-btn:hover:not(:disabled) {
+  background: var(--explorer-toolbar-hover-bg);
+  color: var(--menu-text-strong);
+}
+
+.explorer-toolbar-btn--active {
   background: var(--explorer-toolbar-hover-bg);
   color: var(--menu-text-strong);
 }
