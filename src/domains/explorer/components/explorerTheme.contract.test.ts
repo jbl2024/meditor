@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import treeSource from './ExplorerTree.vue?raw'
+import toolbarSource from './ExplorerToolbar.vue?raw'
+import confirmDialogSource from './ExplorerConfirmDialog.vue?raw'
+import conflictDialogSource from './ExplorerConflictDialog.vue?raw'
 import itemSource from './ExplorerItem.vue?raw'
 import propertiesSource from '../../editor/components/editor/EditorPropertiesPanel.vue?raw'
 import propertyTokenSource from './PropertyTokenInput.vue?raw'
@@ -7,11 +10,16 @@ import propertyAddSource from './PropertyAddDropdown.vue?raw'
 
 describe('Explorer and properties theme contracts', () => {
   it('routes explorer surfaces and states through semantic tokens', () => {
-    expect(treeSource).toContain('var(--explorer-toolbar-hover-bg)')
-    expect(treeSource).toContain('var(--menu-backdrop)')
-    expect(treeSource).toContain('var(--surface-bg)')
+    expect(toolbarSource).toContain('var(--explorer-toolbar-hover-bg)')
+    expect(confirmDialogSource).toContain('var(--menu-backdrop)')
+    expect(confirmDialogSource).toContain('var(--surface-bg)')
+    expect(conflictDialogSource).toContain('var(--menu-backdrop)')
+    expect(conflictDialogSource).toContain('var(--surface-bg)')
     expect(treeSource).not.toContain('dark:')
     expect(treeSource).not.toMatch(/#[0-9A-Fa-f]{3,8}/)
+    expect(toolbarSource).not.toContain('dark:')
+    expect(confirmDialogSource).not.toContain('dark:')
+    expect(conflictDialogSource).not.toContain('dark:')
 
     expect(itemSource).toContain('var(--explorer-row-selected-bg)')
     expect(itemSource).toContain('var(--explorer-row-active-text)')
