@@ -898,17 +898,6 @@ onMounted(() => {
               </template>
             </UiField>
 
-            <UiField label="Color" for-id="alter-color" help="Used as a quick visual accent.">
-              <template #default="{ describedBy }">
-                <UiInput
-                  id="alter-color"
-                  :model-value="draft.color ?? ''"
-                  :aria-describedby="describedBy"
-                  placeholder="#8d6e63"
-                  @update:modelValue="draft.color = $event"
-                />
-              </template>
-            </UiField>
           </section>
 
           <section v-else-if="wizardStep === 1" class="alter-stack">
