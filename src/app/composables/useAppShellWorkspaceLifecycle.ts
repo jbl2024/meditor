@@ -18,6 +18,7 @@ export type AppShellWorkspaceLifecycleControllerPort = {
   closeWorkspaceInternal: () => Promise<void>
   resetWorkspaceState: () => void
   applyWorkspaceFsChanges: (changes: WorkspaceFsChange[]) => void
+  relayEditorFsChanges: (changes: WorkspaceFsChange[]) => Promise<void>
 }
 
 /** Groups shell resets triggered when a workspace opens, closes, or changes. */
@@ -195,6 +196,7 @@ export function useAppShellWorkspaceLifecycle(options: UseAppShellWorkspaceLifec
           return
         }
         options.controllerPort.applyWorkspaceFsChanges(payload.changes)
+        void options.controllerPort.relayEditorFsChanges(payload.changes)
         options.favoritesPort.applyWorkspaceFsChanges(payload.changes)
         syncFavoritesForWorkspaceChanges(payload.changes)
         syncViewedNotesForWorkspaceChanges(payload.changes)

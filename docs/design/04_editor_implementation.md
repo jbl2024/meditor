@@ -8,6 +8,8 @@ Local-First Knowledge Environment
 
 This document explains the architecture of `EditorView` as the frontend integration layer of the editor.
 
+For filesystem synchronization, conflict handling, and conditional save semantics, see `docs/design/10_editor_filesystem_sync.md`.
+
 Goals:
 
 - Clarify why `EditorView` exists and what it is responsible for.

@@ -3,7 +3,9 @@ import { computed, onBeforeUnmount, ref } from 'vue'
 import EditorPaneTabs, { type FileEditorStatus } from './EditorPaneTabs.vue'
 import PaneSurfaceHost from './PaneSurfaceHost.vue'
 import type { MultiPaneLayout, PaneState, PaneTab } from '../../composables/useMultiPaneWorkspaceState'
+import type { DocumentSession } from '../../../domains/editor/composables/useDocumentEditorSessions'
 import type { WikilinkAnchor } from '../../../domains/editor/lib/wikilinks'
+import type { ReadNoteSnapshotResult, SaveNoteResult, WorkspaceFsChange } from '../../../shared/api/apiTypes'
 import type {
   AppShellCosmosViewModel,
   AppShellLaunchpadViewModel,
@@ -13,6 +15,7 @@ import type {
 export type EditorPaneGridExposed = {
   saveNow: () => Promise<void>
   reloadCurrent: () => Promise<void>
+  applyWorkspaceFsChanges: (changes: WorkspaceFsChange[]) => Promise<void>
   focusEditor: () => void
   focusFirstContentBlock: () => void
   revealSnippet: (snippet: string) => Promise<void>
@@ -32,8 +35,14 @@ const props = defineProps<{
   layout: MultiPaneLayout
   activeDocumentPath: string
   getStatus: (path: string) => FileEditorStatus
-  openFile: (path: string) => Promise<string>
-  saveFile: (path: string, text: string, options: { explicit: boolean }) => Promise<{ persisted: boolean }>
+  openFile?: (path: string) => Promise<string>
+  saveFile?: (path: string, text: string, options: { explicit: boolean }) => Promise<{ persisted: boolean }>
+  readNoteSnapshot?: (path: string) => Promise<ReadNoteSnapshotResult>
+  saveNoteBuffer?: (
+    path: string,
+    text: string,
+    options: { explicit: boolean; expectedBaseVersion: DocumentSession['baseVersion']; force?: boolean }
+  ) => Promise<SaveNoteResult>
   renameFileFromTitle: (path: string, title: string) => Promise<{ path: string; title: string }>
   loadLinkTargets: () => Promise<string[]>
   loadLinkHeadings: (target: string) => Promise<string[]>
@@ -57,6 +66,7 @@ const emit = defineEmits<{
   outline: [payload: Array<{ level: 1 | 2 | 3; text: string }>]
   properties: [payload: { path: string; items: Array<{ key: string; value: string }>; parseErrorCount: number }]
   'pulse-open-second-brain': [payload: { contextPaths: string[]; prompt?: string }]
+  'external-reload': [payload: { path: string }]
   'cosmos-query-update': [value: string]
   'cosmos-search-enter': []
   'cosmos-select-match': [nodeId: string]
@@ -218,6 +228,13 @@ async function reloadCurrent() {
   await ensureCall((editor) => editor.reloadCurrent(), Promise.resolve())
 }
 
+async function applyWorkspaceFsChanges(changes: WorkspaceFsChange[]) {
+  for (const editor of Object.values(editorRefs)) {
+    if (!editor) continue
+    await editor.applyWorkspaceFsChanges(changes)
+  }
+}
+
 function focusEditor() {
   ensureCall((editor) => editor.focusEditor(), undefined)
 }
@@ -265,6 +282,7 @@ function focusCosmosNodeById(nodeId: string): boolean {
 defineExpose<EditorPaneGridExposed>({
   saveNow,
   reloadCurrent,
+  applyWorkspaceFsChanges,
   focusEditor,
   focusFirstContentBlock,
   revealSnippet,
@@ -332,6 +350,8 @@ onBeforeUnmount(() => {
         :get-status="getStatus"
         :openFile="openFile"
         :saveFile="saveFile"
+        :readNoteSnapshot="readNoteSnapshot"
+        :saveNoteBuffer="saveNoteBuffer"
         :renameFileFromTitle="renameFileFromTitle"
         :loadLinkTargets="loadLinkTargets"
         :loadLinkHeadings="loadLinkHeadings"
@@ -343,6 +363,7 @@ onBeforeUnmount(() => {
         @outline="emit('outline', $event)"
         @properties="emit('properties', $event)"
         @pulse-open-second-brain="emit('pulse-open-second-brain', $event)"
+        @external-reload="emit('external-reload', $event)"
         @cosmos-query-update="emit('cosmos-query-update', $event)"
         @cosmos-search-enter="emit('cosmos-search-enter')"
         @cosmos-select-match="emit('cosmos-select-match', $event)"

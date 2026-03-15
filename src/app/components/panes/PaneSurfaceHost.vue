@@ -7,6 +7,8 @@ import WorkspaceLaunchpad from './WorkspaceLaunchpad.vue'
 import type { PaneTab } from '../../composables/useMultiPaneWorkspaceState'
 import type { FileEditorStatus } from './EditorPaneTabs.vue'
 import type { WikilinkAnchor } from '../../../domains/editor/lib/wikilinks'
+import type { DocumentSession } from '../../../domains/editor/composables/useDocumentEditorSessions'
+import type { ReadNoteSnapshotResult, SaveNoteResult, WorkspaceFsChange } from '../../../shared/api/apiTypes'
 import type {
   AppShellCosmosViewModel,
   AppShellLaunchpadViewModel,
@@ -19,8 +21,14 @@ const props = defineProps<{
   openTabs: PaneTab[]
   openDocumentPaths: string[]
   getStatus: (path: string) => FileEditorStatus
-  openFile: (path: string) => Promise<string>
-  saveFile: (path: string, text: string, options: { explicit: boolean }) => Promise<{ persisted: boolean }>
+  openFile?: (path: string) => Promise<string>
+  saveFile?: (path: string, text: string, options: { explicit: boolean }) => Promise<{ persisted: boolean }>
+  readNoteSnapshot?: (path: string) => Promise<ReadNoteSnapshotResult>
+  saveNoteBuffer?: (
+    path: string,
+    text: string,
+    options: { explicit: boolean; expectedBaseVersion: DocumentSession['baseVersion']; force?: boolean }
+  ) => Promise<SaveNoteResult>
   renameFileFromTitle: (path: string, title: string) => Promise<{ path: string; title: string }>
   loadLinkTargets: () => Promise<string[]>
   loadLinkHeadings: (target: string) => Promise<string[]>
@@ -42,6 +50,7 @@ const emit = defineEmits<{
   outline: [payload: Array<{ level: 1 | 2 | 3; text: string }>]
   properties: [payload: { path: string; items: Array<{ key: string; value: string }>; parseErrorCount: number }]
   'pulse-open-second-brain': [payload: { contextPaths: string[]; prompt?: string }]
+  'external-reload': [payload: { path: string }]
   'cosmos-query-update': [value: string]
   'cosmos-search-enter': []
   'cosmos-select-match': [nodeId: string]
@@ -72,6 +81,7 @@ const emit = defineEmits<{
 type EditorSurfaceExposed = {
   saveNow: () => Promise<void>
   reloadCurrent: () => Promise<void>
+  applyWorkspaceFsChanges: (changes: WorkspaceFsChange[]) => Promise<void>
   focusEditor: () => void
   focusFirstContentBlock: () => void
   revealSnippet: (snippet: string) => Promise<void>
@@ -101,6 +111,7 @@ function withEditor<T>(run: (editor: EditorSurfaceExposed) => T, fallback: T): T
 defineExpose<EditorSurfaceExposed>({
   saveNow: async () => await withEditor((editor) => editor.saveNow(), Promise.resolve()),
   reloadCurrent: async () => await withEditor((editor) => editor.reloadCurrent(), Promise.resolve()),
+  applyWorkspaceFsChanges: async (changes: WorkspaceFsChange[]) => await withEditor((editor) => editor.applyWorkspaceFsChanges(changes), Promise.resolve()),
   focusEditor: () => withEditor((editor) => editor.focusEditor(), undefined),
   focusFirstContentBlock: () => withEditor((editor) => editor.focusFirstContentBlock(), undefined),
   revealSnippet: async (snippet: string) => await withEditor((editor) => editor.revealSnippet(snippet), Promise.resolve()),
@@ -124,6 +135,8 @@ defineExpose<EditorSurfaceExposed>({
     :openPaths="openDocumentPaths"
     :openFile="openFile"
     :saveFile="saveFile"
+    :readNoteSnapshot="readNoteSnapshot"
+    :saveNoteBuffer="saveNoteBuffer"
     :renameFileFromTitle="renameFileFromTitle"
     :loadLinkTargets="loadLinkTargets"
     :loadLinkHeadings="loadLinkHeadings"
@@ -135,6 +148,7 @@ defineExpose<EditorSurfaceExposed>({
     @outline="emit('outline', $event)"
     @properties="emit('properties', $event)"
     @pulse-open-second-brain="emit('pulse-open-second-brain', $event)"
+    @external-reload="emit('external-reload', $event)"
   />
 
   <WorkspaceLaunchpad

@@ -5,6 +5,7 @@ import { editorDataToMarkdown, markdownToEditorData } from '../lib/markdownBlock
 import { composeMarkdownDocument, serializeFrontmatter, type FrontmatterEnvelope } from '../lib/frontmatter'
 import { toTiptapDoc } from '../lib/tiptap/editorBlocksToTiptapDoc'
 import type { DocumentSession } from './useDocumentEditorSessions'
+import type { ReadNoteSnapshotResult, SaveNoteResult } from '../../../shared/api/apiTypes'
 import {
   finishOpenTrace,
   finishOpenTraceSpan,
@@ -31,6 +32,10 @@ const MERMAID_FENCE_RE = /```[ \t]*mermaid\b/i
 const MERMAID_FENCE_GLOBAL_RE = /```[ \t]*mermaid\b/gi
 const MARKDOWN_TABLE_SEPARATOR_RE = /^\s*\|?(?:\s*:?-{3,}:?\s*\|){1,}\s*$/gm
 const MARKDOWN_TABLE_ROW_RE = /^\s*\|.+\|\s*$/gm
+
+function logEditorSync(event: string, detail: Record<string, unknown>) {
+  console.info('[editor-sync]', event, detail)
+}
 
 function isHeavyRenderMarkdown(source: string): boolean {
   if (MERMAID_FENCE_RE.test(source)) return true
@@ -125,8 +130,10 @@ export type EditorFileLifecycleUiPort = {
  * Read/write IO adapters for markdown documents.
  */
 export type EditorFileLifecycleIoPort = {
-  openFile: (path: string) => Promise<string>
-  saveFile: (path: string, text: string, options: { explicit: boolean }) => Promise<{ persisted: boolean }>
+  openFile?: (path: string) => Promise<string>
+  saveFile?: (path: string, text: string, options: { explicit: boolean }) => Promise<{ persisted: boolean }>
+  readNoteSnapshot?: (path: string) => Promise<ReadNoteSnapshotResult>
+  saveNoteBuffer?: (path: string, text: string, options: { explicit: boolean; expectedBaseVersion: DocumentSession['baseVersion']; force?: boolean }) => Promise<SaveNoteResult>
   renameFileFromTitle: (path: string, title: string) => Promise<{ path: string; title: string }>
 }
 
@@ -215,6 +222,34 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
   const heavyRenderIdleSettleMs = options.heavyRenderIdleSettleMs ?? 48
   const heavyOverlayDelayMs = options.heavyOverlayDelayMs ?? 160
   const heavyRenderComplexityThreshold = options.heavyRenderComplexityThreshold ?? 4
+  const pendingManualSavePaths = new Set<string>()
+
+  async function readSnapshot(path: string): Promise<ReadNoteSnapshotResult> {
+    if (ioPort.readNoteSnapshot) {
+      return await ioPort.readNoteSnapshot(path)
+    }
+    return {
+      path,
+      content: await ioPort.openFile!(path),
+      version: null
+    }
+  }
+
+  async function persistBuffer(
+    path: string,
+    text: string,
+    saveOptions: { explicit: boolean; expectedBaseVersion: DocumentSession['baseVersion']; force?: boolean }
+  ): Promise<SaveNoteResult> {
+    if (ioPort.saveNoteBuffer) {
+      return await ioPort.saveNoteBuffer(path, text, saveOptions)
+    }
+
+    await ioPort.saveFile!(path, text, { explicit: saveOptions.explicit })
+    return {
+      ok: true,
+      version: saveOptions.expectedBaseVersion ?? { mtimeMs: Date.now(), size: text.length }
+    }
+  }
 
   async function flushUiFrame() {
     await nextTick()
@@ -294,12 +329,12 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
     let largeDocOverlayShownAt = 0
     try {
       if (shouldReloadContent) {
-        const txt = await runWithOpenTraceSpan(traceId, 'open.ipc.read_text_file', async () => await ioPort.openFile(path), {
+        const snapshot = await runWithOpenTraceSpan(traceId, 'open.ipc.read_note_snapshot', async () => await readSnapshot(path), {
           parentSpanId: editorLoadSpanId,
           payload: { path }
         })
         traceOpenStep(traceId, 'file read finished', {
-          chars: txt.length
+          chars: snapshot.content.length
         })
         if (typeof loadOptions?.requestId === 'number' && !requestPort.isCurrentRequest(loadOptions.requestId)) {
           finishOpenTraceSpan(traceId, editorLoadSpanId, 'blocked', { stage: 'stale_request_after_read' })
@@ -308,12 +343,12 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
         }
 
         const frontmatterStartedAt = performance.now()
-        documentPort.parseAndStoreFrontmatter(path, txt)
+        documentPort.parseAndStoreFrontmatter(path, snapshot.content)
         traceOpenStep(traceId, 'frontmatter parsed', {
           duration_ms: Math.round(performance.now() - frontmatterStartedAt)
         })
-        const body = documentPort.frontmatterByPath.value[path]?.body ?? txt
-        const isLargeDocument = txt.length >= uiPort.largeDocThreshold
+        const body = documentPort.frontmatterByPath.value[path]?.body ?? snapshot.content
+        const isLargeDocument = snapshot.content.length >= uiPort.largeDocThreshold
         const heavyComplexityScore = heavyRenderComplexityScore(body)
         const shouldShowOverlayEarly = isLargeDocument || heavyComplexityScore >= heavyRenderComplexityThreshold
 
@@ -400,7 +435,10 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
           }
         }
 
-        session.loadedText = txt
+        session.loadedText = snapshot.content
+        session.baseVersion = snapshot.version
+        session.currentDiskVersion = snapshot.version
+        session.conflict = null
         session.isLoaded = true
         sessionPort.setDirty(path, false)
       }
@@ -487,13 +525,21 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
    * Failure behavior:
    * - Any step failure records an error with `setSaveError` and still clears `saving` in `finally`.
    */
-  async function saveCurrentFile(manual = true) {
+  async function saveCurrentFile(manual = true, saveOptions?: { force?: boolean }) {
     const editor = sessionPort.getEditor()
     const initialPath = sessionPort.currentPath.value
     const initialSession = sessionPort.getSession(initialPath)
     if (!initialPath || !editor || !initialSession || initialSession.saving) return
 
     let savePath = initialPath
+    if (manual) {
+      pendingManualSavePaths.add(initialPath)
+    }
+    logEditorSync('save:start', {
+      manual,
+      initialPath,
+      pendingManualSavePaths: Array.from(pendingManualSavePaths)
+    })
     sessionPort.setSaving(savePath, true)
     if (manual) sessionPort.setSaveError(savePath, '')
 
@@ -502,13 +548,14 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
       const requestedTitle = documentPort.commitTitle(initialPath) || documentPort.getCurrentTitle(initialPath) || documentPort.noteTitleFromPath(initialPath)
       const lastLoaded = initialSession.loadedText
 
-      const latestOnDisk = await ioPort.openFile(initialPath)
-      if (latestOnDisk !== lastLoaded) {
-        throw new Error('File changed on disk. Reload before saving to avoid overwrite.')
-      }
-
       const renameResult = await ioPort.renameFileFromTitle(initialPath, requestedTitle)
       savePath = renameResult.path
+      logEditorSync('save:rename_result', {
+        manual,
+        initialPath,
+        requestedTitle,
+        savePath
+      })
       const bodyMarkdown = editorDataToMarkdown({ blocks: rawBlocks })
       const frontmatterState = documentPort.frontmatterByPath.value[savePath] ?? documentPort.frontmatterByPath.value[initialPath]
       const frontmatterYaml = documentPort.propertyEditorMode.value === 'raw'
@@ -527,18 +574,72 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
         documentPort.moveFrontmatterPathState(initialPath, savePath)
         documentPort.moveTitlePathState(initialPath, savePath)
         documentPort.syncLoadedTitle(savePath, renameResult.title)
+        if (manual) {
+          pendingManualSavePaths.add(savePath)
+        }
+        logEditorSync('save:rename_applied', {
+          manual,
+          from: initialPath,
+          to: savePath,
+          pendingManualSavePaths: Array.from(pendingManualSavePaths)
+        })
         uiPort.emitPathRenamed({ from: initialPath, to: savePath, manual })
       }
 
-      const result = await ioPort.saveFile(savePath, markdown, { explicit: manual })
-      if (!result.persisted) {
+      // A title-driven rename on an existing note is still the same logical file version.
+      // Keep the original base version so the conditional save does not self-conflict
+      // after the rename has already materialized on disk.
+      const expectedBaseVersion = initialSession.baseVersion
+      const result = await persistBuffer(savePath, markdown, {
+        explicit: manual,
+        expectedBaseVersion,
+        force: Boolean(saveOptions?.force)
+      })
+
+      if (!result.ok) {
+        if (result.reason === 'CONFLICT') {
+          logEditorSync('save:conflict', {
+            manual,
+            savePath,
+            diskVersion: result.diskVersion
+          })
+          const conflictedSession = sessionPort.getSession(savePath)
+          if (conflictedSession) {
+            conflictedSession.currentDiskVersion = result.diskVersion
+            conflictedSession.conflict = {
+              kind: 'modified',
+              diskVersion: result.diskVersion,
+              diskContent: result.diskContent,
+              detectedAt: Date.now()
+            }
+          }
+          sessionPort.setDirty(savePath, true)
+          sessionPort.setSaveError(savePath, 'File changed on disk. Resolve the conflict before saving.')
+          return
+        }
+
+        logEditorSync('save:error', {
+          manual,
+          savePath,
+          reason: result.reason,
+          message: result.message
+        })
+        sessionPort.setSaveError(savePath, result.message)
         sessionPort.setDirty(savePath, true)
         return
       }
 
+      logEditorSync('save:success', {
+        manual,
+        savePath,
+        version: result.version
+      })
       const savedSession = sessionPort.getSession(savePath)
       if (savedSession) {
         savedSession.loadedText = markdown
+        savedSession.baseVersion = result.version
+        savedSession.currentDiskVersion = result.version
+        savedSession.conflict = null
         savedSession.isLoaded = true
       }
 
@@ -546,8 +647,23 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
       documentPort.syncLoadedTitle(savePath, renameResult.title)
       sessionPort.setDirty(savePath, false)
     } catch (error) {
+      logEditorSync('save:exception', {
+        manual,
+        savePath,
+        message: error instanceof Error ? error.message : 'Could not save file.'
+      })
       sessionPort.setSaveError(savePath, error instanceof Error ? error.message : 'Could not save file.')
     } finally {
+      if (manual) {
+        pendingManualSavePaths.delete(initialPath)
+        pendingManualSavePaths.delete(savePath)
+      }
+      logEditorSync('save:finally', {
+        manual,
+        initialPath,
+        savePath,
+        pendingManualSavePaths: Array.from(pendingManualSavePaths)
+      })
       sessionPort.setSaving(savePath, false)
       uiPort.emitOutlineSoon(savePath)
     }
@@ -555,6 +671,7 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
 
   return {
     loadCurrentFile,
-    saveCurrentFile
+    saveCurrentFile,
+    shouldIgnoreWatcherChangeForPath: (path: string) => pendingManualSavePaths.has(path)
   }
 }

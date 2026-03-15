@@ -17,6 +17,11 @@ export type ConflictStrategy = 'fail' | 'rename' | 'overwrite'
 export type EntryKind = 'file' | 'folder'
 export type WorkspaceFsChangeKind = 'created' | 'removed' | 'renamed' | 'modified'
 
+export type FileVersion = {
+  mtimeMs: number
+  size: number
+}
+
 export type WorkspaceFsChange = {
   kind: WorkspaceFsChangeKind
   path?: string
@@ -26,6 +31,7 @@ export type WorkspaceFsChange = {
   old_parent?: string
   new_parent?: string
   is_dir?: boolean
+  version?: FileVersion
 }
 
 export type WorkspaceFsChangedPayload = {
@@ -39,6 +45,32 @@ export type FileMetadata = {
   created_at_ms: number | null
   updated_at_ms: number | null
 }
+
+export type ReadNoteSnapshotResult = {
+  path: string
+  content: string
+  version: FileVersion | null
+}
+
+export type SaveNoteSuccess = {
+  ok: true
+  version: FileVersion | null
+}
+
+export type SaveNoteConflict = {
+  ok: false
+  reason: 'CONFLICT'
+  diskVersion: FileVersion
+  diskContent: string
+}
+
+export type SaveNoteError = {
+  ok: false
+  reason: 'NOT_FOUND' | 'IO_ERROR'
+  message: string
+}
+
+export type SaveNoteResult = SaveNoteSuccess | SaveNoteConflict | SaveNoteError
 
 export type AboutMetadata = {
   version: string

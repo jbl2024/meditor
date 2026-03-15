@@ -23,6 +23,7 @@ use crate::{
 use crate::markdown_index::{
     reindex_markdown_file_lexical_sync, reindex_markdown_file_semantic_sync,
 };
+use crate::editor_sync::record_workspace_mutation_write;
 
 #[derive(Serialize)]
 pub(crate) struct GraphNodeDto {
@@ -446,7 +447,8 @@ pub(crate) fn update_wikilinks_for_rename(
             continue;
         }
 
-        fs::write(&canonical_candidate, updated_markdown)?;
+        fs::write(&canonical_candidate, &updated_markdown)?;
+        record_workspace_mutation_write(&canonical_candidate, &updated_markdown);
         reindex_markdown_file_now_sync(canonical_candidate.to_string_lossy().to_string())?;
         changed_files += 1;
     }
@@ -555,7 +557,8 @@ pub(crate) fn update_wikilinks_for_path_moves(
             continue;
         }
 
-        fs::write(&canonical_candidate, updated_markdown)?;
+        fs::write(&canonical_candidate, &updated_markdown)?;
+        record_workspace_mutation_write(&canonical_candidate, &updated_markdown);
         reindex_paths.insert(canonical_candidate.to_string_lossy().to_string());
         changed_files += 1;
     }

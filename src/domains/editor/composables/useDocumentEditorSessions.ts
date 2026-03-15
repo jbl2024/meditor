@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import type { Editor } from '@tiptap/vue-3'
+import type { FileVersion } from '../../../shared/api/apiTypes'
 
 export type PaneId = string
 
@@ -13,6 +14,14 @@ export type DocumentSession = {
   path: string
   editor: Editor
   loadedText: string
+  baseVersion: FileVersion | null
+  currentDiskVersion: FileVersion | null
+  conflict: {
+    kind: 'modified' | 'deleted'
+    diskVersion?: FileVersion
+    diskContent?: string
+    detectedAt: number
+  } | null
   isLoaded: boolean
   dirty: boolean
   saving: boolean
@@ -54,6 +63,9 @@ export function useDocumentEditorSessions(options: UseDocumentEditorSessionsOpti
       path: trimmed,
       editor: options.createEditor(trimmed),
       loadedText: '',
+      baseVersion: null,
+      currentDiskVersion: null,
+      conflict: null,
       isLoaded: false,
       dirty: false,
       saving: false,

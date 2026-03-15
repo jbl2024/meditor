@@ -15,6 +15,7 @@ use crate::{
     active_workspace_root, clear_active_workspace, set_active_workspace, workspace_watch, AppError,
     Result,
 };
+use crate::editor_sync::record_workspace_mutation_write_from_disk;
 
 const TRASH_DIR_NAME: &str = ".tomosona-trash";
 const INTERNAL_DIR_NAME: &str = ".tomosona";
@@ -163,7 +164,7 @@ fn normalize_existing_dir(path: &str) -> Result<PathBuf> {
     Ok(pb)
 }
 
-fn normalize_path(path: &str) -> Result<PathBuf> {
+pub(crate) fn normalize_path(path: &str) -> Result<PathBuf> {
     let pb = PathBuf::from(path);
     if pb.as_os_str().is_empty() {
         return Err(AppError::InvalidPath);
@@ -171,7 +172,7 @@ fn normalize_path(path: &str) -> Result<PathBuf> {
     Ok(pb)
 }
 
-fn normalize_existing_path(path: &str) -> Result<PathBuf> {
+pub(crate) fn normalize_existing_path(path: &str) -> Result<PathBuf> {
     let pb = PathBuf::from(path);
     if pb.as_os_str().is_empty() || !pb.exists() {
         return Err(AppError::InvalidPath);
@@ -208,7 +209,7 @@ fn log_fs_perf(
     eprintln!("[fs-perf] {}", fields.join(" "));
 }
 
-fn ensure_within_root(root: &Path, path: &Path) -> Result<()> {
+pub(crate) fn ensure_within_root(root: &Path, path: &Path) -> Result<()> {
     let root_canonical = fs::canonicalize(root)?;
     let path_canonical = fs::canonicalize(path)?;
 
@@ -218,7 +219,7 @@ fn ensure_within_root(root: &Path, path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn ensure_parent_within_root(root: &Path, path: &Path) -> Result<()> {
+pub(crate) fn ensure_parent_within_root(root: &Path, path: &Path) -> Result<()> {
     let Some(parent) = path.parent() else {
         return Err(AppError::InvalidPath);
     };
@@ -636,6 +637,9 @@ pub fn rename_entry(
     }
 
     fs::rename(&source, &destination)?;
+    if destination.is_file() {
+        record_workspace_mutation_write_from_disk(&destination);
+    }
     Ok(destination.to_string_lossy().to_string())
 }
 
@@ -706,6 +710,9 @@ pub fn move_entry(
     }
 
     fs::rename(&source, &destination)?;
+    if destination.is_file() {
+        record_workspace_mutation_write_from_disk(&destination);
+    }
     Ok(destination.to_string_lossy().to_string())
 }
 
@@ -864,6 +871,8 @@ mod tests {
         path::{Path, PathBuf},
         time::{SystemTime, UNIX_EPOCH},
     };
+
+    use crate::editor_sync::recent_internal_write_for;
 
     use super::{
         copy_entry, create_entry, duplicate_entry, list_children, list_markdown_files, move_entry,
@@ -1090,6 +1099,7 @@ mod tests {
 
         assert!(renamed.ends_with("new.md"));
         assert!(!source.exists());
+        assert!(recent_internal_write_for(&renamed).is_some());
         fs::remove_dir_all(dir).expect("cleanup");
     }
 

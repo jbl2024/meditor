@@ -1,9 +1,11 @@
 import { computed, nextTick, type Ref } from 'vue'
 import type { Editor } from '@tiptap/vue-3'
+import type { ReadNoteSnapshotResult, SaveNoteResult } from '../../../shared/api/apiTypes'
 import { useFrontmatterProperties } from './useFrontmatterProperties'
 import { useEditorSessionLifecycle } from './useEditorSessionLifecycle'
 import { useEditorSessionStatus } from './useEditorSessionStatus'
 import { useEditorFileLifecycle } from './useEditorFileLifecycle'
+import { useEditorFilesystemSync } from './useEditorFilesystemSync'
 import { useEditorPathWatchers } from './useEditorPathWatchers'
 import { useEditorTitleState } from './useEditorTitleState'
 import { useEditorMountedSessions } from './useEditorMountedSessions'
@@ -25,8 +27,14 @@ const MAIN_PANE_ID: PaneId = 'main'
 export type EditorDocumentRuntimePropsPort = {
   path: Ref<string>
   openPaths: Ref<string[]>
-  openFile: (path: string) => Promise<string>
-  saveFile: (path: string, text: string, options: { explicit: boolean }) => Promise<{ persisted: boolean }>
+  openFile?: (path: string) => Promise<string>
+  saveFile?: (path: string, text: string, options: { explicit: boolean }) => Promise<{ persisted: boolean }>
+  readNoteSnapshot?: (path: string) => Promise<ReadNoteSnapshotResult>
+  saveNoteBuffer?: (
+    path: string,
+    text: string,
+    options: { explicit: boolean; expectedBaseVersion: import('./useDocumentEditorSessions').DocumentSession['baseVersion']; force?: boolean }
+  ) => Promise<SaveNoteResult>
   renameFileFromTitle: (path: string, title: string) => Promise<{ path: string; title: string }>
   loadPropertyTypeSchema: () => Promise<Record<string, string>>
   savePropertyTypeSchema: (schema: Record<string, string>) => Promise<void>
@@ -38,6 +46,7 @@ export type EditorDocumentRuntimeEmitPort = {
   emitOutline: (payload: Array<{ text: string; level: number; id: string }>) => void
   emitProperties: (payload: { path: string; items: Array<{ key: string; value: string }>; parseErrorCount: number }) => void
   emitPathRenamed: (payload: { from: string; to: string; manual: boolean }) => void
+  emitExternalReload: (payload: { path: string }) => void
 }
 
 /** Owns active editor/session access for document lifecycle orchestration. */
@@ -340,8 +349,18 @@ export function useEditorDocumentRuntime(options: UseEditorDocumentRuntimeOption
       ui: ui.loading
     },
     ioPort: {
-      openFile: input.openFile,
-      saveFile: input.saveFile,
+      readNoteSnapshot: input.readNoteSnapshot ?? (async (path: string) => ({
+        path,
+        content: await input.openFile!(path),
+        version: null
+      })),
+      saveNoteBuffer: input.saveNoteBuffer ?? (async (path: string, text: string, options) => {
+        await input.saveFile!(path, text, { explicit: options.explicit })
+        return {
+          ok: true,
+          version: options.expectedBaseVersion ?? { mtimeMs: Date.now(), size: text.length }
+        } satisfies SaveNoteResult
+      }),
       renameFileFromTitle: input.renameFileFromTitle
     },
     requestPort: {
@@ -404,9 +423,24 @@ export function useEditorDocumentRuntime(options: UseEditorDocumentRuntimeOption
     await fileLifecycle.loadCurrentFile(path, loadOptions)
   }
 
-  async function saveCurrentFile(manual = true) {
-    await fileLifecycle.saveCurrentFile(manual)
+  async function saveCurrentFile(manual = true, saveOptions?: { force?: boolean }) {
+    await fileLifecycle.saveCurrentFile(manual, saveOptions)
   }
+
+  const filesystemSync = useEditorFilesystemSync({
+    getSession,
+    listPaths: () => sessionStore.listPaths(),
+    currentPath: () => currentPath.value,
+    renameSessionPath: (from, to) => sessionStore.renamePath(from, to),
+    moveLifecyclePathState: (from, to) => lifecycle.movePathState(from, to),
+    moveFrontmatterPathState,
+    moveTitlePathState: titleState.movePathState,
+    setActiveSession,
+    nextRequestId: sessionState.nextRequestId,
+    loadCurrentFile,
+    emitExternalReload: (payload) => output.emitExternalReload(payload),
+    shouldIgnoreOwnSaveWatcherChange: (path) => fileLifecycle.shouldIgnoreWatcherChangeForPath(path)
+  })
 
   useEditorPathWatchers({
     path: computed(() => input.path.value ?? ''),
@@ -449,6 +483,7 @@ export function useEditorDocumentRuntime(options: UseEditorDocumentRuntimeOption
     setActiveSession,
     loadCurrentFile,
     saveCurrentFile,
+    applyWorkspaceFsChanges: filesystemSync.applyWorkspaceFsChanges,
     clearAutosaveTimer,
     scheduleAutosave,
     nextRequestId: sessionState.nextRequestId,

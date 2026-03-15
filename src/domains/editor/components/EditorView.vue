@@ -3,7 +3,7 @@ import { computed, ref, type Ref } from 'vue'
 import { Editor, EditorContent } from '@tiptap/vue-3'
 import { DragHandle as DragHandleVue3 } from '@tiptap/extension-drag-handle-vue-3'
 import { openExternalUrl } from '../../../shared/api/workspaceApi'
-import type { PulseActionId } from '../../../shared/api/apiTypes'
+import type { PulseActionId, ReadNoteSnapshotResult, SaveNoteResult, WorkspaceFsChange } from '../../../shared/api/apiTypes'
 import { PULSE_ACTIONS_BY_SOURCE, type PulseApplyMode } from '../../pulse/lib/pulse'
 import type { DocumentSession } from '../composables/useDocumentEditorSessions'
 import { captureHeavyRenderEpoch, hasPendingHeavyRender, waitForHeavyRenderIdle } from '../lib/tiptap/renderStabilizer'
@@ -41,8 +41,14 @@ const props = defineProps<{
   path: string
   workspacePath?: string
   openPaths?: string[]
-  openFile: (path: string) => Promise<string>
-  saveFile: (path: string, text: string, options: { explicit: boolean }) => Promise<{ persisted: boolean }>
+  openFile?: (path: string) => Promise<string>
+  saveFile?: (path: string, text: string, options: { explicit: boolean }) => Promise<{ persisted: boolean }>
+  readNoteSnapshot?: (path: string) => Promise<ReadNoteSnapshotResult>
+  saveNoteBuffer?: (
+    path: string,
+    text: string,
+    options: { explicit: boolean; expectedBaseVersion: DocumentSession['baseVersion']; force?: boolean }
+  ) => Promise<SaveNoteResult>
   renameFileFromTitle: (path: string, title: string) => Promise<{ path: string; title: string }>
   loadLinkTargets: () => Promise<string[]>
   loadLinkHeadings: (target: string) => Promise<string[]>
@@ -56,7 +62,8 @@ const emit = defineEmits([
   'path-renamed',
   'outline',
   'properties',
-  'pulse-open-second-brain'
+  'pulse-open-second-brain',
+  'external-reload'
 ])
 
 function emitStatus(payload: { path: string; dirty: boolean; saving: boolean; saveError: string }) {
@@ -77,6 +84,10 @@ function emitProperties(payload: { path: string; items: Array<{ key: string; val
 
 function emitPulseOpenSecondBrain(payload: { contextPaths: string[]; prompt?: string }) {
   emit('pulse-open-second-brain', payload)
+}
+
+function emitExternalReload(payload: { path: string }) {
+  emit('external-reload', payload)
 }
 
 const holder = ref<HTMLDivElement | null>(null)
@@ -172,8 +183,18 @@ documentRuntime = useEditorDocumentRuntime({
   documentInputPort: {
     path: pathRef,
     openPaths: openPathsRef,
-    openFile: props.openFile,
-    saveFile: props.saveFile,
+    readNoteSnapshot: props.readNoteSnapshot ?? (async (path: string) => ({
+      path,
+      content: await props.openFile!(path),
+      version: null
+    })),
+    saveNoteBuffer: props.saveNoteBuffer ?? (async (_path: string, text: string, options) => {
+      await props.saveFile!(_path, text, { explicit: options.explicit })
+      return {
+        ok: true,
+        version: options.expectedBaseVersion ?? { mtimeMs: Date.now(), size: text.length }
+      } satisfies SaveNoteResult
+    }),
     renameFileFromTitle: props.renameFileFromTitle,
     loadPropertyTypeSchema: props.loadPropertyTypeSchema,
     savePropertyTypeSchema: props.savePropertyTypeSchema
@@ -182,7 +203,8 @@ documentRuntime = useEditorDocumentRuntime({
     emitStatus,
     emitOutline,
     emitProperties,
-    emitPathRenamed
+    emitPathRenamed,
+    emitExternalReload
   },
   documentSessionPort: {
     holder,
@@ -377,6 +399,21 @@ function focusFirstContentBlock() {
   layout.focusFirstEditableBlock()
 }
 
+const activeSession = computed(() => currentPath.value ? getSession(currentPath.value) : null)
+const activeConflict = computed(() => activeSession.value?.conflict ?? null)
+
+async function onLoadDiskVersion() {
+  if (!currentPath.value) return
+  const requestId = documentRuntime.nextRequestId()
+  documentRuntime.ensureSession(currentPath.value)
+  documentRuntime.setActiveSession(currentPath.value)
+  await documentRuntime.loadCurrentFile(currentPath.value, { forceReload: true, requestId })
+}
+
+async function onOverwriteWithMyVersion() {
+  await documentRuntime.saveCurrentFile(true, { force: true })
+}
+
 defineExpose({
   saveNow: async () => {
     await documentRuntime.saveCurrentFile(true)
@@ -387,6 +424,9 @@ defineExpose({
     documentRuntime.ensureSession(currentPath.value)
     documentRuntime.setActiveSession(currentPath.value)
     await documentRuntime.loadCurrentFile(currentPath.value, { forceReload: true, requestId })
+  },
+  applyWorkspaceFsChanges: async (changes: WorkspaceFsChange[]) => {
+    await documentRuntime.applyWorkspaceFsChanges(changes)
   },
   focusEditor: layout.focusEditor,
   focusFirstContentBlock,
@@ -416,6 +456,31 @@ defineExpose({
     </div>
 
     <div v-else class="editor-shell flex min-h-0 flex-1 flex-col overflow-hidden border-x">
+      <div
+        v-if="activeConflict"
+        class="border-b border-[var(--border-strong)] bg-[var(--surface-muted)] px-4 py-2 text-sm"
+      >
+        <div class="flex flex-wrap items-center gap-3">
+          <span>
+            {{ activeConflict.kind === 'deleted' ? 'This file was deleted on disk.' : 'A newer disk version was detected.' }}
+          </span>
+          <button
+            v-if="activeConflict.kind === 'modified'"
+            type="button"
+            class="rounded border px-2 py-1"
+            @click="onLoadDiskVersion"
+          >
+            Load disk version
+          </button>
+          <button
+            type="button"
+            class="rounded border px-2 py-1"
+            @click="onOverwriteWithMyVersion"
+          >
+            {{ activeConflict.kind === 'deleted' ? 'Recreate file' : 'Overwrite with my version' }}
+          </button>
+        </div>
+      </div>
       <div
         class="relative min-h-0 flex-1 overflow-hidden"
         :data-drag-lock="computedDragLock ? 'true' : 'false'"

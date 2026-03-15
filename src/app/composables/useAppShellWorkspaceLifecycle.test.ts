@@ -32,7 +32,8 @@ function createLifecycle() {
       shellPort.hasWorkspace.value = false
     }),
     resetWorkspaceState: vi.fn(),
-    applyWorkspaceFsChanges: vi.fn()
+    applyWorkspaceFsChanges: vi.fn(),
+    relayEditorFsChanges: vi.fn(async () => {})
   }
   const uiPort = {
     activePaneId,

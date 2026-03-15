@@ -82,6 +82,7 @@ function createHarness(options: {
   const emitOutline = vi.fn()
   const emitProperties = vi.fn()
   const emitPathRenamed = vi.fn()
+  const emitExternalReload = vi.fn()
   const syncAfterSessionChange = vi.fn()
   const syncAfterDocumentChange = vi.fn()
   const initializeUi = vi.fn(options.initializeUi ?? (async () => {}))
@@ -113,7 +114,8 @@ function createHarness(options: {
           emitStatus,
           emitOutline,
           emitProperties,
-          emitPathRenamed
+          emitPathRenamed,
+          emitExternalReload
         },
         documentSessionPort: {
           holder: ref(holderEl),
@@ -300,6 +302,8 @@ describe('useEditorDocumentRuntime', () => {
     expect(harness.saveFile).toHaveBeenCalled()
     harness.app.unmount()
   })
+
+  it.todo('does not surface a false conflict when a manual title rename save receives its own watcher sequence')
 
   it('marks editor changes dirty and schedules autosave plus outline sync', async () => {
     vi.useFakeTimers()

@@ -38,6 +38,9 @@ function createSession(path: string): DocumentSession {
       }
     } as unknown as DocumentSession['editor'],
     loadedText: '',
+    baseVersion: null,
+    currentDiskVersion: null,
+    conflict: null,
     isLoaded: false,
     dirty: false,
     saving: false,
@@ -198,10 +201,13 @@ describe('useEditorFileLifecycle', () => {
 
   it('renames path state before persisting when title-triggered rename occurs', async () => {
     const { options, sessions } = createOptions({
-      ioPort: { renameFileFromTitle: vi.fn(async () => ({ path: 'b.md', title: 'Renamed' })) } as Partial<EditorFileLifecycleIoPort>
+      ioPort: {
+        renameFileFromTitle: vi.fn(async () => ({ path: 'b.md', title: 'Renamed' })),
+        saveNoteBuffer: vi.fn(async () => ({ ok: true, version: { mtimeMs: 8, size: 15 } }))
+      } as Partial<EditorFileLifecycleIoPort>
     })
     sessions['a.md'].loadedText = 'saved-before'
-    options.ioPort.openFile = vi.fn(async () => 'saved-before')
+    sessions['a.md'].baseVersion = { mtimeMs: 4, size: 12 }
 
     const lifecycle = useEditorFileLifecycle(options)
     await lifecycle.saveCurrentFile(false)
@@ -210,25 +216,86 @@ describe('useEditorFileLifecycle', () => {
     expect(options.sessionPort.moveLifecyclePathState).toHaveBeenCalledWith('a.md', 'b.md')
     expect(options.documentPort.moveFrontmatterPathState).toHaveBeenCalledWith('a.md', 'b.md')
     expect(options.uiPort.emitPathRenamed).toHaveBeenCalledWith({ from: 'a.md', to: 'b.md', manual: false })
-    expect(options.ioPort.saveFile).toHaveBeenCalledWith('b.md', expect.any(String), { explicit: false })
+    expect(options.ioPort.saveNoteBuffer).toHaveBeenCalledWith('b.md', expect.any(String), {
+      explicit: false,
+      expectedBaseVersion: { mtimeMs: 4, size: 12 },
+      force: false
+    })
 
     const renameOrder = (options.sessionPort.renameSessionPath as any).mock.invocationCallOrder[0]
-    const saveOrder = (options.ioPort.saveFile as any).mock.invocationCallOrder[0]
+    const saveOrder = (options.ioPort.saveNoteBuffer as any).mock.invocationCallOrder[0]
     expect(renameOrder).toBeLessThan(saveOrder)
   })
 
-  it('reports save error and skips write when on-disk content changed', async () => {
+  it('stores conflict state when the backend rejects a stale base version', async () => {
     const { options, sessions } = createOptions()
     sessions['a.md'].loadedText = 'original'
-    options.ioPort.openFile = vi.fn(async () => 'external-change')
+    sessions['a.md'].baseVersion = { mtimeMs: 2, size: 8 }
+    options.ioPort.saveNoteBuffer = vi.fn(async () => ({
+      ok: false,
+      reason: 'CONFLICT',
+      diskVersion: { mtimeMs: 9, size: 15 },
+      diskContent: 'external-change'
+    } as const))
 
     const lifecycle = useEditorFileLifecycle(options)
     await lifecycle.saveCurrentFile(false)
     await nextTick()
 
-    expect(options.ioPort.saveFile).not.toHaveBeenCalled()
-    expect(options.sessionPort.setSaveError).toHaveBeenCalledWith('a.md', 'File changed on disk. Reload before saving to avoid overwrite.')
+    expect(sessions['a.md'].conflict).toEqual({
+      kind: 'modified',
+      diskVersion: { mtimeMs: 9, size: 15 },
+      diskContent: 'external-change',
+      detectedAt: expect.any(Number)
+    })
+    expect(options.sessionPort.setDirty).toHaveBeenCalledWith('a.md', true)
+    expect(options.sessionPort.setSaveError).toHaveBeenCalledWith('a.md', 'File changed on disk. Resolve the conflict before saving.')
     expect(options.sessionPort.setSaving).toHaveBeenCalledWith('a.md', false)
+  })
+
+  it('stores base and disk version from the loaded snapshot', async () => {
+    const { options, sessions } = createOptions({
+      ioPort: {
+        readNoteSnapshot: vi.fn(async () => ({
+          path: 'a.md',
+          content: '# Title\n\nBody',
+          version: { mtimeMs: 123, size: 14 }
+        }))
+      } as Partial<EditorFileLifecycleIoPort>
+    })
+
+    const lifecycle = useEditorFileLifecycle(options)
+    await lifecycle.loadCurrentFile('a.md', { requestId: 1 })
+
+    expect(sessions['a.md'].baseVersion).toEqual({ mtimeMs: 123, size: 14 })
+    expect(sessions['a.md'].currentDiskVersion).toEqual({ mtimeMs: 123, size: 14 })
+    expect(sessions['a.md'].conflict).toBeNull()
+  })
+
+  it('updates synchronized version and clears conflict after a forced overwrite', async () => {
+    const { options, sessions } = createOptions()
+    sessions['a.md'].loadedText = 'draft'
+    sessions['a.md'].baseVersion = { mtimeMs: 1, size: 5 }
+    sessions['a.md'].conflict = {
+      kind: 'modified',
+      detectedAt: 10
+    }
+    options.ioPort.saveNoteBuffer = vi.fn(async () => ({
+      ok: true,
+      version: { mtimeMs: 22, size: 14 }
+    } as const))
+
+    const lifecycle = useEditorFileLifecycle(options)
+    await lifecycle.saveCurrentFile(true, { force: true })
+
+    expect(options.ioPort.saveNoteBuffer).toHaveBeenCalledWith('a.md', expect.any(String), {
+      explicit: true,
+      expectedBaseVersion: { mtimeMs: 1, size: 5 },
+      force: true
+    })
+    expect(sessions['a.md'].baseVersion).toEqual({ mtimeMs: 22, size: 14 })
+    expect(sessions['a.md'].currentDiskVersion).toEqual({ mtimeMs: 22, size: 14 })
+    expect(sessions['a.md'].conflict).toBeNull()
   })
 
   it('keeps large-doc overlay visible for minimum duration to avoid imperceptible flash', async () => {

@@ -1,19 +1,27 @@
 use std::{
+    collections::HashSet,
     fs,
     path::{Path, PathBuf},
     sync::{Arc, Mutex, OnceLock},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use notify::{
     event::{EventKind, ModifyKind, RenameMode},
-    RecommendedWatcher, RecursiveMode, Watcher,
+    RecommendedWatcher, RecursiveMode,
 };
+use notify_debouncer_full::{new_debouncer, DebounceEventResult, Debouncer, RecommendedCache};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
-use crate::{AppError, Result};
+use crate::{
+    editor_sync::{
+        clear_recent_internal_write, recent_internal_write_for, same_version, version_from_path,
+        FileVersion,
+    },
+    AppError, Result,
+};
 
 const INTERNAL_DIR_NAME: &str = ".tomosona";
 const TRASH_DIR_NAME: &str = ".tomosona-trash";
@@ -21,6 +29,10 @@ const DB_FILE_NAME: &str = "tomosona.sqlite";
 const GITIGNORE_FILE_NAME: &str = ".gitignore";
 const TOMOSONA_IGNORE_FILE_NAME: &str = ".tomosonaignore";
 const FS_EVENT_NAME: &str = "workspace://fs-changed";
+
+fn log_editor_sync_watch(message: &str) {
+    eprintln!("[editor-sync/watch] {message}");
+}
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -48,6 +60,8 @@ pub(crate) struct WorkspaceFsChange {
     pub new_parent: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_dir: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<FileVersion>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -62,7 +76,7 @@ pub(crate) struct WorkspaceFsChangedPayload {
 struct WorkspaceWatcherState {
     session_id: u64,
     root: Option<PathBuf>,
-    watcher: Option<RecommendedWatcher>,
+    watcher: Option<Debouncer<RecommendedWatcher, RecommendedCache>>,
     started_at_ms: u64,
 }
 
@@ -244,6 +258,84 @@ fn emit_changes(
     let _ = app_handle.emit(FS_EVENT_NAME, payload);
 }
 
+fn content_hash(path: &Path) -> Option<String> {
+    let bytes = fs::read(path).ok()?;
+    Some(blake3::hash(&bytes).to_hex().to_string())
+}
+
+fn should_filter_internal_write(path: &Path, normalized: &str, version: Option<&FileVersion>) -> bool {
+    let Some(record) = recent_internal_write_for(normalized) else {
+        return false;
+    };
+
+    if same_version(version, Some(&record.resulting_version)) {
+        log_editor_sync_watch(&format!(
+            "suppress version_match path={} source={:?} request_id={} version={:?}",
+            record.path, record.source, record.request_id, version
+        ));
+        clear_recent_internal_write(normalized);
+        return true;
+    }
+
+    let Some(current_hash) = content_hash(path) else {
+        return false;
+    };
+
+    if current_hash == record.content_hash {
+        log_editor_sync_watch(&format!(
+            "suppress hash_match path={} source={:?} request_id={}",
+            record.path, record.source, record.request_id
+        ));
+        clear_recent_internal_write(normalized);
+        return true;
+    }
+
+    log_editor_sync_watch(&format!(
+        "keep path={} source={:?} request_id={} version={:?}",
+        record.path, record.source, record.request_id, version
+    ));
+    false
+}
+
+fn enrich_change_versions_and_filter_internal_writes(changes: Vec<WorkspaceFsChange>) -> Vec<WorkspaceFsChange> {
+    let mut filtered = Vec::with_capacity(changes.len());
+
+    for mut change in changes {
+        let Some(path) = change.path.as_deref() else {
+            filtered.push(change);
+            continue;
+        };
+
+        let Some(is_dir) = change.is_dir else {
+            filtered.push(change);
+            continue;
+        };
+
+        if is_dir {
+            filtered.push(change);
+            continue;
+        }
+
+        let path_buf = PathBuf::from(path);
+        if !path_buf.exists() {
+            filtered.push(change);
+            continue;
+        }
+
+        if matches!(change.kind, WorkspaceFsChangeKind::Created | WorkspaceFsChangeKind::Modified) {
+            let version = version_from_path(&path_buf);
+            if should_filter_internal_write(&path_buf, path, version.as_ref()) {
+                continue;
+            }
+            change.version = version;
+        }
+
+        filtered.push(change);
+    }
+
+    filtered
+}
+
 fn handle_notify_event(
     app_handle: &AppHandle,
     session_id: u64,
@@ -260,6 +352,19 @@ fn handle_notify_event(
         watcher_started_at_ms,
         event,
     );
+    if !changes.is_empty() {
+        log_editor_sync_watch(&format!(
+            "mapped session_id={session_id} changes={:?}",
+            changes
+        ));
+    }
+    let changes = enrich_change_versions_and_filter_internal_writes(changes);
+    if !changes.is_empty() {
+        log_editor_sync_watch(&format!(
+            "emit session_id={session_id} changes={:?}",
+            changes
+        ));
+    }
     emit_changes(app_handle, session_id, root_normalized, changes);
 }
 
@@ -306,6 +411,7 @@ fn map_notify_event_to_changes_with_options(
                     old_parent: None,
                     new_parent: None,
                     is_dir: maybe_is_dir(&path),
+                    version: None,
                 });
             }
         }
@@ -332,6 +438,7 @@ fn map_notify_event_to_changes_with_options(
                     old_parent: None,
                     new_parent: None,
                     is_dir: maybe_is_dir(&path),
+                    version: None,
                 });
             }
         }
@@ -371,6 +478,7 @@ fn map_notify_event_to_changes_with_options(
                     path: None,
                     parent: None,
                     is_dir: maybe_is_dir(new_raw).or_else(|| maybe_is_dir(old_raw)),
+                    version: None,
                 });
             }
             RenameMode::From => {
@@ -396,6 +504,7 @@ fn map_notify_event_to_changes_with_options(
                         old_parent: None,
                         new_parent: None,
                         is_dir: maybe_is_dir(&path),
+                        version: None,
                     });
                 }
             }
@@ -422,6 +531,7 @@ fn map_notify_event_to_changes_with_options(
                         old_parent: None,
                         new_parent: None,
                         is_dir: maybe_is_dir(&path),
+                        version: None,
                     });
                 }
             }
@@ -453,6 +563,7 @@ fn map_notify_event_to_changes_with_options(
                     old_parent: None,
                     new_parent: None,
                     is_dir: maybe_is_dir(&path),
+                    version: None,
                 });
             }
         }
@@ -485,24 +596,35 @@ pub(crate) fn start_workspace_watcher(app_handle: AppHandle, root_path: PathBuf)
     let callback_root_normalized = root_normalized.clone();
     let callback_ignore_matcher = build_ignore_matcher(&root_canonical).map(Arc::new);
 
-    let mut watcher = notify::recommended_watcher(move |result: notify::Result<notify::Event>| {
-        let Ok(event) = result else {
-            return;
-        };
+    let mut watcher = new_debouncer(
+        Duration::from_millis(250),
+        None,
+        move |result: DebounceEventResult| {
+            let Ok(events) = result else {
+                return;
+            };
 
-        handle_notify_event(
-            &callback_app_handle,
-            session_id,
-            &callback_root,
-            &callback_root_normalized,
-            callback_ignore_matcher.as_deref(),
-            Some(started_at_ms),
-            event,
-        );
-    })
-    .map_err(|err| {
-        AppError::InvalidOperation(format!("Could not start workspace watcher: {err}"))
-    })?;
+            let mut seen = HashSet::new();
+            for debounced in events {
+                let event = debounced.event;
+                let signature = format!("{:?}-{:?}", event.kind, event.paths);
+                if !seen.insert(signature) {
+                    continue;
+                }
+
+                handle_notify_event(
+                    &callback_app_handle,
+                    session_id,
+                    &callback_root,
+                    &callback_root_normalized,
+                    callback_ignore_matcher.as_deref(),
+                    Some(started_at_ms),
+                    event,
+                );
+            }
+        },
+    )
+    .map_err(|err| AppError::InvalidOperation(format!("Could not start workspace watcher: {err}")))?;
 
     watcher
         .watch(&root_canonical, RecursiveMode::Recursive)
@@ -534,6 +656,7 @@ mod tests {
     use notify::Event;
 
     use super::*;
+    use crate::editor_sync::record_workspace_mutation_write;
 
     fn unique_test_dir() -> PathBuf {
         let now = SystemTime::now()
@@ -816,5 +939,46 @@ mod tests {
         );
 
         assert!(changes.is_empty());
+    }
+
+    #[test]
+    fn filters_recent_workspace_mutation_modify_event() {
+        let (root, root_norm) = mk_root();
+        let file = root.join("notes/rewritten.md");
+        fs::create_dir_all(file.parent().expect("parent")).expect("create parent");
+        fs::write(&file, "rewritten").expect("write file");
+
+        record_workspace_mutation_write(&file, "rewritten");
+
+        let mapped = map_notify_event_to_changes(
+            &root,
+            &root_norm,
+            None,
+            test_event(EventKind::Modify(ModifyKind::Any), vec![file.clone()]),
+        );
+        let filtered = enrich_change_versions_and_filter_internal_writes(mapped);
+
+        assert!(filtered.is_empty());
+    }
+
+    #[test]
+    fn keeps_external_modify_event_when_not_recorded_as_internal() {
+        let (root, root_norm) = mk_root();
+        let file = root.join("notes/external.md");
+        fs::create_dir_all(file.parent().expect("parent")).expect("create parent");
+        fs::write(&file, "external").expect("write file");
+
+        let mapped = map_notify_event_to_changes(
+            &root,
+            &root_norm,
+            None,
+            test_event(EventKind::Modify(ModifyKind::Any), vec![file.clone()]),
+        );
+        let filtered = enrich_change_versions_and_filter_internal_writes(mapped);
+
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].kind, WorkspaceFsChangeKind::Modified);
+        assert_eq!(filtered[0].path, Some(normalize_slashes(&file)));
+        assert_eq!(filtered[0].version, version_from_path(&file));
     }
 }

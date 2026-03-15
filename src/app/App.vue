@@ -30,6 +30,7 @@ import {
   writeTextFile,
   listenWorkspaceFsChanged
 } from '../shared/api/workspaceApi'
+import { readNoteSnapshot as readNoteSnapshotIpc, saveNoteBuffer as saveNoteBufferIpc } from '../shared/api/editorSyncApi'
 import {
   addFavorite,
   listFavorites,
@@ -55,7 +56,7 @@ import {
   updateWikilinksForRename,
   writePropertyTypeSchema
 } from '../shared/api/indexApi'
-import type { PathMove, SemanticLink } from '../shared/api/apiTypes'
+import type { FileVersion, PathMove, ReadNoteSnapshotResult, SaveNoteResult, SemanticLink, WorkspaceFsChange } from '../shared/api/apiTypes'
 import {
   bindPendingOpenTrace,
   findOpenTrace,
@@ -195,11 +196,11 @@ type ExplorerTreeExposed = {
 
 type SaveFileOptions = {
   explicit: boolean
+  expectedBaseVersion: FileVersion | null
+  force?: boolean
 }
 
-type SaveFileResult = {
-  persisted: boolean
-}
+type SaveFileResult = SaveNoteResult
 
 type RenameFromTitleResult = {
   path: string
@@ -1657,7 +1658,10 @@ const workspaceLifecycle = useAppShellWorkspaceLifecycle({
     loadWorkingFolderInternal,
     closeWorkspaceInternal,
     resetWorkspaceState,
-    applyWorkspaceFsChanges
+    applyWorkspaceFsChanges,
+    relayEditorFsChanges: async (changes: WorkspaceFsChange[]) => {
+      await editorRef.value?.applyWorkspaceFsChanges?.(changes)
+    }
   },
   uiPort: {
     activePaneId: computed(() => multiPane.layout.value.activePaneId),
@@ -2153,13 +2157,19 @@ async function onExplorerOpen(path: string) {
   if (!opened) return
 }
 
-async function openFile(path: string) {
+async function readNoteSnapshot(path: string): Promise<ReadNoteSnapshotResult> {
   if (!filesystem.workingFolderPath.value) {
     throw new Error('Working folder is not set.')
   }
   const virtual = virtualDocs.value[path]
-  if (virtual) return virtual.content
-  return await readTextFile(path)
+  if (virtual) {
+    return {
+      path,
+      content: virtual.content,
+      version: null
+    }
+  }
+  return await readNoteSnapshotIpc(path)
 }
 
 function applyImmediatePathMovesLocally(moves: PathMove[], expandedMarkdownMoves: PathMove[]) {
@@ -2309,17 +2319,31 @@ async function openOrPrepareMarkdown(path: string, titleLine: string) {
   return true
 }
 
-async function saveFile(path: string, txt: string, options: SaveFileOptions): Promise<SaveFileResult> {
+async function saveNoteBuffer(path: string, txt: string, options: SaveFileOptions): Promise<SaveFileResult> {
   if (!filesystem.workingFolderPath.value) {
     throw new Error('Working folder is not set.')
   }
   const virtual = virtualDocs.value[path]
   if (virtual && !options.explicit && isTitleOnlyContent(txt, virtual.titleLine)) {
-    return { persisted: false }
+    return {
+      ok: true,
+      version: options.expectedBaseVersion
+    }
   }
 
   await ensureParentFolders(path)
-  await writeTextFile(path, txt)
+  const result = await saveNoteBufferIpc({
+    path,
+    content: txt,
+    expectedBaseVersion: options.expectedBaseVersion,
+    requestId: crypto.randomUUID(),
+    force: options.force
+  })
+
+  if (!result.ok) {
+    return result
+  }
+
   await refreshActiveFileMetadata(path)
 
   if (virtual) {
@@ -2330,7 +2354,7 @@ async function saveFile(path: string, txt: string, options: SaveFileOptions): Pr
 
   upsertWorkspaceFilePath(path)
   enqueueMarkdownReindex(path)
-  return { persisted: true }
+  return result
 }
 
 function onGlobalSearchModeSelect(mode: SearchMode) {
@@ -3199,8 +3223,8 @@ onBeforeUnmount(() => {
               :layout="multiPane.layout.value"
               :active-document-path="activeFilePath"
               :get-status="editorState.getStatus"
-              :openFile="openFile"
-              :saveFile="saveFile"
+              :readNoteSnapshot="readNoteSnapshot"
+              :saveNoteBuffer="saveNoteBuffer"
               :renameFileFromTitle="renameFileFromTitle"
               :loadLinkTargets="loadWikilinkTargets"
               :loadLinkHeadings="loadWikilinkHeadings"
@@ -3218,6 +3242,7 @@ onBeforeUnmount(() => {
               @pane-request-move-tab="multiPane.moveActiveTabToAdjacentPane($event.direction)"
               @open-note="void openNoteFromSecondBrain($event)"
               @pulse-open-second-brain="void openPulseContextInSecondBrain($event)"
+              @external-reload="filesystem.notifyInfo(`Reloaded ${basenameLabel($event.path)} from disk.`)"
               @second-brain-context-changed="onSecondBrainContextChanged"
               @second-brain-session-changed="onSecondBrainSessionChanged"
               @cosmos-query-update="onCosmosQueryUpdate"

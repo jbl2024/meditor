@@ -2,6 +2,7 @@
 //! and Cosmos graph payload generation.
 
 mod db;
+mod editor_sync;
 mod echoes;
 mod favorites;
 mod fs_ops;
@@ -36,6 +37,7 @@ use fs_ops::{
     read_file_metadata, read_text_file, rename_entry, reveal_in_file_manager,
     select_working_folder, set_working_folder, trash_entry, write_text_file,
 };
+use editor_sync::{read_note_snapshot, save_note_buffer};
 pub(crate) use index_schema::refresh_semantic_edges_cache_now_sync;
 use index_schema::{
     ensure_index_schema, init_db as init_db_impl, list_markdown_files_via_find, min_max_normalize,
@@ -362,6 +364,8 @@ pub fn run() {
             read_text_file,
             read_file_metadata,
             write_text_file,
+            read_note_snapshot,
+            save_note_buffer,
             create_entry,
             rename_entry,
             duplicate_entry,

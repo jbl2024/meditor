@@ -1,5 +1,6 @@
 import { createApp, defineComponent, h, nextTick, ref } from 'vue'
 import { describe, expect, it, vi } from 'vitest'
+import type { SaveNoteResult } from '../../../shared/api/apiTypes'
 
 const { mermaidRender } = vi.hoisted(() => ({
   mermaidRender: vi.fn(async (id: string, source: string) => ({
@@ -21,6 +22,19 @@ async function flushUi() {
   await Promise.resolve()
   await new Promise<void>((resolve) => setTimeout(resolve, 0))
   await nextTick()
+}
+
+type Deferred<T> = {
+  promise: Promise<T>
+  resolve: (value: T) => void
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((res) => {
+    resolve = res
+  })
+  return { promise, resolve }
 }
 
 describe('EditorView interactions contract', () => {
@@ -278,6 +292,152 @@ describe('EditorView interactions contract', () => {
     expect(root.textContent).toContain('Preview the diagram at full size and export it as SVG.')
     expect(root.querySelector('.editor-mermaid-preview svg')).toBeTruthy()
     expect(mermaidRender).toHaveBeenCalled()
+
+    app.unmount()
+    document.body.innerHTML = ''
+  })
+
+  it('does not surface a false conflict banner during a manual title rename save when a watcher modify lands on the renamed path', async () => {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+
+    const controls = {
+      path: ref('a.md'),
+      openPaths: ref(['a.md'])
+    }
+    const editorRef = ref<any>(null)
+    const pendingSave = deferred<SaveNoteResult>()
+
+    const app = createApp(defineComponent({
+      setup() {
+        return () =>
+          h(EditorView, {
+            ref: editorRef,
+            path: controls.path.value,
+            openPaths: controls.openPaths.value,
+            readNoteSnapshot: async (path: string) => ({
+              path,
+              content: '# Title\n\nBody',
+              version: { mtimeMs: 1, size: 13 }
+            }),
+            saveNoteBuffer: async () => pendingSave.promise,
+            renameFileFromTitle: async () => ({ path: 'b.md', title: 'Renamed' }),
+            loadLinkTargets: async () => ['a.md', 'b.md'],
+            loadLinkHeadings: async () => ['H1'],
+            loadPropertyTypeSchema: async () => ({}),
+            savePropertyTypeSchema: async () => {},
+            openLinkTarget: async () => true,
+            onStatus: () => {},
+            onOutline: () => {},
+            onProperties: () => {},
+            onPathRenamed: ({ from, to }: { from: string; to: string }) => {
+              controls.path.value = controls.path.value === from ? to : controls.path.value
+              controls.openPaths.value = controls.openPaths.value.map((value) => value === from ? to : value)
+            }
+          })
+      }
+    }))
+
+    app.mount(root)
+    await flushUi()
+
+    const titleField = root.querySelector('.editor-title-field') as HTMLElement
+    expect(titleField).toBeTruthy()
+    titleField.textContent = 'Renamed'
+    titleField.dispatchEvent(new InputEvent('input', { bubbles: true }))
+    await flushUi()
+
+    const savePromise = editorRef.value.saveNow()
+    await flushUi()
+
+    await editorRef.value.applyWorkspaceFsChanges([
+      { kind: 'modified', path: 'b.md', is_dir: false, version: { mtimeMs: 2, size: 15 } }
+    ])
+    await flushUi()
+
+    expect(root.textContent).not.toContain('A newer disk version was detected.')
+
+    pendingSave.resolve({
+      ok: true,
+      version: { mtimeMs: 3, size: 15 }
+    })
+    await savePromise
+    await flushUi()
+
+    app.unmount()
+    document.body.innerHTML = ''
+  })
+
+  it('does not surface a false conflict banner when the source path watcher event lands before the manual rename save resolves', async () => {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+
+    const controls = {
+      path: ref('a.md'),
+      openPaths: ref(['a.md'])
+    }
+    const editorRef = ref<any>(null)
+    const pendingRename = deferred<{ path: string; title: string }>()
+    const pendingSave = deferred<SaveNoteResult>()
+
+    const app = createApp(defineComponent({
+      setup() {
+        return () =>
+          h(EditorView, {
+            ref: editorRef,
+            path: controls.path.value,
+            openPaths: controls.openPaths.value,
+            readNoteSnapshot: async (path: string) => ({
+              path,
+              content: '# Title\n\nBody',
+              version: { mtimeMs: 1, size: 13 }
+            }),
+            saveNoteBuffer: async () => pendingSave.promise,
+            renameFileFromTitle: async () => pendingRename.promise,
+            loadLinkTargets: async () => ['a.md', 'b.md'],
+            loadLinkHeadings: async () => ['H1'],
+            loadPropertyTypeSchema: async () => ({}),
+            savePropertyTypeSchema: async () => {},
+            openLinkTarget: async () => true,
+            onStatus: () => {},
+            onOutline: () => {},
+            onProperties: () => {},
+            onPathRenamed: ({ from, to }: { from: string; to: string }) => {
+              controls.path.value = controls.path.value === from ? to : controls.path.value
+              controls.openPaths.value = controls.openPaths.value.map((value) => value === from ? to : value)
+            }
+          })
+      }
+    }))
+
+    app.mount(root)
+    await flushUi()
+
+    const titleField = root.querySelector('.editor-title-field') as HTMLElement
+    expect(titleField).toBeTruthy()
+    titleField.textContent = 'Renamed'
+    titleField.dispatchEvent(new InputEvent('input', { bubbles: true }))
+    await flushUi()
+
+    const savePromise = editorRef.value.saveNow()
+    await flushUi()
+
+    await editorRef.value.applyWorkspaceFsChanges([
+      { kind: 'removed', path: 'a.md', is_dir: false }
+    ])
+    await flushUi()
+
+    pendingRename.resolve({ path: 'b.md', title: 'Renamed' })
+    await flushUi()
+
+    pendingSave.resolve({
+      ok: true,
+      version: { mtimeMs: 3, size: 15 }
+    })
+    await savePromise
+    await flushUi()
+
+    expect(root.textContent).not.toContain('A newer disk version was detected.')
 
     app.unmount()
     document.body.innerHTML = ''
