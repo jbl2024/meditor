@@ -1286,7 +1286,6 @@ onMounted(() => {
 .alter-list-item:hover {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--panel-border));
   background: color-mix(in srgb, var(--accent-soft) 26%, var(--panel-bg));
-  transform: translateY(-1px);
 }
 
 .alter-list-item--active {
@@ -1307,8 +1306,9 @@ onMounted(() => {
   margin: 0;
   color: var(--text-muted);
   line-height: 1.4;
-  font-size: 0.8125rem;
+  font-size: 0.7125rem;
   display: -webkit-box;
+  line-clamp: 2;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
