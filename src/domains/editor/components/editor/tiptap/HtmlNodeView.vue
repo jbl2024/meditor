@@ -31,12 +31,59 @@ const props = defineProps<{
 const sourceTextarea = ref<HTMLTextAreaElement | null>(null)
 const sourcePre = ref<HTMLElement | null>(null)
 const showSource = ref(false)
+const sourceEditorHeight = ref('0px')
 
 const html = computed(() => String(props.node.attrs.html ?? ''))
 const sanitizedPreview = computed(() => toPreviewHtml(html.value))
 const highlightedSource = computed(() => highlightHtmlSource(html.value))
 
-function openSourceEditor(options?: { placeCaretAtEnd?: boolean }) {
+function estimateSourceHeight(value: string): number {
+  const lineCount = Math.max(1, value.split('\n').length)
+  const lineHeightPx = 22
+  const verticalPaddingPx = 18
+  const borderPx = 2
+  return Math.max(74, lineCount * lineHeightPx + verticalPaddingPx + borderPx)
+}
+
+function syncSourceEditorHeight() {
+  const textarea = sourceTextarea.value
+  if (!textarea) {
+    sourceEditorHeight.value = `${estimateSourceHeight(html.value)}px`
+    return
+  }
+  const previousHeight = textarea.style.height
+  textarea.style.height = '0px'
+  const measuredHeight = textarea.scrollHeight
+  const nextHeight = Math.max(measuredHeight, estimateSourceHeight(textarea.value))
+  sourceEditorHeight.value = `${nextHeight}px`
+  textarea.style.height = previousHeight || sourceEditorHeight.value
+}
+
+function findTemplateInnerCaret(value: string): number | null {
+  const match = value.match(/^<([A-Za-z][^\s/>]*)(?:[^>]*)>\n([ \t]*)\n<\/\1>\s*$/)
+  if (!match) return null
+  const lineBreakIndex = value.indexOf('\n')
+  if (lineBreakIndex < 0) return null
+  return lineBreakIndex + 1 + match[2].length
+}
+
+function applyCaretPosition(options?: { placeCaretAtEnd?: boolean; placeCaretInsideTemplate?: boolean }) {
+  const textarea = sourceTextarea.value
+  if (!textarea) return
+  if (options?.placeCaretInsideTemplate) {
+    const innerCaret = findTemplateInnerCaret(textarea.value)
+    if (typeof innerCaret === 'number') {
+      textarea.setSelectionRange(innerCaret, innerCaret)
+      return
+    }
+  }
+  if (options?.placeCaretAtEnd) {
+    const size = textarea.value.length
+    textarea.setSelectionRange(size, size)
+  }
+}
+
+function openSourceEditor(options?: { placeCaretAtEnd?: boolean; placeCaretInsideTemplate?: boolean }) {
   if (!props.editor.isEditable) return
   focusHtmlNodeSelection()
   showSource.value = true
@@ -44,17 +91,18 @@ function openSourceEditor(options?: { placeCaretAtEnd?: boolean }) {
     focusHtmlNodeSelection()
     props.editor.view?.focus?.({ preventScroll: true })
     sourceTextarea.value?.focus({ preventScroll: true })
-    if (!options?.placeCaretAtEnd) return
-    const size = sourceTextarea.value?.value.length ?? 0
-    sourceTextarea.value?.setSelectionRange(size, size)
+    syncSourceEditorHeight()
+    applyCaretPosition(options)
   }).then(() => nextTick()).then(() => {
-    if (document.activeElement === sourceTextarea.value) return
+    syncSourceEditorHeight()
+    if (document.activeElement === sourceTextarea.value) {
+      applyCaretPosition(options)
+      return
+    }
     focusHtmlNodeSelection()
     props.editor.view?.focus?.({ preventScroll: true })
     sourceTextarea.value?.focus({ preventScroll: true })
-    if (!options?.placeCaretAtEnd) return
-    const size = sourceTextarea.value?.value.length ?? 0
-    sourceTextarea.value?.setSelectionRange(size, size)
+    applyCaretPosition(options)
   })
 }
 
@@ -78,7 +126,7 @@ function focusHtmlNodeSelection() {
 function consumeAutoEdit() {
   if (!props.editor.isEditable) return
   if (!props.node.attrs.autoEdit) return
-  openSourceEditor({ placeCaretAtEnd: true })
+  openSourceEditor({ placeCaretInsideTemplate: true })
   props.updateAttributes({ autoEdit: false })
 }
 
@@ -182,6 +230,7 @@ function toPreviewHtml(value: string): string {
 function onInput(event: Event) {
   const value = (event.target as HTMLTextAreaElement | null)?.value ?? ''
   props.updateAttributes({ html: value })
+  syncSourceEditorHeight()
 }
 
 function onEditorToggle(event?: MouseEvent) {
@@ -220,6 +269,7 @@ function syncHighlightedScroll() {
 function commitValue(nextValue: string, start: number, end: number) {
   props.updateAttributes({ html: nextValue })
   void nextTick().then(() => {
+    syncSourceEditorHeight()
     sourceTextarea.value?.setSelectionRange(start, end)
     syncHighlightedScroll()
   })
@@ -315,11 +365,20 @@ function onEditorKeydown(event: KeyboardEvent) {
 }
 
 onMounted(() => {
+  sourceEditorHeight.value = `${estimateSourceHeight(html.value)}px`
   consumeAutoEdit()
 })
 
 watch(() => props.node.attrs.autoEdit, () => {
   consumeAutoEdit()
+})
+
+watch(html, () => {
+  if (!showSource.value) return
+  void nextTick().then(() => {
+    syncSourceEditorHeight()
+    syncHighlightedScroll()
+  })
 })
 </script>
 
@@ -346,11 +405,12 @@ watch(() => props.node.attrs.autoEdit, () => {
         ></div>
 
         <div v-else class="tomosona-html-source-shell">
-          <pre ref="sourcePre" class="tomosona-html-source" aria-hidden="true"><code class="hljs language-xml" v-html="highlightedSource"></code></pre>
+          <pre ref="sourcePre" class="tomosona-html-source" :style="{ height: sourceEditorHeight }" aria-hidden="true"><code class="hljs language-xml" v-html="highlightedSource"></code></pre>
           <textarea
             ref="sourceTextarea"
             class="tomosona-html-textarea"
             :value="html"
+            :style="{ height: sourceEditorHeight }"
             spellcheck="false"
             @input="onInput"
             @scroll="syncHighlightedScroll"
@@ -418,7 +478,6 @@ watch(() => props.node.attrs.autoEdit, () => {
   font-size: var(--font-size-code);
   line-height: 1.45;
   margin: 0;
-  min-height: 120px;
   overflow: auto;
   padding: 0.56rem 0.62rem;
   white-space: pre;

@@ -120,6 +120,9 @@ describe('HtmlNodeView', () => {
     expect(wrapper.classList.contains('is-editing')).toBe(true)
     expect(textarea).toBeTruthy()
     expect(document.activeElement).toBe(textarea)
+    expect(textarea.selectionStart).toBe('<div>\n  '.length)
+    expect(textarea.selectionEnd).toBe('<div>\n  '.length)
+    expect(textarea.style.height).toBe('86px')
     expect(harness.updateAttributes).toHaveBeenCalledWith({ autoEdit: false })
     expect(harness.autoEdit.value).toBe(false)
 
