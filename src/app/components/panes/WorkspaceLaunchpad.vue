@@ -7,6 +7,7 @@ import {
   DocumentPlusIcon,
   DocumentTextIcon,
   QuestionMarkCircleIcon,
+  AcademicCapIcon,
   RocketLaunchIcon
 } from '@heroicons/vue/24/outline'
 import UiButton from '../../../shared/components/ui/UiButton.vue'
@@ -329,7 +330,7 @@ function shortUpdatedLabel(value: string): string {
             </span>
           </button>
           <button type="button" class="launchpad-action-row" @click="emit('quickStart', 'alters')">
-            <span class="launchpad-action-icon launchpad-action-icon-second-brain"><BoltIcon /></span>
+            <span class="launchpad-action-icon launchpad-action-icon-second-brain"><AcademicCapIcon /></span>
             <span class="launchpad-action-copy">
               <strong>Open Alters</strong>
               <span>Manage workspace Alter personas</span>

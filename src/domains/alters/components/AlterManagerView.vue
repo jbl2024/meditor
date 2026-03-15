@@ -282,10 +282,10 @@ onMounted(() => {
           </div>
 
           <div class="alter-hero__actions">
-            <UiButton variant="primary" @click="emit('open-second-brain', activeAlter.id)">Invoke In Second Brain</UiButton>
-            <UiButton variant="secondary" @click="manager.openEditWizard()">Edit</UiButton>
-            <UiButton variant="ghost" @click="void manager.duplicateActiveAlter()">Duplicate</UiButton>
-            <UiButton variant="danger" @click="void manager.deleteActiveAlter()">Delete</UiButton>
+            <UiButton size="sm" variant="primary" @click="emit('open-second-brain', activeAlter.id)">Invoke In Second Brain</UiButton>
+            <UiButton size="sm" variant="secondary" @click="manager.openEditWizard()">Edit</UiButton>
+            <UiButton size="sm" variant="ghost" @click="void manager.duplicateActiveAlter()">Duplicate</UiButton>
+            <UiButton size="sm" variant="danger" @click="void manager.deleteActiveAlter()">Delete</UiButton>
           </div>
         </UiPanel>
 
@@ -364,13 +364,13 @@ onMounted(() => {
           Alters belong to the workspace and stay visible here instead of hiding in Settings.
         </p>
         <div class="alter-card-actions">
-          <UiButton variant="secondary" @click="openQuickStart()">
+          <UiButton size="sm" variant="secondary" @click="openQuickStart()">
             <template #leading>
               <SparklesIcon class="alter-step-button__icon" />
             </template>
             Quick Start
           </UiButton>
-          <UiButton variant="primary" @click="manager.openCreateWizard()">Create Alter</UiButton>
+          <UiButton size="sm" variant="primary" @click="manager.openCreateWizard()">Create Alter</UiButton>
         </div>
       </UiPanel>
     </main>
@@ -412,10 +412,11 @@ onMounted(() => {
       <template #footer>
         <div class="alter-wizard__footer">
           <div class="alter-card-actions">
-            <UiButton variant="ghost" @click="closeQuickStart()">Cancel</UiButton>
+            <UiButton size="sm" variant="ghost" @click="closeQuickStart()">Cancel</UiButton>
           </div>
           <div class="alter-card-actions">
             <UiButton
+              size="sm"
               variant="primary"
               :disabled="generating || !quickStartPrompt.trim()"
               :loading="generating"
@@ -761,7 +762,7 @@ onMounted(() => {
             </UiField>
 
             <div class="alter-card-actions">
-              <UiButton variant="secondary" @click="void submitPreview()">Generate preview</UiButton>
+              <UiButton size="sm" variant="secondary" @click="void submitPreview()">Generate preview</UiButton>
             </div>
 
             <UiPanel tone="subtle" class-name="alter-preview-panel">
@@ -775,14 +776,15 @@ onMounted(() => {
       <template #footer>
         <div class="alter-wizard__footer">
           <div class="alter-card-actions">
-            <UiButton variant="ghost" @click="resetDraft()">Reset</UiButton>
-            <UiButton variant="ghost" @click="closeWizard()">Cancel</UiButton>
+            <UiButton size="sm" variant="ghost" @click="resetDraft()">Reset</UiButton>
+            <UiButton size="sm" variant="ghost" @click="closeWizard()">Cancel</UiButton>
           </div>
 
           <div class="alter-card-actions">
-            <UiButton variant="secondary" :disabled="wizardStep === 0" @click="previousStep()">Back</UiButton>
+            <UiButton size="sm" variant="secondary" :disabled="wizardStep === 0" @click="previousStep()">Back</UiButton>
             <UiButton
               v-if="wizardStep < stepDefinitions.length - 1"
+              size="sm"
               variant="primary"
               @click="nextStep()"
             >
@@ -790,6 +792,7 @@ onMounted(() => {
             </UiButton>
             <UiButton
               v-else
+              size="sm"
               variant="primary"
               :disabled="saving || !canSaveDraft"
               :loading="saving"
@@ -809,8 +812,8 @@ onMounted(() => {
   display: grid;
   grid-template-columns: 20rem minmax(0, 1fr);
   min-height: 100%;
-  gap: 1rem;
-  padding: 1rem;
+  gap: 0.75rem;
+  padding: 0.75rem;
   background:
     radial-gradient(circle at top left, color-mix(in srgb, var(--accent-soft) 24%, transparent), transparent 34%),
     linear-gradient(180deg, color-mix(in srgb, var(--surface-muted) 40%, var(--surface-bg)), var(--surface-bg));
@@ -824,7 +827,7 @@ onMounted(() => {
 .alter-sidebar {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
 .alter-sidebar__panel,
@@ -834,7 +837,7 @@ onMounted(() => {
 .alter-empty-main {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
 .alter-sidebar__head,
@@ -845,7 +848,7 @@ onMounted(() => {
 .alter-revision-item,
 .alter-wizard__footer {
   display: flex;
-  gap: 0.75rem;
+  gap: 0.5rem;
 }
 
 .alter-sidebar__head,
@@ -865,8 +868,8 @@ onMounted(() => {
 
 .alter-kicker,
 .alter-section-kicker {
-  margin: 0 0 0.35rem;
-  font-size: 0.72rem;
+  margin: 0 0 0.2rem;
+  font-size: 0.68rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-dim);
@@ -879,7 +882,8 @@ onMounted(() => {
 .alter-wizard__intro p {
   margin: 0;
   color: var(--text-muted);
-  line-height: 1.55;
+  line-height: 1.4;
+  font-size: 0.94rem;
 }
 
 .alter-sidebar__meta,
@@ -888,25 +892,25 @@ onMounted(() => {
 .alter-checkbox-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.35rem;
 }
 
 .alter-section-count {
   color: var(--text-dim);
-  font-size: 0.8rem;
+  font-size: 0.76rem;
 }
 
 .alter-list {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.5rem;
 }
 
 .alter-list-item {
   border: 1px solid var(--panel-border);
   border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--panel-bg) 92%, transparent);
-  padding: 0.9rem;
+  padding: 0.7rem 0.8rem;
   text-align: left;
   transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
 }
@@ -926,26 +930,27 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 0.4rem;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
 }
 
 .alter-list-item p {
   margin: 0;
   color: var(--text-muted);
-  line-height: 1.45;
+  line-height: 1.35;
+  font-size: 0.92rem;
 }
 
 .alter-main {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
 .alter-hero__body {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.5rem;
 }
 
 .alter-hero__actions,
@@ -957,24 +962,25 @@ onMounted(() => {
 .alter-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
 .alter-pre {
   margin: 0;
-  padding: 0.95rem;
+  padding: 0.7rem 0.8rem;
   border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--surface-muted) 84%, var(--panel-bg));
   color: var(--text-base);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  line-height: 1.55;
+  line-height: 1.45;
+  font-size: 0.9rem;
 }
 
 .alter-revision-list {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: 0.45rem;
 }
 
 .alter-revision-item {
@@ -982,7 +988,7 @@ onMounted(() => {
   border: 1px solid var(--panel-border);
   border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--surface-muted) 55%, var(--panel-bg));
-  padding: 0.8rem 0.9rem;
+  padding: 0.65rem 0.75rem;
   text-align: left;
 }
 
@@ -993,13 +999,13 @@ onMounted(() => {
 .alter-revision-preview {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: 0.45rem;
 }
 
 .alter-empty,
 .alter-error {
   border-radius: var(--radius-lg);
-  padding: 1rem;
+  padding: 0.8rem;
 }
 
 .alter-empty {
@@ -1016,7 +1022,7 @@ onMounted(() => {
 .alter-empty-main {
   align-items: flex-start;
   justify-content: center;
-  min-height: 22rem;
+  min-height: 18rem;
 }
 
 :deep(.alter-wizard-modal) {
@@ -1026,8 +1032,8 @@ onMounted(() => {
 .alter-wizard {
   display: grid;
   grid-template-columns: 18rem minmax(0, 1fr);
-  gap: 1rem;
-  min-height: 34rem;
+  gap: 0.75rem;
+  min-height: 30rem;
 }
 
 .alter-wizard__rail,
@@ -1035,14 +1041,14 @@ onMounted(() => {
 .alter-stack {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.75rem;
   min-width: 0;
 }
 
 .alter-wizard__steps {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.35rem;
 }
 
 .alter-step-button {
@@ -1058,7 +1064,7 @@ onMounted(() => {
 .alter-form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
 .alter-form-grid__full {
@@ -1068,27 +1074,27 @@ onMounted(() => {
 .alter-inspiration-card {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
 .alter-range-panel {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
 .alter-range-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
 .alter-range-field {
   display: flex;
   flex-direction: column;
-  gap: 0.65rem;
+  gap: 0.45rem;
   color: var(--field-label);
-  font-size: 0.85rem;
+  font-size: 0.78rem;
   font-weight: 600;
 }
 
@@ -1100,7 +1106,24 @@ onMounted(() => {
 .alter-wizard__summary {
   display: flex;
   flex-direction: column;
-  gap: 0.65rem;
+  gap: 0.5rem;
+}
+
+.alter-sidebar :deep(.ui-panel),
+.alter-main :deep(.ui-panel) {
+  padding: 0.85rem;
+}
+
+.alter-sidebar strong,
+.alter-main strong,
+.alter-main h3,
+.alter-sidebar h3 {
+  line-height: 1.2;
+}
+
+.alter-hero h1 {
+  font-size: 1.65rem;
+  line-height: 1.05;
 }
 
 @media (max-width: 1180px) {
