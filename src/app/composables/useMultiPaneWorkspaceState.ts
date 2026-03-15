@@ -2,13 +2,14 @@ import { computed, ref } from 'vue'
 
 export type PaneId = string
 
-export type SurfaceType = 'document' | 'home' | 'cosmos' | 'second-brain-chat'
+export type SurfaceType = 'document' | 'home' | 'cosmos' | 'second-brain-chat' | 'alters'
 
 export type PaneTab =
   | { id: string; type: 'document'; path: string; pinned: boolean }
   | { id: string; type: 'home'; pinned: boolean }
   | { id: string; type: 'cosmos'; pinned: boolean }
   | { id: string; type: 'second-brain-chat'; pinned: boolean }
+  | { id: string; type: 'alters'; pinned: boolean }
 
 export type PaneState = {
   id: PaneId
@@ -184,7 +185,7 @@ export function hydrateLayout(payload: unknown): MultiPaneLayout | null {
       }
       // Backward compatibility: hydrate legacy "second-brain-sessions" tabs as chat tabs.
       const nextType = tab.type === 'second-brain-sessions' ? 'second-brain-chat' : tab.type
-      if (nextType === 'home' || nextType === 'cosmos' || nextType === 'second-brain-chat') {
+      if (nextType === 'home' || nextType === 'cosmos' || nextType === 'second-brain-chat' || nextType === 'alters') {
         if (seenSpecialSurfaces.has(nextType)) continue
         seenSpecialSurfaces.add(nextType)
         openTabs.push({ id: surfaceTabId(nextType), type: nextType, pinned: Boolean(tab.pinned) })

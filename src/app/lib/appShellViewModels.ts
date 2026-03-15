@@ -1,4 +1,5 @@
 import type { CosmosGraph, CosmosGraphNode } from '../../domains/cosmos/lib/graphIndex'
+import type { AppSettingsAlters } from '../../shared/api/apiTypes'
 
 /** Launchpad row shown for a recently opened workspace. */
 export type LaunchpadRecentWorkspace = {
@@ -45,8 +46,17 @@ export type AppShellSecondBrainViewModel = {
   requestedSessionNonce: number
   requestedPrompt: string
   requestedPromptNonce: number
+  requestedAlterId?: string
+  requestedAlterNonce?: number
   activeNotePath: string
   echoesRefreshToken: number
+  settings?: AppSettingsAlters
+}
+
+/** View-model consumed by pane-native Alters surfaces. */
+export type AppShellAltersViewModel = {
+  workspacePath: string
+  settings: AppSettingsAlters
 }
 
 /** View-model consumed by Home/Launchpad pane surfaces. */

@@ -10,6 +10,7 @@ import {
   publishDraftToNewNote,
   readSecondBrainConfigStatus,
   saveSecondBrainDraft,
+  setSecondBrainSessionAlter,
   exportSecondBrainSessionMarkdown,
   insertSecondBrainAssistantIntoTargetNote,
   sendSecondBrainMessage,
@@ -45,10 +46,12 @@ export async function fetchSecondBrainSessions(limit = 80): Promise<SecondBrainS
 export async function createDeliberationSession(payload: {
   title?: string
   contextPaths: string[]
+  alterId?: string | null
 }): Promise<{ sessionId: string; createdAtMs: number }> {
   const result = await createSecondBrainSession({
     title: payload.title,
-    context_paths: payload.contextPaths
+    context_paths: payload.contextPaths,
+    alter_id: payload.alterId ?? undefined
   })
   return {
     sessionId: result.session_id,
@@ -86,18 +89,29 @@ export async function runDeliberation(payload: {
   sessionId: string
   mode: string
   message: string
+  alterId?: string | null
   attachments?: SecondBrainAttachmentMeta[]
 }): Promise<{ userMessageId: string; assistantMessageId: string }> {
   const result = await sendSecondBrainMessage({
     session_id: payload.sessionId,
     mode: payload.mode,
     message: payload.message,
+    alter_id: payload.alterId ?? undefined,
     attachments: payload.attachments ?? []
   })
   return {
     userMessageId: result.user_message_id,
     assistantMessageId: result.assistant_message_id
   }
+}
+
+/** Persists the active Alter selection for a session. */
+export async function setDeliberationSessionAlter(sessionId: string, alterId?: string | null): Promise<string> {
+  const result = await setSecondBrainSessionAlter({
+    session_id: sessionId,
+    alter_id: alterId ?? undefined
+  })
+  return result.alter_id
 }
 
 /** Requests server-side cancellation for an in-flight deliberation stream. */

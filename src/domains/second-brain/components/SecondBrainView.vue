@@ -10,6 +10,7 @@ import {
   removeDeliberationSession,
   replaceSessionContext,
   runDeliberation,
+  setDeliberationSessionAlter,
   subscribeSecondBrainStream
 } from '../lib/secondBrainApi'
 import { sanitizeHtmlForPreview } from '../../../shared/lib/htmlSanitizer'
@@ -18,6 +19,7 @@ import { normalizeContextPathsForUpdate, toAbsoluteWorkspacePath } from '../lib/
 import type { PulseActionId, SecondBrainMessage, SecondBrainSessionSummary } from '../../../shared/api/apiTypes'
 import { writeClipboardText } from '../../../shared/api/clipboardApi'
 import { readTextFile } from '../../../shared/api/workspaceApi'
+import { fetchAlterList } from '../../alters/lib/altersApi'
 import { useEchoesPack } from '../../echoes/composables/useEchoesPack'
 import { useSecondBrainAtMentions, type SecondBrainAtMentionItem } from '../composables/useSecondBrainAtMentions'
 import { PULSE_ACTIONS_BY_SOURCE, getPulseDropdownItems } from '../../pulse/lib/pulse'
@@ -27,17 +29,29 @@ import SecondBrainAtMentionsMenu from './SecondBrainAtMentionsMenu.vue'
 import SecondBrainEchoesPanel from './SecondBrainEchoesPanel.vue'
 import SecondBrainSessionDropdown from './SecondBrainSessionDropdown.vue'
 import type { EchoesItem } from '../../echoes/lib/echoes'
+import type { AlterSummary, AppSettingsAlters } from '../../../shared/api/apiTypes'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   workspacePath: string
   allWorkspaceFiles: string[]
   requestedSessionId: string
   requestedSessionNonce: number
   requestedPrompt: string
   requestedPromptNonce: number
+  requestedAlterId?: string
+  requestedAlterNonce?: number
   activeNotePath?: string
   echoesRefreshToken?: number
-}>()
+  settings?: AppSettingsAlters
+}>(), {
+  requestedAlterId: '',
+  requestedAlterNonce: 0,
+  settings: () => ({
+    default_mode: 'neutral',
+    show_badge_in_chat: true,
+    default_influence_intensity: 'balanced'
+  })
+})
 
 const emit = defineEmits<{
   'open-note': [path: string]
@@ -76,6 +90,8 @@ const pulseActionId = ref<PulseActionId>('synthesize')
 const pulseDropdownOpen = ref(false)
 const pulseDropdownQuery = ref('')
 const pulseDropdownActiveIndex = ref(0)
+const availableAlters = ref<AlterSummary[]>([])
+const selectedAlterId = ref('')
 const streamUnsubscribers: Array<() => void> = []
 const ignoredAssistantMessageIds = new Set<string>()
 let copyToastTimer: ReturnType<typeof setTimeout> | null = null
@@ -85,6 +101,11 @@ const COPY_TOAST_MS = 2000
 
 const workspacePathRef = computed(() => props.workspacePath)
 const allWorkspaceFilesRef = computed(() => props.allWorkspaceFiles)
+const alterSettings = computed<AppSettingsAlters>(() => props.settings ?? {
+  default_mode: 'neutral',
+  show_badge_in_chat: true,
+  default_influence_intensity: 'balanced'
+})
 
 const mentions = useSecondBrainAtMentions({
   workspacePath: workspacePathRef,
@@ -163,6 +184,10 @@ const echoesItems = computed<EchoesItem[]>(() => {
   }
 
   return deduped
+})
+const activeAlterLabel = computed(() => {
+  if (!selectedAlterId.value) return 'Neutral'
+  return availableAlters.value.find((item) => item.id === selectedAlterId.value)?.name ?? 'Neutral'
 })
 
 function mergeContextPaths(nextPaths: string[]): string[] {
@@ -254,6 +279,7 @@ function resetActiveSession(options: { emitSessionChange?: boolean } = {}) {
   messages.value = []
   streamByMessage.value = {}
   composerContextPaths.value = []
+  selectedAlterId.value = alterSettings.value.default_mode === 'last_used' ? selectedAlterId.value : ''
   mentionInfo.value = ''
   emit('context-changed', [])
 }
@@ -269,6 +295,7 @@ async function loadSession(nextSessionId: string) {
     sessionId.value = payload.session_id
     emit('session-changed', sessionId.value)
     sessionTitle.value = payload.title || 'Second Brain Session'
+    selectedAlterId.value = payload.alter_id || ''
     contextPaths.value = payload.context_items.map((item) => asAbsolute(item.path))
 
     const nextTokens: Record<string, number> = {}
@@ -295,11 +322,34 @@ async function refreshSessionsIndex() {
   }
 }
 
+async function refreshAlterList() {
+  try {
+    availableAlters.value = await fetchAlterList()
+  } catch {
+    availableAlters.value = []
+  }
+}
+
+async function applySelectedAlter(alterId: string) {
+  const normalized = (alterId ?? '').trim()
+  selectedAlterId.value = normalized
+  if (!sessionId.value) return
+  try {
+    await setDeliberationSessionAlter(sessionId.value, normalized || null)
+  } catch (err) {
+    sendError.value = err instanceof Error ? err.message : 'Could not update Alter.'
+  }
+}
+
 async function onCreateSession() {
   if (creatingSession.value) return
   creatingSession.value = true
   try {
-    const created = await createDeliberationSession({ contextPaths: [], title: '' })
+    const created = await createDeliberationSession(
+      selectedAlterId.value
+        ? { contextPaths: [], title: '', alterId: selectedAlterId.value }
+        : { contextPaths: [], title: '' }
+    )
     sessionId.value = created.sessionId
     emit('session-changed', sessionId.value)
     sessionTitle.value = 'Second Brain Session'
@@ -330,11 +380,16 @@ async function onDeleteSession(sessionToDelete: string) {
 async function initializeSessionOnFirstOpen() {
   if (sessionId.value) return
 
+  void refreshAlterList()
   await refreshSessionsIndex()
+  if (sessionId.value) return
 
   if (props.requestedSessionId.trim()) {
     await loadSession(props.requestedSessionId.trim())
   } else {
+    selectedAlterId.value = alterSettings.value.default_mode === 'last_used'
+      ? (props.requestedAlterId ?? '').trim()
+      : ''
     resetActiveSession({ emitSessionChange: false })
   }
 }
@@ -663,11 +718,20 @@ async function onSendMessage() {
   void scrollThreadToBottom()
 
   try {
-    const result = await runDeliberation({
-      sessionId: sessionId.value,
-      mode: 'freestyle',
-      message: outgoing
-    })
+    const result = await runDeliberation(
+      selectedAlterId.value
+        ? {
+            sessionId: sessionId.value,
+            mode: 'freestyle',
+            message: outgoing,
+            alterId: selectedAlterId.value
+          }
+        : {
+            sessionId: sessionId.value,
+            mode: 'freestyle',
+            message: outgoing
+          }
+    )
 
     messages.value = messages.value.map((message) =>
       message.id === tempUserId ? { ...message, id: result.userMessageId } : message
@@ -810,6 +874,7 @@ async function addEchoesSuggestion(path: string) {
 }
 
 onMounted(async () => {
+  await refreshAlterList()
   try {
     const status = await fetchSecondBrainConfigStatus()
     if (!status.configured) {
@@ -934,6 +999,16 @@ watch(
   { immediate: true }
 )
 
+watch(
+  () => `${props.requestedAlterNonce}::${props.requestedAlterId}`,
+  (value) => {
+    const [nonce] = value.split('::')
+    if (!nonce.trim()) return
+    void applySelectedAlter(props.requestedAlterId)
+  },
+  { immediate: true }
+)
+
 watch(contextPaths, (paths) => {
   if (!selectedEchoesContextPath.value) return
   if (!paths.includes(selectedEchoesContextPath.value)) {
@@ -949,6 +1024,21 @@ watch(contextPaths, (paths) => {
         <div class="title-wrap">
           <h2>{{ sessionTitle }}</h2>
           <p v-if="configError" class="sb-error">{{ configError }}</p>
+          <div class="sb-alter-row">
+            <label for="sb-alter-select">Alter</label>
+            <select
+              id="sb-alter-select"
+              class="sb-alter-select"
+              :value="selectedAlterId"
+              @change="void applySelectedAlter(($event.target as HTMLSelectElement).value)"
+            >
+              <option value="">Neutral</option>
+              <option v-for="item in availableAlters" :key="item.id" :value="item.id">
+                {{ item.name }}
+              </option>
+            </select>
+            <span v-if="alterSettings.show_badge_in_chat" class="sb-alter-badge">{{ activeAlterLabel }}</span>
+          </div>
         </div>
         <div class="sb-session-actions">
           <UiIconButton
@@ -1216,6 +1306,32 @@ watch(contextPaths, (paths) => {
   margin: 4px 0 0;
   color: var(--sb-danger-text);
   font-size: 12px;
+}
+
+.sb-alter-row {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--sb-text-muted);
+}
+
+.sb-alter-select {
+  border: 1px solid var(--sb-input-border);
+  border-radius: 8px;
+  background: var(--sb-input-bg);
+  color: var(--sb-text);
+  padding: 5px 8px;
+}
+
+.sb-alter-badge {
+  border: 1px solid var(--sb-button-border);
+  border-radius: 999px;
+  background: var(--sb-button-bg);
+  color: var(--sb-button-text);
+  padding: 3px 8px;
 }
 
 .sb-thread {

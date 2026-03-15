@@ -3,7 +3,7 @@ import type { SidebarMode } from './useWorkspaceState'
 
 type PaneAxis = 'row' | 'column'
 type PaneDirection = 'next' | 'previous'
-type SurfaceType = 'home' | 'cosmos' | 'second-brain-chat'
+type SurfaceType = 'home' | 'cosmos' | 'second-brain-chat' | 'alters'
 
 /** Groups shell workspace state and shell-owned UI persistence used by commands. */
 export type AppShellCommandsWorkspacePort = {
@@ -161,6 +161,15 @@ export function useAppShellCommands(options: UseAppShellCommandsOptions) {
     return true
   }
 
+  async function openAltersViewFromPalette() {
+    if (!options.workspacePort.hasWorkspace.value) {
+      options.workspacePort.notifyError('Open a workspace first.')
+      return false
+    }
+    options.panePort.openSurfaceInPane('alters')
+    return true
+  }
+
   function openFavoritesPanelFromPalette() {
     options.actionPort.closeOverflowMenu()
     persistSidebarModeSelection('favorites')
@@ -287,7 +296,7 @@ export function useAppShellCommands(options: UseAppShellCommandsOptions) {
     await options.actionPort.openQuickOpen('>')
   }
 
-  async function runLaunchpadQuickStart(kind: 'today' | 'second-brain' | 'cosmos' | 'command-palette') {
+  async function runLaunchpadQuickStart(kind: 'today' | 'second-brain' | 'cosmos' | 'command-palette' | 'alters') {
     if (kind === 'today') {
       await options.actionPort.openTodayNote()
       return
@@ -298,6 +307,10 @@ export function useAppShellCommands(options: UseAppShellCommandsOptions) {
     }
     if (kind === 'cosmos') {
       await openCosmosViewFromPalette()
+      return
+    }
+    if (kind === 'alters') {
+      await openAltersViewFromPalette()
       return
     }
     await openCommandPalette()
@@ -377,6 +390,7 @@ export function useAppShellCommands(options: UseAppShellCommandsOptions) {
     openCosmosViewFromPalette,
     openSecondBrainViewFromPalette,
     openHomeViewFromPalette,
+    openAltersViewFromPalette,
     openFavoritesPanelFromPalette,
     addActiveNoteToSecondBrainFromPalette,
     addActiveNoteToFavoritesFromPalette,

@@ -75,6 +75,7 @@ function normalizeSearchText(value: string) {
 
 const QUICK_OPEN_BROWSE_ACTION_IDS = [
   'open-home-view',
+  'open-alters-view',
   'open-today',
   'create-new-file',
   'open-favorites',

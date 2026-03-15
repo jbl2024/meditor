@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import EditorView from '../../../domains/editor/components/EditorView.vue'
 import CosmosPaneSurface from '../../../domains/cosmos/components/CosmosPaneSurface.vue'
 import SecondBrainPaneSurface from '../../../domains/second-brain/components/SecondBrainPaneSurface.vue'
+import AlterManagerView from '../../../domains/alters/components/AlterManagerView.vue'
 import WorkspaceLaunchpad from './WorkspaceLaunchpad.vue'
 import type { PaneTab } from '../../composables/useMultiPaneWorkspaceState'
 import type { FileEditorStatus } from './EditorPaneTabs.vue'
@@ -11,9 +12,11 @@ import type { DocumentSession } from '../../../domains/editor/composables/useDoc
 import type { ReadNoteSnapshotResult, SaveNoteResult, WorkspaceFsChange } from '../../../shared/api/apiTypes'
 import type {
   AppShellCosmosViewModel,
+  AppShellAltersViewModel,
   AppShellLaunchpadViewModel,
   AppShellSecondBrainViewModel
 } from '../../lib/appShellViewModels'
+import type { AppSettingsAlters } from '../../../shared/api/apiTypes'
 
 const props = defineProps<{
   paneId: string
@@ -37,6 +40,7 @@ const props = defineProps<{
   openLinkTarget: (target: string) => Promise<boolean>
   activeDocumentPath: string
   cosmos: AppShellCosmosViewModel
+  alters?: AppShellAltersViewModel
   secondBrain: AppShellSecondBrainViewModel
   launchpad: AppShellLaunchpadViewModel & {
     showExperience: boolean
@@ -73,9 +77,10 @@ const emit = defineEmits<{
   'launchpad-open-quick-open': []
   'launchpad-create-note': []
   'launchpad-open-recent-note': [path: string]
-  'launchpad-quick-start': [kind: 'today' | 'second-brain' | 'cosmos' | 'command-palette']
+  'launchpad-quick-start': [kind: 'today' | 'second-brain' | 'cosmos' | 'command-palette' | 'alters']
   'second-brain-context-changed': [paths: string[]]
   'second-brain-session-changed': [sessionId: string]
+  'alter-open-second-brain': [alterId: string]
 }>()
 
 type EditorSurfaceExposed = {
@@ -99,8 +104,32 @@ const editorSurfaceRef = ref<EditorSurfaceExposed | null>(null)
 const cosmosSurfaceRef = ref<{ resetView: () => void; focusNodeById: (nodeId: string) => boolean } | null>(null)
 const hasCosmosTab = computed(() => props.openTabs.some((tab) => tab.type === 'cosmos'))
 const hasSecondBrainTab = computed(() => props.openTabs.some((tab) => tab.type === 'second-brain-chat'))
+const hasAltersTab = computed(() => props.openTabs.some((tab) => tab.type === 'alters'))
 const showCosmosSurface = computed(() => props.activeTab?.type === 'cosmos')
 const showSecondBrainSurface = computed(() => props.activeTab?.type === 'second-brain-chat')
+const showAltersSurface = computed(() => props.activeTab?.type === 'alters')
+const defaultAlterSettings: AppSettingsAlters = {
+  default_mode: 'neutral',
+  show_badge_in_chat: true,
+  default_influence_intensity: 'balanced'
+}
+const secondBrainViewModel = computed(() => ({
+  workspacePath: props.secondBrain.workspacePath,
+  allWorkspaceFiles: props.secondBrain.allWorkspaceFiles,
+  requestedSessionId: props.secondBrain.requestedSessionId,
+  requestedSessionNonce: props.secondBrain.requestedSessionNonce,
+  requestedPrompt: props.secondBrain.requestedPrompt,
+  requestedPromptNonce: props.secondBrain.requestedPromptNonce,
+  requestedAlterId: props.secondBrain.requestedAlterId ?? '',
+  requestedAlterNonce: props.secondBrain.requestedAlterNonce ?? 0,
+  activeNotePath: props.secondBrain.activeNotePath,
+  echoesRefreshToken: props.secondBrain.echoesRefreshToken,
+  settings: props.secondBrain.settings ?? defaultAlterSettings
+}))
+const altersViewModel = computed<AppShellAltersViewModel>(() => props.alters ?? {
+  workspacePath: '',
+  settings: defaultAlterSettings
+})
 
 function withEditor<T>(run: (editor: EditorSurfaceExposed) => T, fallback: T): T {
   const editor = editorSurfaceRef.value
@@ -210,17 +239,28 @@ defineExpose<EditorSurfaceExposed>({
   <SecondBrainPaneSurface
     v-if="hasSecondBrainTab"
     v-show="showSecondBrainSurface"
-    :workspace-path="secondBrain.workspacePath"
-    :all-workspace-files="secondBrain.allWorkspaceFiles"
-    :requested-session-id="secondBrain.requestedSessionId"
-    :requested-session-nonce="secondBrain.requestedSessionNonce"
-    :requested-prompt="secondBrain.requestedPrompt"
-    :requested-prompt-nonce="secondBrain.requestedPromptNonce"
-    :active-note-path="secondBrain.activeNotePath"
-    :echoes-refresh-token="secondBrain.echoesRefreshToken"
+    :workspace-path="secondBrainViewModel.workspacePath"
+    :all-workspace-files="secondBrainViewModel.allWorkspaceFiles"
+    :requested-session-id="secondBrainViewModel.requestedSessionId"
+    :requested-session-nonce="secondBrainViewModel.requestedSessionNonce"
+    :requested-prompt="secondBrainViewModel.requestedPrompt"
+    :requested-prompt-nonce="secondBrainViewModel.requestedPromptNonce"
+    :requested-alter-id="secondBrainViewModel.requestedAlterId"
+    :requested-alter-nonce="secondBrainViewModel.requestedAlterNonce"
+    :active-note-path="secondBrainViewModel.activeNotePath"
+    :echoes-refresh-token="secondBrainViewModel.echoesRefreshToken"
+    :settings="secondBrainViewModel.settings"
     @open-note="emit('open-note', $event)"
     @context-changed="emit('second-brain-context-changed', $event)"
     @session-changed="emit('second-brain-session-changed', $event)"
+  />
+
+  <AlterManagerView
+    v-if="hasAltersTab"
+    v-show="showAltersSurface"
+    :workspace-path="altersViewModel.workspacePath"
+    :settings="altersViewModel.settings"
+    @open-second-brain="emit('alter-open-second-brain', $event)"
   />
 
   <WorkspaceLaunchpad

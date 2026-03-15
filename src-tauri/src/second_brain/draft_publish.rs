@@ -9,7 +9,7 @@ use rusqlite::params;
 
 use super::{
     super::{
-        active_workspace_root, now_ms, open_db, reindex_markdown_file_now_sync, AppError, Result,
+        active_workspace_root, ensure_index_schema, now_ms, open_db, reindex_markdown_file_now_sync, AppError, Result,
     },
     draft::{read_draft, write_draft},
     paths::{
@@ -25,6 +25,7 @@ use super::{
 
 pub(super) fn save_draft(payload: SaveDraftPayload) -> Result<()> {
     let conn = open_db()?;
+    ensure_index_schema(&conn)?;
     ensure_session_exists(&conn, &payload.session_id)?;
 
     write_draft(&payload.session_id, &payload.content_md)?;
@@ -39,6 +40,7 @@ pub(super) fn save_draft(payload: SaveDraftPayload) -> Result<()> {
 
 pub(super) fn append_message_to_draft(payload: AppendMessageToDraftPayload) -> Result<String> {
     let conn = open_db()?;
+    ensure_index_schema(&conn)?;
     ensure_session_exists(&conn, &payload.session_id)?;
 
     let message_content = conn
@@ -67,6 +69,7 @@ pub(super) fn publish_draft_to_new_note(
     payload: PublishDraftToNewNotePayload,
 ) -> Result<PublishDraftToNewNoteResult> {
     let conn = open_db()?;
+    ensure_index_schema(&conn)?;
     ensure_session_exists(&conn, &payload.session_id)?;
 
     let root = active_workspace_root()?;
@@ -101,6 +104,7 @@ pub(super) fn publish_draft_to_existing_note(
     payload: PublishDraftToExistingNotePayload,
 ) -> Result<()> {
     let conn = open_db()?;
+    ensure_index_schema(&conn)?;
     ensure_session_exists(&conn, &payload.session_id)?;
 
     let root = active_workspace_root()?;
@@ -126,6 +130,7 @@ pub(super) fn set_session_target_note_impl(
     payload: SetSessionTargetNotePayload,
 ) -> Result<SetSessionTargetNoteResult> {
     let conn = open_db()?;
+    ensure_index_schema(&conn)?;
     ensure_session_exists(&conn, &payload.session_id)?;
     let target_relative = normalize_workspace_markdown_relative(&payload.target_path)?;
     set_target_note_path(&conn, &payload.session_id, &target_relative)?;
@@ -138,6 +143,7 @@ pub(super) fn insert_assistant_into_target_note_impl(
     payload: InsertAssistantIntoTargetPayload,
 ) -> Result<InsertAssistantIntoTargetResult> {
     let conn = open_db()?;
+    ensure_index_schema(&conn)?;
     ensure_session_exists(&conn, &payload.session_id)?;
 
     let target_relative: String = conn
@@ -178,6 +184,7 @@ pub(super) fn insert_assistant_into_target_note_impl(
 
 pub(super) fn export_session_markdown(session_id: String) -> Result<ExportSessionMarkdownResult> {
     let conn = open_db()?;
+    ensure_index_schema(&conn)?;
     ensure_session_exists(&conn, &session_id)?;
 
     let payload = load_session(&conn, &session_id, read_draft(&session_id)?)?;

@@ -67,6 +67,36 @@ fn sqlite_error_tokens(err: &rusqlite::Error) -> String {
     tokens.join(" ")
 }
 
+fn table_has_column(conn: &Connection, table: &str, column: &str) -> bool {
+    let pragma = format!("PRAGMA table_info({table})");
+    let mut stmt = match conn.prepare(&pragma) {
+        Ok(stmt) => stmt,
+        Err(_) => return false,
+    };
+    let rows = match stmt.query_map([], |row| row.get::<_, String>(1)) {
+        Ok(rows) => rows,
+        Err(_) => return false,
+    };
+
+    for name in rows.flatten() {
+        if name == column {
+            return true;
+        }
+    }
+    false
+}
+
+fn schema_shape_needs_reset(conn: &Connection, current_version: i64) -> bool {
+    if current_version == 0 {
+        return false;
+    }
+    if current_version < 3 {
+        return false;
+    }
+
+    !table_has_column(conn, "second_brain_sessions", "alter_id")
+}
+
 pub(crate) fn ensure_index_schema(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         r#"
@@ -89,9 +119,12 @@ pub(crate) fn ensure_index_schema(conn: &Connection) -> Result<()> {
         .and_then(|value| value.parse::<i64>().ok())
         .unwrap_or(0);
 
-    if current_version != INDEX_SCHEMA_VERSION {
+    let reset_for_version = current_version != INDEX_SCHEMA_VERSION;
+    let reset_for_shape = !reset_for_version && schema_shape_needs_reset(conn, current_version);
+
+    if reset_for_version || reset_for_shape {
         log_index(&format!(
-            "schema:reset old_version={current_version} new_version={INDEX_SCHEMA_VERSION}"
+            "schema:reset old_version={current_version} new_version={INDEX_SCHEMA_VERSION} reset_for_shape={reset_for_shape}"
         ));
         conn.execute_batch(
             r#"
@@ -103,6 +136,14 @@ pub(crate) fn ensure_index_schema(conn: &Connection) -> Result<()> {
       DROP TABLE IF EXISTS note_links;
       DROP TABLE IF EXISTS note_properties;
       DROP TABLE IF EXISTS semantic_edges;
+      DROP TABLE IF EXISTS second_brain_session_targets;
+      DROP TABLE IF EXISTS second_brain_drafts;
+      DROP TABLE IF EXISTS second_brain_messages;
+      DROP TABLE IF EXISTS second_brain_context_items;
+      DROP TABLE IF EXISTS second_brain_sessions;
+      DROP TABLE IF EXISTS alter_revisions;
+      DROP TABLE IF EXISTS alter_inspirations;
+      DROP TABLE IF EXISTS alters;
       DELETE FROM internal_meta WHERE key = 'index_schema_version';
     "#,
         )?;
@@ -197,6 +238,7 @@ pub(crate) fn ensure_index_schema(conn: &Connection) -> Result<()> {
       title TEXT NOT NULL DEFAULT '',
       provider TEXT NOT NULL DEFAULT '',
       model TEXT NOT NULL DEFAULT '',
+      alter_id TEXT NOT NULL DEFAULT '',
       created_at_ms INTEGER NOT NULL DEFAULT 0,
       updated_at_ms INTEGER NOT NULL DEFAULT 0
     );
@@ -236,6 +278,54 @@ pub(crate) fn ensure_index_schema(conn: &Connection) -> Result<()> {
       target_note_path TEXT NOT NULL DEFAULT '',
       updated_at_ms INTEGER NOT NULL DEFAULT 0
     );
+
+    CREATE TABLE IF NOT EXISTS alters (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      icon TEXT NOT NULL DEFAULT '',
+      color TEXT NOT NULL DEFAULT '',
+      category TEXT NOT NULL DEFAULT '',
+      mission TEXT NOT NULL DEFAULT '',
+      principles_json TEXT NOT NULL DEFAULT '[]',
+      reflexes_json TEXT NOT NULL DEFAULT '[]',
+      values_json TEXT NOT NULL DEFAULT '[]',
+      critiques_json TEXT NOT NULL DEFAULT '[]',
+      blind_spots_json TEXT NOT NULL DEFAULT '[]',
+      system_hints_json TEXT NOT NULL DEFAULT '[]',
+      style_json TEXT NOT NULL DEFAULT '{}',
+      invocation_prompt TEXT NOT NULL DEFAULT '',
+      is_favorite INTEGER NOT NULL DEFAULT 0,
+      is_built_in INTEGER NOT NULL DEFAULT 0,
+      created_at_ms INTEGER NOT NULL DEFAULT 0,
+      updated_at_ms INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_alters_slug ON alters(slug);
+    CREATE INDEX IF NOT EXISTS idx_alters_updated ON alters(updated_at_ms DESC);
+
+    CREATE TABLE IF NOT EXISTS alter_inspirations (
+      alter_id TEXT NOT NULL,
+      inspiration_id TEXT NOT NULL,
+      label TEXT NOT NULL,
+      source_type TEXT NOT NULL,
+      weight REAL,
+      reference_id TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY(alter_id, inspiration_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_alter_inspirations_order
+      ON alter_inspirations(alter_id, sort_order ASC);
+
+    CREATE TABLE IF NOT EXISTS alter_revisions (
+      revision_id TEXT PRIMARY KEY,
+      alter_id TEXT NOT NULL,
+      snapshot_json TEXT NOT NULL,
+      reason TEXT NOT NULL DEFAULT '',
+      created_at_ms INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_alter_revisions_alter_created
+      ON alter_revisions(alter_id, created_at_ms DESC);
   "#,
     )?;
 

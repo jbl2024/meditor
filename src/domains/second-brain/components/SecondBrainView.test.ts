@@ -11,10 +11,17 @@ const api = vi.hoisted(() => ({
   removeDeliberationSession: vi.fn(),
   replaceSessionContext: vi.fn(),
   runDeliberation: vi.fn(),
+  setDeliberationSessionAlter: vi.fn(),
   subscribeSecondBrainStream: vi.fn()
 }))
 
 vi.mock('../lib/secondBrainApi', () => api)
+
+const altersApi = vi.hoisted(() => ({
+  fetchAlterList: vi.fn()
+}))
+
+vi.mock('../../alters/lib/altersApi', () => altersApi)
 
 const apiCore = vi.hoisted(() => ({
   computeEchoesPack: vi.fn()
@@ -100,6 +107,23 @@ describe('SecondBrainView', () => {
     api.replaceSessionContext.mockResolvedValue(42)
     api.createDeliberationSession.mockResolvedValue({ sessionId: 's-new', createdAtMs: 10 })
     api.removeDeliberationSession.mockResolvedValue(undefined)
+    api.setDeliberationSessionAlter.mockResolvedValue('')
+    altersApi.fetchAlterList.mockResolvedValue([
+      {
+        id: 'alter-strategist',
+        name: 'Strategist',
+        slug: 'strategist',
+        description: 'Stress tests plans.',
+        icon: null,
+        color: null,
+        category: 'Strategy',
+        mission: 'Challenge plans.',
+        is_favorite: true,
+        is_built_in: false,
+        revision_count: 1,
+        updated_at_ms: 1
+      }
+    ])
     apiCore.computeEchoesPack.mockImplementation(async (anchorPath: string) => ({
       anchorPath,
       generatedAtMs: 1,
@@ -535,6 +559,36 @@ describe('SecondBrainView', () => {
     expect(api.createDeliberationSession).toHaveBeenCalledWith({ contextPaths: [], title: '' })
     expect(api.loadDeliberationSession).not.toHaveBeenCalled()
     expect(mounted.root.textContent).not.toContain('No session selected')
+
+    mounted.app.unmount()
+  })
+
+  it('includes the selected Alter when creating a new session', async () => {
+    const mounted = mountView()
+    for (let i = 0; i < 6; i += 1) {
+      await flushUi()
+    }
+
+    const select = mounted.root.querySelector<HTMLSelectElement>('#sb-alter-select')
+    expect(select).toBeTruthy()
+    if (!select) return
+
+    select.value = 'alter-strategist'
+    select.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushUi()
+
+    const createBtn = mounted.root.querySelector<HTMLButtonElement>('.sb-session-create-btn')
+    expect(createBtn).toBeTruthy()
+    if (!createBtn) return
+
+    createBtn.click()
+    await flushUi()
+
+    expect(api.createDeliberationSession).toHaveBeenCalledWith({
+      contextPaths: [],
+      title: '',
+      alterId: 'alter-strategist'
+    })
 
     mounted.app.unmount()
   })

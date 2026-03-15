@@ -47,12 +47,14 @@ function tabTitle(tab: PaneTab): string {
   if (tab.type === 'document') return fileName(tab.path)
   if (tab.type === 'home') return 'Home'
   if (tab.type === 'cosmos') return 'Cosmos'
+  if (tab.type === 'alters') return 'Alters'
   return 'Second Brain'
 }
 
 function tabIcon(tab: PaneTab): string {
   if (tab.type === 'cosmos') return ''
   if (tab.type === 'second-brain-chat') return ''
+  if (tab.type === 'alters') return ''
   return ''
 }
 </script>
@@ -81,6 +83,9 @@ function tabIcon(tab: PaneTab): string {
           <ShareIcon />
         </span>
         <span v-else-if="tab.type === 'second-brain-chat'" class="pane-tab-icon pane-tab-icon--hero">
+          <SparklesIcon />
+        </span>
+        <span v-else-if="tab.type === 'alters'" class="pane-tab-icon pane-tab-icon--hero">
           <SparklesIcon />
         </span>
         <span v-else-if="tab.icon" class="pane-tab-icon">{{ tab.icon }}</span>

@@ -4,7 +4,7 @@ use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 
-use super::{now_ms, open_db, settings, AppError, Result};
+use super::{ensure_index_schema, now_ms, open_db, settings, AppError, Result};
 
 pub mod config;
 mod context;
@@ -31,7 +31,7 @@ use draft_publish::{
 use message_flow::send_message;
 use openai_codex::{discover_models, has_codex_tokens, CodexDiscoveredModel};
 use pulse_flow::run_pulse;
-use session_store::{create_session, delete_session, list_sessions, load_session, upsert_context};
+use session_store::{create_session, delete_session, list_sessions, load_session, set_session_alter_id, upsert_context};
 use stream_control::request_stream_cancel;
 
 const SESSION_PREFIX: &str = "sb";
@@ -50,6 +50,7 @@ pub struct AttachmentMeta {
 pub struct CreateSessionPayload {
     pub title: Option<String>,
     pub context_paths: Vec<String>,
+    pub alter_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -74,8 +75,20 @@ pub struct SendMessagePayload {
     pub session_id: String,
     pub mode: String,
     pub message: String,
+    pub alter_id: Option<String>,
     #[serde(default)]
     pub attachments: Vec<AttachmentMeta>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SetSessionAlterPayload {
+    pub session_id: String,
+    pub alter_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SetSessionAlterResult {
+    pub alter_id: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -316,6 +329,7 @@ pub fn create_second_brain_session(payload: CreateSessionPayload) -> Result<Crea
     })?;
 
     let conn = open_db()?;
+    ensure_index_schema(&conn)?;
     let session_id = next_id(SESSION_PREFIX);
     let title = payload
         .title
@@ -326,7 +340,14 @@ pub fn create_second_brain_session(payload: CreateSessionPayload) -> Result<Crea
         .to_string();
 
     let (created_at_ms, _updated_at_ms) =
-        create_session(&conn, &session_id, &title, &active.provider, &active.model)?;
+        create_session(
+            &conn,
+            &session_id,
+            &title,
+            &active.provider,
+            &active.model,
+            payload.alter_id.as_deref().unwrap_or("").trim(),
+        )?;
 
     let context_items = load_context_items(&payload.context_paths)?;
     let _ = upsert_context(&conn, &session_id, &context_items)?;
@@ -339,16 +360,35 @@ pub fn create_second_brain_session(payload: CreateSessionPayload) -> Result<Crea
 }
 
 #[tauri::command]
+pub fn set_second_brain_session_alter(payload: SetSessionAlterPayload) -> Result<SetSessionAlterResult> {
+    let conn = open_db()?;
+    ensure_index_schema(&conn)?;
+    if !session_exists(&conn, &payload.session_id)? {
+        return Err(AppError::InvalidOperation(
+            "Second Brain session not found.".to_string(),
+        ));
+    }
+    let alter_id = payload.alter_id.unwrap_or_default().trim().to_string();
+    if !alter_id.is_empty() {
+        let _ = crate::alters::resolve_invocation_prompt(&conn, Some(&alter_id))?;
+    }
+    set_session_alter_id(&conn, &payload.session_id, &alter_id)?;
+    Ok(SetSessionAlterResult { alter_id })
+}
+
+#[tauri::command]
 pub fn list_second_brain_sessions(
     limit: Option<usize>,
 ) -> Result<Vec<session_store::SessionSummary>> {
     let conn = open_db()?;
+    ensure_index_schema(&conn)?;
     list_sessions(&conn, limit.unwrap_or(80).clamp(1, 250))
 }
 
 #[tauri::command]
 pub fn load_second_brain_session(session_id: String) -> Result<session_store::SessionPayload> {
     let conn = open_db()?;
+    ensure_index_schema(&conn)?;
     let draft_content = read_draft(&session_id)?;
     load_session(&conn, &session_id, draft_content)
 }

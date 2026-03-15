@@ -8,6 +8,7 @@ import type { WikilinkAnchor } from '../../../domains/editor/lib/wikilinks'
 import type { ReadNoteSnapshotResult, SaveNoteResult, WorkspaceFsChange } from '../../../shared/api/apiTypes'
 import type {
   AppShellCosmosViewModel,
+  AppShellAltersViewModel,
   AppShellLaunchpadViewModel,
   AppShellSecondBrainViewModel
 } from '../../lib/appShellViewModels'
@@ -50,6 +51,7 @@ const props = defineProps<{
   savePropertyTypeSchema: (schema: Record<string, string>) => Promise<void>
   openLinkTarget: (target: string) => Promise<boolean>
   cosmos: AppShellCosmosViewModel
+  alters: AppShellAltersViewModel
   secondBrain: AppShellSecondBrainViewModel
   launchpad: AppShellLaunchpadViewModel
 }>()
@@ -89,9 +91,10 @@ const emit = defineEmits<{
   'launchpad-open-quick-open': []
   'launchpad-create-note': []
   'launchpad-open-recent-note': [path: string]
-  'launchpad-quick-start': [kind: 'today' | 'second-brain' | 'cosmos' | 'command-palette']
+  'launchpad-quick-start': [kind: 'today' | 'second-brain' | 'cosmos' | 'command-palette' | 'alters']
   'second-brain-context-changed': [paths: string[]]
   'second-brain-session-changed': [sessionId: string]
+  'alter-open-second-brain': [alterId: string]
 }>()
 
 // Keep instance refs out of Vue reactivity to avoid render-feedback loops.
@@ -346,6 +349,7 @@ onBeforeUnmount(() => {
           showWizardAction: launchpad.showWizardAction
         }"
         :cosmos="cosmos"
+        :alters="alters"
         :second-brain="secondBrain"
         :get-status="getStatus"
         :openFile="openFile"
@@ -389,6 +393,7 @@ onBeforeUnmount(() => {
         @launchpad-quick-start="emit('launchpad-quick-start', $event)"
         @second-brain-context-changed="emit('second-brain-context-changed', $event)"
         @second-brain-session-changed="emit('second-brain-session-changed', $event)"
+        @alter-open-second-brain="emit('alter-open-second-brain', $event)"
       />
     </section>
 

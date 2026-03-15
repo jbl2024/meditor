@@ -30,6 +30,7 @@ import {
   writeTextFile,
   listenWorkspaceFsChanged
 } from '../shared/api/workspaceApi'
+import { readAppSettings } from '../shared/api/settingsApi'
 import { readNoteSnapshot as readNoteSnapshotIpc, saveNoteBuffer as saveNoteBufferIpc } from '../shared/api/editorSyncApi'
 import {
   addFavorite,
@@ -57,6 +58,7 @@ import {
   writePropertyTypeSchema
 } from '../shared/api/indexApi'
 import type { FileVersion, PathMove, ReadNoteSnapshotResult, SaveNoteResult, SemanticLink, WorkspaceFsChange } from '../shared/api/apiTypes'
+import type { AppSettingsAlters } from '../shared/api/apiTypes'
 import {
   bindPendingOpenTrace,
   findOpenTrace,
@@ -167,6 +169,7 @@ import { useWorkspaceState, type SidebarMode } from './composables/useWorkspaceS
 import { useFavoritesController } from '../domains/favorites/composables/useFavoritesController'
 import { rewritePathWithMoves, sortPathMoves } from './lib/pathMoves'
 import type {
+  AppShellAltersViewModel,
   AppShellCosmosViewModel,
   AppShellLaunchpadViewModel,
   AppShellSecondBrainViewModel
@@ -258,6 +261,11 @@ const semanticLinksLoading = ref(false)
 const propertiesPreview = ref<PropertyPreviewRow[]>([])
 const propertyParseErrorCount = ref(0)
 const virtualDocs = ref<Record<string, VirtualDoc>>({})
+const altersSettings = ref<AppSettingsAlters>({
+  default_mode: 'neutral',
+  show_badge_in_chat: true,
+  default_influence_intensity: 'balanced'
+})
 const overflowMenuOpen = ref(false)
 const editorZoom = ref(1)
 const workspaceMutationEchoesToken = ref(0)
@@ -596,8 +604,11 @@ const {
   secondBrainRequestedSessionNonce,
   secondBrainRequestedPrompt,
   secondBrainRequestedPromptNonce,
+  secondBrainRequestedAlterId,
+  secondBrainRequestedAlterNonce,
   setSecondBrainSessionId,
   setSecondBrainPrompt,
+  setSecondBrainAlterId,
   addActiveNoteToSecondBrain,
   onSecondBrainContextChanged,
   onSecondBrainSessionChanged
@@ -687,40 +698,41 @@ const paletteActionPriority: Record<string, number> = {
   'open-specific-date': 6,
   'open-cosmos-view': 7,
   'open-second-brain-view': 8,
-  'add-active-note-to-second-brain': 9,
-  'add-active-note-to-favorites': 10,
-  'remove-active-note-from-favorites': 11,
-  'open-settings': 12,
-  'open-note-in-cosmos': 13,
-  'reveal-in-explorer': 14,
-  'show-shortcuts': 15,
-  'create-new-file': 16,
-  'close-other-tabs': 17,
-  'close-all-tabs': 18,
-  'close-all-tabs-current-pane': 19,
-  'split-pane-right': 20,
-  'split-pane-down': 21,
-  'focus-pane-1': 22,
-  'focus-pane-2': 23,
-  'focus-pane-3': 24,
-  'focus-pane-4': 25,
-  'focus-next-pane': 26,
-  'move-tab-next-pane': 27,
-  'close-active-pane': 28,
-  'join-panes': 29,
-  'reset-pane-layout': 30,
-  'zoom-in': 31,
-  'zoom-out': 32,
-  'zoom-reset': 33,
-  'theme-select': 34,
-  'theme-system': 35,
-  'theme-tomosona-light': 36,
-  'theme-tomosona-dark': 37,
-  'theme-github-light': 38,
-  'theme-tokyo-night': 39,
-  'theme-catppuccin-latte': 40,
-  'theme-catppuccin-mocha': 41,
-  'close-workspace': 42
+  'open-alters-view': 9,
+  'add-active-note-to-second-brain': 10,
+  'add-active-note-to-favorites': 11,
+  'remove-active-note-from-favorites': 12,
+  'open-settings': 13,
+  'open-note-in-cosmos': 14,
+  'reveal-in-explorer': 15,
+  'show-shortcuts': 16,
+  'create-new-file': 17,
+  'close-other-tabs': 18,
+  'close-all-tabs': 19,
+  'close-all-tabs-current-pane': 20,
+  'split-pane-right': 21,
+  'split-pane-down': 22,
+  'focus-pane-1': 23,
+  'focus-pane-2': 24,
+  'focus-pane-3': 25,
+  'focus-pane-4': 26,
+  'focus-next-pane': 27,
+  'move-tab-next-pane': 28,
+  'close-active-pane': 29,
+  'join-panes': 30,
+  'reset-pane-layout': 31,
+  'zoom-in': 32,
+  'zoom-out': 33,
+  'zoom-reset': 34,
+  'theme-select': 35,
+  'theme-system': 36,
+  'theme-tomosona-light': 37,
+  'theme-tomosona-dark': 38,
+  'theme-github-light': 39,
+  'theme-tokyo-night': 40,
+  'theme-catppuccin-latte': 41,
+  'theme-catppuccin-mocha': 42,
+  'close-workspace': 43
 }
 
 const paletteActions = computed<PaletteAction[]>(() => [
@@ -747,6 +759,12 @@ const paletteActions = computed<PaletteAction[]>(() => [
     id: 'open-second-brain-view',
     label: 'Open Second Brain View',
     run: () => openSecondBrainViewFromPalette(),
+    closeBeforeRun: true
+  },
+  {
+    id: 'open-alters-view',
+    label: 'Open Alters View',
+    run: () => openAltersViewFromPalette(),
     closeBeforeRun: true
   },
   {
@@ -1132,8 +1150,15 @@ const secondBrainPaneViewModel = computed<AppShellSecondBrainViewModel>(() => ({
   requestedSessionNonce: secondBrainRequestedSessionNonce.value,
   requestedPrompt: secondBrainRequestedPrompt.value,
   requestedPromptNonce: secondBrainRequestedPromptNonce.value,
+  requestedAlterId: secondBrainRequestedAlterId.value,
+  requestedAlterNonce: secondBrainRequestedAlterNonce.value,
   activeNotePath: activeFilePath.value,
-  echoesRefreshToken: workspaceMutationEchoesToken.value
+  echoesRefreshToken: workspaceMutationEchoesToken.value,
+  settings: altersSettings.value
+}))
+const altersPaneViewModel = computed<AppShellAltersViewModel>(() => ({
+  workspacePath: filesystem.workingFolderPath.value,
+  settings: altersSettings.value
 }))
 const launchpadPaneViewModel = computed<AppShellLaunchpadViewModel>(() => ({
   workspaceLabel: filesystem.workingFolderPath.value ? basenameLabel(filesystem.workingFolderPath.value) : '',
@@ -1469,8 +1494,8 @@ const navigationPanePort = {
   openPathInPane: (path: string, paneId?: string) => multiPane.openPathInPane(path, paneId),
   revealDocumentInPane: (path: string, paneId?: string) => multiPane.revealDocumentInPane(path, paneId),
   setActivePathInPane: (paneId: string, path: string) => multiPane.setActivePathInPane(paneId, path),
-  openSurfaceInPane: (type: 'home' | 'cosmos' | 'second-brain-chat', paneId?: string) => multiPane.openSurfaceInPane(type, paneId),
-  findPaneContainingSurface: (type: 'home' | 'cosmos' | 'second-brain-chat') => multiPane.findPaneContainingSurface(type)
+  openSurfaceInPane: (type: 'home' | 'cosmos' | 'second-brain-chat' | 'alters', paneId?: string) => multiPane.openSurfaceInPane(type, paneId),
+  findPaneContainingSurface: (type: 'home' | 'cosmos' | 'second-brain-chat' | 'alters') => multiPane.findPaneContainingSurface(type)
 }
 
 const navigationHistoryPort = {
@@ -1616,6 +1641,7 @@ const {
   openCosmosViewFromPalette,
   openSecondBrainViewFromPalette,
   openHomeViewFromPalette,
+  openAltersViewFromPalette,
   openFavoritesPanelFromPalette,
   addActiveNoteToSecondBrainFromPalette,
   addActiveNoteToFavoritesFromPalette,
@@ -2039,13 +2065,39 @@ async function openPulseContextInSecondBrain(payload: {
   }
 }
 
+async function openAlterInSecondBrain(alterId: string) {
+  if (!filesystem.hasWorkspace.value) {
+    filesystem.errorMessage.value = 'Open a workspace first.'
+    return false
+  }
+  setSecondBrainAlterId(alterId, { bumpNonce: true })
+  await openSecondBrainViewFromPalette()
+  return true
+}
+
 function onSettingsSaved(result: { path: string; embeddings_changed: boolean }) {
   filesystem.notifySuccess(`Settings saved at ${result.path}.`)
+  if ('alters' in result) {
+    altersSettings.value = (result as typeof result & { alters: AppSettingsAlters }).alters
+  }
   if (result.embeddings_changed) {
     markIndexOutOfSync()
     filesystem.notifyInfo('Embedding settings changed. Rebuild index to resync semantic search.')
   }
   closeSettingsModal()
+}
+
+async function syncAlterSettingsFromDisk() {
+  try {
+    const settings = await readAppSettings()
+    altersSettings.value = settings.alters
+  } catch {
+    altersSettings.value = {
+      default_mode: 'neutral',
+      show_badge_in_chat: true,
+      default_influence_intensity: 'balanced'
+    }
+  }
 }
 
 async function ensureRelativeFolder(relativePath: string) {
@@ -3095,6 +3147,7 @@ onMounted(() => {
   window.addEventListener('resize', onWindowResize)
   window.addEventListener('mousemove', onPointerMove)
   window.addEventListener('mouseup', stopResize)
+  void syncAlterSettingsFromDisk()
   void workspaceLifecycle.start()
 })
 
@@ -3232,6 +3285,7 @@ onBeforeUnmount(() => {
               :savePropertyTypeSchema="savePropertyTypeSchema"
               :openLinkTarget="openWikilinkTarget"
               :cosmos="cosmosPaneViewModel"
+              :alters="altersPaneViewModel"
               :second-brain="secondBrainPaneViewModel"
               :launchpad="launchpadPaneViewModel"
               @pane-focus="multiPane.setActivePane($event.paneId)"
@@ -3245,6 +3299,7 @@ onBeforeUnmount(() => {
               @external-reload="filesystem.notifyInfo(`Reloaded ${basenameLabel($event.path)} from disk.`)"
               @second-brain-context-changed="onSecondBrainContextChanged"
               @second-brain-session-changed="onSecondBrainSessionChanged"
+              @alter-open-second-brain="void openAlterInSecondBrain($event)"
               @cosmos-query-update="onCosmosQueryUpdate"
               @cosmos-search-enter="onCosmosSearchEnter"
               @cosmos-select-match="onCosmosMatchClick"
