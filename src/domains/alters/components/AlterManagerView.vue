@@ -811,9 +811,11 @@ onMounted(() => {
 .alter-manager {
   display: grid;
   grid-template-columns: 20rem minmax(0, 1fr);
-  min-height: 100%;
+  height: 100%;
+  min-height: 0;
   gap: 0.75rem;
   padding: 0.75rem;
+  overflow: auto;
   background:
     radial-gradient(circle at top left, color-mix(in srgb, var(--accent-soft) 24%, transparent), transparent 34%),
     linear-gradient(180deg, color-mix(in srgb, var(--surface-muted) 40%, var(--surface-bg)), var(--surface-bg));
@@ -822,12 +824,15 @@ onMounted(() => {
 .alter-sidebar,
 .alter-main {
   min-width: 0;
+  min-height: 0;
 }
 
 .alter-sidebar {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  overflow: auto;
+  padding-right: 0.15rem;
 }
 
 .alter-sidebar__panel,
@@ -866,10 +871,16 @@ onMounted(() => {
   margin: 0;
 }
 
+.alter-sidebar__title {
+  font-size: 0.92rem;
+  line-height: 1.15;
+  font-weight: 600;
+}
+
 .alter-kicker,
 .alter-section-kicker {
   margin: 0 0 0.2rem;
-  font-size: 0.68rem;
+  font-size: 0.64rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-dim);
@@ -882,8 +893,8 @@ onMounted(() => {
 .alter-wizard__intro p {
   margin: 0;
   color: var(--text-muted);
-  line-height: 1.4;
-  font-size: 0.94rem;
+  line-height: 1.3;
+  font-size: 0.84rem;
 }
 
 .alter-sidebar__meta,
@@ -938,19 +949,26 @@ onMounted(() => {
   margin: 0;
   color: var(--text-muted);
   line-height: 1.35;
-  font-size: 0.92rem;
+  font-size: 0.84rem;
 }
 
 .alter-main {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  overflow: auto;
+  padding-right: 0.15rem;
 }
 
 .alter-hero__body {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+}
+
+.alter-hero h1 {
+  font-size: 1.15rem;
+  line-height: 1.1;
 }
 
 .alter-hero__actions,
@@ -974,7 +992,7 @@ onMounted(() => {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   line-height: 1.45;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
 }
 
 .alter-revision-list {
@@ -1119,11 +1137,7 @@ onMounted(() => {
 .alter-main h3,
 .alter-sidebar h3 {
   line-height: 1.2;
-}
-
-.alter-hero h1 {
-  font-size: 1.65rem;
-  line-height: 1.05;
+  font-size: 0.88rem;
 }
 
 @media (max-width: 1180px) {
