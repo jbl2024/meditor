@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { onBeforeUnmount, watch } from 'vue'
+
 /**
  * Shared modal shell for standard application dialogs.
  *
@@ -45,6 +47,33 @@ function close() {
   emit('update:modelValue', false)
   emit('close')
 }
+
+/**
+ * Owns Escape handling for the shared modal shell so content-specific focus
+ * behavior does not decide whether dialogs can be dismissed.
+ */
+function onDocumentKeydown(event: KeyboardEvent) {
+  if (!props.modelValue) return
+  if (event.key !== 'Escape') return
+  event.preventDefault()
+  close()
+}
+
+watch(
+  () => props.modelValue,
+  (open) => {
+    if (open) {
+      document.addEventListener('keydown', onDocumentKeydown)
+      return
+    }
+    document.removeEventListener('keydown', onDocumentKeydown)
+  },
+  { immediate: true }
+)
+
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', onDocumentKeydown)
+})
 </script>
 
 <template>

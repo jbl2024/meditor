@@ -41,4 +41,34 @@ describe('UiModalShell', () => {
     expect(events).toEqual(['model:false', 'close'])
     app.unmount()
   })
+
+  it('closes from Escape', () => {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+    const open = ref(true)
+    const events: string[] = []
+
+    const app = createApp(defineComponent({
+      setup() {
+        return () => h(UiModalShell, {
+          modelValue: open.value,
+          title: 'Test dialog',
+          onClose: () => events.push('close'),
+          'onUpdate:modelValue': (value: boolean) => {
+            open.value = value
+            events.push(`model:${value}`)
+          }
+        }, {
+          default: () => h('p', 'Body')
+        })
+      }
+    }))
+
+    app.mount(root)
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+
+    expect(events).toEqual(['model:false', 'close'])
+    app.unmount()
+  })
 })

@@ -529,6 +529,7 @@ Events:
 
 Behavior:
 - clicking the backdrop closes the modal
+- pressing `Escape` closes the modal
 - the shell now constrains panel height and makes the body scrollable when content overflows
 
 Accessibility:
