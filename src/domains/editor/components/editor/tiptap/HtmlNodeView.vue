@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { NodeViewWrapper } from '@tiptap/vue-3'
+import { NodeSelection } from '@tiptap/pm/state'
 import { common, createLowlight } from 'lowlight'
 import { sanitizeHtmlForPreview } from '../../../../../shared/lib/htmlSanitizer'
 import { parseWikilinkTarget } from '../../../lib/wikilinks'
@@ -17,9 +18,14 @@ type HastNode = {
 }
 
 const props = defineProps<{
-  node: { attrs: { html?: string } }
+  node: { attrs: { html?: string; autoEdit?: boolean } }
   updateAttributes: (attrs: Record<string, unknown>) => void
-  editor: { isEditable: boolean }
+  editor: {
+    isEditable: boolean
+    state?: { doc: unknown; selection?: { from?: number } }
+    view?: { dispatch: (transaction: unknown) => void; focus?: (options?: FocusOptions) => void }
+  }
+  getPos?: () => number | undefined
 }>()
 
 const sourceTextarea = ref<HTMLTextAreaElement | null>(null)
@@ -29,6 +35,52 @@ const showSource = ref(false)
 const html = computed(() => String(props.node.attrs.html ?? ''))
 const sanitizedPreview = computed(() => toPreviewHtml(html.value))
 const highlightedSource = computed(() => highlightHtmlSource(html.value))
+
+function openSourceEditor(options?: { placeCaretAtEnd?: boolean }) {
+  if (!props.editor.isEditable) return
+  focusHtmlNodeSelection()
+  showSource.value = true
+  void nextTick().then(() => {
+    focusHtmlNodeSelection()
+    props.editor.view?.focus?.({ preventScroll: true })
+    sourceTextarea.value?.focus({ preventScroll: true })
+    if (!options?.placeCaretAtEnd) return
+    const size = sourceTextarea.value?.value.length ?? 0
+    sourceTextarea.value?.setSelectionRange(size, size)
+  }).then(() => nextTick()).then(() => {
+    if (document.activeElement === sourceTextarea.value) return
+    focusHtmlNodeSelection()
+    props.editor.view?.focus?.({ preventScroll: true })
+    sourceTextarea.value?.focus({ preventScroll: true })
+    if (!options?.placeCaretAtEnd) return
+    const size = sourceTextarea.value?.value.length ?? 0
+    sourceTextarea.value?.setSelectionRange(size, size)
+  })
+}
+
+function focusHtmlNodeSelection() {
+  const pos = props.getPos?.()
+  const state = props.editor.state
+  const view = props.editor.view
+  if (typeof pos !== 'number' || !state || !view?.dispatch) return
+  try {
+    const selection = NodeSelection.create(state.doc as never, pos)
+    const currentFrom = state.selection?.from
+    if (currentFrom === selection.from) return
+    const transaction = (state as { tr?: { setSelection: (selection: NodeSelection) => unknown } }).tr
+    if (!transaction?.setSelection) return
+    view.dispatch(transaction.setSelection(selection))
+  } catch {
+    // Ignore focus anchoring failures and fall back to direct textarea focus.
+  }
+}
+
+function consumeAutoEdit() {
+  if (!props.editor.isEditable) return
+  if (!props.node.attrs.autoEdit) return
+  openSourceEditor({ placeCaretAtEnd: true })
+  props.updateAttributes({ autoEdit: false })
+}
 
 function escapeHtml(value: string): string {
   return value
@@ -137,10 +189,11 @@ function onEditorToggle(event?: MouseEvent) {
     event.preventDefault()
     event.stopPropagation()
   }
-  showSource.value = !showSource.value
   if (showSource.value) {
-    void nextTick().then(() => sourceTextarea.value?.focus())
+    showSource.value = false
+    return
   }
+  openSourceEditor()
 }
 
 function syncHighlightedScroll() {
@@ -245,6 +298,14 @@ function onEditorKeydown(event: KeyboardEvent) {
     showSource.value = false
   }
 }
+
+onMounted(() => {
+  consumeAutoEdit()
+})
+
+watch(() => props.node.attrs.autoEdit, () => {
+  consumeAutoEdit()
+})
 </script>
 
 <template>
@@ -324,7 +385,7 @@ function onEditorKeydown(event: KeyboardEvent) {
 .tomosona-html-preview {
   border: 1px solid transparent;
   border-radius: 0.7rem;
-  min-height: 3.5rem;
+  min-height: 2.25rem;
   transition: border-color 120ms ease, background-color 120ms ease;
 }
 

@@ -84,7 +84,7 @@ describe('useEditorSlashInsertion', () => {
     expect(chain.deleteRange).toHaveBeenCalledWith({ from: 2, to: 7 })
     expect(chain.insertContent).toHaveBeenCalledWith({
       type: 'htmlBlock',
-      attrs: { html: '<div>test</div>' }
+      attrs: { html: '<div>test</div>', autoEdit: true }
     })
   })
 

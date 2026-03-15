@@ -12,6 +12,10 @@ export const HtmlNode = Node.create({
     return {
       html: {
         default: ''
+      },
+      autoEdit: {
+        default: false,
+        renderHTML: () => ({})
       }
     }
   },

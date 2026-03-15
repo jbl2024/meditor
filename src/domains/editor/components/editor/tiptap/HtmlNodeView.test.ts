@@ -8,22 +8,26 @@ async function flush() {
   await nextTick()
 }
 
-function mountHarness(options?: { editable?: boolean; initialHtml?: string }) {
+function mountHarness(options?: { editable?: boolean; initialHtml?: string; initialAutoEdit?: boolean }) {
   const root = document.createElement('div')
   document.body.appendChild(root)
 
   const html = ref(options?.initialHtml ?? '<div>Hello</div>')
+  const autoEdit = ref(options?.initialAutoEdit ?? false)
   const editable = options?.editable ?? true
   const updateAttributes = vi.fn((attrs: Record<string, unknown>) => {
     if (typeof attrs.html === 'string') {
       html.value = attrs.html
+    }
+    if (typeof attrs.autoEdit === 'boolean') {
+      autoEdit.value = attrs.autoEdit
     }
   })
 
   const Harness = defineComponent({
     setup() {
       return () => h(HtmlNodeView, {
-        node: { attrs: { html: html.value } },
+        node: { attrs: { html: html.value, autoEdit: autoEdit.value } },
         updateAttributes,
         editor: { isEditable: editable }
       })
@@ -34,7 +38,7 @@ function mountHarness(options?: { editable?: boolean; initialHtml?: string }) {
   app.provide('onDragStart', () => {})
   app.provide('decorationClasses', ref(''))
   app.mount(root)
-  return { app, root, html, updateAttributes }
+  return { app, root, html, autoEdit, updateAttributes }
 }
 
 describe('HtmlNodeView', () => {
@@ -103,6 +107,21 @@ describe('HtmlNodeView', () => {
     editorToggle.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
     await flush()
     expect(wrapper.classList.contains('is-editing')).toBe(false)
+
+    harness.app.unmount()
+  })
+
+  it('opens source mode and focuses textarea when auto-edit is requested', async () => {
+    const harness = mountHarness({ initialHtml: '<div>\n  \n</div>', initialAutoEdit: true })
+    await flush()
+
+    const wrapper = harness.root.querySelector('.tomosona-html-node') as HTMLElement
+    const textarea = harness.root.querySelector('.tomosona-html-textarea') as HTMLTextAreaElement
+    expect(wrapper.classList.contains('is-editing')).toBe(true)
+    expect(textarea).toBeTruthy()
+    expect(document.activeElement).toBe(textarea)
+    expect(harness.updateAttributes).toHaveBeenCalledWith({ autoEdit: false })
+    expect(harness.autoEdit.value).toBe(false)
 
     harness.app.unmount()
   })

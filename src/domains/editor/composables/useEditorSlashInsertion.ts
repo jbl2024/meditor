@@ -192,7 +192,7 @@ export function useEditorSlashInsertion(options: UseEditorSlashInsertionOptions)
         case 'code':
           return { type: 'codeBlock', attrs: { language: '' }, content: [] }
         case 'html':
-          return { type: 'htmlBlock', attrs: { html: String(data.html ?? '') } }
+          return { type: 'htmlBlock', attrs: { html: String(data.html ?? ''), autoEdit: true } }
         case 'quote':
           return { type: 'quoteBlock', attrs: { text: String(data.text ?? '') } }
         case 'delimiter':
