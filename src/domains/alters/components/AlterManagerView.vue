@@ -500,10 +500,6 @@ onMounted(() => {
             <div class="alter-detail__identity">
               <h2 class="alter-detail__title">{{ activeAlter.name }}</h2>
               <p class="alter-detail__description">{{ activeAlter.description || activeAlter.mission }}</p>
-              <div class="alter-detail__tags">
-                <UiBadge v-for="item in activeAlterSummary" :key="item" tone="neutral" size="sm">{{ item }}</UiBadge>
-                <UiBadge v-if="activeAlter.category" tone="accent" size="sm">{{ activeAlter.category }}</UiBadge>
-              </div>
             </div>
 
             <div class="alter-detail__header-actions">
@@ -513,6 +509,11 @@ onMounted(() => {
               <UiButton size="sm" variant="secondary" @click="manager.openEditWizard()">Edit</UiButton>
               <UiButton size="sm" variant="ghost" @click="void manager.duplicateActiveAlter()">Duplicate</UiButton>
               <UiButton size="sm" variant="danger" @click="void manager.deleteActiveAlter()">Delete</UiButton>
+            </div>
+
+            <div class="alter-detail__tags">
+              <UiBadge v-for="item in activeAlterSummary" :key="item" tone="neutral" size="xs">{{ item }}</UiBadge>
+              <UiBadge v-if="activeAlter.category" tone="accent" size="xs">{{ activeAlter.category }}</UiBadge>
             </div>
           </header>
 
@@ -1335,9 +1336,9 @@ onMounted(() => {
 
 /* Detail Header */
 .alter-detail__hero {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
   gap: 1rem;
   padding: 1rem 1.25rem;
   border-bottom: 1px solid var(--panel-border);
@@ -1362,17 +1363,24 @@ onMounted(() => {
 
 .alter-detail__description {
   margin: 0;
-  font-size: 0.88rem;
+  font-size: 0.82rem;
   color: var(--text-muted);
-  line-height: 1.45;
+  line-height: 1.38;
   max-width: 52rem;
 }
 
 .alter-detail__tags {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  margin-top: 0.25rem;
+  flex-wrap: nowrap;
+  gap: 0.28rem;
+  grid-column: 1 / -1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.alter-detail__tags::-webkit-scrollbar {
+  display: none;
 }
 
 .alter-detail__header-actions {
@@ -1760,7 +1768,6 @@ onMounted(() => {
     grid-template-columns: 1fr;
   }
 
-  .alter-detail__hero,
   .alter-detail__cards {
     grid-template-columns: 1fr;
   }
@@ -1773,7 +1780,7 @@ onMounted(() => {
   }
 
   .alter-detail__hero {
-    flex-direction: column;
+    grid-template-columns: 1fr;
   }
 
   .alter-detail__header-actions {
