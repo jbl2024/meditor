@@ -148,4 +148,22 @@ describe('HtmlNodeView', () => {
     expect(harness.html.value).toContain('\n  \n  <span')
     harness.app.unmount()
   })
+
+  it('opens source mode on cmd or ctrl click from preview', async () => {
+    const harness = mountHarness({ initialHtml: '<div>Hello</div>' })
+    await flush()
+
+    const preview = harness.root.querySelector('.tomosona-html-preview') as HTMLDivElement
+    preview.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, metaKey: true }))
+    preview.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, metaKey: true }))
+    await flush()
+
+    const wrapper = harness.root.querySelector('.tomosona-html-node') as HTMLElement
+    const textarea = harness.root.querySelector('.tomosona-html-textarea') as HTMLTextAreaElement
+    expect(wrapper.classList.contains('is-editing')).toBe(true)
+    expect(textarea).toBeTruthy()
+    expect(document.activeElement).toBe(textarea)
+
+    harness.app.unmount()
+  })
 })

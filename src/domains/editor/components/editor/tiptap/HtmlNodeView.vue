@@ -196,6 +196,21 @@ function onEditorToggle(event?: MouseEvent) {
   openSourceEditor()
 }
 
+function onPreviewModifierPointerDown(event: MouseEvent) {
+  if (!props.editor.isEditable) return
+  if (!event.metaKey && !event.ctrlKey) return
+  event.preventDefault()
+  event.stopPropagation()
+}
+
+function onPreviewModifierClick(event: MouseEvent) {
+  if (!props.editor.isEditable) return
+  if (!event.metaKey && !event.ctrlKey) return
+  event.preventDefault()
+  event.stopPropagation()
+  openSourceEditor({ placeCaretAtEnd: true })
+}
+
 function syncHighlightedScroll() {
   if (!sourceTextarea.value || !sourcePre.value) return
   sourcePre.value.scrollTop = sourceTextarea.value.scrollTop
@@ -326,6 +341,8 @@ watch(() => props.node.attrs.autoEdit, () => {
           class="tomosona-html-preview"
           contenteditable="false"
           v-html="sanitizedPreview"
+          @mousedown="onPreviewModifierPointerDown"
+          @click="onPreviewModifierClick"
         ></div>
 
         <div v-else class="tomosona-html-source-shell">
