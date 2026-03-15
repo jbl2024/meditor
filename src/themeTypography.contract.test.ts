@@ -6,7 +6,9 @@ import shortcutsSource from './app/components/app/ShortcutsModal.vue?raw'
 import searchSource from './app/components/app/SearchSidebarPanel.vue?raw'
 import codeBlockSource from './domains/editor/components/editor/tiptap/CodeBlockNodeView.vue?raw'
 
-const themeSource = readFileSync(resolve(process.cwd(), 'src/assets/tailwind.css'), 'utf-8')
+const tailwindSource = readFileSync(resolve(process.cwd(), 'src/assets/tailwind.css'), 'utf-8')
+const themeTokensSource = readFileSync(resolve(process.cwd(), 'src/assets/theme-tokens.css'), 'utf-8')
+const baseThemeSource = readFileSync(resolve(process.cwd(), 'src/assets/themes/base.css'), 'utf-8')
 const editorContentSource = readFileSync(
   resolve(process.cwd(), 'src/domains/editor/components/editor/EditorViewContent.css'),
   'utf-8',
@@ -14,13 +16,14 @@ const editorContentSource = readFileSync(
 
 describe('Theme typography contracts', () => {
   it('defines global typography tokens and applies them to base surfaces', () => {
-    expect(themeSource).toContain('--font-ui')
-    expect(themeSource).toContain('--font-editor')
-    expect(themeSource).toContain('--font-code')
-    expect(themeSource).toContain('--font-size-xs')
-    expect(themeSource).toContain('--font-size-md')
-    expect(themeSource).toContain('--editor-font-size-base')
-    expect(themeSource).toContain('font-family: var(--font-ui);')
+    expect(themeTokensSource).toContain('./themes/base.css')
+    expect(baseThemeSource).toContain('--font-ui')
+    expect(baseThemeSource).toContain('--font-editor')
+    expect(baseThemeSource).toContain('--font-code')
+    expect(baseThemeSource).toContain('--font-size-xs')
+    expect(baseThemeSource).toContain('--font-size-md')
+    expect(baseThemeSource).toContain('--editor-font-size-base')
+    expect(tailwindSource).toContain('font-family: var(--font-ui);')
   })
 
   it('routes editor and technical surfaces through typography tokens', () => {

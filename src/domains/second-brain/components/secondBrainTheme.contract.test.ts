@@ -50,7 +50,7 @@ describe('Second-brain and support theme contracts', () => {
     expect(shortcutsSource).not.toContain(':global(.ide-root.dark)')
 
     expect(echoesSource).toContain('var(--echoes-card-bg)')
-    expect(echoesSource).toContain('var(--echoes-item-hover-bg)')
+    expect(echoesSource).toContain('var(--right-pane-item-hover)')
     expect(echoesSource).not.toContain('.ide-root.dark')
   })
 })
