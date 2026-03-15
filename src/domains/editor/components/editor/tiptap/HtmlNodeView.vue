@@ -324,6 +324,7 @@ function onEditorKeydown(event: KeyboardEvent) {
 .tomosona-html-preview {
   border: 1px solid transparent;
   border-radius: 0.7rem;
+  min-height: 3.5rem;
   transition: border-color 120ms ease, background-color 120ms ease;
 }
 
