@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.21.3] - 2026-03-16
+
+### Fixed
+- fix(alters): add blind_spots and system_hints fields to edit wizard (661eb9b)
+
 ## [0.21.2] - 2026-03-16
 
 ### Fixed
