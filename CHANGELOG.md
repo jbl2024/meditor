@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.21.2] - 2026-03-16
+
+### Fixed
+- fix(second-brain): log LLM transport failures and preserve IPC error messages (5b15bc0)
+
 ## [0.21.1] - 2026-03-15
 
 ### Fixed
