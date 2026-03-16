@@ -1048,6 +1048,32 @@ onMounted(() => {
                 />
               </template>
             </UiField>
+
+            <UiField label="Blind Spots" for-id="alter-blind-spots" help="Known limitations or blind spots of this Alter." class-name="alter-form-grid__full">
+              <template #default="{ describedBy }">
+                <UiTextarea
+                  id="alter-blind-spots"
+                  :model-value="joinMultiline(draft.blind_spots)"
+                  :aria-describedby="describedBy"
+                  :rows="6"
+                  placeholder="May undervalue efficiency gains"
+                  @update:modelValue="draft.blind_spots = splitMultiline($event)"
+                />
+              </template>
+            </UiField>
+
+            <UiField label="System Hints" for-id="alter-system-hints" help="Implementation hints for the system." class-name="alter-form-grid__full">
+              <template #default="{ describedBy }">
+                <UiTextarea
+                  id="alter-system-hints"
+                  :model-value="joinMultiline(draft.system_hints)"
+                  :aria-describedby="describedBy"
+                  :rows="6"
+                  placeholder="Keep responses Tomosona-native rather than direct imitation"
+                  @update:modelValue="draft.system_hints = splitMultiline($event)"
+                />
+              </template>
+            </UiField>
           </section>
 
           <section v-else-if="wizardStep === 4" class="alter-stack">
