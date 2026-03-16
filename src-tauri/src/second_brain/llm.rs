@@ -11,6 +11,21 @@ fn is_openai_codex(profile: &ProviderProfile) -> bool {
     profile.provider.trim().eq_ignore_ascii_case("openai-codex")
 }
 
+fn llm_log(event: &str, profile: &ProviderProfile, detail: &str) {
+    let provider = profile.provider.trim();
+    let model = profile.model.trim();
+    let profile_id = profile.id.trim();
+    let base_url = profile
+        .base_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("-");
+    eprintln!(
+        "[second-brain/llm] event={event} provider={provider} model={model} profile_id={profile_id} base_url={base_url} detail={detail}"
+    );
+}
+
 fn normalize_model_name(profile: &ProviderProfile) -> String {
     let provider = profile.provider.trim().to_lowercase();
     let model = profile.model.trim();
@@ -85,7 +100,11 @@ pub async fn run_llm(
             };
             Ok(final_text)
         }
-        Err(err) => Err(format!("Model request failed: {err}")),
+        Err(err) => {
+            let message = format!("Model request failed: {err}");
+            llm_log("request_error", profile, &message);
+            Err(message)
+        }
     }
 }
 
@@ -117,7 +136,11 @@ where
     let mut response = client
         .exec_chat_stream(&model, request, Some(&options))
         .await
-        .map_err(|err| format!("Model request failed: {err}"))?;
+        .map_err(|err| {
+            let message = format!("Model request failed: {err}");
+            llm_log("stream_start_error", profile, &message);
+            message
+        })?;
 
     let mut full_text = String::new();
     while let Some(next) = response.stream.next().await {
@@ -136,7 +159,11 @@ where
                 }
             }
             Ok(_) => {}
-            Err(err) => return Err(format!("Model stream failed: {err}")),
+            Err(err) => {
+                let message = format!("Model stream failed: {err}");
+                llm_log("stream_error", profile, &message);
+                return Err(message);
+            }
         }
     }
 
