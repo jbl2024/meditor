@@ -1,0 +1,61 @@
+name: Bug report
+description: Report a problem, regression, or unexpected behavior.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug.
+        Please fill out the details below so we can reproduce and fix it faster.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Describe the bug in a few sentences.
+      placeholder: What happened, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: List the exact steps needed to reproduce the issue.
+      placeholder: |
+        1. Open...
+        2. Click...
+        3. Observe...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: Explain what should have happened.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Explain what actually happened, including error messages if any.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Share the app and system details relevant to the bug.
+      placeholder: |
+        - Tomosona version:
+        - OS:
+        - Workspace type:
+        - Relevant settings:
+    validations:
+      required: false
+  - type: textarea
+    id: notes
+    attributes:
+      label: Additional context
+      description: Add screenshots, logs, or anything else that may help.
+    validations:
+      required: false

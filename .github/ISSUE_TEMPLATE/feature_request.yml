@@ -1,0 +1,39 @@
+name: Feature request
+description: Suggest an improvement, new workflow, or product capability.
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea.
+        Please describe the problem or opportunity as clearly as you can.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What user need or workflow gap does this feature address?
+      placeholder: What are you trying to do today that is hard or missing?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the feature you'd like to see.
+      placeholder: What should Tomosona do?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: List other approaches or workarounds you've tried or considered.
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Share examples, mockups, links, or related issues.
+    validations:
+      required: false
