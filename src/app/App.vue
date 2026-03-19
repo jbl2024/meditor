@@ -1643,6 +1643,7 @@ const commands = useAppShellCommands({
   actionPort: {
     loadAllFiles,
     addActiveNoteToSecondBrain,
+    primeSecondBrainSessionRequest: () => secondBrainBridge.primeRequestedSecondBrainSessionFromStorage(),
     openSettingsModal,
     openQuickOpen,
     openTodayNote,

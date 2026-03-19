@@ -197,7 +197,26 @@ vi.mock('./domains/editor/components/EditorRightPane.vue', () => ({
 vi.mock('./domains/explorer/components/ExplorerTree.vue', () => ({ default: defineComponent(() => () => h('div')) }))
 vi.mock('./domains/cosmos/components/CosmosView.vue', () => ({ default: defineComponent(() => () => h('div')) }))
 vi.mock('./domains/cosmos/components/CosmosSidebarPanel.vue', () => ({ default: defineComponent(() => () => h('div')) }))
-vi.mock('./domains/second-brain/components/SecondBrainView.vue', () => ({ default: defineComponent(() => () => h('div')) }))
+vi.mock('./domains/second-brain/components/SecondBrainView.vue', () => ({
+  default: defineComponent({
+    name: 'SecondBrainViewStub',
+    props: {
+      requestedSessionId: { type: String, default: '' },
+      requestedSessionNonce: { type: Number, default: 0 },
+      requestedPrompt: { type: String, default: '' },
+      requestedPromptNonce: { type: Number, default: 0 }
+    },
+    setup(props) {
+      return () => h('div', {
+        'data-second-brain-view-stub': 'true',
+        'data-requested-session-id': props.requestedSessionId,
+        'data-requested-session-nonce': String(props.requestedSessionNonce),
+        'data-requested-prompt': props.requestedPrompt,
+        'data-requested-prompt-nonce': String(props.requestedPromptNonce)
+      })
+    }
+  })
+}))
 
 import App from './app/App.vue'
 
@@ -332,6 +351,7 @@ describe('App constituted context', () => {
     mounted.root.querySelector<HTMLButtonElement>('[data-open-context-second-brain="true"]')?.click()
     await flushUi()
     expect(secondBrainApi.replaceSessionContext).toHaveBeenLastCalledWith('s-new', ['/vault/a.md', '/vault/b.md'])
+    expect(mounted.root.querySelector('[data-pane-tabs="true"]')?.textContent).toContain('second-brain-chat')
 
     mounted.root.querySelector<HTMLButtonElement>('[data-open-context-pulse="true"]')?.click()
     await flushUi()
