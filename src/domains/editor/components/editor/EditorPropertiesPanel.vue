@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ChevronRightIcon } from '@heroicons/vue/24/outline'
 import { CircleStackIcon } from '@heroicons/vue/24/solid'
+import type { CSSProperties } from 'vue'
 import UiButton from '../../../../shared/components/ui/UiButton.vue'
 import UiCheckbox from '../../../../shared/components/ui/UiCheckbox.vue'
 import UiInput from '../../../../shared/components/ui/UiInput.vue'
@@ -43,6 +44,13 @@ const emit = defineEmits<{
   'add-property': [key: string]
   'raw-yaml-input': [value: string]
 }>()
+
+const compactModeButtonStyle: CSSProperties = {
+  height: '1.45rem',
+  padding: '0 0.4rem',
+  fontSize: '10px',
+  lineHeight: '1'
+}
 </script>
 
 <template>
@@ -77,7 +85,8 @@ const emit = defineEmits<{
           type="button"
           size="sm"
           variant="ghost"
-          class-name="properties-mode-btn text-[10px]"
+          class-name="properties-mode-btn"
+          :style="compactModeButtonStyle"
           :active="props.mode === 'structured'"
           :disabled="!props.canUseStructuredProperties"
           @click="emit('set-mode', 'structured')"
@@ -88,7 +97,8 @@ const emit = defineEmits<{
           type="button"
           size="sm"
           variant="ghost"
-          class-name="properties-mode-btn text-[10px]"
+          class-name="properties-mode-btn"
+          :style="compactModeButtonStyle"
           :active="props.mode === 'raw'"
           @click="emit('set-mode', 'raw')"
         >
@@ -205,7 +215,7 @@ const emit = defineEmits<{
 }
 
 .properties-row {
-  min-height: 1.5rem;
+  min-height: 2rem;
   display: flex;
   align-items: center;
   justify-content: space-between;

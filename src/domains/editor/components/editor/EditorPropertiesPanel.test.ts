@@ -79,4 +79,38 @@ describe('EditorPropertiesPanel', () => {
 
     app.unmount()
   })
+
+  it('uses compact mode buttons when expanded', async () => {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+
+    const app = createApp(defineComponent({
+      setup() {
+        return () => h(EditorPropertiesPanel, {
+          expanded: true,
+          hasProperties: true,
+          mode: 'structured',
+          canUseStructuredProperties: true,
+          structuredPropertyFields: [],
+          structuredPropertyKeys: [],
+          activeRawYaml: '',
+          activeParseErrors: [],
+          corePropertyOptions: [],
+          effectiveTypeForField: (): PropertyType => 'text',
+          isPropertyTypeLocked: () => false
+        })
+      }
+    }))
+
+    app.mount(root)
+    await flushUi()
+
+    const buttons = root.querySelectorAll('.properties-mode-btn')
+    expect(buttons.length).toBe(2)
+    expect((buttons[0] as HTMLButtonElement).style.height).toBe('1.45rem')
+    expect((buttons[1] as HTMLButtonElement).style.height).toBe('1.45rem')
+    expect((buttons[0] as HTMLButtonElement).style.fontSize).toBe('10px')
+
+    app.unmount()
+  })
 })
