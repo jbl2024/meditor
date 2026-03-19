@@ -85,6 +85,8 @@ const composerContextPaths = ref<string[]>([])
 const selectedEchoesContextPath = ref('')
 const composerRef = ref<HTMLTextAreaElement | null>(null)
 const threadRef = ref<HTMLElement | null>(null)
+const threadAutoScrollEnabled = ref(true)
+const threadBottomSentinel = ref<HTMLElement | null>(null)
 const activeAssistantStreamMessageId = ref<string | null>(null)
 const pulseActionId = ref<PulseActionId>('synthesize')
 const pulseDropdownOpen = ref(false)
@@ -98,6 +100,7 @@ let copyToastTimer: ReturnType<typeof setTimeout> | null = null
 const copyFeedbackTimers: Record<string, ReturnType<typeof setTimeout>> = {}
 const COPY_FEEDBACK_MS = 1300
 const COPY_TOAST_MS = 2000
+let threadBottomObserver: IntersectionObserver | null = null
 
 const workspacePathRef = computed(() => props.workspacePath)
 const allWorkspaceFilesRef = computed(() => props.allWorkspaceFiles)
@@ -306,7 +309,7 @@ async function loadSession(nextSessionId: string) {
 
     messages.value = payload.messages
     emit('context-changed', contextPaths.value)
-    await scrollThreadToBottom()
+    await scrollThreadToBottom({ force: true })
   } catch (err) {
     sendError.value = err instanceof Error ? err.message : 'Could not load session.'
   } finally {
@@ -360,7 +363,7 @@ async function onCreateSession() {
     composerContextPaths.value = []
     mentionInfo.value = ''
     emit('context-changed', contextPaths.value)
-    await scrollThreadToBottom()
+    await scrollThreadToBottom({ force: true })
     await refreshSessionsIndex()
   } finally {
     creatingSession.value = false
@@ -736,11 +739,46 @@ function onComposerKeydown(event: KeyboardEvent) {
   }
 }
 
-async function scrollThreadToBottom() {
+function isThreadNearBottom(thread: HTMLElement): boolean {
+  const remaining = thread.scrollHeight - thread.scrollTop - thread.clientHeight
+  return remaining <= 8
+}
+
+function onThreadScroll() {
+  const thread = threadRef.value
+  if (!thread) return
+  if (threadBottomObserver) return
+  threadAutoScrollEnabled.value = isThreadNearBottom(thread)
+}
+
+function setupThreadBottomObserver() {
+  if (typeof IntersectionObserver === 'undefined') return
+  const thread = threadRef.value
+  const sentinel = threadBottomSentinel.value
+  if (!thread || !sentinel) return
+
+  threadBottomObserver?.disconnect()
+  threadBottomObserver = new IntersectionObserver(([entry]) => {
+    threadAutoScrollEnabled.value = Boolean(entry?.isIntersecting)
+  }, {
+    root: thread,
+    threshold: 1
+  })
+  threadBottomObserver.observe(sentinel)
+}
+
+async function scrollThreadToBottom(options: { force?: boolean } = {}) {
   await nextTick()
   const thread = threadRef.value
   if (!thread) return
-  thread.scrollTop = thread.scrollHeight
+  if (!options.force && !threadAutoScrollEnabled.value) return
+  const sentinel = threadBottomSentinel.value
+  if (sentinel && typeof sentinel.scrollIntoView === 'function') {
+    sentinel.scrollIntoView({ block: 'end', inline: 'nearest', behavior: 'auto' })
+  } else {
+    thread.scrollTop = thread.scrollHeight
+  }
+  threadAutoScrollEnabled.value = true
 }
 
 async function onSendMessage() {
@@ -784,7 +822,7 @@ async function onSendMessage() {
     attachments_json: '[]',
     created_at_ms: Date.now()
   }]
-  void scrollThreadToBottom()
+  void scrollThreadToBottom({ force: true })
 
   try {
     const result = await runDeliberation(
@@ -816,7 +854,7 @@ async function onSendMessage() {
         attachments_json: '[]',
         created_at_ms: Date.now()
       }]
-      void scrollThreadToBottom()
+      void scrollThreadToBottom({ force: true })
     }
 
     await refreshSessionsIndex()
@@ -954,6 +992,8 @@ onMounted(async () => {
   }
 
   await initializeSessionOnFirstOpen()
+  await nextTick()
+  setupThreadBottomObserver()
 
   streamUnsubscribers.push(await subscribeSecondBrainStream('second-brain://assistant-start', (payload) => {
     if (payload.session_id !== sessionId.value) return
@@ -1040,6 +1080,8 @@ onBeforeUnmount(() => {
     clearTimeout(copyToastTimer)
     copyToastTimer = null
   }
+  threadBottomObserver?.disconnect()
+  threadBottomObserver = null
   for (const timer of Object.values(copyFeedbackTimers)) {
     clearTimeout(timer)
   }
@@ -1140,7 +1182,7 @@ watch(contextPaths, (paths) => {
         </div>
       </header>
 
-      <section ref="threadRef" class="sb-thread">
+      <section ref="threadRef" class="sb-thread" @scroll.passive="onThreadScroll">
         <div v-if="!sessionId && !loading" class="sb-empty-state">
           <strong>No session selected</strong>
           <p>Start a new session or reopen one from the session menu. No previous session is resumed automatically.</p>
@@ -1170,6 +1212,7 @@ watch(contextPaths, (paths) => {
           <div v-if="message.role === 'assistant'" class="assistant-markdown" v-html="renderAssistantMarkdown(message)"></div>
           <pre v-else>{{ displayMessage(message) }}</pre>
         </article>
+        <div ref="threadBottomSentinel" class="sb-thread-bottom-sentinel" aria-hidden="true"></div>
 
       </section>
 
@@ -1415,6 +1458,12 @@ watch(contextPaths, (paths) => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.sb-thread-bottom-sentinel {
+  width: 100%;
+  height: 1px;
+  flex: 0 0 auto;
 }
 
 .sb-empty-state {

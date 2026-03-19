@@ -380,6 +380,97 @@ describe('SecondBrainView', () => {
     mounted.app.unmount()
   })
 
+  it('pauses stream autoscroll when the thread is scrolled up and resumes at the bottom', async () => {
+    const streamHandlers = new Map<string, (payload: {
+      session_id: string
+      message_id: string
+      chunk: string
+      done: boolean
+      error: string | null
+    }) => void>()
+    api.subscribeSecondBrainStream.mockImplementation(async (eventName: string, handler: (payload: {
+      session_id: string
+      message_id: string
+      chunk: string
+      done: boolean
+      error: string | null
+    }) => void) => {
+      streamHandlers.set(eventName, handler)
+      return () => {}
+    })
+
+    const pendingRun = deferredPromise<{ userMessageId: string; assistantMessageId: string }>()
+    api.runDeliberation.mockReturnValueOnce(pendingRun.promise)
+
+    const mounted = mountView({ requestedSessionId: 's1', requestedSessionNonce: 1 })
+    await flushUi()
+
+    const thread = mounted.root.querySelector<HTMLElement>('.sb-thread')
+    const textarea = mounted.root.querySelector<HTMLTextAreaElement>('.sb-textarea')
+    const sendBtn = mounted.root.querySelector<HTMLButtonElement>('.send-icon-btn')
+    expect(thread).toBeTruthy()
+    expect(textarea).toBeTruthy()
+    expect(sendBtn).toBeTruthy()
+    if (!thread || !textarea || !sendBtn) return
+
+    Object.defineProperty(thread, 'clientHeight', { value: 100, configurable: true })
+    Object.defineProperty(thread, 'scrollHeight', { value: 420, configurable: true })
+    thread.scrollTop = 0
+
+    textarea.value = 'follow the stream'
+    textarea.selectionStart = textarea.value.length
+    textarea.selectionEnd = textarea.value.length
+    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushUi()
+
+    sendBtn.click()
+    await flushUi()
+
+    expect(thread.scrollTop).toBe(420)
+
+    thread.scrollTop = 120
+    thread.dispatchEvent(new Event('scroll'))
+    await flushUi()
+
+    Object.defineProperty(thread, 'scrollHeight', { value: 560, configurable: true })
+
+    streamHandlers.get('second-brain://assistant-start')?.({
+      session_id: 's1',
+      message_id: 'a-stream',
+      chunk: '',
+      done: false,
+      error: null
+    })
+    streamHandlers.get('second-brain://assistant-delta')?.({
+      session_id: 's1',
+      message_id: 'a-stream',
+      chunk: 'alpha',
+      done: false,
+      error: null
+    })
+    await flushUi()
+
+    expect(thread.scrollTop).toBe(120)
+
+    thread.scrollTop = 560
+    thread.dispatchEvent(new Event('scroll'))
+    await flushUi()
+
+    Object.defineProperty(thread, 'scrollHeight', { value: 640, configurable: true })
+    streamHandlers.get('second-brain://assistant-delta')?.({
+      session_id: 's1',
+      message_id: 'a-stream',
+      chunk: 'beta',
+      done: false,
+      error: null
+    })
+    await flushUi()
+
+    expect(thread.scrollTop).toBe(640)
+
+    mounted.app.unmount()
+  })
+
   it('scrolls to the bottom when opening a requested session with existing messages', async () => {
     api.loadDeliberationSession.mockImplementation(async (sessionId: string) => ({
       session_id: sessionId,
