@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.21.6] - 2026-03-19
+
+### Fixed
+- fix(editor): align collapsed properties row height (d69236e)
+
 ## [0.21.5] - 2026-03-19
 
 ### Changed
