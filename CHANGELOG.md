@@ -18,6 +18,17 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.21.5] - 2026-03-19
+
+### Changed
+- ci(workflow): split frontend and backend validation jobs (e1500e7)
+- docs(testing): add unit and integration test guide (43b37c9)
+
+### Fixed
+- fix(second-brain): use marked for preview rendering (#49) (1b125f4)
+- fix(second-brain): pause stream autoscroll on manual scroll (#48) (079dba3)
+- fix(second-brain): restore persisted session when opening pane (#46) (95644c3)
+
 ## [0.21.4] - 2026-03-19
 
 ### Added
