@@ -90,6 +90,24 @@ export function useAppSecondBrainBridge(options: UseAppSecondBrainBridgeOptions)
     return window.localStorage.getItem(storageKey)?.trim() ?? ''
   }
 
+  /**
+   * Restores a persisted session request when the user explicitly opens Second Brain.
+   *
+   * This keeps the add-to-second-brain flow sticky without changing workspace-change
+   * behavior or auto-resuming sessions on shell startup.
+   */
+  function primeRequestedSecondBrainSessionFromStorage(): string {
+    const currentRequestedId = secondBrainRequestedSessionId.value.trim()
+    if (currentRequestedId) return currentRequestedId
+
+    const workspacePath = currentWorkspacePath()
+    const persistedSessionId = readPersistedSecondBrainSessionId(workspacePath)
+    if (!persistedSessionId) return ''
+
+    setSecondBrainSessionId(persistedSessionId, { bumpNonce: true })
+    return persistedSessionId
+  }
+
   /** Updates the requested session id and optionally bumps the nonce consumed by the surface. */
   function setSecondBrainSessionId(sessionId: string, optionsArg?: { bumpNonce?: boolean }) {
     const normalized = sessionId.trim()
@@ -211,6 +229,7 @@ export function useAppSecondBrainBridge(options: UseAppSecondBrainBridgeOptions)
     setSecondBrainSessionId,
     setSecondBrainPrompt,
     setSecondBrainAlterId,
+    primeRequestedSecondBrainSessionFromStorage,
     resolveSecondBrainSessionForPath,
     ensurePathInSecondBrainSession,
     addActiveNoteToSecondBrain,

@@ -74,6 +74,7 @@ function createCommands() {
   const actionPort = {
     loadAllFiles: vi.fn(async () => {}),
     addActiveNoteToSecondBrain: vi.fn(async () => true),
+    primeSecondBrainSessionRequest: vi.fn(() => ''),
     openSettingsModal: vi.fn(async () => {}),
     openQuickOpen: vi.fn(async () => {}),
     openTodayNote: vi.fn(async () => true),
@@ -133,6 +134,7 @@ describe('useAppShellCommands', () => {
 
     expect(await api.openSecondBrainViewFromPalette()).toBe(true)
 
+    expect(actionPort.primeSecondBrainSessionRequest).toHaveBeenCalledTimes(1)
     expect(panePort.openSurfaceInPane).toHaveBeenCalledWith('second-brain-chat')
     expect(navigationPort.recordSecondBrainHistorySnapshot).toHaveBeenCalled()
     expect(actionPort.loadAllFiles).toHaveBeenCalledTimes(1)

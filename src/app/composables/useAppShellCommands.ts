@@ -75,6 +75,7 @@ export type AppShellCommandsCosmosPort = {
 export type AppShellCommandsActionPort = {
   loadAllFiles: () => Promise<void>
   addActiveNoteToSecondBrain: () => Promise<boolean>
+  primeSecondBrainSessionRequest: () => string
   openSettingsModal: () => Promise<void>
   openQuickOpen: (initialQuery?: string) => Promise<void>
   openTodayNote: () => Promise<boolean>
@@ -144,6 +145,7 @@ export function useAppShellCommands(options: UseAppShellCommandsOptions) {
       return false
     }
 
+    options.actionPort.primeSecondBrainSessionRequest()
     options.panePort.openSurfaceInPane('second-brain-chat')
     options.navigationPort.recordSecondBrainHistorySnapshot()
     if (!options.workspacePort.allWorkspaceFiles.value.length) {

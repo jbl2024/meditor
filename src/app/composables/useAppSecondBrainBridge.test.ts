@@ -82,6 +82,17 @@ describe('useAppSecondBrainBridge', () => {
     expect(loadDeliberationSession).not.toHaveBeenCalled()
   })
 
+  it('restores the persisted session request when explicitly primed for opening Second Brain', () => {
+    window.localStorage.setItem('sb:/vault', 'session-persisted')
+    const { bridge } = createBridge()
+
+    const sessionId = bridge.primeRequestedSecondBrainSessionFromStorage()
+
+    expect(sessionId).toBe('session-persisted')
+    expect(bridge.secondBrainRequestedSessionId.value).toBe('session-persisted')
+    expect(bridge.secondBrainRequestedSessionNonce.value).toBe(2)
+  })
+
   it('adds the active note to the requested session context', async () => {
     const { bridge, replaceSessionContext, notifySuccess } = createBridge()
     bridge.setSecondBrainSessionId('session-1')
@@ -137,6 +148,18 @@ describe('useAppSecondBrainBridge', () => {
 
     expect(bridge.secondBrainRequestedSessionId.value).toBe('')
     expect(window.localStorage.getItem('sb:/vault')).toBeNull()
+  })
+
+  it('keeps an existing requested session id when primed for opening Second Brain', () => {
+    window.localStorage.setItem('sb:/vault', 'session-persisted')
+    const { bridge } = createBridge()
+    bridge.setSecondBrainSessionId('session-requested')
+
+    const sessionId = bridge.primeRequestedSecondBrainSessionFromStorage()
+
+    expect(sessionId).toBe('session-requested')
+    expect(bridge.secondBrainRequestedSessionNonce.value).toBe(1)
+    expect(window.localStorage.getItem('sb:/vault')).toBe('session-requested')
   })
 
   it('updates the requested prompt and bumps its nonce only when requested', () => {
