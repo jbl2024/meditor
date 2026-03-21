@@ -39,7 +39,6 @@ import {
   renameFavorite,
 } from '../shared/api/favoritesApi'
 import {
-  backlinksForPath,
   ftsSearch,
   getWikilinkGraph,
   initDb,
@@ -52,30 +51,20 @@ import {
   requestIndexCancel,
   reindexMarkdownFileLexical,
   reindexMarkdownFileSemantic,
-  semanticLinksForPath,
   updateWikilinksForPathMoves,
   updateWikilinksForRename,
   writePropertyTypeSchema
 } from '../shared/api/indexApi'
-import type { FileVersion, PathMove, ReadNoteSnapshotResult, SaveNoteResult, SemanticLink, WorkspaceFsChange } from '../shared/api/apiTypes'
+import type { FileVersion, PathMove, ReadNoteSnapshotResult, SaveNoteResult, WorkspaceFsChange } from '../shared/api/apiTypes'
 import type { AppSettingsAlters } from '../shared/api/apiTypes'
 import {
-  bindPendingOpenTrace,
-  findOpenTrace,
-  finishOpenTraceSpan,
-  finishOpenTrace,
   hasActiveOpenTrace,
   installOpenDebugLongTaskObserver,
-  runWithOpenTraceSpan,
-  startOpenTraceSpan,
-  startOpenTrace,
   subscribeOpenTraceActivity,
-  traceOpenStep
 } from '../shared/lib/openTrace'
 import { parseSearchSnippet } from '../shared/lib/searchSnippets'
 import { type SearchMode } from '../shared/lib/searchMode'
 import { hasActiveTextSelectionInEditor, shouldBlockGlobalShortcutsFromTarget } from '../shared/lib/shortcutTargets'
-import { parseWikilinkTarget } from '../domains/editor/lib/wikilinks'
 import { buildCosmosGraph } from '../domains/cosmos/lib/graphIndex'
 import {
   createDeliberationSession,
@@ -151,8 +140,9 @@ import { useAppShellCommands } from './composables/useAppShellCommands'
 import { useAppShellKeyboard } from './composables/useAppShellKeyboard'
 import { useAppShellLaunchpad } from './composables/useAppShellLaunchpad'
 import { useAppShellModals } from './composables/useAppShellModals'
+import { useAppShellOpenFlow, type RefreshBacklinksOptions } from './composables/useAppShellOpenFlow'
 import { useAppShellPersistence } from './composables/useAppShellPersistence'
-import { useAppShellSearch, type AppShellSearchHit } from './composables/useAppShellSearch'
+import { useAppShellSearch } from './composables/useAppShellSearch'
 import { useAppShellWorkspaceEntries } from './composables/useAppShellWorkspaceEntries'
 import { useAppShellWorkspaceLifecycle } from './composables/useAppShellWorkspaceLifecycle'
 import { useAppModalController } from './composables/useAppModalController'
@@ -160,8 +150,7 @@ import { useAppSecondBrainBridge } from './composables/useAppSecondBrainBridge'
 import {
   useAppQuickOpen,
   type PaletteAction,
-  type PaletteActionFamily,
-  type QuickOpenResult
+  type PaletteActionFamily
 } from './composables/useAppQuickOpen'
 import { useAppTheme, type ThemePreference } from './composables/useAppTheme'
 import { useAppWorkspaceController } from './composables/useAppWorkspaceController'
@@ -186,14 +175,7 @@ import {
 } from './composables/useMultiPaneWorkspaceState'
 import packageJson from '../../package.json'
 
-type SearchHit = AppShellSearchHit
 type PropertyPreviewRow = { key: string; value: string }
-type SemanticLinkRow = SemanticLink
-type RefreshBacklinksOptions = {
-  path?: string
-  traceId?: string | null
-  parentSpanId?: string | null
-}
 
 type EditorViewExposed = EditorPaneGridExposed
 
@@ -258,10 +240,6 @@ const rightPaneWidth = ref(300)
 const editorRef = ref<EditorViewExposed | null>(null)
 const explorerRef = ref<ExplorerTreeExposed | null>(null)
 const topbarRef = ref<InstanceType<typeof TopbarNavigationControls> | null>(null)
-const backlinks = ref<string[]>([])
-const backlinksLoading = ref(false)
-const semanticLinks = ref<SemanticLinkRow[]>([])
-const semanticLinksLoading = ref(false)
 const propertiesPreview = ref<PropertyPreviewRow[]>([])
 const propertyParseErrorCount = ref(0)
 const virtualDocs = ref<Record<string, VirtualDoc>>({})
@@ -316,6 +294,8 @@ const shellPersistence = useAppShellPersistence({
 })
 const showDebugTools = import.meta.env.DEV
 const appVersion = packageJson.version
+let shellOpenFlow: ReturnType<typeof useAppShellOpenFlow> | null = null
+let closeQuickOpenProxy = () => {}
 
 const resizeState = ref<{
   side: 'left' | 'right'
@@ -491,7 +471,7 @@ const indexingControllerDocumentPort = {
 }
 
 const indexingControllerSurfacePort = {
-  refreshBacklinks,
+  refreshBacklinks: (options?: RefreshBacklinksOptions) => shellOpenFlow?.refreshBacklinks(options) ?? Promise.resolve(),
   refreshCosmosGraph: () => cosmos.refreshGraph(),
   hasCosmosSurface: () => multiPane.findPaneContainingSurface('cosmos') !== null
 }
@@ -959,6 +939,7 @@ const {
   openSettingsFromOverflow,
   openShortcutsFromPalette
 } = shellModals
+closeQuickOpenProxy = () => closeQuickOpen()
 const workspaceEntries = useAppShellWorkspaceEntries({
   statePort: {
     workingFolderPath: filesystem.workingFolderPath,
@@ -1131,12 +1112,6 @@ const forwardHistoryItems = computed(() =>
     label: historyTargetLabel(target.entry)
   }))
 )
-
-function resolvedNoteNavigationFallback(): SidebarMode {
-  const current = previousNonCosmosMode.value
-  if (current === 'search' || current === 'favorites' || current === 'explorer') return current
-  return 'explorer'
-}
 
 function openIndexStatusModal() {
   rememberFocusBeforeModalOpen()
@@ -1418,6 +1393,60 @@ const {
   openNextTabWithAutosave,
   dispose: disposeNavigationController
 } = navigation
+shellOpenFlow = useAppShellOpenFlow({
+  workspacePort: {
+    workingFolderPath: filesystem.workingFolderPath,
+    sidebarVisible: workspace.sidebarVisible,
+    previousNonCosmosMode,
+    setSidebarMode: (mode) => workspace.setSidebarMode(mode),
+    errorMessage: filesystem.errorMessage
+  },
+  editorPort: {
+    activeFilePath,
+    editorState,
+    editorRef,
+    virtualDocs,
+    explorerRef
+  },
+  contextPort: {
+    resetForAnchor: (path: string) => constitutedContext.resetForAnchor(path)
+  },
+  dataPort: {
+    refreshActiveFileMetadata,
+    loadWikilinkTargets,
+    pathExists,
+    readTextFile,
+    dailyNotePath,
+    isIsoDate,
+    sanitizeRelativePath,
+    resolveExistingWikilinkPath,
+    extractHeadingsFromMarkdown
+  },
+  navigationPort: {
+    openTabWithAutosave,
+    openDailyNote: (date, openPath) => openDailyNote(date, openPath),
+    recordCosmosHistorySnapshot
+  },
+  uiPort: {
+    closeQuickOpen: () => closeQuickOpenProxy()
+  }
+})
+const {
+  backlinks,
+  backlinksLoading,
+  semanticLinks,
+  semanticLinksLoading,
+  openTodayNote,
+  openYesterdayNote,
+  showExplorerForActiveFile,
+  openWikilinkTarget,
+  onCosmosOpenNode,
+  loadWikilinkHeadings,
+  openQuickResult,
+  onSearchResultOpen,
+  onBacklinkOpen,
+  onExplorerOpen
+} = shellOpenFlow
 const historyUi = useAppShellHistoryUi({
   topbarPort: {
     getHistoryButtonEl: (side) => topbarRef.value?.getHistoryButtonEl(side) ?? null,
@@ -2068,19 +2097,6 @@ function onExplorerPathsDeleted(paths: string[]) {
   }
 }
 
-async function onExplorerOpen(path: string) {
-  // Explorer opens participate in the shared open trace pipeline so shell-level
-  // latency remains debuggable across entry points.
-  const traceId = startOpenTrace(path, 'explorer-click')
-  bindPendingOpenTrace(path, traceId)
-  traceOpenStep(traceId, 'explorer open requested')
-  const opened = await openTabWithAutosave(path, { traceId })
-  if (!opened) {
-    finishOpenTrace(traceId, 'blocked', { stage: 'navigation' })
-  }
-  if (!opened) return
-}
-
 async function readNoteSnapshot(path: string): Promise<ReadNoteSnapshotResult> {
   if (!filesystem.workingFolderPath.value) {
     throw new Error('Working folder is not set.')
@@ -2198,51 +2214,6 @@ async function renameFileFromTitle(path: string, rawTitle: string): Promise<Rena
   }
 }
 
-async function ensureVirtualMarkdown(path: string, titleLine: string) {
-  if (virtualDocs.value[path]) return
-  virtualDocs.value = {
-    ...virtualDocs.value,
-    [path]: {
-      content: '',
-      titleLine
-    }
-  }
-}
-
-async function openOrPrepareMarkdown(path: string, titleLine: string) {
-  const root = filesystem.workingFolderPath.value
-  if (!root) {
-    filesystem.errorMessage.value = 'Working folder is not set.'
-    return false
-  }
-
-  let exists = false
-  try {
-    exists = await pathExists(path)
-  } catch {
-    // If parent folders do not exist yet (for example journal/), treat as non-existent
-    // and open a virtual buffer. Folder creation is deferred until first write.
-    exists = false
-  }
-  if (exists) {
-    const nextVirtual = { ...virtualDocs.value }
-    delete nextVirtual[path]
-    virtualDocs.value = nextVirtual
-    const opened = await openTabWithAutosave(path)
-    if (!opened) return false
-    await nextTick()
-    editorRef.value?.focusEditor()
-    return true
-  }
-
-  await ensureVirtualMarkdown(path, titleLine)
-  const opened = await openTabWithAutosave(path)
-  if (!opened) return false
-  await nextTick()
-  editorRef.value?.focusEditor()
-  return true
-}
-
 async function saveNoteBuffer(path: string, txt: string, options: SaveFileOptions): Promise<SaveFileResult> {
   if (!filesystem.workingFolderPath.value) {
     throw new Error('Working folder is not set.')
@@ -2298,22 +2269,6 @@ function onGlobalSearchModeSelect(mode: SearchMode) {
     input.focus()
     input.setSelectionRange(next.caret, next.caret)
   })
-}
-
-async function onSearchResultOpen(hit: SearchHit) {
-  const opened = await openTabWithAutosave(hit.path)
-  if (!opened) return
-  editorState.setRevealSnippet(hit.path, hit.snippet)
-
-  await nextTick()
-  await editorRef.value?.revealSnippet(hit.snippet)
-}
-
-async function onBacklinkOpen(path: string) {
-  const opened = await openTabWithAutosave(path)
-  if (!opened) return
-  await nextTick()
-  editorRef.value?.focusEditor()
 }
 
 async function onPaneTabClick(payload: { paneId: string; tabId: string }) {
@@ -2405,270 +2360,6 @@ function setSidebarMode(mode: SidebarMode) {
   workspace.setSidebarMode(target)
 }
 
-let activeNoteEffectsRequestToken = 0
-
-function isCurrentActiveNoteEffectsRequest(requestToken: number, path: string) {
-  return requestToken === activeNoteEffectsRequestToken && activeFilePath.value === path
-}
-
-async function refreshBacklinks(options: RefreshBacklinksOptions = {}) {
-  const root = filesystem.workingFolderPath.value
-  const path = options.path ?? activeFilePath.value
-  if (!root || !path) {
-    backlinks.value = []
-    semanticLinks.value = []
-    return
-  }
-
-  const traceId = options.traceId ?? null
-  backlinksLoading.value = true
-  semanticLinksLoading.value = true
-  try {
-    const [results, relatedSemanticLinks] = await Promise.all([
-      runWithOpenTraceSpan(traceId, 'open.backlinks', async () => await backlinksForPath(path), {
-        parentSpanId: options.parentSpanId,
-        bucket: 'backlinks',
-        payload: { path }
-      }),
-      runWithOpenTraceSpan(traceId, 'open.semantic_links', async () => await semanticLinksForPath(path), {
-        parentSpanId: options.parentSpanId,
-        bucket: 'semantic_links',
-        payload: { path }
-      })
-    ])
-    backlinks.value = results.map((item) => item.path)
-    semanticLinks.value = relatedSemanticLinks
-  } catch {
-    backlinks.value = []
-    semanticLinks.value = []
-  } finally {
-    backlinksLoading.value = false
-    semanticLinksLoading.value = false
-  }
-}
-
-async function openTodayNote() {
-  return await openDailyNote(formatIsoDate(new Date()), openTabWithAutosave)
-}
-
-async function showExplorerForActiveFile(options: { focusTree?: boolean; traceId?: string | null; parentSpanId?: string | null } = {}) {
-  setSidebarMode('explorer')
-  if (!workspace.sidebarVisible.value) return
-  const activePath = activeFilePath.value
-  if (!activePath) return
-  await runWithOpenTraceSpan(options.traceId ?? null, 'open.explorer_reveal', async () => {
-    await nextTick()
-    for (let attempt = 0; attempt < 4; attempt += 1) {
-      const revealPathInView = explorerRef.value?.revealPathInView
-      if (typeof revealPathInView === 'function') {
-        await revealPathInView(activePath, {
-          focusTree: options.focusTree ?? false,
-          behavior: 'auto'
-        })
-        return
-      }
-      await nextTick()
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
-    }
-  }, {
-    parentSpanId: options.parentSpanId,
-    bucket: 'explorer_reveal',
-    payload: { path: activePath }
-  })
-}
-
-async function runActiveNoteEffects(path: string) {
-  const traceId = findOpenTrace(path)
-  const requestToken = ++activeNoteEffectsRequestToken
-  traceOpenStep(traceId, 'active note effects started', {
-    path,
-    request_token: requestToken
-  })
-
-  if (!path) {
-    editorState.setActiveOutline([])
-    backlinks.value = []
-    semanticLinks.value = []
-    traceOpenStep(traceId, 'active note effects cleared', {
-      path,
-      request_token: requestToken
-    })
-    await refreshActiveFileMetadata(path)
-    return
-  }
-
-  const activeEffectsSpanId = startOpenTraceSpan(traceId, 'open.active_note_effects', {
-    bucket: 'active_note_effects',
-    payload: { path }
-  })
-  const rightPaneSpanId = startOpenTraceSpan(traceId, 'open.right_pane_data', {
-    parentSpanId: activeEffectsSpanId,
-    bucket: 'right_pane_data',
-    payload: { path }
-  })
-
-  const finishBlocked = (stage: string) => {
-    finishOpenTraceSpan(traceId, rightPaneSpanId, 'blocked', { stage, path })
-    finishOpenTraceSpan(traceId, activeEffectsSpanId, 'blocked', { stage, path })
-    finishOpenTrace(traceId, 'blocked', { stage, path })
-  }
-
-  try {
-    traceOpenStep(traceId, 'active note metadata refresh started', {
-      path,
-      request_token: requestToken
-    })
-    await refreshActiveFileMetadata(path, {
-      traceId,
-      parentSpanId: activeEffectsSpanId
-    })
-    traceOpenStep(traceId, 'active note metadata refresh finished', {
-      path,
-      request_token: requestToken
-    })
-    if (!isCurrentActiveNoteEffectsRequest(requestToken, path)) {
-      finishBlocked('stale_after_metadata')
-      return
-    }
-
-    const snippet = editorState.consumeRevealSnippet(path)
-    traceOpenStep(traceId, 'active note reveal snippet check', {
-      path,
-      request_token: requestToken,
-      has_snippet: Boolean(snippet)
-    })
-    if (snippet) {
-      await runWithOpenTraceSpan(traceId, 'open.reveal_snippet', async () => {
-        await nextTick()
-        await editorRef.value?.revealSnippet(snippet)
-      }, {
-        parentSpanId: activeEffectsSpanId,
-        payload: { path, chars: snippet.length }
-      })
-      traceOpenStep(traceId, 'active note reveal snippet finished', {
-        path,
-        chars: snippet.length,
-        request_token: requestToken
-      })
-    }
-    if (!isCurrentActiveNoteEffectsRequest(requestToken, path)) {
-      finishBlocked('stale_after_reveal_snippet')
-      return
-    }
-
-    traceOpenStep(traceId, 'active note backlinks refresh started', {
-      path,
-      request_token: requestToken
-    })
-    await refreshBacklinks({
-      path,
-      traceId,
-      parentSpanId: rightPaneSpanId
-    })
-    traceOpenStep(traceId, 'active note backlinks refresh finished', {
-      path,
-      backlink_count: backlinks.value.length,
-      semantic_count: semanticLinks.value.length,
-      request_token: requestToken
-    })
-    if (!isCurrentActiveNoteEffectsRequest(requestToken, path)) {
-      finishBlocked('stale_after_right_pane')
-      return
-    }
-
-    finishOpenTraceSpan(traceId, rightPaneSpanId, 'done', { path })
-    finishOpenTraceSpan(traceId, activeEffectsSpanId, 'done', { path })
-    finishOpenTrace(traceId, 'done', {
-      stage: 'open.complete',
-      path
-    })
-  } catch (error) {
-    finishOpenTraceSpan(traceId, rightPaneSpanId, 'error', { path })
-    finishOpenTraceSpan(traceId, activeEffectsSpanId, 'error', { path })
-    finishOpenTrace(traceId, 'error', {
-      stage: 'active_note_effects',
-      path,
-      message: error instanceof Error ? error.message : String(error)
-    })
-  }
-}
-
-async function openYesterdayNote() {
-  const value = new Date()
-  value.setDate(value.getDate() - 1)
-  return await openDailyNote(formatIsoDate(value), openTabWithAutosave)
-}
-
-async function openWikilinkTarget(target: string) {
-  const root = filesystem.workingFolderPath.value
-  if (!root) return false
-  const parsed = parseWikilinkTarget(target)
-  const anchor = parsed.anchor
-  const normalized = sanitizeRelativePath(parsed.notePath)
-  const revealAnchor = async () => {
-    if (!anchor) return true
-    await nextTick()
-    return await editorRef.value?.revealAnchor(anchor) ?? false
-  }
-
-  if (!normalized) {
-    if (!anchor || !activeFilePath.value) return false
-    return await revealAnchor()
-  }
-
-  if (normalized.split('/').some((segment) => segment === '.' || segment === '..')) {
-    filesystem.errorMessage.value = 'Invalid link target.'
-    return false
-  }
-
-  if (isIsoDate(normalized)) {
-    const opened = await openDailyNote(normalized, openTabWithAutosave)
-    if (!opened) return false
-    return await revealAnchor()
-  }
-
-  const markdownFiles = await loadWikilinkTargets()
-
-  const existing = resolveExistingWikilinkPath(normalized, markdownFiles)
-
-  if (existing) {
-    const opened = await openTabWithAutosave(`${root}/${existing}`)
-    if (!opened) return false
-    const revealed = await revealAnchor()
-    if (!anchor || !revealed) {
-      editorRef.value?.focusEditor()
-    }
-    return true
-  }
-
-  const withExtension = /\.(md|markdown)$/i.test(normalized) ? normalized : `${normalized}.md`
-  const fullPath = `${root}/${withExtension}`
-  const opened = await openOrPrepareMarkdown(fullPath, '')
-  if (!opened) return false
-  if (!anchor) return true
-  return await revealAnchor()
-}
-
-async function onCosmosOpenNode(path: string) {
-  recordCosmosHistorySnapshot()
-  const root = filesystem.workingFolderPath.value
-  const targetPath = root && !path.startsWith('/') && !/^[A-Za-z]:[\\/]/.test(path)
-    ? `${root}/${path}`
-    : path
-  const opened = await openTabWithAutosave(targetPath)
-  if (!opened) return
-  const fallback = resolvedNoteNavigationFallback()
-  workspace.setSidebarMode(fallback)
-  await nextTick()
-  if (fallback === 'explorer') {
-    const revealPathInView = explorerRef.value?.revealPathInView
-    if (typeof revealPathInView === 'function') {
-      await revealPathInView(targetPath, { behavior: 'auto' })
-    }
-  }
-  editorRef.value?.focusEditor()
-}
-
 function onCosmosResetView() {
   cosmos.selectedNodeId.value = ''
   cosmos.focusMode.value = false
@@ -2731,42 +2422,6 @@ async function onCosmosOpenSelectedNode() {
   const selected = cosmos.openSelected()
   if (!selected) return
   await onCosmosOpenNode(selected.path)
-}
-
-async function loadWikilinkHeadings(target: string): Promise<string[]> {
-  const root = filesystem.workingFolderPath.value
-  if (!root) return []
-  const normalized = sanitizeRelativePath(target)
-  if (!normalized) return []
-  if (normalized.split('/').some((segment) => segment === '.' || segment === '..')) return []
-
-  try {
-    if (isIsoDate(normalized)) {
-      const path = dailyNotePath(root, normalized)
-      if (!(await pathExists(path))) return []
-      return extractHeadingsFromMarkdown(await readTextFile(path))
-    }
-
-    const markdownFiles = await loadWikilinkTargets()
-    const existing = resolveExistingWikilinkPath(normalized, markdownFiles)
-    if (!existing) return []
-    return extractHeadingsFromMarkdown(await readTextFile(`${root}/${existing}`))
-  } catch {
-    return []
-  }
-}
-
-async function openQuickResult(item: QuickOpenResult) {
-  if (item.kind === 'file' || item.kind === 'recent') {
-    const opened = await openTabWithAutosave(item.path)
-    if (!opened) return
-    closeQuickOpen()
-    nextTick(() => editorRef.value?.focusEditor())
-    return
-  }
-  void openDailyNote(item.date, openTabWithAutosave).then((opened) => {
-    if (opened) closeQuickOpen()
-  })
 }
 
 async function runQuickOpenAction(id: string) {
@@ -3000,26 +2655,6 @@ watch(
       void refreshIndexModalData()
     }
   }
-)
-
-watch(
-  () => activeFilePath.value,
-  (path) => {
-    constitutedContext.resetForAnchor(path ?? '')
-    const isInitialRun = activeNoteEffectsRequestToken === 0
-    if (isInitialRun) {
-      activeNoteEffectsRequestToken += 1
-      if (!path) {
-        editorState.setActiveOutline([])
-        backlinks.value = []
-        semanticLinks.value = []
-      }
-      void refreshActiveFileMetadata(path)
-      return
-    }
-    void runActiveNoteEffects(path)
-  },
-  { immediate: true }
 )
 
 onMounted(() => {

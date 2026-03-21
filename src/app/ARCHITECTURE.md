@@ -31,6 +31,7 @@
 ## Shell Composables
 - `useAppModalController`: modal selector derivation, focus restore, tab trapping.
 - `useAppShellPersistence`: shell bootstrapping and persistence for theme, sidebar mode, zoom, and multi-pane layout.
+- `useAppShellOpenFlow`: note opening, wikilink resolution, active-note refresh, backlinks, and explorer/search entry points.
 - `useAppShellCommands`: cross-domain command routing for palette, launchpad, pane chrome, and shell menus.
 - `useAppShellKeyboard`: global shortcut priority, `Escape` routing, pane/navigation shortcut dispatch.
 - `useAppShellSearch`: global search state, debounce, grouping, mode switching.
@@ -66,6 +67,7 @@
 
 ## Anti-patterns
 - Adding new cross-cutting watchers inline in `App.vue`.
+- Reintroducing note-open orchestration or active-note side effects inline in `App.vue`.
 - Duplicating the same shell command across topbar, launchpad, and palette handlers.
 - Reimplementing domain behavior in the shell.
 - Growing pane props with anonymous inline objects and `any`.
