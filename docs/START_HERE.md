@@ -62,6 +62,91 @@ Use this as a quick routing table when you need to make a change.
 | Alter manager | `src/domains/alters/components/AlterManagerView.vue` | `src/domains/alters/composables/useAlterManager.ts`, `src-tauri/src/alters.rs` |
 | UI primitives / shared shells | `src/shared/components/ui/ARCHITECTURE.md` | `src/shared/components/ui/*`, `src/assets/tailwind.css` |
 
+## How Things Fit Together
+
+These are the main flows worth understanding first.
+
+### Open Note
+
+```mermaid
+sequenceDiagram
+  participant U as User
+  participant A as App shell
+  participant N as Navigation
+  participant O as Open flow
+  participant F as Backend fs/index
+  participant E as Editor
+
+  U->>A: click note or command
+  A->>N: route open request
+  N->>O: resolve path and autosave guard
+  O->>F: read file / metadata / backlinks
+  O->>E: load note into active session
+```
+
+### Save Note
+
+```mermaid
+sequenceDiagram
+  participant U as User
+  participant E as Editor view
+  participant L as File lifecycle
+  participant F as Backend fs sync
+  participant I as Index update
+
+  U->>E: edit or save
+  E->>L: dirty state / title rename / serialize
+  L->>F: persist markdown or rename file
+  L->>I: request reindex if needed
+```
+
+### Search / Index
+
+```mermaid
+sequenceDiagram
+  participant U as User
+  participant A as App shell
+  participant C as Index controller
+  participant R as Rust index/search
+  participant S as UI surfaces
+
+  U->>A: search or rebuild
+  A->>C: dispatch request
+  C->>R: reindex or query SQLite
+  C->>S: refresh search/results state
+```
+
+### Second Brain Send
+
+```mermaid
+sequenceDiagram
+  participant U as User
+  participant V as SecondBrainView
+  participant P as Session/context composables
+  participant B as Backend second_brain
+
+  U->>V: type message and context
+  V->>P: resolve explicit context paths
+  P->>B: send session payload
+  B->>V: stream assistant deltas
+```
+
+### Explorer Rename / Move
+
+```mermaid
+sequenceDiagram
+  participant U as User
+  participant X as Explorer UI
+  participant O as Explorer ops
+  participant F as Backend fs ops
+  participant W as Wikilink/index repair
+
+  U->>X: rename or move entry
+  X->>O: validate target and intent
+  O->>F: apply filesystem mutation
+  O->>W: rewrite paths and refresh index
+```
+
 ## Where To Start For A New Change
 
 Use the smallest surface that actually owns the behavior.
