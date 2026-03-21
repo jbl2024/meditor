@@ -20,4 +20,11 @@ describe('App shell contract', () => {
     expect(appSource).not.toContain('listenWorkspaceFsChanged')
     expect(appSource).toContain('useAppShellWorkspaceLifecycle')
   })
+
+  it('keeps the command palette catalog in a dedicated helper', () => {
+    expect(appSource).not.toContain('createPaletteAction(')
+    expect(appSource).not.toContain('paletteActionPriority: Record<string, number> = {')
+    expect(appSource).not.toContain('const paletteActions = computed<PaletteAction[]>')
+    expect(appSource).toContain('useAppShellPaletteActions')
+  })
 })

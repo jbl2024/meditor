@@ -148,6 +148,7 @@ import { useAppShellModalInteractions } from './composables/useAppShellModalInte
 import { useAppShellCommands } from './composables/useAppShellCommands'
 import { useAppShellKeyboard } from './composables/useAppShellKeyboard'
 import { useAppShellLaunchpad } from './composables/useAppShellLaunchpad'
+import { useAppShellPaletteActions } from './composables/useAppShellPaletteActions'
 import { useAppShellModals } from './composables/useAppShellModals'
 import { useAppShellOpenFlow, type RefreshBacklinksOptions } from './composables/useAppShellOpenFlow'
 import { useAppShellPersistence } from './composables/useAppShellPersistence'
@@ -158,11 +159,7 @@ import { useAppShellWorkspaceSetup } from './composables/useAppShellWorkspaceSet
 import { useAppModalController } from './composables/useAppModalController'
 import { useAppSecondBrainBridge } from './composables/useAppSecondBrainBridge'
 import { useAppShellViewModels } from './composables/useAppShellViewModels'
-import {
-  useAppQuickOpen,
-  type PaletteAction,
-  type PaletteActionFamily
-} from './composables/useAppQuickOpen'
+import { useAppQuickOpen } from './composables/useAppQuickOpen'
 import { useAppTheme, type ThemePreference } from './composables/useAppTheme'
 import { useAppWorkspaceController } from './composables/useAppWorkspaceController'
 import { useEditorState } from '../domains/editor/composables/useEditorState'
@@ -639,175 +636,56 @@ const searchModeOptions: Array<{ mode: SearchMode; label: string }> = [
   { mode: 'semantic', label: 'Semantic' },
   { mode: 'lexical', label: 'Lexical' }
 ]
-
-// Palette ranking is explicit so command ordering stays stable as shell
-// commands evolve and new actions are added over time.
-const paletteActionPriority: Record<string, number> = {
-  'open-file': 0,
-  'open-workspace': 1,
-  'open-home-view': 2,
-  'open-favorites': 3,
-  'open-today': 4,
-  'open-yesterday': 5,
-  'open-specific-date': 6,
-  'open-cosmos-view': 7,
-  'open-second-brain-view': 8,
-  'open-alters-view': 9,
-  'add-active-note-to-second-brain': 10,
-  'add-active-note-to-favorites': 11,
-  'remove-active-note-from-favorites': 12,
-  'open-settings': 13,
-  'open-note-in-cosmos': 14,
-  'reveal-in-explorer': 15,
-  'show-shortcuts': 16,
-  'create-new-file': 17,
-  'close-other-tabs': 18,
-  'close-all-tabs': 19,
-  'close-all-tabs-current-pane': 20,
-  'split-pane-right': 21,
-  'split-pane-down': 22,
-  'focus-pane-1': 23,
-  'focus-pane-2': 24,
-  'focus-pane-3': 25,
-  'focus-pane-4': 26,
-  'focus-next-pane': 27,
-  'move-tab-next-pane': 28,
-  'close-active-pane': 29,
-  'join-panes': 30,
-  'reset-pane-layout': 31,
-  'zoom-in': 32,
-  'zoom-out': 33,
-  'zoom-reset': 34,
-  'theme-select': 35,
-  'theme-system': 36,
-  'theme-tomosona-light': 37,
-  'theme-tomosona-dark': 38,
-  'theme-github-light': 39,
-  'theme-tokyo-night': 40,
-  'theme-catppuccin-latte': 41,
-  'theme-catppuccin-mocha': 42,
-  'close-workspace': 43
-}
-
-function createPaletteAction(
-  family: PaletteActionFamily,
-  action: Omit<PaletteAction, 'family'>
-): PaletteAction {
-  return { family, ...action }
-}
-
-const paletteActions = computed<PaletteAction[]>(() => [
-  createPaletteAction('navigation', {
-    id: 'open-home-view',
-    label: 'Open Home',
-    run: () => openHomeViewFromPalette(),
-    closeBeforeRun: true
-  }),
-  createPaletteAction('navigation', {
-    id: 'open-favorites',
-    label: 'Open Favorites',
-    run: () => openFavoritesPanelFromPalette(),
-    closeBeforeRun: true
-  }),
-  createPaletteAction('navigation', {
-    id: 'open-cosmos-view',
-    label: 'Open Cosmos View',
-    run: () => openCosmosViewFromPalette(),
-    closeBeforeRun: true,
-    loadingLabel: 'Loading graph...'
-  }),
-  createPaletteAction('navigation', {
-    id: 'open-second-brain-view',
-    label: 'Open Second Brain View',
-    run: () => openSecondBrainViewFromPalette(),
-    closeBeforeRun: true
-  }),
-  createPaletteAction('navigation', {
-    id: 'open-alters-view',
-    label: 'Open Alters View',
-    run: () => openAltersViewFromPalette(),
-    closeBeforeRun: true
-  }),
-  createPaletteAction('notes', {
-    id: 'add-active-note-to-second-brain',
-    label: 'Add Active Note to Second Brain',
-    run: () => addActiveNoteToSecondBrainFromPalette()
-  }),
-  ...(
-    activeFilePath.value && isMarkdownPath(activeFilePath.value) && !favorites.isFavorite(activeFilePath.value)
-      ? [createPaletteAction('notes', {
-          id: 'add-active-note-to-favorites',
-          label: 'Add Active Note to Favorites',
-          run: () => addActiveNoteToFavoritesFromPalette()
-        })]
-      : []
-  ),
-  ...(
-    activeFilePath.value && isMarkdownPath(activeFilePath.value) && favorites.isFavorite(activeFilePath.value)
-      ? [createPaletteAction('notes', {
-          id: 'remove-active-note-from-favorites',
-          label: 'Remove Active Note from Favorites',
-          run: () => removeActiveNoteFromFavoritesFromPalette()
-        })]
-      : []
-  ),
-  createPaletteAction('utilities', {
-    id: 'open-settings',
-    label: 'Open Settings',
-    run: () => openSettingsFromPalette(),
-    closeBeforeRun: true
-  }),
-  createPaletteAction('navigation', {
-    id: 'open-note-in-cosmos',
-    label: 'Open Note in Cosmos',
-    run: () => openNoteInCosmosFromPalette(),
-    closeBeforeRun: true,
-    loadingLabel: 'Loading graph and locating active note...'
-  }),
-  createPaletteAction('workspace', { id: 'open-workspace', label: 'Open Workspace', run: () => openWorkspaceFromPalette() }),
-  createPaletteAction('workspace', { id: 'close-workspace', label: 'Close Workspace', run: () => closeWorkspaceFromPalette() }),
-  createPaletteAction('utilities', { id: 'show-shortcuts', label: 'Show Keyboard Shortcuts', run: () => openShortcutsFromPalette() }),
-  createPaletteAction('view', { id: 'zoom-in', label: 'Zoom In (Editor)', run: () => zoomInFromPalette() }),
-  createPaletteAction('view', { id: 'zoom-out', label: 'Zoom Out (Editor)', run: () => zoomOutFromPalette() }),
-  createPaletteAction('view', { id: 'zoom-reset', label: 'Reset Zoom (Editor)', run: () => resetZoomFromPalette() }),
-  createPaletteAction('theme', { id: 'theme-select', label: 'Theme: Select Theme…', run: () => openThemePickerFromPalette() }),
-  createPaletteAction('theme', { id: 'theme-system', label: 'Theme: System', run: () => setThemeFromPalette('system') }),
-  ...availableThemes.map((theme) =>
-    createPaletteAction('theme', {
-      id: `theme-${theme.id}`,
-      label: `Theme: ${theme.label}`,
-      run: () => setThemeFromPalette(theme.id)
-    })
-  ),
-  createPaletteAction('notes', { id: 'open-today', label: 'Open Today', run: () => openTodayNote() }),
-  createPaletteAction('notes', { id: 'open-yesterday', label: 'Open Yesterday', run: () => openYesterdayNote() }),
-  createPaletteAction('notes', { id: 'open-specific-date', label: 'Open Specific Date', run: () => openSpecificDateNote() }),
-  createPaletteAction('notes', { id: 'create-new-file', label: 'New Note', run: () => createNewFileFromPalette() }),
-  createPaletteAction('layout', { id: 'close-all-tabs', label: 'Close All Tabs (All Panes)', run: () => closeAllTabsFromPalette() }),
-  createPaletteAction('layout', {
-    id: 'close-all-tabs-current-pane',
-    label: 'Close All Tabs on Current Pane',
-    run: () => closeAllTabsOnCurrentPaneFromPalette()
-  }),
-  createPaletteAction('layout', { id: 'close-other-tabs', label: 'Close Other Tabs', run: () => closeOtherTabsFromPalette() }),
-  createPaletteAction('layout', { id: 'split-pane-right', label: 'Split Pane Right', run: () => splitPaneFromPalette('row') }),
-  createPaletteAction('layout', { id: 'split-pane-down', label: 'Split Pane Down', run: () => splitPaneFromPalette('column') }),
-  createPaletteAction('layout', { id: 'focus-pane-1', label: 'Focus Pane 1', run: () => focusPaneFromPalette(1) }),
-  createPaletteAction('layout', { id: 'focus-pane-2', label: 'Focus Pane 2', run: () => focusPaneFromPalette(2) }),
-  createPaletteAction('layout', { id: 'focus-pane-3', label: 'Focus Pane 3', run: () => focusPaneFromPalette(3) }),
-  createPaletteAction('layout', { id: 'focus-pane-4', label: 'Focus Pane 4', run: () => focusPaneFromPalette(4) }),
-  createPaletteAction('layout', { id: 'focus-next-pane', label: 'Focus Next Pane', run: () => focusNextPaneFromPalette() }),
-  createPaletteAction('layout', {
-    id: 'move-tab-next-pane',
-    label: 'Move Active Tab to Next Pane',
-    run: () => moveTabToNextPaneFromPalette()
-  }),
-  createPaletteAction('layout', { id: 'close-active-pane', label: 'Close Active Pane', run: () => closeActivePaneFromPalette() }),
-  createPaletteAction('layout', { id: 'join-panes', label: 'Join Panes', run: () => joinPanesFromPalette() }),
-  createPaletteAction('layout', { id: 'reset-pane-layout', label: 'Reset Pane Layout', run: () => resetPaneLayoutFromPalette() }),
-  createPaletteAction('search', { id: 'open-file', label: 'Open File', run: () => (quickOpenQuery.value = '', false) }),
-  createPaletteAction('utilities', { id: 'reveal-in-explorer', label: 'Reveal in Explorer', run: () => revealActiveInExplorer() })
-])
+const { paletteActions, paletteActionPriority } = useAppShellPaletteActions({
+  statePort: {
+    activeFilePath,
+    quickOpenQuery
+  },
+  documentPort: {
+    isMarkdownPath
+  },
+  favoritesPort: {
+    isFavorite: (path) => favorites.isFavorite(path)
+  },
+  themePort: {
+    availableThemes
+  },
+  actionPort: {
+    openHomeViewFromPalette: () => openHomeViewFromPalette(),
+    openFavoritesPanelFromPalette: () => openFavoritesPanelFromPalette(),
+    openCosmosViewFromPalette: () => openCosmosViewFromPalette(),
+    openSecondBrainViewFromPalette: () => openSecondBrainViewFromPalette(),
+    openAltersViewFromPalette: () => openAltersViewFromPalette(),
+    addActiveNoteToSecondBrainFromPalette: () => addActiveNoteToSecondBrainFromPalette(),
+    addActiveNoteToFavoritesFromPalette: () => addActiveNoteToFavoritesFromPalette(),
+    removeActiveNoteFromFavoritesFromPalette: () => removeActiveNoteFromFavoritesFromPalette(),
+    openSettingsFromPalette: () => openSettingsFromPalette(),
+    openNoteInCosmosFromPalette: () => openNoteInCosmosFromPalette(),
+    openWorkspaceFromPalette: () => openWorkspaceFromPalette(),
+    closeWorkspaceFromPalette: () => closeWorkspaceFromPalette(),
+    openShortcutsFromPalette: () => openShortcutsFromPalette(),
+    zoomInFromPalette: () => zoomInFromPalette(),
+    zoomOutFromPalette: () => zoomOutFromPalette(),
+    resetZoomFromPalette: () => resetZoomFromPalette(),
+    openThemePickerFromPalette: () => openThemePickerFromPalette(),
+    setThemeFromPalette: (next) => setThemeFromPalette(next),
+    openTodayNote: () => openTodayNote(),
+    openYesterdayNote: () => openYesterdayNote(),
+    openSpecificDateNote: () => openSpecificDateNote(),
+    createNewFileFromPalette: () => createNewFileFromPalette(),
+    closeAllTabsFromPalette: () => closeAllTabsFromPalette(),
+    closeAllTabsOnCurrentPaneFromPalette: () => closeAllTabsOnCurrentPaneFromPalette(),
+    closeOtherTabsFromPalette: () => closeOtherTabsFromPalette(),
+    splitPaneFromPalette: (axis) => splitPaneFromPalette(axis),
+    focusPaneFromPalette: (index) => focusPaneFromPalette(index),
+    focusNextPaneFromPalette: () => focusNextPaneFromPalette(),
+    moveTabToNextPaneFromPalette: () => moveTabToNextPaneFromPalette(),
+    closeActivePaneFromPalette: () => closeActivePaneFromPalette(),
+    joinPanesFromPalette: () => joinPanesFromPalette(),
+    resetPaneLayoutFromPalette: () => resetPaneLayoutFromPalette(),
+    revealActiveInExplorer: () => revealActiveInExplorer()
+  }
+})
 
 const quickOpenDataPort = {
   allWorkspaceFiles,

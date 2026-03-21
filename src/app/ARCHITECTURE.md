@@ -33,6 +33,7 @@
 - `useAppShellPersistence`: shell bootstrapping and persistence for theme, sidebar mode, zoom, and multi-pane layout.
 - `useAppShellOpenFlow`: note opening, wikilink resolution, active-note refresh, backlinks, and explorer/search entry points.
 - `useAppShellCommands`: cross-domain command routing for palette, launchpad, pane chrome, and shell menus.
+- `useAppShellPaletteActions`: command-palette catalog assembly, ordering, and conditional inclusion for quick-open.
 - `useAppShellKeyboard`: global shortcut priority, `Escape` routing, pane/navigation shortcut dispatch.
 - `useAppShellSearch`: global search state, debounce, grouping, mode switching.
 - `useAppShellLaunchpad`: recent workspaces, recent notes, launchpad row derivation.
@@ -59,6 +60,7 @@
 ### Add a new command palette action
 - Put the domain behavior in the owning domain/controller.
 - Put shell routing and UI wiring in `useAppShellCommands` when the action is reused by multiple shell entry points.
+- Put palette catalog membership, ordering, and conditional inclusion in `useAppShellPaletteActions`.
 - Reuse existing shell command helpers before adding a new inline handler in `App.vue`.
 
 ### Add a new shell modal
