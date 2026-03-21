@@ -162,6 +162,7 @@ import { useAppShellWorkspaceEntries } from './composables/useAppShellWorkspaceE
 import { useAppShellWorkspaceLifecycle } from './composables/useAppShellWorkspaceLifecycle'
 import { useAppModalController } from './composables/useAppModalController'
 import { useAppSecondBrainBridge } from './composables/useAppSecondBrainBridge'
+import { useAppShellViewModels } from './composables/useAppShellViewModels'
 import {
   useAppQuickOpen,
   type PaletteAction,
@@ -178,12 +179,6 @@ import { useFilesystemState } from './composables/useFilesystemState'
 import { useWorkspaceState, type SidebarMode } from './composables/useWorkspaceState'
 import { useFavoritesController } from '../domains/favorites/composables/useFavoritesController'
 import { rewritePathWithMoves, sortPathMoves } from './lib/pathMoves'
-import type {
-  AppShellAltersViewModel,
-  AppShellCosmosViewModel,
-  AppShellLaunchpadViewModel,
-  AppShellSecondBrainViewModel
-} from './lib/appShellViewModels'
 import {
   createInitialLayout,
   useMultiPaneWorkspaceState
@@ -650,16 +645,6 @@ const searchModeOptions: Array<{ mode: SearchMode; label: string }> = [
   { mode: 'lexical', label: 'Lexical' }
 ]
 
-const systemThemeLabel = computed(() => buildSystemThemeLabel(activeColorScheme.value))
-
-const themePickerItems = computed(() =>
-  buildThemePickerItems(availableThemes, activeColorScheme.value).filter((item) => {
-    const q = themePickerQuery.value.trim().toLowerCase()
-    if (!q) return true
-    return `${item.label} ${item.meta}`.toLowerCase().includes(q)
-  })
-)
-
 // Palette ranking is explicit so command ordering stays stable as shell
 // commands evolve and new actions are added over time.
 const paletteActionPriority: Record<string, number> = {
@@ -1001,132 +986,10 @@ const {
   submitOpenDateFromModal
 } = workspaceEntries
 
-const shortcutSections = computed(() =>
-  buildShortcutSections({
-    primaryModLabel: primaryModLabel.value,
-    backShortcutLabel: backShortcutLabel.value,
-    forwardShortcutLabel: forwardShortcutLabel.value,
-    homeShortcutLabel: homeShortcutLabel.value,
-    commandPaletteShortcutLabel: commandPaletteShortcutLabel.value
-  })
-)
-
-const filteredShortcutSections = computed(() => {
-  const query = shortcutsFilterQuery.value.trim().toLowerCase()
-  if (!query) return shortcutSections.value
-
-  return shortcutSections.value
-    .map((section) => {
-      const titleMatches = section.title.toLowerCase().includes(query)
-      if (titleMatches) return section
-      const items = section.items.filter((item) =>
-        item.keys.toLowerCase().includes(query) || item.action.toLowerCase().includes(query)
-      )
-      return { ...section, items }
-    })
-    .filter((section) => section.items.length > 0)
-})
-
-const metadataRows = computed(() => buildMetadataRows({
-  activeFilePath: activeFilePath.value,
-  activeStatus: activeStatus.value,
-  virtualDocExists: Boolean(virtualDocs.value[activeFilePath.value]),
-  activeTab: multiPane.getActiveTab(),
-  activeFileMetadata: activeFileMetadata.value,
-  workspacePath: filesystem.workingFolderPath.value,
-  toRelativePath,
-  formatTimestamp
-}))
-const backlinkCount = computed(() => backlinks.value.length)
-const semanticLinkCount = computed(() => semanticLinks.value.length)
-const activeNoteInContext = computed(() => {
-  const path = activeFilePath.value.trim()
-  return path ? constitutedContext.contains(path) : false
-})
-const localContextItems = computed(() => constitutedContext.localItems.value)
-const pinnedContextItems = computed(() => constitutedContext.pinnedItems.value)
-const noteEchoesForPanel = computed(() =>
-  noteEchoes.items.value.map((item) => ({
-    ...item,
-    isInContext: constitutedContext.contains(item.path)
-  }))
-)
-const cosmosSelectedNodeForPanel = computed(() => {
-  if (!cosmos.selectedNode.value) return null
-  return {
-    ...cosmos.selectedNode.value,
-    path: toRelativePath(cosmos.selectedNode.value.path)
-  }
-})
-const cosmosPaneViewModel = computed<AppShellCosmosViewModel>(() => ({
-  graph: cosmos.visibleGraph.value,
-  loading: cosmos.loading.value,
-  error: cosmos.error.value,
-  selectedNodeId: cosmos.selectedNodeId.value,
-  focusMode: cosmos.focusMode.value,
-  focusDepth: cosmos.focusDepth.value,
-  summary: cosmos.summary.value,
-  query: cosmos.query.value,
-  matches: cosmos.queryMatches.value,
-  showSemanticEdges: cosmos.showSemanticEdges.value,
-  selectedNode: cosmosSelectedNodeForPanel.value,
-  selectedLinkCount: cosmos.selectedLinkCount.value,
-  preview: cosmos.preview.value,
-  previewLoading: cosmos.previewLoading.value,
-  previewError: cosmos.previewError.value,
-  outgoingNodes: cosmos.outgoingNodes.value,
-  incomingNodes: cosmos.incomingNodes.value
-}))
-const secondBrainPaneViewModel = computed<AppShellSecondBrainViewModel>(() => ({
-  workspacePath: filesystem.workingFolderPath.value,
-  allWorkspaceFiles: allWorkspaceFiles.value,
-  requestedSessionId: secondBrainRequestedSessionId.value,
-  requestedSessionNonce: secondBrainRequestedSessionNonce.value,
-  requestedPrompt: secondBrainRequestedPrompt.value,
-  requestedPromptNonce: secondBrainRequestedPromptNonce.value,
-  requestedAlterId: secondBrainRequestedAlterId.value,
-  requestedAlterNonce: secondBrainRequestedAlterNonce.value,
-  activeNotePath: activeFilePath.value,
-  echoesRefreshToken: workspaceMutationEchoesToken.value,
-  settings: altersSettings.value
-}))
-const altersPaneViewModel = computed<AppShellAltersViewModel>(() => ({
-  workspacePath: filesystem.workingFolderPath.value,
-  settings: altersSettings.value
-}))
-const launchpadPaneViewModel = computed<AppShellLaunchpadViewModel>(() => ({
-  workspaceLabel: filesystem.workingFolderPath.value ? basenameLabel(filesystem.workingFolderPath.value) : '',
-  recentWorkspaces: launchpadRecentWorkspaces.value,
-  recentViewedNotes: recentViewedNotes.value,
-  recentUpdatedNotes: recentUpdatedNotes.value,
-  showWizardAction: launchpadShowWizardAction.value
-}))
-
 const mediaQuery = typeof window !== 'undefined'
   ? window.matchMedia('(prefers-color-scheme: dark)')
   : null
 let disposeOpenTraceActivitySubscription: (() => void) | null = null
-
-const backShortcutLabel = computed(() => (isMacOs ? 'Cmd+[' : 'Alt+Left'))
-const forwardShortcutLabel = computed(() => (isMacOs ? 'Cmd+]' : 'Alt+Right'))
-const homeShortcutLabel = computed(() => (isMacOs ? 'Cmd+Shift+H' : 'Ctrl+Shift+H'))
-const commandPaletteShortcutLabel = computed(() => (isMacOs ? 'Cmd+Shift+P' : 'Ctrl+Shift+P'))
-const zoomPercentLabel = computed(() => `${Math.round(editorZoom.value * 100)}%`)
-const primaryModLabel = computed(() => (isMacOs ? 'Cmd' : 'Ctrl'))
-const backHistoryItems = computed(() =>
-  documentHistory.backTargets.value.slice(0, 14).map((target) => ({
-    index: target.index,
-    key: `back-${target.index}-${target.entry.stateKey}`,
-    label: historyTargetLabel(target.entry)
-  }))
-)
-const forwardHistoryItems = computed(() =>
-  documentHistory.forwardTargets.value.slice(0, 14).map((target) => ({
-    index: target.index,
-    key: `forward-${target.index}-${target.entry.stateKey}`,
-    label: historyTargetLabel(target.entry)
-  }))
-)
 
 function openIndexStatusModal() {
   rememberFocusBeforeModalOpen()
@@ -1393,6 +1256,117 @@ const {
   onBacklinkOpen,
   onExplorerOpen
 } = shellOpenFlow
+
+const shellViewModels = useAppShellViewModels({
+  theme: {
+    themePreference,
+    activeColorScheme,
+    availableThemes
+  },
+  search: {
+    shortcutsFilterQuery
+  },
+  workspace: {
+    workingFolderPath: filesystem.workingFolderPath,
+    activeFilePath,
+    activeStatus,
+    activeFileMetadata,
+    virtualDocs,
+    editorZoom,
+    getActiveTab: () => multiPane.getActiveTab(),
+    toRelativePath
+  },
+  history: {
+    backTargets: documentHistory.backTargets,
+    forwardTargets: documentHistory.forwardTargets
+  },
+  notes: {
+    noteEchoes: noteEchoes.items,
+    semanticLinks
+  },
+  context: {
+    constitutedContext
+  },
+  cosmos: {
+    graph: cosmos.graph,
+    loading: cosmos.loading,
+    error: cosmos.error,
+    selectedNodeId: cosmos.selectedNodeId,
+    focusMode: cosmos.focusMode,
+    focusDepth: cosmos.focusDepth,
+    summary: cosmos.summary,
+    query: cosmos.query,
+    queryMatches: cosmos.queryMatches,
+    showSemanticEdges: cosmos.showSemanticEdges,
+    selectedNode: cosmos.selectedNode,
+    selectedLinkCount: cosmos.selectedLinkCount,
+    preview: cosmos.preview,
+    previewLoading: cosmos.previewLoading,
+    previewError: cosmos.previewError,
+    outgoingNodes: cosmos.outgoingNodes,
+    incomingNodes: cosmos.incomingNodes
+  },
+  launchpad: {
+    recentWorkspaces: launchpadRecentWorkspaces,
+    recentViewedNotes,
+    recentUpdatedNotes,
+    showWizardAction: launchpadShowWizardAction
+  },
+  altersSettings,
+  secondBrain: {
+    workspacePath: filesystem.workingFolderPath,
+    allWorkspaceFiles,
+    requestedSessionId: secondBrainRequestedSessionId,
+    requestedSessionNonce: secondBrainRequestedSessionNonce,
+    requestedPrompt: secondBrainRequestedPrompt,
+    requestedPromptNonce: secondBrainRequestedPromptNonce,
+    requestedAlterId: secondBrainRequestedAlterId,
+    requestedAlterNonce: secondBrainRequestedAlterNonce,
+    echoesRefreshToken: workspaceMutationEchoesToken
+  },
+  labels: {
+    formatTimestamp
+  },
+  isMacOs,
+  libs: {
+    buildShortcutSections,
+    buildMetadataRows,
+    buildSystemThemeLabel,
+    buildThemePickerItems,
+    basenameLabel
+  },
+  historyLabels: {
+    historyTargetLabel: (entry) => historyTargetLabel(entry)
+  }
+})
+
+const {
+  systemThemeLabel,
+  themePickerItems,
+  shortcutSections,
+  filteredShortcutSections,
+  metadataRows,
+  backlinkCount,
+  semanticLinkCount,
+  activeNoteInContext,
+  localContextItems,
+  pinnedContextItems,
+  noteEchoesForPanel,
+  cosmosSelectedNodeForPanel,
+  cosmosPaneViewModel,
+  secondBrainPaneViewModel,
+  altersPaneViewModel,
+  launchpadPaneViewModel,
+  backShortcutLabel,
+  forwardShortcutLabel,
+  homeShortcutLabel,
+  commandPaletteShortcutLabel,
+  zoomPercentLabel,
+  primaryModLabel,
+  backHistoryItems,
+  forwardHistoryItems
+} = shellViewModels
+
 shellModalInteractions = useAppShellModalInteractions({
   quickOpenPort: {
     quickOpenVisible,
