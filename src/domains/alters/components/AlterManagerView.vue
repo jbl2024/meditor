@@ -79,7 +79,7 @@ const stepDefinitions: StepDefinition[] = [
     id: 4,
     label: 'Behavior',
     title: 'Behavior and response style',
-    detail: 'Tune contradiction, exploration, and delivery style.',
+    detail: 'Tune contradiction, temperature, exploration, and delivery style.',
     icon: AdjustmentsHorizontalIcon
   },
   {
@@ -139,6 +139,7 @@ const activeAlterSummary = computed(() => {
   return [
     `${activeAlter.value.inspirations.length} inspiration${activeAlter.value.inspirations.length > 1 ? 's' : ''}`,
     `${activeAlter.value.principles.length} principle${activeAlter.value.principles.length > 1 ? 's' : ''}`,
+    `${temperatureToPercent(activeAlter.value.style.temperature)}% temp`,
     `${revisions.value.length} revision${revisions.value.length > 1 ? 's' : ''}`
   ]
 })
@@ -163,6 +164,15 @@ function formatInspirationMeta(sourceType: string, weight: number | null): strin
   const label = sourceType.replace(/_/g, ' ')
   if (weight == null) return label
   return `${label} · ${weight}`
+}
+
+// The slider is shown as 0-100, but the stored Alter style keeps 0-1.
+function temperatureToPercent(temperature: number): number {
+  return Math.round(Math.min(Math.max(temperature, 0), 1) * 100)
+}
+
+function temperatureFromPercent(percent: number): number {
+  return Math.round(Math.min(Math.max(percent, 0), 100)) / 100
 }
 
 function resetDraft() {
@@ -661,6 +671,7 @@ onMounted(() => {
             <p>{{ draft.description || 'No description yet.' }}</p>
             <div class="alter-sidebar__meta">
               <UiBadge tone="neutral">{{ draft.style.influence_intensity }}</UiBadge>
+              <UiBadge tone="neutral">{{ temperatureToPercent(draft.style.temperature) }}%</UiBadge>
               <UiBadge tone="accent">{{ draft.inspirations.length }} sources</UiBadge>
             </div>
           </UiPanel>
@@ -939,6 +950,19 @@ onMounted(() => {
                   <span>Exploration level</span>
                   <input v-model.number="draft.style.exploration_level" class="alter-range-input" type="range" min="0" max="100">
                   <strong>{{ draft.style.exploration_level }}</strong>
+                </label>
+                <label class="alter-range-field">
+                  <span>Temperature</span>
+                  <input
+                    :value="temperatureToPercent(draft.style.temperature)"
+                    class="alter-range-input"
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="1"
+                    @input="draft.style.temperature = temperatureFromPercent(($event.target as HTMLInputElement).valueAsNumber)"
+                  >
+                  <strong>{{ temperatureToPercent(draft.style.temperature) }}%</strong>
                 </label>
               </div>
 
@@ -1527,7 +1551,7 @@ onMounted(() => {
 
 .alter-range-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 0.75rem;
 }
 

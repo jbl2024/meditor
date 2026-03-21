@@ -268,8 +268,8 @@ pub async fn discover_models() -> Result<Vec<CodexDiscoveredModel>, String> {
     Ok(models)
 }
 
-fn codex_request_body(model: &str, system_prompt: &str, user_prompt: &str) -> Value {
-    serde_json::json!({
+fn codex_request_body(model: &str, system_prompt: &str, user_prompt: &str, temperature: Option<f64>) -> Value {
+    let mut body = serde_json::json!({
         "model": model,
         "stream": true,
         "store": false,
@@ -284,7 +284,11 @@ fn codex_request_body(model: &str, system_prompt: &str, user_prompt: &str) -> Va
         ],
         "text": {"verbosity": "medium"},
         "include": ["reasoning.encrypted_content"]
-    })
+    });
+    if let Some(temperature) = temperature {
+        body["temperature"] = serde_json::json!(temperature);
+    }
+    body
 }
 
 async fn post_codex_request(
@@ -390,21 +394,23 @@ pub async fn run_codex(
     model: &str,
     system_prompt: &str,
     user_prompt: &str,
+    temperature: Option<f64>,
 ) -> Result<String, String> {
-    run_codex_stream(model, system_prompt, user_prompt, |_| Ok(())).await
+    run_codex_stream(model, system_prompt, user_prompt, temperature, |_| Ok(())).await
 }
 
 pub async fn run_codex_stream<F>(
     model: &str,
     system_prompt: &str,
     user_prompt: &str,
+    temperature: Option<f64>,
     on_chunk: F,
 ) -> Result<String, String>
 where
     F: FnMut(&str) -> Result<(), String>,
 {
     let (access_token, account_id) = load_credentials()?;
-    let body = codex_request_body(model, system_prompt, user_prompt);
+    let body = codex_request_body(model, system_prompt, user_prompt, temperature);
     let response = post_codex_request(&access_token, &account_id, &body).await?;
     let full_text = stream_codex_text(response, on_chunk).await?;
     let trimmed = full_text.trim();
@@ -509,5 +515,17 @@ mod tests {
         let models = parse_models_payload(&payload);
         assert_eq!(models.len(), 1);
         assert_eq!(models[0].id, "gpt-5.2-codex");
+    }
+
+    #[test]
+    fn codex_request_body_includes_temperature_when_provided() {
+        let body = codex_request_body("gpt-5.2-codex", "system", "user", Some(0.15));
+        assert_eq!(body.get("temperature"), Some(&serde_json::json!(0.15)));
+    }
+
+    #[test]
+    fn codex_request_body_omits_temperature_when_missing() {
+        let body = codex_request_body("gpt-5.2-codex", "system", "user", None);
+        assert!(body.get("temperature").is_none());
     }
 }

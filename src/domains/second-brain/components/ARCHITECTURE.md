@@ -14,6 +14,7 @@ This folder contains the modular frontend surface for the Second Brain view.
 - Modes contract is declared in `src/domains/second-brain/lib/secondBrainModes.ts`.
 - `useSecondBrainAtMentions` resolves inline `@relative/path.md` mentions and extracts context paths before send.
 - `SecondBrainView.vue` owns the local markdown assembly used by the `Copy conversation` action: it reads current context notes through `workspaceApi.readTextFile`, concatenates them before the thread, and writes the final markdown to the clipboard.
+- Alter sampling temperature is resolved in the backend from the active Alter record and falls back to `0.15` when no Alter is selected, so the neutral/default Second Brain path stays deterministic.
 
 ## Design constraints
 - Keep `App.vue` as integration shell only.

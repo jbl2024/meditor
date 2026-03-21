@@ -6,6 +6,8 @@
 
 use tauri::{AppHandle, Emitter};
 
+use crate::alters::effective_generation_temperature;
+
 use super::{
     config::active_profile,
     context::load_context_entries_from_paths,
@@ -114,11 +116,13 @@ async fn run_pulse_generation(
     let request_id_for_stream = request_id.to_string();
     let output_id_for_stream = output_id.to_string();
     let app_for_stream = app.clone();
+    let temperature = effective_generation_temperature(None);
     let llm_result = if active.capabilities.streaming {
         run_llm_stream(
             active,
             pulse_action_prompt(action_id),
             user_prompt,
+            Some(temperature),
             move |chunk| {
                 if consume_stream_cancel(&request_id_for_stream, &output_id_for_stream) {
                     return Err("Generation canceled.".to_string());
@@ -140,7 +144,13 @@ async fn run_pulse_generation(
         )
         .await
     } else {
-        run_llm(active, pulse_action_prompt(action_id), user_prompt).await
+        run_llm(
+            active,
+            pulse_action_prompt(action_id),
+            user_prompt,
+            Some(temperature),
+        )
+        .await
     };
 
     let answer = match llm_result {

@@ -20,7 +20,7 @@ use super::{
     stream_control::consume_stream_cancel,
     AppError, Result, SendMessagePayload, SendMessageResult, StreamEvent,
 };
-use crate::alters::resolve_invocation_prompt;
+use crate::alters::{effective_generation_temperature, resolve_invocation_prompt, resolve_invocation_temperature};
 use crate::ensure_index_schema;
 
 /// Runs the complete assistant message flow while preserving the existing IPC events.
@@ -58,6 +58,9 @@ pub(super) async fn send_message(
         .unwrap_or(&session_alter_id)
         .trim()
         .to_string();
+    let effective_temperature = effective_generation_temperature(
+        resolve_invocation_temperature(Some(&effective_alter_id))?,
+    );
 
     let user_message_id = next_id("sbm-user");
     let assistant_message_id = next_id("sbm-assistant");
@@ -93,6 +96,7 @@ pub(super) async fn send_message(
         &assistant_message_id,
         &mode_prompt,
         &built_prompt.user_prompt,
+        effective_temperature,
     )
     .await?;
 
@@ -170,12 +174,13 @@ async fn run_assistant_generation(
     assistant_message_id: &str,
     system_prompt: &str,
     user_prompt: &str,
+    temperature: f64,
 ) -> Result<String> {
     let stream_session_id = session_id.to_string();
     let stream_message_id = assistant_message_id.to_string();
     let app_for_stream = app.clone();
     let llm_result = if active.capabilities.streaming {
-        run_llm_stream(active, system_prompt, user_prompt, move |chunk| {
+        run_llm_stream(active, system_prompt, user_prompt, Some(temperature), move |chunk| {
             if consume_stream_cancel(&stream_session_id, &stream_message_id) {
                 return Err("Generation canceled.".to_string());
             }
@@ -193,7 +198,7 @@ async fn run_assistant_generation(
         })
         .await
     } else {
-        run_llm(active, system_prompt, user_prompt).await
+        run_llm(active, system_prompt, user_prompt, Some(temperature)).await
     };
 
     let answer = match llm_result {

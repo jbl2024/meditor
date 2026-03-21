@@ -29,6 +29,7 @@ import {
 const DEFAULT_STYLE: AlterStyle = {
   tone: 'strategic',
   verbosity: 'medium',
+  temperature: 0.15,
   contradiction_level: 55,
   exploration_level: 60,
   influence_intensity: 'balanced',

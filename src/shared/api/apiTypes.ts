@@ -292,9 +292,11 @@ export type AlterInspiration = {
   reference_id: string | null
 }
 
+/** Runtime Alter style persisted with each workspace alter. */
 export type AlterStyle = {
   tone: 'neutral' | 'direct' | 'socratic' | 'strategic' | 'creative'
   verbosity: 'short' | 'medium' | 'long'
+  temperature: number
   contradiction_level: number
   exploration_level: number
   influence_intensity: 'light' | 'balanced' | 'strong'

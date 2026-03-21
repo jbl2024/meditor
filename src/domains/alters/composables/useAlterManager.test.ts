@@ -36,6 +36,7 @@ describe('useAlterManager', () => {
       expect(draft.name).toBe('')
       expect(draft.description).toBe('')
       expect(draft.mission).toBe('')
+      expect(draft.style.temperature).toBe(0.15)
       expect(draft.principles).toEqual([])
       expect(draft.reflexes).toEqual([])
       expect(draft.values).toEqual([])
@@ -70,6 +71,7 @@ describe('useAlterManager', () => {
         style: {
           tone: 'neutral',
           verbosity: 'medium',
+          temperature: 0.15,
           contradiction_level: 50,
           exploration_level: 50,
           influence_intensity: 'balanced',
@@ -85,6 +87,7 @@ describe('useAlterManager', () => {
       }
       manager.openEditWizard()
       expect(manager.draft.value.blind_spots).toEqual(testBlindSpots)
+      expect(manager.draft.value.style.temperature).toBe(0.15)
     })
 
     it('copies system_hints from activeAlter to draft', () => {
@@ -109,6 +112,7 @@ describe('useAlterManager', () => {
         style: {
           tone: 'neutral',
           verbosity: 'medium',
+          temperature: 0.15,
           contradiction_level: 50,
           exploration_level: 50,
           influence_intensity: 'balanced',
@@ -148,6 +152,7 @@ describe('useAlterManager', () => {
         style: {
           tone: 'neutral',
           verbosity: 'medium',
+          temperature: 0.15,
           contradiction_level: 50,
           exploration_level: 50,
           influence_intensity: 'balanced',
@@ -188,6 +193,7 @@ describe('useAlterManager', () => {
         style: {
           tone: 'neutral',
           verbosity: 'medium',
+          temperature: 0.15,
           contradiction_level: 50,
           exploration_level: 50,
           influence_intensity: 'balanced',
@@ -228,6 +234,7 @@ describe('useAlterManager', () => {
         style: {
           tone: 'neutral',
           verbosity: 'medium',
+          temperature: 0.15,
           contradiction_level: 50,
           exploration_level: 50,
           influence_intensity: 'balanced',
@@ -262,6 +269,7 @@ describe('useAlterManager', () => {
         style: {
           tone: 'neutral',
           verbosity: 'medium',
+          temperature: 0.15,
           contradiction_level: 50,
           exploration_level: 50,
           influence_intensity: 'balanced',
@@ -285,7 +293,10 @@ describe('useAlterManager', () => {
       expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({
         id: 'test-id',
         blind_spots: ['Test blind spot'],
-        system_hints: ['Test hint']
+        system_hints: ['Test hint'],
+        style: expect.objectContaining({
+          temperature: 0.15
+        })
       }))
     })
   })

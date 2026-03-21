@@ -5,6 +5,8 @@ describe('loadBuiltInAlters', () => {
   it('loads the bundled alters from markdown files', () => {
     expect(builtInAlters.length).toBeGreaterThan(0)
     expect(builtInAlters.map((item) => item.id)).toContain('antifragile-strategist')
+    expect(builtInAlters.map((item) => item.id)).toContain('program-conductor')
+    expect(builtInAlters.map((item) => item.id)).toContain('weak-signal-scout')
   })
 
   it('parses explicit ids and keeps colon-containing values intact', () => {

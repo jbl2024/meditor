@@ -66,13 +66,26 @@ fn configure_environment(profile: &ProviderProfile) {
     }
 }
 
+fn chat_options_for_temperature(temperature: f64, capture_content: bool) -> ChatOptions {
+    let mut options = ChatOptions::default().with_temperature(temperature);
+    if capture_content {
+        options = options.with_capture_content(true);
+    }
+    options
+}
+
+/// Runs a single Second Brain LLM request.
+///
+/// Callers pass an optional temperature so alter-scoped tuning can be applied
+/// without changing the provider default for other generation paths.
 pub async fn run_llm(
     profile: &ProviderProfile,
     system_prompt: &str,
     user_prompt: &str,
+    temperature: Option<f64>,
 ) -> Result<String, String> {
     if is_openai_codex(profile) {
-        return run_codex(&profile.model, system_prompt, user_prompt).await;
+        return run_codex(&profile.model, system_prompt, user_prompt, temperature).await;
     }
 
     configure_environment(profile);
@@ -86,7 +99,8 @@ pub async fn run_llm(
     ];
 
     let request = ChatRequest::new(messages);
-    match client.exec_chat(&model, request, None).await {
+    let chat_options = temperature.map(|value| chat_options_for_temperature(value, false));
+    match client.exec_chat(&model, request, chat_options.as_ref()).await {
         Ok(response) => {
             let text = response
                 .first_text()
@@ -108,17 +122,21 @@ pub async fn run_llm(
     }
 }
 
+/// Runs a streaming Second Brain LLM request.
+///
+/// The optional temperature follows the same rules as [`run_llm`].
 pub async fn run_llm_stream<F>(
     profile: &ProviderProfile,
     system_prompt: &str,
     user_prompt: &str,
+    temperature: Option<f64>,
     mut on_chunk: F,
 ) -> Result<String, String>
 where
     F: FnMut(&str) -> Result<(), String>,
 {
     if is_openai_codex(profile) {
-        return run_codex_stream(&profile.model, system_prompt, user_prompt, on_chunk).await;
+        return run_codex_stream(&profile.model, system_prompt, user_prompt, temperature, on_chunk).await;
     }
 
     configure_environment(profile);
@@ -132,9 +150,9 @@ where
     ];
 
     let request = ChatRequest::new(messages);
-    let options = ChatOptions::default().with_capture_content(true);
+    let options = temperature.map(|value| chat_options_for_temperature(value, true));
     let mut response = client
-        .exec_chat_stream(&model, request, Some(&options))
+        .exec_chat_stream(&model, request, options.as_ref())
         .await
         .map_err(|err| {
             let message = format!("Model request failed: {err}");
@@ -221,5 +239,11 @@ mod tests {
             capabilities: Default::default(),
         };
         assert!(!is_openai_codex(&profile));
+    }
+
+    #[test]
+    fn builds_chat_options_with_temperature() {
+        let options = chat_options_for_temperature(0.42, true);
+        assert_eq!(options.temperature(), Some(0.42));
     }
 }

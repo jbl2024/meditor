@@ -19,6 +19,7 @@ use crate::second_brain::llm::run_llm;
 use crate::settings;
 
 const ALTER_PREFIX: &str = "alter";
+pub const ALTER_DEFAULT_TEMPERATURE: f64 = 0.15;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -42,6 +43,8 @@ pub struct AlterInspiration {
 pub struct AlterStyle {
     pub tone: String,
     pub verbosity: String,
+    #[serde(default = "default_alter_temperature")]
+    pub temperature: f64,
     pub contradiction_level: i64,
     pub exploration_level: i64,
     pub influence_intensity: String,
@@ -204,6 +207,7 @@ struct GeneratedAlterInspiration {
 struct GeneratedAlterStyle {
     pub tone: Option<String>,
     pub verbosity: Option<String>,
+    pub temperature: Option<f64>,
     pub contradiction_level: Option<i64>,
     pub exploration_level: Option<i64>,
     pub influence_intensity: Option<String>,
@@ -223,6 +227,10 @@ fn empty_to_none(value: Option<String>) -> Option<String> {
     })
 }
 
+fn default_alter_temperature() -> f64 {
+    ALTER_DEFAULT_TEMPERATURE
+}
+
 fn sanitize_lines(values: &[String]) -> Vec<String> {
     values
         .iter()
@@ -236,6 +244,7 @@ fn default_style() -> AlterStyle {
     AlterStyle {
         tone: "strategic".to_string(),
         verbosity: "medium".to_string(),
+        temperature: ALTER_DEFAULT_TEMPERATURE,
         contradiction_level: 55,
         exploration_level: 60,
         influence_intensity: "balanced".to_string(),
@@ -343,6 +352,7 @@ fn normalize_generated_draft(parsed: GeneratedAlterDraft, prompt: &str) -> Creat
     let style = parsed.style.unwrap_or(GeneratedAlterStyle {
         tone: None,
         verbosity: None,
+        temperature: None,
         contradiction_level: None,
         exploration_level: None,
         influence_intensity: None,
@@ -392,6 +402,7 @@ fn normalize_generated_draft(parsed: GeneratedAlterDraft, prompt: &str) -> Creat
         style: AlterStyle {
             tone: style.tone.unwrap_or(defaults.tone).trim().to_string(),
             verbosity: style.verbosity.unwrap_or(defaults.verbosity).trim().to_string(),
+            temperature: style.temperature.unwrap_or(defaults.temperature),
             contradiction_level: style.contradiction_level.unwrap_or(defaults.contradiction_level),
             exploration_level: style.exploration_level.unwrap_or(defaults.exploration_level),
             influence_intensity: style
@@ -427,6 +438,9 @@ fn validate_style(style: &AlterStyle) -> Result<()> {
     }
     if !valid_response.contains(&style.response_style.trim()) {
         return Err(AppError::InvalidOperation("Alter response style is invalid.".to_string()));
+    }
+    if !(0.0..=1.0).contains(&style.temperature) {
+        return Err(AppError::InvalidOperation("Alter temperature must be between 0 and 1.".to_string()));
     }
     if !(0..=100).contains(&style.contradiction_level) || !(0..=100).contains(&style.exploration_level) {
         return Err(AppError::InvalidOperation("Alter behavior levels must be between 0 and 100.".to_string()));
@@ -697,6 +711,20 @@ pub fn resolve_invocation_prompt(_conn: &Connection, alter_id: Option<&str>) -> 
     Ok(Some(alter.invocation_prompt))
 }
 
+/// Resolves the normalized sampling temperature for an Alter invocation.
+pub fn resolve_invocation_temperature(alter_id: Option<&str>) -> Result<Option<f64>> {
+    let Some(alter_id) = alter_id.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(None);
+    };
+    let alter = load_alter_record(alter_id)?;
+    Ok(Some(alter.style.temperature))
+}
+
+/// Returns the effective generation temperature, defaulting neutral runs to `0.15`.
+pub fn effective_generation_temperature(temperature: Option<f64>) -> f64 {
+    temperature.unwrap_or(ALTER_DEFAULT_TEMPERATURE)
+}
+
 fn quick_start_system_prompt() -> &'static str {
     "You design structured Alter personas for a workspace-centric thinking tool.
 
@@ -722,6 +750,7 @@ Required JSON shape:
   \"style\": {
     \"tone\": \"neutral\" | \"direct\" | \"socratic\" | \"strategic\" | \"creative\",
     \"verbosity\": \"short\" | \"medium\" | \"long\",
+    \"temperature\": number,
     \"contradiction_level\": number,
     \"exploration_level\": number,
     \"influence_intensity\": \"light\" | \"balanced\" | \"strong\",
@@ -738,6 +767,7 @@ Constraints:
 - Prefer 3 to 6 items for each list when relevant.
 - Keep inspirations concrete and use reference_figure/manual unless the user explicitly implies a note.
 - Use null for unknown optional values.
+- Keep temperature between 0 and 1.
 - Keep contradiction_level and exploration_level between 0 and 100."
 }
 
@@ -773,9 +803,14 @@ pub async fn generate_alter_draft(payload: GenerateAlterDraftPayload) -> Result<
         ));
     }
 
-    let raw = run_llm(active, quick_start_system_prompt(), &quick_start_user_prompt(&normalized_prompt))
-        .await
-        .map_err(AppError::InvalidOperation)?;
+    let raw = run_llm(
+        active,
+        quick_start_system_prompt(),
+        &quick_start_user_prompt(&normalized_prompt),
+        None,
+    )
+    .await
+    .map_err(AppError::InvalidOperation)?;
     let json = extract_json_object(&raw).ok_or_else(|| {
         AppError::InvalidOperation("Could not parse Alter quick start response.".to_string())
     })?;
@@ -973,7 +1008,14 @@ mod tests {
         assert!(!draft.name.trim().is_empty());
         assert!(draft.mission.contains("Build an alter for strategy under uncertainty"));
         assert_eq!(draft.style.influence_intensity, "balanced");
+        assert_eq!(draft.style.temperature, ALTER_DEFAULT_TEMPERATURE);
         assert_eq!(draft.color.as_deref(), Some("#8d6e63"));
+    }
+
+    #[test]
+    fn effective_generation_temperature_defaults_to_neutral() {
+        assert_eq!(effective_generation_temperature(None), ALTER_DEFAULT_TEMPERATURE);
+        assert_eq!(effective_generation_temperature(Some(0.42)), 0.42);
     }
 
     #[test]
@@ -1005,6 +1047,7 @@ mod tests {
             assert_eq!(loaded.system_hints, created.system_hints);
             assert_eq!(loaded.style.tone, created.style.tone);
             assert_eq!(loaded.style.verbosity, created.style.verbosity);
+            assert_eq!(loaded.style.temperature, created.style.temperature);
             assert_eq!(loaded.style.contradiction_level, created.style.contradiction_level);
             assert_eq!(loaded.style.exploration_level, created.style.exploration_level);
             assert_eq!(loaded.style.influence_intensity, created.style.influence_intensity);
@@ -1059,6 +1102,26 @@ mod tests {
             Ok(())
         })
         .expect("file-backed alters workflow")
+    }
+
+    #[test]
+    fn file_backed_alters_loads_missing_temperature_with_default() {
+        use_test_workspace(|| {
+            let created = create_alter(sample_create_payload("Legacy Temperature"))?;
+            let path = alter_path(&created.id)?;
+            let mut json: serde_json::Value = serde_json::from_str(&fs::read_to_string(&path)?)
+                .map_err(|_| AppError::OperationFailed)?;
+            if let Some(style) = json.get_mut("style").and_then(|value| value.as_object_mut()) {
+                style.remove("temperature");
+            }
+            fs::write(&path, serde_json::to_string_pretty(&json).map_err(|_| AppError::OperationFailed)?)?;
+
+            let loaded = load_alter(created.id.clone())?;
+            assert_eq!(loaded.style.temperature, ALTER_DEFAULT_TEMPERATURE);
+
+            Ok(())
+        })
+        .expect("missing temperature should fall back to the default")
     }
 
     #[test]
@@ -1128,6 +1191,22 @@ mod tests {
             load_alter("missing".to_string()),
             Err(AppError::InvalidOperation(message)) if message == "No workspace is selected."
         ));
+    }
+
+    #[test]
+    fn file_backed_alters_reject_invalid_temperature_values() {
+        use_test_workspace(|| {
+            let mut payload = sample_create_payload("Invalid Temperature");
+            payload.style.temperature = 1.5;
+
+            assert!(matches!(
+                create_alter(payload),
+                Err(AppError::InvalidOperation(message)) if message == "Alter temperature must be between 0 and 1."
+            ));
+
+            Ok(())
+        })
+        .expect("invalid temperatures should be rejected")
     }
 
     #[test]
