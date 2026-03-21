@@ -1,0 +1,44 @@
+{
+  "files.exclude": {
+    "**/.DS_Store": true,
+    "**/dist": true,
+    "**/src-tauri/target": true
+  },
+
+  "files.watcherExclude": {
+    "**/.git/**": true,
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/node_modules/**": true,
+    "**/node_modules/.cache/**": true,
+    "**/dist/**": true,
+    "**/coverage/**": true,
+    "**/.vite/**": true,
+    "**/src-tauri/target/**": true,
+    "**/src-tauri/target/debug/**": true,
+    "**/src-tauri/target/release/**": true,
+    "**/.pnpm-store/**": true,
+    "**/.yarn/**": true
+  },
+
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/node_modules/.cache": true,
+    "**/dist": true,
+    "**/coverage": true,
+    "**/.vite": true,
+    "**/src-tauri/target": true,
+    "**/*.lock": true,
+    "**/.pnpm-store": true,
+    "**/.yarn": true
+  },
+
+  "typescript.tsserver.maxTsServerMemory": 3072,
+  "typescript.disableAutomaticTypeAcquisition": true,
+
+  "rust-analyzer.cargo.buildScripts.enable": false,
+  "rust-analyzer.checkOnSave": false,
+  "rust-analyzer.procMacro.enable": false,
+
+  "files.useExperimentalFileWatcher": false
+}
