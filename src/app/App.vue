@@ -1402,7 +1402,21 @@ const historyUi = useAppShellHistoryUi({
   canOpenMenu: (side) => side === 'back' ? documentHistory.canGoBack.value : documentHistory.canGoForward.value,
   getTargetCount: (side) => side === 'back'
     ? documentHistory.backTargets.value.length
-    : documentHistory.forwardTargets.value.length
+    : documentHistory.forwardTargets.value.length,
+  navigationPort: {
+    goBackInHistory: async () => {
+      await goBackInHistory()
+    },
+    goForwardInHistory: async () => {
+      await goForwardInHistory()
+    },
+    openHistoryEntry,
+    documentHistory: {
+      currentIndex: documentHistory.currentIndex,
+      jumpToEntry: (index: number) => documentHistory.jumpToEntry(index)
+    },
+    isApplyingHistoryNavigation
+  }
 })
 const {
   historyMenuOpen,
@@ -1411,7 +1425,8 @@ const {
   onHistoryButtonPointerDown,
   cancelHistoryLongPress,
   onHistoryButtonContextMenu,
-  shouldConsumeHistoryButtonClick,
+  onHistoryButtonClick,
+  onHistoryTargetClick,
   onWindowResize,
   onGlobalPointerDown: onGlobalPointerDownInternal,
   dispose: disposeHistoryUi
@@ -1647,37 +1662,6 @@ function scheduleCosmosNodeFocus(nodeId: string, remainingAttempts = 12) {
 
 function onGlobalPointerDown(event: MouseEvent) {
   onGlobalPointerDownInternal(event, overflowMenuOpen.value)
-}
-
-function onHistoryButtonClick(side: 'back' | 'forward') {
-  if (shouldConsumeHistoryButtonClick(side)) {
-    return
-  }
-  if (side === 'back') {
-    void goBackInHistory()
-    return
-  }
-  void goForwardInHistory()
-}
-
-function onHistoryTargetClick(targetIndex: number) {
-  closeHistoryMenu()
-  const previousIndex = documentHistory.currentIndex.value
-  const targetEntry = documentHistory.jumpToEntry(targetIndex)
-  if (!targetEntry) return
-  void (async () => {
-    isApplyingHistoryNavigation.value = true
-    let opened = false
-    try {
-      opened = await openHistoryEntry(targetEntry)
-    } finally {
-      isApplyingHistoryNavigation.value = false
-    }
-    if (opened) {
-      return
-    }
-    documentHistory.jumpToEntry(previousIndex)
-  })()
 }
 
 function moveThemePickerSelection(delta: number) {

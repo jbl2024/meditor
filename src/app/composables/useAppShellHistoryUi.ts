@@ -1,4 +1,5 @@
-import { onScopeDispose, ref } from 'vue'
+import { onScopeDispose, ref, type Ref } from 'vue'
+import type { DocumentHistoryEntry } from '../../domains/editor/composables/useDocumentHistory'
 
 export type HistoryMenuSide = 'back' | 'forward'
 
@@ -15,6 +16,16 @@ export type UseAppShellHistoryUiOptions = {
   closeOverflowMenu: () => void
   canOpenMenu: (side: HistoryMenuSide) => boolean
   getTargetCount: (side: HistoryMenuSide) => number
+  navigationPort: {
+    goBackInHistory: () => Promise<void>
+    goForwardInHistory: () => Promise<void>
+    openHistoryEntry: (entry: DocumentHistoryEntry) => Promise<boolean>
+    documentHistory: {
+      currentIndex: Ref<number>
+      jumpToEntry: (index: number) => DocumentHistoryEntry | null
+    }
+    isApplyingHistoryNavigation: Ref<boolean>
+  }
 }
 
 /**
@@ -99,6 +110,35 @@ export function useAppShellHistoryUi(options: UseAppShellHistoryUiOptions) {
     return false
   }
 
+  function onHistoryButtonClick(side: HistoryMenuSide) {
+    if (shouldConsumeHistoryButtonClick(side)) {
+      return
+    }
+    if (side === 'back') {
+      void options.navigationPort.goBackInHistory()
+      return
+    }
+    void options.navigationPort.goForwardInHistory()
+  }
+
+  function onHistoryTargetClick(targetIndex: number) {
+    closeHistoryMenu()
+    const previousIndex = options.navigationPort.documentHistory.currentIndex.value
+    const targetEntry = options.navigationPort.documentHistory.jumpToEntry(targetIndex)
+    if (!targetEntry) return
+    void (async () => {
+      options.navigationPort.isApplyingHistoryNavigation.value = true
+      let opened = false
+      try {
+        opened = await options.navigationPort.openHistoryEntry(targetEntry)
+      } finally {
+        options.navigationPort.isApplyingHistoryNavigation.value = false
+      }
+      if (opened) return
+      options.navigationPort.documentHistory.jumpToEntry(previousIndex)
+    })()
+  }
+
   function onWindowResize() {
     if (!historyMenuOpen.value) return
     updateHistoryMenuPosition(historyMenuOpen.value)
@@ -136,6 +176,8 @@ export function useAppShellHistoryUi(options: UseAppShellHistoryUiOptions) {
     cancelHistoryLongPress,
     onHistoryButtonContextMenu,
     shouldConsumeHistoryButtonClick,
+    onHistoryButtonClick,
+    onHistoryTargetClick,
     onWindowResize,
     onGlobalPointerDown,
     dispose
