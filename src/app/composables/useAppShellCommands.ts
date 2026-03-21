@@ -294,26 +294,6 @@ export function useAppShellCommands(options: UseAppShellCommandsOptions) {
     await options.actionPort.openQuickOpen('>')
   }
 
-  async function runLaunchpadQuickStart(kind: 'today' | 'second-brain' | 'cosmos' | 'command-palette' | 'alters') {
-    if (kind === 'today') {
-      await options.actionPort.openTodayNote()
-      return
-    }
-    if (kind === 'second-brain') {
-      await openSecondBrainViewFromPalette()
-      return
-    }
-    if (kind === 'cosmos') {
-      await openCosmosViewFromPalette()
-      return
-    }
-    if (kind === 'alters') {
-      await openAltersViewFromPalette()
-      return
-    }
-    await openCommandPalette()
-  }
-
   function closeAllTabsFromPalette() {
     const allDocumentPaths = Object.keys(options.panePort.panesById.value)
       .flatMap((paneId) => documentPathsForPane(options.panePort.panesById.value, paneId))
@@ -401,7 +381,6 @@ export function useAppShellCommands(options: UseAppShellCommandsOptions) {
     openFavoriteFromSidebar,
     revealActiveInExplorer,
     openCommandPalette,
-    runLaunchpadQuickStart,
     closeAllTabsFromPalette,
     closeAllTabsOnCurrentPaneFromPalette,
     openWorkspaceFromPalette,

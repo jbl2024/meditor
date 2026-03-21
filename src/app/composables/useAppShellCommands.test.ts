@@ -193,17 +193,4 @@ describe('useAppShellCommands', () => {
     scope.stop()
   })
 
-  it('routes launchpad quick starts to the corresponding shell workflows', async () => {
-    const { api, scope, actionPort, panePort } = createCommands()
-
-    await api.runLaunchpadQuickStart('today')
-    await api.runLaunchpadQuickStart('command-palette')
-    await api.runLaunchpadQuickStart('cosmos')
-
-    expect(actionPort.openTodayNote).toHaveBeenCalled()
-    expect(actionPort.closeOverflowMenu).toHaveBeenCalled()
-    expect(actionPort.openQuickOpen).toHaveBeenCalledWith('>')
-    expect(panePort.openSurfaceInPane).toHaveBeenCalledWith('cosmos')
-    scope.stop()
-  })
 })

@@ -89,7 +89,7 @@ function createPaletteAction(
 }
 
 // Palette ranking keeps action ordering stable as the shell grows.
-const PALETTE_ACTION_PRIORITY: Record<string, number> = {
+export const PALETTE_ACTION_PRIORITY: Record<string, number> = {
   'open-file': 0,
   'open-workspace': 1,
   'open-home-view': 2,

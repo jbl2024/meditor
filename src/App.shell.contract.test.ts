@@ -27,4 +27,11 @@ describe('App shell contract', () => {
     expect(appSource).not.toContain('const paletteActions = computed<PaletteAction[]>')
     expect(appSource).toContain('useAppShellPaletteActions')
   })
+
+  it('keeps launchpad quick-start routing and theme picker proxies out of App.vue', () => {
+    expect(appSource).not.toContain('function openThemePickerFromPalette')
+    expect(appSource).not.toContain('function setThemeFromPalette')
+    expect(appSource).not.toContain('runLaunchpadQuickStart')
+    expect(appSource).toContain('launchpad.launchQuickStart')
+  })
 })

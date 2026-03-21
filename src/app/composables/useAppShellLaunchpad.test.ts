@@ -11,6 +11,14 @@ function createLaunchpad(overrides: Partial<Parameters<typeof useAppShellLaunchp
     ['/vault/a.md', 200],
     ['/vault/b.md', 150]
   ])
+  const actionPort = overrides.actionPort ?? {
+    openQuickOpen: vi.fn(async () => true),
+    openCommandPalette: vi.fn(async () => true),
+    openTodayNote: vi.fn(async () => true),
+    openCosmosView: vi.fn(async () => true),
+    openSecondBrainView: vi.fn(async () => true),
+    openAltersView: vi.fn(async () => true)
+  }
 
   const scope = effectScope()
   const api = scope.run(() => useAppShellLaunchpad({
@@ -46,10 +54,16 @@ function createLaunchpad(overrides: Partial<Parameters<typeof useAppShellLaunchp
     noteTitleFromPath: (path) => path.split('/').pop()?.replace('.md', '') ?? path,
     basenameLabel: (path) => path.split('/').pop() ?? path,
     formatRelativeTime: (ts, prefix = '') => `${prefix} ${ts}`.trim(),
+    actionPort,
     ...overrides
   }))
   if (!api) throw new Error('Expected launchpad controller')
-  return { api, scope, recentNotesByKey }
+  return {
+    api,
+    scope,
+    recentNotesByKey,
+    actionPort
+  }
 }
 
 describe('useAppShellLaunchpad', () => {
@@ -111,6 +125,26 @@ describe('useAppShellLaunchpad', () => {
     await api.refreshLaunchpadRecentNotes()
 
     expect(readFileMetadata.mock.calls.length).toBeGreaterThan(baselineCalls + 1)
+    scope.stop()
+  })
+
+  it('routes launchpad quick-start actions to the owning shell actions', async () => {
+    const { api, scope, actionPort } = createLaunchpad()
+
+    await api.openQuickOpenFromLaunchpad()
+    await api.openCommandPaletteFromLaunchpad()
+    await api.launchQuickStart('today')
+    await api.launchQuickStart('second-brain')
+    await api.launchQuickStart('cosmos')
+    await api.launchQuickStart('alters')
+    await api.launchQuickStart('command-palette')
+
+    expect(actionPort.openQuickOpen).toHaveBeenCalledWith('')
+    expect(actionPort.openCommandPalette).toHaveBeenCalledTimes(2)
+    expect(actionPort.openTodayNote).toHaveBeenCalledTimes(1)
+    expect(actionPort.openSecondBrainView).toHaveBeenCalledTimes(1)
+    expect(actionPort.openCosmosView).toHaveBeenCalledTimes(1)
+    expect(actionPort.openAltersView).toHaveBeenCalledTimes(1)
     scope.stop()
   })
 })

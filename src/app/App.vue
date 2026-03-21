@@ -147,8 +147,8 @@ import { useAppShellHistoryUi } from './composables/useAppShellHistoryUi'
 import { useAppShellModalInteractions } from './composables/useAppShellModalInteractions'
 import { useAppShellCommands } from './composables/useAppShellCommands'
 import { useAppShellKeyboard } from './composables/useAppShellKeyboard'
-import { useAppShellLaunchpad } from './composables/useAppShellLaunchpad'
-import { useAppShellPaletteActions } from './composables/useAppShellPaletteActions'
+import { useAppShellLaunchpad, type UseAppShellLaunchpadActionPort } from './composables/useAppShellLaunchpad'
+import { PALETTE_ACTION_PRIORITY, useAppShellPaletteActions, type AppShellPaletteActionPort } from './composables/useAppShellPaletteActions'
 import { useAppShellModals } from './composables/useAppShellModals'
 import { useAppShellOpenFlow, type RefreshBacklinksOptions } from './composables/useAppShellOpenFlow'
 import { useAppShellPersistence } from './composables/useAppShellPersistence'
@@ -409,6 +409,14 @@ const {
   closeWorkspace: closeWorkspaceInternal,
   loadWorkingFolder: loadWorkingFolderInternal
 } = workspaceController
+const launchpadActionPort: UseAppShellLaunchpadActionPort = {
+  openQuickOpen: async () => false,
+  openCommandPalette: async () => false,
+  openTodayNote: async () => false,
+  openCosmosView: async () => false,
+  openSecondBrainView: async () => false,
+  openAltersView: async () => false
+}
 const launchpad = useAppShellLaunchpad({
   storageKey: RECENT_WORKSPACES_STORAGE_KEY,
   workingFolderPath: filesystem.workingFolderPath,
@@ -428,7 +436,8 @@ const launchpad = useAppShellLaunchpad({
   toRelativePath,
   noteTitleFromPath,
   basenameLabel,
-  formatRelativeTime
+  formatRelativeTime,
+  actionPort: launchpadActionPort
 })
 const {
   recentViewedNotes,
@@ -636,7 +645,42 @@ const searchModeOptions: Array<{ mode: SearchMode; label: string }> = [
   { mode: 'semantic', label: 'Semantic' },
   { mode: 'lexical', label: 'Lexical' }
 ]
-const { paletteActions, paletteActionPriority } = useAppShellPaletteActions({
+const shellPaletteActionPort: AppShellPaletteActionPort = {
+  openHomeViewFromPalette: () => false,
+  openFavoritesPanelFromPalette: () => false,
+  openCosmosViewFromPalette: () => false,
+  openSecondBrainViewFromPalette: () => false,
+  openAltersViewFromPalette: () => false,
+  addActiveNoteToSecondBrainFromPalette: () => false,
+  addActiveNoteToFavoritesFromPalette: () => false,
+  removeActiveNoteFromFavoritesFromPalette: () => false,
+  openSettingsFromPalette: () => false,
+  openNoteInCosmosFromPalette: () => false,
+  openWorkspaceFromPalette: () => false,
+  closeWorkspaceFromPalette: () => false,
+  openShortcutsFromPalette: () => false,
+  zoomInFromPalette: () => false,
+  zoomOutFromPalette: () => false,
+  resetZoomFromPalette: () => false,
+  openThemePickerFromPalette: () => false,
+  setThemeFromPalette: () => false,
+  openTodayNote: () => false,
+  openYesterdayNote: () => false,
+  openSpecificDateNote: () => false,
+  createNewFileFromPalette: () => false,
+  closeAllTabsFromPalette: () => false,
+  closeAllTabsOnCurrentPaneFromPalette: () => false,
+  closeOtherTabsFromPalette: () => false,
+  splitPaneFromPalette: () => false,
+  focusPaneFromPalette: () => false,
+  focusNextPaneFromPalette: () => false,
+  moveTabToNextPaneFromPalette: () => false,
+  closeActivePaneFromPalette: () => false,
+  joinPanesFromPalette: () => false,
+  resetPaneLayoutFromPalette: () => false,
+  revealActiveInExplorer: () => false
+}
+const { paletteActions } = useAppShellPaletteActions({
   statePort: {
     activeFilePath,
     quickOpenQuery
@@ -650,41 +694,7 @@ const { paletteActions, paletteActionPriority } = useAppShellPaletteActions({
   themePort: {
     availableThemes
   },
-  actionPort: {
-    openHomeViewFromPalette: () => openHomeViewFromPalette(),
-    openFavoritesPanelFromPalette: () => openFavoritesPanelFromPalette(),
-    openCosmosViewFromPalette: () => openCosmosViewFromPalette(),
-    openSecondBrainViewFromPalette: () => openSecondBrainViewFromPalette(),
-    openAltersViewFromPalette: () => openAltersViewFromPalette(),
-    addActiveNoteToSecondBrainFromPalette: () => addActiveNoteToSecondBrainFromPalette(),
-    addActiveNoteToFavoritesFromPalette: () => addActiveNoteToFavoritesFromPalette(),
-    removeActiveNoteFromFavoritesFromPalette: () => removeActiveNoteFromFavoritesFromPalette(),
-    openSettingsFromPalette: () => openSettingsFromPalette(),
-    openNoteInCosmosFromPalette: () => openNoteInCosmosFromPalette(),
-    openWorkspaceFromPalette: () => openWorkspaceFromPalette(),
-    closeWorkspaceFromPalette: () => closeWorkspaceFromPalette(),
-    openShortcutsFromPalette: () => openShortcutsFromPalette(),
-    zoomInFromPalette: () => zoomInFromPalette(),
-    zoomOutFromPalette: () => zoomOutFromPalette(),
-    resetZoomFromPalette: () => resetZoomFromPalette(),
-    openThemePickerFromPalette: () => openThemePickerFromPalette(),
-    setThemeFromPalette: (next) => setThemeFromPalette(next),
-    openTodayNote: () => openTodayNote(),
-    openYesterdayNote: () => openYesterdayNote(),
-    openSpecificDateNote: () => openSpecificDateNote(),
-    createNewFileFromPalette: () => createNewFileFromPalette(),
-    closeAllTabsFromPalette: () => closeAllTabsFromPalette(),
-    closeAllTabsOnCurrentPaneFromPalette: () => closeAllTabsOnCurrentPaneFromPalette(),
-    closeOtherTabsFromPalette: () => closeOtherTabsFromPalette(),
-    splitPaneFromPalette: (axis) => splitPaneFromPalette(axis),
-    focusPaneFromPalette: (index) => focusPaneFromPalette(index),
-    focusNextPaneFromPalette: () => focusNextPaneFromPalette(),
-    moveTabToNextPaneFromPalette: () => moveTabToNextPaneFromPalette(),
-    closeActivePaneFromPalette: () => closeActivePaneFromPalette(),
-    joinPanesFromPalette: () => joinPanesFromPalette(),
-    resetPaneLayoutFromPalette: () => resetPaneLayoutFromPalette(),
-    revealActiveInExplorer: () => revealActiveInExplorer()
-  }
+  actionPort: shellPaletteActionPort
 })
 
 const quickOpenDataPort = {
@@ -701,7 +711,7 @@ const quickOpenDocumentPort = {
 
 const quickOpenPalettePort = {
   paletteActions,
-  paletteActionPriority
+  paletteActionPriority: PALETTE_ACTION_PRIORITY
 }
 
 const {
@@ -1298,6 +1308,8 @@ shellModalInteractions = useAppShellModalInteractions({
   applyTheme,
   applyThemePreview
 })
+shellPaletteActionPort.openThemePickerFromPalette = shellModalInteractions!.openThemePickerFromPalette
+shellPaletteActionPort.setThemeFromPalette = shellModalInteractions!.setThemeFromPalette
 const historyUi = useAppShellHistoryUi({
   topbarPort: {
     getHistoryButtonEl: (side) => topbarRef.value?.getHistoryButtonEl(side) ?? null,
@@ -1421,7 +1433,6 @@ const {
   openFavoriteFromSidebar,
   revealActiveInExplorer,
   openCommandPalette,
-  runLaunchpadQuickStart,
   closeAllTabsFromPalette,
   closeAllTabsOnCurrentPaneFromPalette,
   openWorkspaceFromPalette,
@@ -1435,6 +1446,45 @@ const {
   joinPanesFromPalette,
   resetPaneLayoutFromPalette
 } = commands
+launchpadActionPort.openQuickOpen = (initialQuery = '') => openQuickOpen(initialQuery)
+launchpadActionPort.openCommandPalette = () => openCommandPalette()
+launchpadActionPort.openTodayNote = () => openTodayNote()
+launchpadActionPort.openCosmosView = () => openCosmosViewFromPalette()
+launchpadActionPort.openSecondBrainView = () => openSecondBrainViewFromPalette()
+launchpadActionPort.openAltersView = () => openAltersViewFromPalette()
+
+shellPaletteActionPort.openHomeViewFromPalette = openHomeViewFromPalette
+shellPaletteActionPort.openFavoritesPanelFromPalette = openFavoritesPanelFromPalette
+shellPaletteActionPort.openCosmosViewFromPalette = openCosmosViewFromPalette
+shellPaletteActionPort.openSecondBrainViewFromPalette = openSecondBrainViewFromPalette
+shellPaletteActionPort.openAltersViewFromPalette = openAltersViewFromPalette
+shellPaletteActionPort.addActiveNoteToSecondBrainFromPalette = addActiveNoteToSecondBrainFromPalette
+shellPaletteActionPort.addActiveNoteToFavoritesFromPalette = addActiveNoteToFavoritesFromPalette
+shellPaletteActionPort.removeActiveNoteFromFavoritesFromPalette = removeActiveNoteFromFavoritesFromPalette
+shellPaletteActionPort.openSettingsFromPalette = openSettingsFromPalette
+shellPaletteActionPort.openNoteInCosmosFromPalette = openNoteInCosmosFromPalette
+shellPaletteActionPort.openWorkspaceFromPalette = openWorkspaceFromPalette
+shellPaletteActionPort.closeWorkspaceFromPalette = closeWorkspaceFromPalette
+shellPaletteActionPort.openShortcutsFromPalette = openShortcutsFromPalette
+shellPaletteActionPort.zoomInFromPalette = zoomInFromPalette
+shellPaletteActionPort.zoomOutFromPalette = zoomOutFromPalette
+shellPaletteActionPort.resetZoomFromPalette = resetZoomFromPalette
+shellPaletteActionPort.openTodayNote = openTodayNote
+shellPaletteActionPort.openYesterdayNote = openYesterdayNote
+shellPaletteActionPort.openSpecificDateNote = openSpecificDateNote
+shellPaletteActionPort.createNewFileFromPalette = createNewFileFromPalette
+shellPaletteActionPort.closeAllTabsFromPalette = closeAllTabsFromPalette
+shellPaletteActionPort.closeAllTabsOnCurrentPaneFromPalette = closeAllTabsOnCurrentPaneFromPalette
+shellPaletteActionPort.closeOtherTabsFromPalette = closeOtherTabsFromPalette
+shellPaletteActionPort.splitPaneFromPalette = splitPaneFromPalette
+shellPaletteActionPort.focusPaneFromPalette = focusPaneFromPalette
+shellPaletteActionPort.focusNextPaneFromPalette = focusNextPaneFromPalette
+shellPaletteActionPort.moveTabToNextPaneFromPalette = moveTabToNextPaneFromPalette
+shellPaletteActionPort.closeActivePaneFromPalette = closeActivePaneFromPalette
+shellPaletteActionPort.joinPanesFromPalette = joinPanesFromPalette
+shellPaletteActionPort.resetPaneLayoutFromPalette = resetPaneLayoutFromPalette
+shellPaletteActionPort.revealActiveInExplorer = revealActiveInExplorer
+
 const workspaceLifecycle = useAppShellWorkspaceLifecycle({
   shellPort: {
     storageKey: WORKING_FOLDER_STORAGE_KEY,
@@ -1621,14 +1671,6 @@ function onThemePickerEnter() {
 
 function openThemePickerFromOverflow() {
   shellModalInteractions?.openThemePickerFromOverflow()
-}
-
-function openThemePickerFromPalette() {
-  return shellModalInteractions?.openThemePickerFromPalette() ?? false
-}
-
-function setThemeFromPalette(next: ThemePreference) {
-  return shellModalInteractions?.setThemeFromPalette(next) ?? false
 }
 
 function addPathToConstitutedContext(path: string) {
@@ -2456,14 +2498,14 @@ onBeforeUnmount(() => {
               @properties="onEditorProperties"
               @launchpad-open-workspace="void onSelectWorkingFolder()"
               @launchpad-open-wizard="void openWorkspaceSetupWizard()"
-              @launchpad-open-command-palette="openCommandPalette"
+              @launchpad-open-command-palette="void launchpad.openCommandPaletteFromLaunchpad()"
               @launchpad-open-shortcuts="openShortcutsModal"
               @launchpad-open-recent-workspace="void openRecentWorkspace($event)"
               @launchpad-open-today="void openTodayNote()"
-              @launchpad-open-quick-open="void openQuickOpen()"
+              @launchpad-open-quick-open="void launchpad.openQuickOpenFromLaunchpad()"
               @launchpad-create-note="void createNewFileFromPalette()"
               @launchpad-open-recent-note="void onExplorerOpen($event)"
-              @launchpad-quick-start="void runLaunchpadQuickStart($event)"
+              @launchpad-quick-start="void launchpad.launchQuickStart($event)"
             />
           </main>
 

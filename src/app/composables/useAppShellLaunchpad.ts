@@ -8,6 +8,16 @@ type RecentNoteStorageEntry = {
   lastViewedAtMs: number
 }
 
+/**
+ * Module: useAppShellLaunchpad
+ *
+ * Purpose:
+ * - Own launchpad recents and launchpad-facing routing.
+ *
+ * Boundary:
+ * - Keeps launchpad quick-start decisions out of `App.vue`.
+ * - Leaves command implementations in the shell command and modal composables.
+ */
 /** Declares the dependencies required by the shell launchpad controller. */
 export type UseAppShellLaunchpadOptions = {
   storageKey: string
@@ -29,6 +39,17 @@ export type UseAppShellLaunchpadOptions = {
   noteTitleFromPath: (path: string) => string
   basenameLabel: (path: string) => string
   formatRelativeTime: (tsMs: number | null, prefix?: string) => string
+  actionPort: UseAppShellLaunchpadActionPort
+}
+
+/** Groups launchpad-driven shell actions so launchpad routing stays in one place. */
+export type UseAppShellLaunchpadActionPort = {
+  openQuickOpen: (initialQuery?: string) => boolean | Promise<boolean | void> | void
+  openCommandPalette: () => boolean | Promise<boolean | void> | void
+  openTodayNote: () => boolean | Promise<boolean | void> | void
+  openCosmosView: () => boolean | Promise<boolean | void> | void
+  openSecondBrainView: () => boolean | Promise<boolean | void> | void
+  openAltersView: () => boolean | Promise<boolean | void> | void
 }
 
 /**
@@ -190,6 +211,37 @@ export function useAppShellLaunchpad(options: UseAppShellLaunchpadOptions) {
     await refreshLaunchpadUpdatedNotes()
   }
 
+  async function openQuickOpenFromLaunchpad(initialQuery = '') {
+    await options.actionPort.openQuickOpen(initialQuery)
+    return true
+  }
+
+  async function openCommandPaletteFromLaunchpad() {
+    await options.actionPort.openCommandPalette()
+    return true
+  }
+
+  async function launchQuickStart(kind: 'today' | 'second-brain' | 'cosmos' | 'command-palette' | 'alters') {
+    if (kind === 'today') {
+      await options.actionPort.openTodayNote()
+      return true
+    }
+    if (kind === 'second-brain') {
+      await options.actionPort.openSecondBrainView()
+      return true
+    }
+    if (kind === 'cosmos') {
+      await options.actionPort.openCosmosView()
+      return true
+    }
+    if (kind === 'alters') {
+      await options.actionPort.openAltersView()
+      return true
+    }
+    await options.actionPort.openCommandPalette()
+    return true
+  }
+
   function dispose() {
     recentUpdatedNotesRequestToken += 1
   }
@@ -222,6 +274,9 @@ export function useAppShellLaunchpad(options: UseAppShellLaunchpadOptions) {
     renameLaunchpadRecentNote,
     invalidateRecentNotes,
     refreshLaunchpadRecentNotes,
+    openQuickOpenFromLaunchpad,
+    openCommandPaletteFromLaunchpad,
+    launchQuickStart,
     dispose
   }
 }

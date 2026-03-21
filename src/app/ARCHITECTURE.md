@@ -32,11 +32,11 @@
 - `useAppModalController`: modal selector derivation, focus restore, tab trapping.
 - `useAppShellPersistence`: shell bootstrapping and persistence for theme, sidebar mode, zoom, and multi-pane layout.
 - `useAppShellOpenFlow`: note opening, wikilink resolution, active-note refresh, backlinks, and explorer/search entry points.
-- `useAppShellCommands`: cross-domain command routing for palette, launchpad, pane chrome, and shell menus.
+- `useAppShellCommands`: cross-domain command routing for palette, pane chrome, and shell menus.
 - `useAppShellPaletteActions`: command-palette catalog assembly, ordering, and conditional inclusion for quick-open.
 - `useAppShellKeyboard`: global shortcut priority, `Escape` routing, pane/navigation shortcut dispatch.
 - `useAppShellSearch`: global search state, debounce, grouping, mode switching.
-- `useAppShellLaunchpad`: recent workspaces, recent notes, launchpad row derivation.
+- `useAppShellLaunchpad`: recent workspaces, recent notes, launchpad row derivation, and launchpad quick-start routing.
 - `useAppShellModals`: shell modal open/close flows, modal-local focus choreography, and local UI watchers.
 - `useAppShellModalInteractions`: quick-open action routing and theme picker keyboard/selection handling.
 - `useAppShellWorkspaceEntries`: shell form workflows for new file, new folder, and open-date actions.
