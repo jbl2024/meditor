@@ -150,6 +150,7 @@ import {
   secondBrainSnapshotStateKey
 } from './lib/appNavigationHistory'
 import { useAppShellHistoryUi } from './composables/useAppShellHistoryUi'
+import { useAppShellModalInteractions } from './composables/useAppShellModalInteractions'
 import { useAppShellCommands } from './composables/useAppShellCommands'
 import { useAppShellKeyboard } from './composables/useAppShellKeyboard'
 import { useAppShellLaunchpad } from './composables/useAppShellLaunchpad'
@@ -309,6 +310,7 @@ const shellPersistence = useAppShellPersistence({
 const showDebugTools = import.meta.env.DEV
 const appVersion = packageJson.version
 let shellOpenFlow: ReturnType<typeof useAppShellOpenFlow> | null = null
+let shellModalInteractions: ReturnType<typeof useAppShellModalInteractions> | null = null
 let closeQuickOpenProxy = () => {}
 
 const resizeState = ref<{
@@ -657,8 +659,6 @@ const themePickerItems = computed(() =>
     return `${item.label} ${item.meta}`.toLowerCase().includes(q)
   })
 )
-
-const themePickerItemCount = computed(() => themePickerItems.value.length)
 
 // Palette ranking is explicit so command ordering stays stable as shell
 // commands evolve and new actions are added over time.
@@ -1392,6 +1392,70 @@ const {
   onBacklinkOpen,
   onExplorerOpen
 } = shellOpenFlow
+shellModalInteractions = useAppShellModalInteractions({
+  quickOpenPort: {
+    quickOpenVisible,
+    quickOpenIsActionMode,
+    quickOpenHasTextQuery,
+    quickOpenActiveIndex,
+    quickOpenActionResults,
+    quickOpenResults,
+    quickOpenBrowseItems,
+    paletteActions,
+    moveQuickOpenSelection,
+    openQuickResult
+  },
+  themePickerPort: {
+    themePickerVisible,
+    themePickerQuery,
+    themePickerActiveIndex,
+    themePickerItems,
+    themePickerHasPreview,
+    themePreference
+  },
+  closeQuickOpen: (restoreFocus = true) => closeQuickOpen(restoreFocus),
+  closeOverflowMenu: () => closeOverflowMenu(),
+  rememberFocusBeforeModalOpen,
+  restoreFocusAfterModalClose,
+  focusEditor: () => editorRef.value?.focusEditor(),
+  focusQuickOpenInput: () => {
+    document.querySelector<HTMLInputElement>('[data-quick-open-input="true"]')?.focus()
+  },
+  focusThemePickerInput: () => {
+    document.querySelector<HTMLInputElement>('[data-theme-picker-input="true"]')?.focus()
+  },
+  scrollThemePickerActiveItemIntoView: () => {
+    if (!themePickerVisible.value) return
+    void nextTick(() => {
+      const modalList = document.querySelector<HTMLElement>('[data-modal="theme-picker"] .modal-list')
+      if (!modalList) return
+      const activeItem = modalList.querySelector<HTMLElement>('.modal-item.active')
+      activeItem?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'auto' })
+    })
+  },
+  showLoadingState: (label: string) => {
+    cosmosCommandLoadingLabel.value = label
+    cosmosCommandLoadingVisible.value = true
+  },
+  hideLoadingState: () => {
+    cosmosCommandLoadingVisible.value = false
+  },
+  setErrorMessage: (message: string) => {
+    filesystem.errorMessage.value = message
+  },
+  canRestoreEditorFocusAfterAction: () =>
+    !newFileModalVisible.value &&
+    !newFolderModalVisible.value &&
+    !openDateModalVisible.value &&
+    !settingsModalVisible.value &&
+    !designSystemDebugVisible.value &&
+    !shortcutsModalVisible.value &&
+    !themePickerVisible.value &&
+    !workspaceSetupWizardVisible.value &&
+    !cosmosCommandLoadingVisible.value,
+  applyTheme,
+  applyThemePreview
+})
 const historyUi = useAppShellHistoryUi({
   topbarPort: {
     getHistoryButtonEl: (side) => topbarRef.value?.getHistoryButtonEl(side) ?? null,
@@ -1665,101 +1729,36 @@ function onGlobalPointerDown(event: MouseEvent) {
 }
 
 function moveThemePickerSelection(delta: number) {
-  const count = themePickerItemCount.value
-  if (!count) return
-  themePickerActiveIndex.value = (themePickerActiveIndex.value + delta + count) % count
-  previewThemePickerItemAtIndex(themePickerActiveIndex.value)
-}
-
-function syncThemePickerActiveIndex() {
-  if (themePickerItemCount.value <= 0) {
-    themePickerActiveIndex.value = 0
-    return
-  }
-  if (themePickerActiveIndex.value < 0 || themePickerActiveIndex.value >= themePickerItemCount.value) {
-    themePickerActiveIndex.value = 0
-  }
-}
-
-function focusThemePickerInput() {
-  document.querySelector<HTMLInputElement>('[data-theme-picker-input="true"]')?.focus()
-}
-
-function scrollThemePickerActiveItemIntoView() {
-  if (!themePickerVisible.value) return
-  void nextTick(() => {
-    const modalList = document.querySelector<HTMLElement>('[data-modal="theme-picker"] .modal-list')
-    if (!modalList) return
-    const activeItem = modalList.querySelector<HTMLElement>('.modal-item.active')
-    activeItem?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'auto' })
-  })
-}
-
-function previewThemePickerItem(next: ThemePreference) {
-  themePickerHasPreview.value = true
-  applyThemePreview(next)
-}
-
-function previewThemePickerItemAtIndex(index: number) {
-  const item = themePickerItems.value[index]
-  if (!item) return
-  previewThemePickerItem(item.id)
-}
-
-async function openThemePickerModal() {
-  rememberFocusBeforeModalOpen()
-  themePickerVisible.value = true
-  themePickerQuery.value = ''
-  themePickerActiveIndex.value = 0
-  themePickerHasPreview.value = false
-  await nextTick()
-  focusThemePickerInput()
+  shellModalInteractions?.moveThemePickerSelection(delta)
 }
 
 function closeThemePickerModal(restoreTheme = true) {
-  if (restoreTheme && themePickerHasPreview.value) {
-    applyTheme()
-  }
-  themePickerVisible.value = false
-  themePickerQuery.value = ''
-  themePickerActiveIndex.value = 0
-  themePickerHasPreview.value = false
-  void nextTick(() => {
-    restoreFocusAfterModalClose()
-  })
+  shellModalInteractions?.closeThemePickerModal(restoreTheme)
 }
 
-function applyThemePreference(next: ThemePreference) {
-  themePreference.value = next
+function previewThemePickerItem(next: ThemePreference) {
+  shellModalInteractions?.previewThemePickerItem(next)
 }
 
 function selectThemeFromModal(next: ThemePreference) {
-  applyThemePreference(next)
-  closeThemePickerModal(false)
+  shellModalInteractions?.setThemeFromPalette(next)
+  shellModalInteractions?.closeThemePickerModal(false)
 }
 
 function onThemePickerEnter() {
-  const item = themePickerItems.value[themePickerActiveIndex.value]
-  if (!item) return
-  selectThemeFromModal(item.id)
+  shellModalInteractions?.onThemePickerEnter()
 }
 
 function openThemePickerFromOverflow() {
-  closeOverflowMenu()
-  void openThemePickerModal()
+  shellModalInteractions?.openThemePickerFromOverflow()
 }
 
 function openThemePickerFromPalette() {
-  if (quickOpenVisible.value) {
-    closeQuickOpen(false)
-  }
-  void openThemePickerModal()
-  return true
+  return shellModalInteractions?.openThemePickerFromPalette() ?? false
 }
 
 function setThemeFromPalette(next: ThemePreference) {
-  applyThemePreference(next)
-  return true
+  return shellModalInteractions?.setThemeFromPalette(next) ?? false
 }
 
 function addPathToConstitutedContext(path: string) {
@@ -2353,49 +2352,8 @@ async function onCosmosOpenSelectedNode() {
   await onCosmosOpenNode(selected.path)
 }
 
-async function runQuickOpenAction(id: string) {
-  const action = paletteActions.value.find((item) => item.id === id)
-  if (!action) return
-  const closesBeforeRun = Boolean(action.closeBeforeRun)
-  const hasLoadingModal = Boolean(action.loadingLabel)
-  if (closesBeforeRun && quickOpenVisible.value) {
-    closeQuickOpen(false)
-  }
-  if (hasLoadingModal) {
-    cosmosCommandLoadingLabel.value = action.loadingLabel ?? 'Loading graph...'
-    cosmosCommandLoadingVisible.value = true
-  }
-  try {
-    const shouldClose = await action.run()
-    if (!closesBeforeRun && shouldClose) {
-      closeQuickOpen()
-    }
-    if (!shouldClose) return
-    nextTick(() => {
-      if (
-        !newFileModalVisible.value &&
-        !newFolderModalVisible.value &&
-        !openDateModalVisible.value &&
-        !settingsModalVisible.value &&
-        !designSystemDebugVisible.value &&
-        !shortcutsModalVisible.value &&
-        !themePickerVisible.value &&
-        !workspaceSetupWizardVisible.value &&
-        !cosmosCommandLoadingVisible.value
-      ) {
-        editorRef.value?.focusEditor()
-      }
-    })
-  } catch (err) {
-    filesystem.errorMessage.value = err instanceof Error ? err.message : 'Command failed.'
-    if (!closesBeforeRun) {
-      closeQuickOpen()
-    }
-  } finally {
-    if (hasLoadingModal) {
-      cosmosCommandLoadingVisible.value = false
-    }
-  }
+function runQuickOpenAction(id: string) {
+  shellModalInteractions?.runQuickOpenAction(id)
 }
 
 
@@ -2415,84 +2373,15 @@ function clearEditorStatusForPaths(paths: string[]) {
 }
 
 function onQuickOpenEnter() {
-  if (quickOpenIsActionMode.value) {
-    const action = quickOpenActionResults.value[quickOpenActiveIndex.value]
-    if (action) {
-      void runQuickOpenAction(action.id)
-    }
-    return
-  }
-
-  if (quickOpenHasTextQuery.value) {
-    const item = quickOpenResults.value[quickOpenActiveIndex.value]
-    if (item) {
-      void openQuickResult(item)
-    }
-    return
-  }
-
-  const browseItem = quickOpenBrowseItems.value[quickOpenActiveIndex.value]
-  if (!browseItem) return
-  if (browseItem.kind === 'action') {
-    void runQuickOpenAction(browseItem.id)
-    return
-  }
-  void openQuickResult(browseItem)
+  shellModalInteractions?.onQuickOpenEnter()
 }
 
 function onQuickOpenInputKeydown(event: KeyboardEvent) {
-  if (event.metaKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
-    // Keep native caret/selection behavior in the input, but prevent app-level handlers.
-    event.stopPropagation()
-    return
-  }
-  if (event.key === 'ArrowDown') {
-    event.preventDefault()
-    event.stopPropagation()
-    moveQuickOpenSelection(1)
-    return
-  }
-  if (event.key === 'ArrowUp') {
-    event.preventDefault()
-    event.stopPropagation()
-    moveQuickOpenSelection(-1)
-    return
-  }
-  if (event.key === 'Enter') {
-    event.preventDefault()
-    event.stopPropagation()
-    onQuickOpenEnter()
-  }
+  shellModalInteractions?.onQuickOpenInputKeydown(event)
 }
 
 function onThemePickerInputKeydown(event: KeyboardEvent) {
-  if (event.metaKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
-    event.stopPropagation()
-    return
-  }
-  if (event.key === 'ArrowDown') {
-    event.preventDefault()
-    event.stopPropagation()
-    moveThemePickerSelection(1)
-    return
-  }
-  if (event.key === 'ArrowUp') {
-    event.preventDefault()
-    event.stopPropagation()
-    moveThemePickerSelection(-1)
-    return
-  }
-  if (event.key === 'Enter') {
-    event.preventDefault()
-    event.stopPropagation()
-    onThemePickerEnter()
-    return
-  }
-  if (event.key === 'Escape') {
-    event.preventDefault()
-    event.stopPropagation()
-    closeThemePickerModal()
-  }
+  shellModalInteractions?.onThemePickerInputKeydown(event)
 }
 
 function onOpenDateInputKeydown(event: KeyboardEvent) {
@@ -2552,21 +2441,6 @@ function onNewFolderInputKeydown(event: KeyboardEvent) {
 async function saveActiveTab() {
   await editorRef.value?.saveNow()
 }
-
-watch(themePickerQuery, () => {
-  themePickerActiveIndex.value = 0
-})
-
-watch(themePickerActiveIndex, () => {
-  syncThemePickerActiveIndex()
-  scrollThemePickerActiveItemIntoView()
-})
-
-watch(themePickerVisible, (visible) => {
-  if (!visible) return
-  syncThemePickerActiveIndex()
-  scrollThemePickerActiveItemIntoView()
-})
 
 watch(
   () => noteEchoes.items.value.length,

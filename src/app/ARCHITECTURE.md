@@ -37,6 +37,7 @@
 - `useAppShellSearch`: global search state, debounce, grouping, mode switching.
 - `useAppShellLaunchpad`: recent workspaces, recent notes, launchpad row derivation.
 - `useAppShellModals`: shell modal open/close flows, modal-local focus choreography, and local UI watchers.
+- `useAppShellModalInteractions`: quick-open action routing and theme picker keyboard/selection handling.
 - `useAppShellWorkspaceEntries`: shell form workflows for new file, new folder, and open-date actions.
 - `useAppShellHistoryUi`: back/forward menu long press, click routing, outside click, resize positioning.
 - `useAppShellWorkspaceLifecycle`: workspace restore, workspace close/reset, and global filesystem event orchestration.
