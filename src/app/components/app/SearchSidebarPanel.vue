@@ -221,6 +221,10 @@ async function loadPropertyKeys() {
     if (requestToken !== autocompleteRequestToken) return
     propertyKeys.value = keys
     propertyKeysLoaded.value = true
+  } catch {
+    if (requestToken !== autocompleteRequestToken) return
+    propertyKeys.value = []
+    propertyKeysLoaded.value = true
   } finally {
     if (requestToken === autocompleteRequestToken) {
       propertyKeysLoading.value = false
@@ -236,6 +240,10 @@ async function loadPropertyTypeSchema() {
     const schema = await readPropertyTypeSchema()
     if (requestToken !== autocompleteRequestToken) return
     propertyTypeSchema.value = schema
+    propertyTypeSchemaLoaded.value = true
+  } catch {
+    if (requestToken !== autocompleteRequestToken) return
+    propertyTypeSchema.value = {}
     propertyTypeSchemaLoaded.value = true
   } finally {
     if (requestToken === autocompleteRequestToken) {
@@ -256,6 +264,9 @@ async function loadPropertyValues(key: string) {
       ...propertyValuesByKey.value,
       [key]: values
     }
+    propertyValuesLoaded.value = { ...propertyValuesLoaded.value, [key]: true }
+  } catch {
+    if (requestToken !== autocompleteRequestToken) return
     propertyValuesLoaded.value = { ...propertyValuesLoaded.value, [key]: true }
   } finally {
     if (requestToken === autocompleteRequestToken) {
