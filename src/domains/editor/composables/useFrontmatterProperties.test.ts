@@ -7,6 +7,7 @@ import type {
 } from '../../../shared/api/frontmatterGenerationApi'
 
 const apiMocks = vi.hoisted(() => ({
+  readPropertyKeys: vi.fn(async () => ['status', 'tags', 'title']),
   readPropertyValueSuggestions: vi.fn(async (key: string) => {
     if (key === 'status') return ['draft', 'review', 'published']
     if (key === 'tags') return ['alpha', 'beta']
@@ -75,6 +76,15 @@ describe('useFrontmatterProperties', () => {
     expect(api.propertySchema.value).toEqual({ published: 'checkbox', tags: 'tags' })
   })
 
+  it('loads workspace property keys for autocomplete', async () => {
+    const { api } = setup()
+
+    api.parseAndStoreFrontmatter('notes/a.md', '---\nstatus: draft\n---\nBody')
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+
+    expect(api.propertyKeySuggestions.value).toEqual(['status', 'tags', 'title'])
+  })
+
   it('switches to raw mode when parse errors exist', () => {
     const { api } = setup()
 
@@ -124,11 +134,11 @@ describe('useFrontmatterProperties', () => {
     expect(onDirty).toHaveBeenCalledWith('notes/a.md')
   })
 
-  it('preloads and caches autocomplete suggestions for list-like properties', async () => {
+  it('preloads and caches autocomplete suggestions for property fields', async () => {
     const { api } = setup()
     apiMocks.readPropertyValueSuggestions.mockClear()
 
-    api.parseAndStoreFrontmatter('notes/a.md', '---\nstatus:\n  - draft\ntags:\n  - alpha\n---\nBody')
+    api.parseAndStoreFrontmatter('notes/a.md', '---\nstatus: draft\ntags:\n  - alpha\n---\nBody')
     await new Promise<void>((resolve) => setTimeout(resolve, 0))
 
     const firstCallCount = apiMocks.readPropertyValueSuggestions.mock.calls.length
@@ -136,7 +146,7 @@ describe('useFrontmatterProperties', () => {
     expect(api.propertySuggestionsForField(api.activeFields.value[0]!) ).toEqual(['draft', 'review', 'published'])
     expect(api.propertySuggestionsForField(api.activeFields.value[1]!) ).toEqual(['alpha', 'beta'])
 
-    api.parseAndStoreFrontmatter('notes/a.md', '---\nstatus:\n  - draft\ntags:\n  - alpha\n---\nBody')
+    api.parseAndStoreFrontmatter('notes/a.md', '---\nstatus: draft\ntags:\n  - alpha\n---\nBody')
     await new Promise<void>((resolve) => setTimeout(resolve, 0))
 
     expect(apiMocks.readPropertyValueSuggestions.mock.calls.length).toBe(firstCallCount + 2)
@@ -146,7 +156,7 @@ describe('useFrontmatterProperties', () => {
     const { api } = setup()
     apiMocks.readPropertyValueSuggestions.mockClear()
 
-    api.parseAndStoreFrontmatter('notes/a.md', '---\nstatus:\n  - draft\n---\nBody')
+    api.parseAndStoreFrontmatter('notes/a.md', '---\nstatus: draft\n---\nBody')
     await new Promise<void>((resolve) => setTimeout(resolve, 0))
     expect(api.propertySuggestionsForField(api.activeFields.value[0]!) ).toEqual(['draft', 'review', 'published'])
 
@@ -155,7 +165,7 @@ describe('useFrontmatterProperties', () => {
       return []
     })
 
-    api.parseAndStoreFrontmatter('notes/b.md', '---\nstatus:\n  - draft\n---\nBody')
+    api.parseAndStoreFrontmatter('notes/b.md', '---\nstatus: draft\n---\nBody')
     await new Promise<void>((resolve) => setTimeout(resolve, 0))
 
     expect(api.propertySuggestionsForField(api.activeFields.value[0]!) ).toEqual(['draft', 'review', 'published', 'blocked'])

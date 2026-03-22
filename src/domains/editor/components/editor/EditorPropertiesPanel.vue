@@ -10,6 +10,7 @@ import UiSelect from '../../../../shared/components/ui/UiSelect.vue'
 import UiTextarea from '../../../../shared/components/ui/UiTextarea.vue'
 import type { FrontmatterField } from '../../lib/frontmatter'
 import type { PropertyType } from '../../lib/propertyTypes'
+import PropertyAutocompleteInput from '../properties/PropertyAutocompleteInput.vue'
 import PropertyAddDropdown from '../properties/PropertyAddDropdown.vue'
 import PropertyTokenInput from '../properties/PropertyTokenInput.vue'
 
@@ -29,6 +30,7 @@ const props = defineProps<{
   activeRawYaml: string
   activeParseErrors: Array<{ line: number; message: string }>
   corePropertyOptions: CorePropertyOption[]
+  propertyKeySuggestions: string[]
   propertySuggestionsForField: (field: FrontmatterField) => string[]
   effectiveTypeForField: (field: FrontmatterField) => PropertyType
   isPropertyTypeLocked: (key: string) => boolean
@@ -134,11 +136,12 @@ const compactModeButtonStyle: CSSProperties = {
             :key="index"
             class="property-row grid grid-cols-[1fr_auto_2fr_auto] items-center gap-2"
           >
-            <UiInput
+            <PropertyAutocompleteInput
               :model-value="field.key"
               size="sm"
               class-name="properties-field text-xs"
               placeholder="key"
+              :suggestions="props.propertyKeySuggestions"
               @update:model-value="emit('property-key-input', { index, value: $event })"
             />
             <UiSelect
@@ -155,12 +158,13 @@ const compactModeButtonStyle: CSSProperties = {
               <option value="tags">Tags</option>
             </UiSelect>
             <div class="min-w-0">
-              <UiInput
+              <PropertyAutocompleteInput
                 v-if="props.effectiveTypeForField(field) === 'text' || props.effectiveTypeForField(field) === 'date'"
                 :model-value="String(field.value ?? '')"
                 size="sm"
                 class-name="properties-field w-full text-xs"
                 :placeholder="props.effectiveTypeForField(field) === 'date' ? 'YYYY-MM-DD' : 'value'"
+                :suggestions="props.propertySuggestionsForField(field)"
                 @update:model-value="emit('property-value-input', { index, value: $event })"
               />
               <UiInput

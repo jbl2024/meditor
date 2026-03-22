@@ -264,6 +264,7 @@ const {
   canUseStructuredProperties,
   structuredPropertyFields,
   structuredPropertyKeys,
+  propertyKeySuggestions,
   propertySuggestionsForField,
   propertyGenerationLoading,
   propertyGenerationTargetIndex,
@@ -537,6 +538,7 @@ defineExpose({
                 :active-raw-yaml="activeRawYaml"
                 :active-parse-errors="activeParseErrors"
                 :core-property-options="CORE_PROPERTY_OPTIONS"
+                :property-key-suggestions="propertyKeySuggestions"
                 :property-suggestions-for-field="propertySuggestionsForField"
                 :effective-type-for-field="effectiveTypeForField"
                 :is-property-type-locked="isPropertyTypeLocked"

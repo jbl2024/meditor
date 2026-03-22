@@ -1,6 +1,6 @@
 import { computed, ref, type Ref } from 'vue'
 import { composeMarkdownDocument, parseFrontmatter, serializeFrontmatter, type FrontmatterEnvelope, type FrontmatterField } from '../lib/frontmatter'
-import { readPropertyValueSuggestions } from '../../../shared/api/indexApi'
+import { readPropertyKeys, readPropertyValueSuggestions } from '../../../shared/api/indexApi'
 import {
   generateFrontmatterProperties,
   serializeFrontmatterGenerationField,
@@ -106,6 +106,9 @@ export function useFrontmatterProperties(options: UseFrontmatterPropertiesOption
   const propertySchema = ref<PropertyTypeSchema>({})
   const propertySchemaLoaded = ref(false)
   const propertySchemaSaving = ref(false)
+  const propertyKeySuggestions = ref<string[]>([])
+  const propertyKeySuggestionsLoaded = ref(false)
+  const propertyKeySuggestionsLoading = ref(false)
   const propertySuggestionsByKey = ref<Record<string, string[]>>({})
   const propertySuggestionsLoadedByKey = ref<Record<string, boolean>>({})
   const propertySuggestionsLoadingByKey = ref<Record<string, boolean>>({})
@@ -171,7 +174,29 @@ export function useFrontmatterProperties(options: UseFrontmatterPropertiesOption
   function resetPropertySchemaState() {
     propertySchemaLoaded.value = false
     propertySchema.value = {}
+    propertyKeySuggestions.value = []
+    propertyKeySuggestionsLoaded.value = false
+    propertyKeySuggestionsLoading.value = false
     resetPropertySuggestionsState()
+  }
+
+  /**
+   * Loads workspace property keys once per editor session.
+   */
+  async function ensurePropertyKeySuggestionsLoaded(force = false) {
+    if (!force && (propertyKeySuggestionsLoaded.value || propertyKeySuggestionsLoading.value)) {
+      return
+    }
+
+    propertyKeySuggestionsLoading.value = true
+    try {
+      propertyKeySuggestions.value = await readPropertyKeys(100)
+    } catch {
+      propertyKeySuggestions.value = []
+    } finally {
+      propertyKeySuggestionsLoaded.value = true
+      propertyKeySuggestionsLoading.value = false
+    }
   }
 
   /**
@@ -266,11 +291,10 @@ export function useFrontmatterProperties(options: UseFrontmatterPropertiesOption
   }
 
   /**
-   * Preloads suggestions for list-like fields without blocking render.
+   * Preloads suggestions for all populated property fields without blocking render.
    */
   function preloadPropertySuggestions(fields: FrontmatterField[], force = false) {
     for (const field of fields) {
-      if (field.type !== 'list' && field.type !== 'tags') continue
       void ensurePropertySuggestionsLoaded(field.key, force)
     }
   }
@@ -297,6 +321,7 @@ export function useFrontmatterProperties(options: UseFrontmatterPropertiesOption
         [path]: false
       }
     }
+    void ensurePropertyKeySuggestionsLoaded(true)
     preloadPropertySuggestions(envelope.fields, true)
     emitProperties(path)
   }
@@ -563,6 +588,7 @@ export function useFrontmatterProperties(options: UseFrontmatterPropertiesOption
     if (effectiveType === 'list' || effectiveType === 'tags') {
       void ensurePropertySuggestionsLoaded(normalizedNext)
     }
+    void ensurePropertyKeySuggestionsLoaded()
 
     const nextSchema: PropertyTypeSchema = {
       ...propertySchema.value,
@@ -736,6 +762,7 @@ export function useFrontmatterProperties(options: UseFrontmatterPropertiesOption
     rawYamlByPath,
     propertySchema,
     propertySchemaLoaded,
+    propertyKeySuggestions,
     activeFrontmatter,
     activeFields,
     activeParseErrors,
@@ -747,6 +774,7 @@ export function useFrontmatterProperties(options: UseFrontmatterPropertiesOption
     propertyGenerationLoading,
     propertyGenerationTargetIndex,
     ensurePropertySchemaLoaded,
+    ensurePropertyKeySuggestionsLoaded,
     resetPropertySchemaState,
     resetPropertySuggestionsState,
     parseAndStoreFrontmatter,

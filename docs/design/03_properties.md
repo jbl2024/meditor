@@ -119,8 +119,8 @@ Default mode with row-based property editor:
 
 Reserved keys (`tags`, `aliases`, `cssclasses`) are type-locked in UI.
 
-Property fields automatically autocomplete from values already indexed in
-the current workspace.
+Property keys autocomplete from the workspace index, and property values
+reuse the same indexed suggestions in the editor.
 
 The quick-add menu stays intentionally small and second-brain-oriented:
 
