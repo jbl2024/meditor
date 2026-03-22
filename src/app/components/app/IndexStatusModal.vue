@@ -44,11 +44,12 @@ const props = defineProps<{
   showWarmupNote: boolean
   alert: { level: 'error' | 'warning'; title: string; message: string } | null
   semanticLinksCount: number
-  indexedNotesCount: number
+  processedNotesCount: number
   notesTotalCount: number
   notesTotalLoading: boolean
   lastRunFinishedAtMs: number | null
   lastRunTitle: string
+  lastRunDurationMs: number | null
   logFilter: IndexLogFilter
   filteredRows: IndexActivityRow[]
   errorCount: number
@@ -77,6 +78,17 @@ const lastRunFinishedAtLabel = computed(() =>
 const lastRunTitleLabel = computed(() =>
   latestCompletedRow.value?.title || props.lastRunTitle || 'Waiting for the first completed run'
 )
+
+const lastRunDetailLabel = computed(() => {
+  const title = lastRunTitleLabel.value
+  const durationLabel = (latestCompletedRow.value?.durationMs != null
+    ? props.formatDurationMs(latestCompletedRow.value.durationMs)
+    : (
+    props.lastRunDurationMs != null ? props.formatDurationMs(props.lastRunDurationMs) : ''
+  )).trim()
+  if (!durationLabel || durationLabel === title) return title
+  return `${title} · ${durationLabel}`
+})
 
 const showCurrentRunSection = computed(
   () => props.running || props.currentOperationLabel || props.progressSummary || props.currentPathLabel
@@ -134,25 +146,25 @@ const heroStats = computed(() => [
   },
   {
     icon: DocumentTextIcon,
-    label: 'Notes indexed',
+    label: 'Notes processed',
     value:
       props.notesTotalLoading
-        ? `${props.indexedNotesCount}/…`
+        ? `${props.processedNotesCount}/…`
         : props.notesTotalCount > 0
-        ? `${props.indexedNotesCount}/${props.notesTotalCount}`
-        : String(props.indexedNotesCount),
+        ? `${props.processedNotesCount}/${props.notesTotalCount}`
+        : String(props.processedNotesCount),
     detail:
       props.notesTotalLoading
         ? 'Loading workspace notes'
         : props.notesTotalCount > 0
-        ? `${props.indexedNotesCount} indexed of ${props.notesTotalCount} workspace notes`
+        ? `${props.processedNotesCount} processed of ${props.notesTotalCount} workspace notes`
         : 'No notes discovered in the workspace yet'
   },
   {
     icon: ClockIcon,
     label: 'Last run',
     value: lastRunFinishedAtLabel.value,
-    detail: lastRunTitleLabel.value
+    detail: lastRunDetailLabel.value
   }
 ])
 

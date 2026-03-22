@@ -54,11 +54,12 @@ defineProps<{
   indexShowWarmupNote: boolean
   indexAlert: { level: 'error' | 'warning'; title: string; message: string } | null
   indexSemanticLinksCount: number
-  indexIndexedNotesCount: number
+  indexProcessedNotesCount: number
   indexNotesTotalCount: number
   indexNotesTotalLoading: boolean
   lastRunFinishedAtMs: number | null
   lastRunTitle: string
+  lastRunDurationMs: number | null
   indexLogFilter: IndexLogFilter
   filteredIndexActivityRows: IndexActivityRow[]
   indexErrorCount: number
@@ -177,11 +178,12 @@ const emit = defineEmits<{
     :show-warmup-note="indexShowWarmupNote"
     :alert="indexAlert"
     :semantic-links-count="indexSemanticLinksCount"
-    :indexed-notes-count="indexIndexedNotesCount"
+    :processed-notes-count="indexProcessedNotesCount"
     :notes-total-count="indexNotesTotalCount"
     :notes-total-loading="indexNotesTotalLoading"
     :last-run-finished-at-ms="lastRunFinishedAtMs"
     :last-run-title="lastRunTitle"
+    :last-run-duration-ms="lastRunDurationMs"
     :log-filter="indexLogFilter"
     :filtered-rows="filteredIndexActivityRows"
     :error-count="indexErrorCount"

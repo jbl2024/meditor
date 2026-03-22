@@ -533,6 +533,11 @@ pub(crate) fn reindex_markdown_file_lexical_sync(path: String) -> Result<()> {
         "DELETE FROM note_properties WHERE path = ?1",
         params![path_for_db.clone()],
     )?;
+    tx.execute(
+        "INSERT INTO note_processing(path, processed_at_ms) VALUES (?1, ?2)
+         ON CONFLICT(path) DO UPDATE SET processed_at_ms=excluded.processed_at_ms",
+        params![path_for_db.clone(), mtime],
+    )?;
 
     for (chunk_ord, (anchor, text)) in chunks.into_iter().enumerate() {
         let chunk_hash = chunk_content_hash(&anchor, &text);
@@ -596,7 +601,7 @@ pub(crate) fn reindex_markdown_file_lexical_sync(path: String) -> Result<()> {
     log_index(&format!(
         "reindex:done path={path_for_db} chunks={chunk_count} targets={target_count} properties={property_count} embedding=deferred embedding_ms=0 total_ms={total_ms}"
     ));
-    let _ = record_last_index_run(&conn, "Indexed file content", crate::now_ms());
+    let _ = record_last_index_run(&conn, "Indexed file content", crate::now_ms(), Some(total_ms as u64));
     Ok(())
 }
 
@@ -788,13 +793,24 @@ pub(crate) fn reindex_markdown_file_semantic_sync(path: String) -> Result<()> {
         }
     }
 
+    tx.execute(
+        "INSERT INTO note_processing(path, processed_at_ms) VALUES (?1, ?2)
+         ON CONFLICT(path) DO UPDATE SET processed_at_ms=excluded.processed_at_ms",
+        params![path_for_db.clone(), crate::now_ms() as i64],
+    )?;
+
     tx.commit()?;
     let total_chunks = chunk_ids.len();
     log_index(&format!(
         "semantic:reindex:done path={path_for_db} chunks_total={total_chunks} chunks_reused={reused} chunks_reembedded={reembedded} total_ms={}",
         started_at.elapsed().as_millis()
     ));
-    let _ = record_last_index_run(&conn, "Semantic note updated", crate::now_ms());
+    let _ = record_last_index_run(
+        &conn,
+        "Semantic note updated",
+        crate::now_ms(),
+        Some(started_at.elapsed().as_millis() as u64),
+    );
     Ok(())
 }
 
@@ -821,6 +837,10 @@ pub(crate) fn remove_markdown_file_from_index_sync(path: String) -> Result<()> {
     )?;
     tx.execute(
         "DELETE FROM note_properties WHERE path = ?1",
+        params![path_for_db.clone()],
+    )?;
+    tx.execute(
+        "DELETE FROM note_processing WHERE path = ?1",
         params![path_for_db.clone()],
     )?;
     tx.execute(

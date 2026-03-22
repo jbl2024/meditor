@@ -308,13 +308,15 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
 
   const indexSemanticLinksCount = computed(() => indexOverviewStats.value?.semantic_links_count ?? 0)
 
-  const indexIndexedNotesCount = computed(() => indexOverviewStats.value?.indexed_notes_count ?? 0)
+  const indexProcessedNotesCount = computed(() => indexOverviewStats.value?.processed_notes_count ?? 0)
 
   const indexWorkspaceNotesCount = computed(() => indexOverviewStats.value?.workspace_notes_count ?? 0)
 
   const indexLastRunFinishedAtMs = computed(() => indexOverviewStats.value?.last_run_finished_at_ms ?? null)
 
   const indexLastRunTitle = computed(() => indexOverviewStats.value?.last_run_title ?? null)
+
+  const indexLastRunDurationMs = computed(() => indexOverviewStats.value?.last_run_duration_ms ?? null)
 
   const indexActivityRows = computed(() => buildIndexActivityRows(indexLogEntries.value, indexingShellPort.toRelativePath))
 
@@ -885,10 +887,11 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
     indexRuntimeStatus,
     indexOverviewStats,
     indexSemanticLinksCount,
-    indexIndexedNotesCount,
+    indexProcessedNotesCount,
     indexWorkspaceNotesCount,
     indexLastRunFinishedAtMs,
     indexLastRunTitle,
+    indexLastRunDurationMs,
     indexLogEntries,
     indexLogFilter,
     indexStatusModalVisible,

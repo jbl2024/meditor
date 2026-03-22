@@ -1402,20 +1402,73 @@ mod tests {
         )
         .expect("insert note embedding b");
         conn.execute(
+            "INSERT INTO note_processing(path, processed_at_ms) VALUES (?1, ?2)",
+            params!["a.md", 1_i64],
+        )
+        .expect("insert processed note a");
+        conn.execute(
+            "INSERT INTO note_processing(path, processed_at_ms) VALUES (?1, ?2)",
+            params!["b.md", 1_i64],
+        )
+        .expect("insert processed note b");
+        conn.execute(
             "INSERT INTO semantic_edges(source_path, target_path, score, model, updated_at_ms) VALUES (?1, ?2, ?3, ?4, ?5)",
             params!["a.md", "b.md", 0.91_f32, "test-model", 1_i64],
         )
         .expect("insert semantic edge");
-        index_schema::record_last_index_run(&conn, "Semantic links refreshed", 1710836339000)
+        index_schema::record_last_index_run(
+            &conn,
+            "Semantic links refreshed",
+            1710836339000,
+            Some(4321),
+        )
             .expect("record last run");
         drop(conn);
 
         let stats = read_index_overview_stats_impl().expect("read overview stats");
         assert_eq!(stats.semantic_links_count, 1);
-        assert_eq!(stats.indexed_notes_count, 2);
+        assert_eq!(stats.processed_notes_count, 2);
         assert_eq!(stats.workspace_notes_count, 2);
         assert_eq!(stats.last_run_finished_at_ms, Some(1710836339000));
         assert_eq!(stats.last_run_title.as_deref(), Some("Semantic links refreshed"));
+        assert_eq!(stats.last_run_duration_ms, Some(4321));
+
+        clear_active_workspace().expect("clear workspace");
+        fs::remove_dir_all(&workspace).expect("cleanup workspace");
+    }
+
+    #[test]
+    fn read_index_overview_stats_reports_processed_notes_independently_of_embeddings() {
+        let _guard = workspace_test_guard();
+        let workspace = create_temp_workspace("tomosona-index-overview-processed");
+        let root = workspace.to_string_lossy().to_string();
+        fs::write(workspace.join("a.md"), "# A").expect("write a");
+        fs::write(workspace.join("b.md"), "# B").expect("write b");
+
+        set_active_workspace(&root).expect("set workspace");
+        init_db().expect("init db");
+
+        let conn = open_db().expect("open db");
+        conn.execute(
+            "INSERT INTO note_processing(path, processed_at_ms) VALUES (?1, ?2)",
+            params!["a.md", 1_i64],
+        )
+        .expect("insert processed note a");
+        conn.execute(
+            "INSERT INTO note_processing(path, processed_at_ms) VALUES (?1, ?2)",
+            params!["b.md", 1_i64],
+        )
+        .expect("insert processed note b");
+        conn.execute(
+            "INSERT INTO note_embeddings(path, model, dim, vector, updated_at_ms) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params!["a.md", "test-model", 2_i64, vec![1_u8, 2, 3, 4], 1_i64],
+        )
+        .expect("insert note embedding a");
+        drop(conn);
+
+        let stats = read_index_overview_stats_impl().expect("read overview stats");
+        assert_eq!(stats.processed_notes_count, 2);
+        assert_eq!(stats.workspace_notes_count, 2);
 
         clear_active_workspace().expect("clear workspace");
         fs::remove_dir_all(&workspace).expect("cleanup workspace");

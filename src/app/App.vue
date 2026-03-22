@@ -493,6 +493,7 @@ const {
   indexOverviewStats,
   indexLastRunFinishedAtMs,
   indexLastRunTitle,
+  indexLastRunDurationMs,
   indexLogFilter,
   indexStatusModalVisible,
   indexStateLabel,
@@ -530,9 +531,10 @@ const {
 const indexNotesTotalCount = computed(() => indexOverviewStats.value?.workspace_notes_count ?? allWorkspaceFiles.value.length)
 const indexNotesTotalLoading = computed(() => loadingAllFiles.value)
 const indexSemanticLinksCount = computed(() => indexOverviewStats.value?.semantic_links_count ?? 0)
-const indexIndexedNotesCount = computed(() => indexOverviewStats.value?.indexed_notes_count ?? 0)
+const indexProcessedNotesCount = computed(() => indexOverviewStats.value?.processed_notes_count ?? 0)
 const indexLastRunFinishedAtLabel = computed(() => indexLastRunFinishedAtMs.value)
 const indexLastRunTitleLabel = computed(() => indexLastRunTitle.value ?? '')
+const indexLastRunDurationLabel = computed(() => indexLastRunDurationMs.value)
 const workspaceMutationEffects = useWorkspaceMutationEffects({
   workingFolderPath: filesystem.workingFolderPath,
   allWorkspaceFiles,
@@ -2274,11 +2276,12 @@ onBeforeUnmount(() => {
       :index-show-warmup-note="indexShowWarmupNote"
       :index-alert="indexAlert"
       :index-semantic-links-count="indexSemanticLinksCount"
-      :index-indexed-notes-count="indexIndexedNotesCount"
+      :index-processed-notes-count="indexProcessedNotesCount"
       :index-notes-total-count="indexNotesTotalCount"
       :index-notes-total-loading="indexNotesTotalLoading"
       :last-run-finished-at-ms="indexLastRunFinishedAtLabel"
       :last-run-title="indexLastRunTitleLabel"
+      :last-run-duration-ms="indexLastRunDurationLabel"
       :index-log-filter="indexLogFilter"
       :filtered-index-activity-rows="filteredIndexActivityRows"
       :index-error-count="indexErrorCount"

@@ -28,10 +28,11 @@ function createController() {
   const readIndexLogs = vi.fn(async (): Promise<IndexLogEntry[]> => [])
   const readIndexOverviewStats = vi.fn(async () => ({
     semantic_links_count: 71,
-    indexed_notes_count: 10,
+    processed_notes_count: 10,
     workspace_notes_count: 20,
     last_run_finished_at_ms: 1710836339000,
-    last_run_title: 'Workspace rebuild done'
+    last_run_title: 'Workspace rebuild done',
+    last_run_duration_ms: 474000
   }))
   const readIndexRuntimeStatus = vi.fn(async () => ({
     model_name: 'bge',

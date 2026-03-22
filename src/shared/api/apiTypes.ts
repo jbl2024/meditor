@@ -99,10 +99,11 @@ export type IndexRuntimeStatus = {
 
 export type IndexOverviewStats = {
   semantic_links_count: number
-  indexed_notes_count: number
+  processed_notes_count: number
   workspace_notes_count: number
   last_run_finished_at_ms: number | null
   last_run_title: string | null
+  last_run_duration_ms: number | null
 }
 
 export type IndexLogEntry = {

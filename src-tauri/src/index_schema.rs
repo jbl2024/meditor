@@ -44,14 +44,16 @@ pub(crate) struct IndexRuntimeStatus {
 #[derive(Serialize)]
 pub(crate) struct IndexOverviewStats {
     pub semantic_links_count: u64,
-    pub indexed_notes_count: u64,
+    pub processed_notes_count: u64,
     pub workspace_notes_count: u64,
     pub last_run_finished_at_ms: Option<u64>,
     pub last_run_title: Option<String>,
+    pub last_run_duration_ms: Option<u64>,
 }
 
 const INTERNAL_META_LAST_RUN_FINISHED_AT_MS_KEY: &str = "last_index_run_finished_at_ms";
 const INTERNAL_META_LAST_RUN_TITLE_KEY: &str = "last_index_run_title";
+const INTERNAL_META_LAST_RUN_DURATION_MS_KEY: &str = "last_index_run_duration_ms";
 
 fn sanitize_log_value(value: &str) -> String {
     value
@@ -145,6 +147,7 @@ pub(crate) fn ensure_index_schema(conn: &Connection) -> Result<()> {
       DROP TABLE IF EXISTS chunks_fts;
       DROP TABLE IF EXISTS chunks;
       DROP TABLE IF EXISTS note_embeddings;
+      DROP TABLE IF EXISTS note_processing;
       DROP TABLE IF EXISTS note_links;
       DROP TABLE IF EXISTS note_properties;
       DROP TABLE IF EXISTS semantic_edges;
@@ -153,7 +156,7 @@ pub(crate) fn ensure_index_schema(conn: &Connection) -> Result<()> {
       DROP TABLE IF EXISTS second_brain_messages;
       DROP TABLE IF EXISTS second_brain_context_items;
       DROP TABLE IF EXISTS second_brain_sessions;
-      DELETE FROM internal_meta WHERE key IN ('last_index_run_finished_at_ms', 'last_index_run_title');
+      DELETE FROM internal_meta WHERE key IN ('last_index_run_finished_at_ms', 'last_index_run_title', 'last_index_run_duration_ms');
       DELETE FROM internal_meta WHERE key = 'index_schema_version';
     "#,
         )?;
@@ -207,6 +210,11 @@ pub(crate) fn ensure_index_schema(conn: &Connection) -> Result<()> {
       dim INTEGER NOT NULL,
       vector BLOB NOT NULL,
       updated_at_ms INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS note_processing (
+      path TEXT PRIMARY KEY,
+      processed_at_ms INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS note_links (
@@ -506,7 +514,12 @@ pub(crate) fn refresh_semantic_edges_cache(conn: &Connection, root_canonical: &P
         0,
         started_at.elapsed().as_millis()
     ));
-    let _ = record_last_index_run(conn, "Semantic links refreshed", crate::now_ms());
+    let _ = record_last_index_run(
+        conn,
+        "Semantic links refreshed",
+        crate::now_ms(),
+        Some(started_at.elapsed().as_millis() as u64),
+    );
     Ok(())
 }
 
@@ -524,6 +537,7 @@ pub(crate) fn rebuild_workspace_index_sync() -> Result<RebuildIndexResult> {
         r#"
     DELETE FROM embeddings;
     DELETE FROM note_embeddings;
+    DELETE FROM note_processing;
     DELETE FROM chunks;
     DELETE FROM note_links;
     DELETE FROM note_properties;
@@ -589,7 +603,12 @@ pub(crate) fn rebuild_workspace_index_sync() -> Result<RebuildIndexResult> {
     ));
     if !canceled {
         let finished_at_ms = crate::now_ms();
-        let _ = record_last_index_run(&conn, "Workspace rebuild done", finished_at_ms);
+        let _ = record_last_index_run(
+            &conn,
+            "Workspace rebuild done",
+            finished_at_ms,
+            Some(rebuild_started_at.elapsed().as_millis() as u64),
+        );
     }
     Ok(RebuildIndexResult {
         indexed_files,
@@ -620,7 +639,17 @@ pub(crate) fn read_index_overview_stats() -> Result<IndexOverviewStats> {
     let conn = open_db()?;
     let root = active_workspace_root()?;
     let semantic_links_count = conn.query_row("SELECT COUNT(*) FROM semantic_edges", [], |row| row.get::<_, i64>(0))? as u64;
-    let indexed_notes_count = conn.query_row("SELECT COUNT(*) FROM note_embeddings", [], |row| row.get::<_, i64>(0))? as u64;
+    let processed_notes_count = conn.query_row(
+        r#"
+        SELECT CASE
+          WHEN EXISTS(SELECT 1 FROM note_processing)
+            THEN (SELECT COUNT(*) FROM note_processing)
+          ELSE (SELECT COUNT(DISTINCT path) FROM chunks)
+        END
+        "#,
+        [],
+        |row| row.get::<_, i64>(0),
+    )? as u64;
     let workspace_notes_count = list_markdown_files_via_find(&root)?.len() as u64;
     let last_run_finished_at_ms = conn
         .query_row(
@@ -637,16 +666,30 @@ pub(crate) fn read_index_overview_stats() -> Result<IndexOverviewStats> {
             |row| row.get::<_, String>(0),
         )
         .ok();
+    let last_run_duration_ms = conn
+        .query_row(
+            "SELECT value FROM internal_meta WHERE key = ?1",
+            [INTERNAL_META_LAST_RUN_DURATION_MS_KEY],
+            |row| row.get::<_, String>(0),
+        )
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok());
     Ok(IndexOverviewStats {
         semantic_links_count,
-        indexed_notes_count,
+        processed_notes_count,
         workspace_notes_count,
         last_run_finished_at_ms,
         last_run_title,
+        last_run_duration_ms,
     })
 }
 
-pub(crate) fn record_last_index_run(conn: &Connection, title: &str, finished_at_ms: u64) -> Result<()> {
+pub(crate) fn record_last_index_run(
+    conn: &Connection,
+    title: &str,
+    finished_at_ms: u64,
+    duration_ms: Option<u64>,
+) -> Result<()> {
     conn.execute(
         "INSERT OR REPLACE INTO internal_meta(key, value) VALUES (?1, ?2)",
         params![INTERNAL_META_LAST_RUN_FINISHED_AT_MS_KEY, finished_at_ms.to_string()],
@@ -655,6 +698,20 @@ pub(crate) fn record_last_index_run(conn: &Connection, title: &str, finished_at_
         "INSERT OR REPLACE INTO internal_meta(key, value) VALUES (?1, ?2)",
         params![INTERNAL_META_LAST_RUN_TITLE_KEY, title],
     )?;
+    match duration_ms {
+        Some(duration_ms) => {
+            conn.execute(
+                "INSERT OR REPLACE INTO internal_meta(key, value) VALUES (?1, ?2)",
+                params![INTERNAL_META_LAST_RUN_DURATION_MS_KEY, duration_ms.to_string()],
+            )?;
+        }
+        None => {
+            conn.execute(
+                "DELETE FROM internal_meta WHERE key = ?1",
+                params![INTERNAL_META_LAST_RUN_DURATION_MS_KEY],
+            )?;
+        }
+    }
     Ok(())
 }
 

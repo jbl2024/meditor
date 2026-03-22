@@ -83,11 +83,12 @@ function mountModal() {
           showWarmupNote: true,
           alert: null,
           semanticLinksCount: 71,
-          indexedNotesCount: 10,
+          processedNotesCount: 10,
           notesTotalCount: 20,
           notesTotalLoading: false,
           lastRunFinishedAtMs: 1710836339000,
           lastRunTitle: 'Workspace rebuild done',
+          lastRunDurationMs: 474000,
           logFilter: 'all',
           filteredRows: rows,
           errorCount: 0,
@@ -124,11 +125,12 @@ describe('IndexStatusModal', () => {
 
     expect(mounted.root.textContent).toContain('Index Status')
     expect(mounted.root.textContent).toContain('Semantic links')
-    expect(mounted.root.textContent).toContain('Notes indexed')
+    expect(mounted.root.textContent).toContain('Notes processed')
     expect(mounted.root.textContent).toContain('Last run')
     expect(mounted.root.textContent).toContain('71')
     expect(mounted.root.textContent).toContain('10/20')
     expect(mounted.root.textContent).toContain('Semantic links refreshed')
+    expect(mounted.root.textContent).toContain('86 ms')
     expect(mounted.root.textContent).toContain('Rebuild index')
     expect(mounted.root.textContent).toContain('Close')
 
@@ -177,11 +179,12 @@ describe('IndexStatusModal', () => {
             showWarmupNote: false,
             alert: null,
             semanticLinksCount: 5,
-            indexedNotesCount: 7,
+            processedNotesCount: 7,
             notesTotalCount: 12,
             notesTotalLoading: false,
             lastRunFinishedAtMs: 1710836339000,
             lastRunTitle: 'Workspace rebuild done',
+            lastRunDurationMs: 474000,
             logFilter: 'all',
             filteredRows: [],
             errorCount: 0,
@@ -200,6 +203,7 @@ describe('IndexStatusModal', () => {
 
     expect(root.textContent).toContain('ts:1710836339000')
     expect(root.textContent).toContain('Workspace rebuild done')
+    expect(root.textContent).toContain('474000 ms')
 
     app.unmount()
   })
