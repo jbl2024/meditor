@@ -628,6 +628,7 @@ function renderPathPrefix(row: IndexActivityRow) {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
   white-space: normal;
   line-height: 1.18;
@@ -711,7 +712,7 @@ function renderPathPrefix(row: IndexActivityRow) {
   color: var(--text-main);
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
   white-space: normal;
   line-height: 1.25;
@@ -736,6 +737,7 @@ function renderPathPrefix(row: IndexActivityRow) {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
   white-space: normal;
 }
