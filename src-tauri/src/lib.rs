@@ -468,10 +468,16 @@ mod tests {
     struct SettingsBackup {
         path: PathBuf,
         original: Option<String>,
+        original_home: Option<String>,
     }
 
     impl Drop for SettingsBackup {
         fn drop(&mut self) {
+            match &self.original_home {
+                Some(value) => std::env::set_var("HOME", value),
+                None => std::env::remove_var("HOME"),
+            }
+
             if let Some(parent) = self.path.parent() {
                 let _ = fs::create_dir_all(parent);
             }
@@ -487,6 +493,10 @@ mod tests {
     }
 
     fn install_test_second_brain_settings() -> SettingsBackup {
+        let original_home = std::env::var("HOME").ok();
+        let test_home = create_temp_workspace("tomosona-home");
+        std::env::set_var("HOME", &test_home);
+
         let settings_view = settings::read_app_settings().expect("read app settings");
         let path = PathBuf::from(settings_view.path);
         let original = fs::read_to_string(&path).ok();
@@ -518,7 +528,11 @@ mod tests {
         })
         .expect("write test app settings");
 
-        SettingsBackup { path, original }
+        SettingsBackup {
+            path,
+            original,
+            original_home,
+        }
     }
 
     #[test]

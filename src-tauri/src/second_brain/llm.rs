@@ -244,6 +244,6 @@ mod tests {
     #[test]
     fn builds_chat_options_with_temperature() {
         let options = chat_options_for_temperature(0.42, true);
-        assert_eq!(options.temperature(), Some(0.42));
+        assert_eq!(options.temperature, Some(0.42));
     }
 }

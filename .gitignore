@@ -1,6 +1,9 @@
 node_modules/
 dist/
 target/
+coverage/
+*.profraw
+*.profdata
 .DS_Store
 *.log
 *.sqlite
