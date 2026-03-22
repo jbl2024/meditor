@@ -92,6 +92,7 @@ import {
   extractHeadingsFromMarkdown,
   hasForbiddenEntryNameChars,
   isReservedEntryName,
+  isTitleOnlyContent,
   markdownExtensionFromPath,
   noteTitleFromPath,
   parentPrefixForModal,
@@ -176,7 +177,8 @@ import { useCosmosController } from '../domains/cosmos/composables/useCosmosCont
 import { useFilesystemState } from './composables/useFilesystemState'
 import { useWorkspaceState, type SidebarMode } from './composables/useWorkspaceState'
 import { useFavoritesController } from '../domains/favorites/composables/useFavoritesController'
-import { rewritePathWithMoves, sortPathMoves } from './lib/pathMoves'
+import { applyDeferredPathMovesLocally, applyImmediatePathMovesLocally } from './lib/appShellPathMoveEffects'
+import { clearEditorStatusForPaths as clearEditorStatusForPathsInPane, documentPathsForPane } from './lib/appShellPane'
 import {
   createInitialLayout,
   useMultiPaneWorkspaceState
@@ -536,8 +538,45 @@ const workspaceMutationEffects = useWorkspaceMutationEffects({
   favoriteItems: favorites.items,
   filesystemErrorMessage: filesystem.errorMessage,
   getImmediatePathCandidates: () => multiPane.getOpenDocumentPaths(),
-  applyImmediateLocalPathMoves: applyImmediatePathMovesLocally,
-  applyDeferredLocalPathMoves: applyDeferredPathMovesLocally,
+  applyImmediateLocalPathMoves: (moves, expandedMarkdownMoves) =>
+    applyImmediatePathMovesLocally(
+      {
+        multiPane: {
+          replacePath: (from, to) => multiPane.replacePath(from, to)
+        },
+        documentHistory: {
+          replacePath: (from, to) => documentHistory.replacePath(from, to)
+        },
+        editorState: {
+          movePath: (from, to) => editorState.movePath(from, to)
+        },
+        renameLaunchpadRecentNote: (from, to) => renameLaunchpadRecentNote(from, to),
+        virtualDocs,
+        backlinks
+      },
+      moves,
+      expandedMarkdownMoves
+    ),
+  applyDeferredLocalPathMoves: (moves, expandedMarkdownMoves) =>
+    applyDeferredPathMovesLocally(
+      {
+        multiPane: {
+          replacePath: (from, to) => multiPane.replacePath(from, to)
+        },
+        documentHistory: {
+          replacePath: (from, to) => documentHistory.replacePath(from, to)
+        },
+        editorState: {
+          movePath: (from, to) => editorState.movePath(from, to)
+        },
+        renameLaunchpadRecentNote: (from, to) => renameLaunchpadRecentNote(from, to),
+        virtualDocs,
+        backlinks,
+        replaceWorkspaceFilePath: (from, to) => replaceWorkspaceFilePath(from, to)
+      },
+      moves,
+      expandedMarkdownMoves
+    ),
   renameFavorite: (fromPath, toPath) => favorites.renameFavorite(fromPath, toPath),
   updateWikilinksForRename,
   updateWikilinksForPathMoves,
@@ -894,11 +933,6 @@ async function rebuildIndexFromOverflow() {
   await loadAllFiles()
 }
 
-function isTitleOnlyContent(content: string, titleLine: string): boolean {
-  const normalized = content.replace(/\r\n/g, '\n').trim()
-  return normalized === '' || normalized === titleLine
-}
-
 function closeOverflowMenu() {
   overflowMenuOpen.value = false
 }
@@ -935,21 +969,6 @@ async function openHomeHistorySnapshot(_snapshot: HomeHistorySnapshot): Promise<
   return true
 }
 
-function documentPathsForPane(paneId: string): string[] {
-  const pane = multiPane.layout.value.panesById[paneId]
-  if (!pane) return []
-  return pane.openTabs
-    .filter((tab) => tab.type === 'document')
-    .map((tab) => (tab.type === 'document' ? tab.path : ''))
-    .filter(Boolean)
-}
-
-function clearEditorStatusForPaths(paths: string[]) {
-  for (const path of paths) {
-    editorState.clearStatus(path)
-  }
-}
-
 const navigationWorkspacePort = {
   hasWorkspace: filesystem.hasWorkspace,
   allWorkspaceFiles,
@@ -977,7 +996,7 @@ const navigationPanePort = {
   getActiveDocumentPath: (paneId?: string) => multiPane.getActiveDocumentPath(paneId),
   getActivePaneId: () => multiPane.layout.value.activePaneId,
   getPaneOrder: () => multiPane.paneOrder.value,
-  getDocumentPathsForPane: (paneId: string) => documentPathsForPane(paneId),
+  getDocumentPathsForPane: (paneId: string) => documentPathsForPane(multiPane.layout.value.panesById, paneId),
   openPathInPane: (path: string, paneId?: string) => multiPane.openPathInPane(path, paneId),
   revealDocumentInPane: (path: string, paneId?: string) => multiPane.revealDocumentInPane(path, paneId),
   setActivePathInPane: (paneId: string, path: string) => multiPane.setActivePathInPane(paneId, path),
@@ -1392,7 +1411,8 @@ const commands = useAppShellCommands({
     isMarkdownPath,
     normalizePathKey,
     toRelativePath,
-    clearEditorStatusForPaths,
+    clearEditorStatusForPaths: (paths: string[]) =>
+      clearEditorStatusForPathsInPane(paths, (path) => editorState.clearStatus(path)),
     resetActiveOutline: () => editorState.setActiveOutline([])
   },
   panePort: {
@@ -1804,50 +1824,6 @@ async function readNoteSnapshot(path: string): Promise<ReadNoteSnapshotResult> {
     }
   }
   return await readNoteSnapshotIpc(path)
-}
-
-function applyImmediatePathMovesLocally(moves: PathMove[], expandedMarkdownMoves: PathMove[]) {
-  const normalizedMoves = sortPathMoves(moves)
-  if (!normalizedMoves.length) return
-
-  for (const move of expandedMarkdownMoves) {
-    multiPane.replacePath(move.from, move.to)
-    documentHistory.replacePath(move.from, move.to)
-    editorState.movePath(move.from, move.to)
-    renameLaunchpadRecentNote(move.from, move.to)
-
-    if (virtualDocs.value[move.from]) {
-      const nextVirtual = { ...virtualDocs.value }
-      nextVirtual[move.to] = nextVirtual[move.from]
-      delete nextVirtual[move.from]
-      virtualDocs.value = nextVirtual
-    }
-  }
-
-  backlinks.value = backlinks.value.map((path) => rewritePathWithMoves(path, normalizedMoves))
-}
-
-function applyDeferredPathMovesLocally(moves: PathMove[], expandedMarkdownMoves: PathMove[]) {
-  const normalizedMoves = sortPathMoves(moves)
-  if (!normalizedMoves.length) return
-
-  for (const move of normalizedMoves) {
-    replaceWorkspaceFilePath(move.from, move.to)
-  }
-
-  for (const move of expandedMarkdownMoves) {
-    multiPane.replacePath(move.from, move.to)
-    documentHistory.replacePath(move.from, move.to)
-    editorState.movePath(move.from, move.to)
-    renameLaunchpadRecentNote(move.from, move.to)
-
-    if (virtualDocs.value[move.from]) {
-      const nextVirtual = { ...virtualDocs.value }
-      nextVirtual[move.to] = nextVirtual[move.from]
-      delete nextVirtual[move.from]
-      virtualDocs.value = nextVirtual
-    }
-  }
 }
 
 function onEditorPathRenamed(payload: { from: string; to: string; manual: boolean }) {

@@ -1,6 +1,7 @@
 import { nextTick, type Ref } from 'vue'
 import type { SearchMode } from '../../shared/lib/searchMode'
 import type { SidebarMode } from './useWorkspaceState'
+import { clearEditorStatusForPaths, documentPathsForPane } from '../lib/appShellPane'
 
 /**
  * Module: useAppShellPaneRuntime
@@ -91,20 +92,6 @@ type Options = {
 }
 
 export function useAppShellPaneRuntime(options: Options) {
-  function documentPathsForPane(paneId: string): string[] {
-    const pane = options.multiPane.layout.value.panesById[paneId]
-    if (!pane) return []
-    return pane.openTabs
-      .filter((tab): tab is Extract<PaneTab, { type: 'document' }> => tab.type === 'document')
-      .map((tab) => tab.path)
-  }
-
-  function clearEditorStatusForPaths(paths: string[]) {
-    for (const path of paths) {
-      options.editorState.clearStatus(path)
-    }
-  }
-
   async function onPaneTabClick(payload: { paneId: string; tabId: string }) {
     options.multiPane.setActivePane(payload.paneId)
     const pane = options.multiPane.layout.value.panesById[payload.paneId]
@@ -132,9 +119,9 @@ export function useAppShellPaneRuntime(options: Options) {
   }
 
   function onPaneTabCloseAll(payload: { paneId: string }) {
-    const paths = documentPathsForPane(payload.paneId)
+    const paths = documentPathsForPane(options.multiPane.layout.value.panesById, payload.paneId)
     options.multiPane.closeAllTabsInPane(payload.paneId)
-    clearEditorStatusForPaths(paths)
+    clearEditorStatusForPaths(paths, (path) => options.editorState.clearStatus(path))
   }
 
   function closeActiveTab() {

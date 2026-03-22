@@ -51,6 +51,12 @@ export function isReservedEntryName(name: string): boolean {
   return WINDOWS_RESERVED_NAME_RE.test(name)
 }
 
+/** Returns true when a virtual document save only contains the title line. */
+export function isTitleOnlyContent(content: string, titleLine: string): boolean {
+  const normalized = content.replace(/\r\n/g, '\n').trim()
+  return normalized === '' || normalized === titleLine
+}
+
 /** Extracts deduplicated headings from markdown for wikilink heading completion. */
 export function extractHeadingsFromMarkdown(markdown: string): string[] {
   const lines = markdown.replace(/\r\n?/g, '\n').split('\n')

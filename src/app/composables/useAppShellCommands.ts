@@ -1,5 +1,6 @@
 import { nextTick, type Ref } from 'vue'
 import type { SidebarMode } from './useWorkspaceState'
+import { documentPathsForPane } from '../lib/appShellPane'
 
 type PaneAxis = 'row' | 'column'
 type PaneDirection = 'next' | 'previous'
@@ -94,17 +95,6 @@ export type UseAppShellCommandsOptions = {
   favoritesPort: AppShellCommandsFavoritesPort
   cosmosPort: AppShellCommandsCosmosPort
   actionPort: AppShellCommandsActionPort
-}
-
-function documentPathsForPane(
-  panesById: Record<string, { openTabs: Array<{ id: string; type: 'document'; path: string } | { id: string; type: SurfaceType; pinned: boolean }> }>,
-  paneId: string
-) {
-  const pane = panesById[paneId]
-  if (!pane) return []
-  return pane.openTabs
-    .filter((tab): tab is Extract<typeof tab, { type: 'document' }> => tab.type === 'document')
-    .map((tab) => tab.path)
 }
 
 /**

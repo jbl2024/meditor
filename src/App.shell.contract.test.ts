@@ -59,6 +59,14 @@ describe('App shell contract', () => {
     expect(appSource).toContain('useAppShellPaneRuntime')
   })
 
+  it('keeps shell helper implementations out of App.vue', () => {
+    expect(appSource).not.toContain('function isTitleOnlyContent(')
+    expect(appSource).not.toContain('function documentPathsForPane(')
+    expect(appSource).not.toContain('function clearEditorStatusForPaths(')
+    expect(appSource).not.toContain('function applyImmediatePathMovesLocally(')
+    expect(appSource).not.toContain('function applyDeferredPathMovesLocally(')
+  })
+
   it('keeps constituted-context routing out of App.vue', () => {
     expect(appSource).not.toContain('function addPathToConstitutedContext(')
     expect(appSource).not.toContain('function openConstitutedContextInSecondBrain(')

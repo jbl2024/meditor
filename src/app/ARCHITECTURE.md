@@ -27,6 +27,10 @@
 - If a behavior coordinates two domains or more, place it in the shell.
 - If a shell workflow starts depending on a domain's internal state shape, enrich the domain's public API instead.
 - `App.vue` should mainly create controllers, derive typed view-models, and render the shell.
+- Small pure shell helpers live in `src/app/lib/*` when they do not own lifecycle or orchestration:
+  - `appShellDocuments`
+  - `appShellPane`
+  - `appShellPathMoveEffects`
 
 ## Shell Composables
 - `useAppModalController`: modal selector derivation, focus restore, tab trapping.
