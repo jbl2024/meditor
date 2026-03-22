@@ -331,7 +331,8 @@ describe('App shell flows', () => {
       initialEchoesCalls = indexApi.computeEchoesPack.mock.calls.length
     }
     expect(initialEchoesCalls).toBeGreaterThan(0)
-    const initialAnchorPath = indexApi.computeEchoesPack.mock.calls.at(initialEchoesCalls - 1)?.[0]
+    const computeEchoesPackCalls = indexApi.computeEchoesPack.mock.calls as unknown as Array<[string]>
+    const initialAnchorPath = computeEchoesPackCalls[initialEchoesCalls - 1]?.[0]
 
     mounted.root.querySelector<HTMLButtonElement>('button.status-trigger')?.click()
     await flushUi()
@@ -345,7 +346,7 @@ describe('App shell flows', () => {
     await flushUi()
 
     expect(indexApi.computeEchoesPack.mock.calls.length).toBeGreaterThan(initialEchoesCalls)
-    expect(indexApi.computeEchoesPack.mock.calls.at(-1)?.[0]).toBe(initialAnchorPath)
+    expect(computeEchoesPackCalls[computeEchoesPackCalls.length - 1]?.[0]).toBe(initialAnchorPath)
 
     mounted.app.unmount()
   })
