@@ -11,9 +11,13 @@ describe('editorPaneGridLayout', () => {
     expect(
       collectPaneIds({
         kind: 'split',
+        axis: 'column',
+        ratio: 0.5,
         a: { kind: 'pane', paneId: 'left' },
         b: {
           kind: 'split',
+          axis: 'row',
+          ratio: 0.5,
           a: { kind: 'pane', paneId: 'top-right' },
           b: { kind: 'pane', paneId: 'bottom-right' }
         }

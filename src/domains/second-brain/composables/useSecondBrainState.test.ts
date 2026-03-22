@@ -74,6 +74,9 @@ describe('useSecondBrainState', () => {
         title: 'Draft',
         provider: 'openai',
         model: 'gpt-5.2',
+        created_at_ms: 1,
+        updated_at_ms: 2,
+        target_note_path: '',
         context_items: [
           { path: 'notes/a.md', token_estimate: 4 },
           { path: 'notes/b.md', token_estimate: 6 }
