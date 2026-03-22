@@ -340,6 +340,20 @@ describe('useAppIndexingController', () => {
     expect(refreshBacklinks).toHaveBeenCalledTimes(1)
   })
 
+  it('eventually refreshes derived views when opening stays busy for too long', async () => {
+    vi.useFakeTimers()
+    const { controller, indexingState, refreshBacklinks, isBusyOpeningDocument, reindexMarkdownFileLexical } = createController()
+    isBusyOpeningDocument.mockReturnValue(true)
+    reindexMarkdownFileLexical.mockResolvedValueOnce(undefined)
+
+    controller.enqueueMarkdownReindex('/vault/a.md')
+    await vi.advanceTimersByTimeAsync(6_000)
+
+    expect(refreshBacklinks).toHaveBeenCalledTimes(1)
+    expect(indexingState.value).toBe('indexed')
+    expect(controller.indexRunLastFinishedAt.value).not.toBeNull()
+  })
+
   it('marks semantic indexing as error when semantic reindex fails', async () => {
     vi.useFakeTimers()
     const { controller, reindexMarkdownFileSemantic } = createController()

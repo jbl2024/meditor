@@ -99,6 +99,7 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
   const semanticDebounceMs = 15_000
   const indexedViewRefreshDebounceMs = 120
   const indexedViewRefreshRetryMs = 120
+  const indexedViewRefreshBusyTimeoutMs = 5_000
   let reindexWorkerRunning = false
   let reindexGeneration = 0
   const pendingReindexPaths = new Set<string>()
@@ -155,7 +156,14 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
       let handledVersion = 0
       while (handledVersion < indexedViewRefreshRequestVersion) {
         await new Promise<void>((resolve) => setTimeout(resolve, indexedViewRefreshDebounceMs))
+        const waitStartedAt = Date.now()
         while (shouldDelayIndexedViewRefresh()) {
+          if (Date.now() - waitStartedAt >= indexedViewRefreshBusyTimeoutMs) {
+            console.warn('[index] derived-views-refresh:busy-timeout', {
+              waitedMs: Date.now() - waitStartedAt
+            })
+            break
+          }
           await new Promise<void>((resolve) => setTimeout(resolve, indexedViewRefreshRetryMs))
         }
         handledVersion = indexedViewRefreshRequestVersion
