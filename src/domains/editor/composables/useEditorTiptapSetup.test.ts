@@ -84,6 +84,16 @@ describe('useEditorTiptapSetup', () => {
     expect(options.updateFormattingToolbar).toHaveBeenCalled()
   })
 
+  it('refreshes the block handle on doc changes so heading level edits update the gutter in real time', () => {
+    const { setup, options } = createSetup()
+    const editorOptions = setup.createEditorOptions('a.md') as any
+
+    editorOptions.onTransaction({ transaction: { docChanged: true } })
+
+    expect(options.onEditorDocChanged).toHaveBeenCalledWith('a.md')
+    expect(options.syncBlockHandleFromSelection).toHaveBeenCalled()
+  })
+
   it('handles wikilink and external link click behavior', async () => {
     const openLinkTargetWithAutosave = vi.fn(async () => {})
     const openExternalUrl = vi.fn(async () => {})

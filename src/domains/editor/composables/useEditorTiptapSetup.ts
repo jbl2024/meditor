@@ -349,6 +349,7 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
         const { transaction } = payload
         if (transaction.docChanged) {
           options.onEditorDocChanged(path)
+          options.syncBlockHandleFromSelection()
         }
         if (options.currentPath.value !== path) return
         options.updateTableToolbar()
