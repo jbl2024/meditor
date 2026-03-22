@@ -31,6 +31,11 @@
   - `appShellDocuments`
   - `appShellPane`
   - `appShellPathMoveEffects`
+- Presentation surfaces keep the root template small by grouping existing UI into
+  explicit shells:
+  - `AppShellChromeSurface`
+  - `AppShellWorkspaceSurface`
+  - `AppShellOverlays`
 
 ## Shell Composables
 - `useAppModalController`: modal selector derivation, focus restore, tab trapping.

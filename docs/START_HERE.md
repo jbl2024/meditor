@@ -37,7 +37,7 @@ If you are new to the codebase, do this in order:
 
 1. Run `npm test` once to confirm the frontend test suite is healthy.
 2. Run `cargo check` in `src-tauri` to confirm the backend still compiles.
-3. Open `src/app/App.vue` and skim the imports only. That shows the shell surface area.
+3. Open `src/app/App.vue` and skim the imports only. That shows the shell surface area and the current surface wrappers (`AppShellChromeSurface`, `AppShellWorkspaceSurface`, `AppShellOverlays`).
 4. Open `src/domains/editor/components/editor/ARCHITECTURE.md` and `src/domains/second-brain/components/ARCHITECTURE.md` to see how the two densest UI surfaces are split.
 5. Open `src-tauri/src/BACKEND_INDEX_ARCHITECTURE.md` and `src-tauri/src/second_brain/SECOND_BRAIN_ARCHITECTURE.md` to see where backend responsibilities live.
 6. Pick one feature you care about and trace it through the smallest number of files possible.
@@ -53,6 +53,7 @@ Use this as a quick routing table when you need to make a change.
 | Workspace boot / restore | `src/app/App.vue` | `src/app/composables/useAppShellWorkspaceLifecycle.ts`, `src/app/composables/useAppShellWorkspaceFsSync.ts`, `src/app/composables/useAppShellPersistence.ts`, `src/app/composables/useAppWorkspaceController.ts` |
 | App runtime bootstrap / teardown | `src/app/composables/useAppShellRuntimeLifecycle.ts` | `src/app/App.vue`, `src/app/composables/useAppShellWorkspaceLifecycle.ts`, `src/app/composables/useAppShellPersistence.ts`, `src/shared/lib/openTrace.ts` |
 | Shell chrome controls | `src/app/composables/useAppShellChromeRuntime.ts` | `src/app/App.vue`, `src/app/composables/useAppShellHistoryUi.ts`, `src/app/composables/useAppShellPersistence.ts` |
+| Shell presentation surfaces | `src/app/components/app/AppShellChromeSurface.vue`, `src/app/components/app/AppShellWorkspaceSurface.vue`, `src/app/components/app/AppShellOverlays.vue` | `src/app/App.vue`, `src/app/components/app/TopbarNavigationControls.vue`, `src/app/components/app/SidebarSurface.vue`, `src/app/components/app/WorkspaceStatusBar.vue`, `src/app/components/app/*Modal.vue` |
 | Constituted context actions | `src/app/composables/useAppShellConstitutedContextActions.ts` | `src/app/App.vue`, `src/app/composables/useAppSecondBrainBridge.ts`, `src/domains/editor/composables/useConstitutedContext.ts` |
 | Pane/editor/Cosmos runtime glue | `src/app/composables/useAppShellPaneRuntime.ts` | `src/app/App.vue`, `src/app/composables/useAppNavigationController.ts`, `src/app/composables/useAppShellCommands.ts` |
 | Pure shell helpers | `src/app/lib/appShellDocuments.ts`, `src/app/lib/appShellPane.ts`, `src/app/lib/appShellPathMoveEffects.ts` | `src/app/App.vue`, `src/app/composables/useAppShellPaneRuntime.ts`, `src/app/composables/useAppShellCommands.ts` |

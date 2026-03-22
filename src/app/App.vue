@@ -1,19 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import EditorPaneGrid, { type EditorPaneGridExposed } from './components/panes/EditorPaneGrid.vue'
-import EditorRightPane from '../domains/editor/components/EditorRightPane.vue'
-import SidebarSurface from './components/app/SidebarSurface.vue'
-import IndexStatusModal from './components/app/IndexStatusModal.vue'
-import QuickOpenModal from './components/app/QuickOpenModal.vue'
-import ThemePickerModal from './components/app/ThemePickerModal.vue'
-import ShortcutsModal from './components/app/ShortcutsModal.vue'
-import AboutModal from './components/app/AboutModal.vue'
-import TopbarNavigationControls from './components/app/TopbarNavigationControls.vue'
-import WorkspaceSetupWizardModal from './components/app/WorkspaceSetupWizardModal.vue'
-import WorkspaceEntryModals from './components/app/WorkspaceEntryModals.vue'
-import WorkspaceStatusBar from './components/app/WorkspaceStatusBar.vue'
-import SettingsModal from './components/settings/SettingsModal.vue'
-import DesignSystemDebugModal from './components/app/DesignSystemDebugModal.vue'
+import AppShellChromeSurface, { type AppShellChromeSurfaceExposed } from './components/app/AppShellChromeSurface.vue'
+import AppShellWorkspaceSurface, { type AppShellWorkspaceSurfaceExposed } from './components/app/AppShellWorkspaceSurface.vue'
+import AppShellOverlays from './components/app/AppShellOverlays.vue'
 import { useDocumentHistory } from '../domains/editor/composables/useDocumentHistory'
 import {
   clearWorkingFolder,
@@ -189,9 +179,7 @@ type PropertyPreviewRow = { key: string; value: string }
 
 type EditorViewExposed = EditorPaneGridExposed
 
-type ExplorerTreeExposed = {
-  revealPathInView: (path: string, options?: { focusTree?: boolean; behavior?: ScrollBehavior }) => Promise<void>
-}
+type ExplorerTreeExposed = AppShellWorkspaceSurfaceExposed
 
 type SaveFileOptions = {
   explicit: boolean
@@ -247,7 +235,7 @@ const themePickerActiveIndex = ref(0)
 const themePickerHasPreview = ref(false)
 const editorRef = ref<EditorViewExposed | null>(null)
 const explorerRef = ref<ExplorerTreeExposed | null>(null)
-const topbarRef = ref<InstanceType<typeof TopbarNavigationControls> | null>(null)
+const topbarRef = ref<AppShellChromeSurfaceExposed | null>(null)
 const propertiesPreview = ref<PropertyPreviewRow[]>([])
 const propertyParseErrorCount = ref(0)
 const virtualDocs = ref<Record<string, VirtualDoc>>({})
@@ -2045,7 +2033,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="ide-root" :class="{ 'macos-overlay': isMacOs }">
-    <TopbarNavigationControls
+    <AppShellChromeSurface
       ref="topbarRef"
       :can-go-back="documentHistory.canGoBack.value"
       :can-go-forward="documentHistory.canGoForward.value"
@@ -2066,6 +2054,11 @@ onBeforeUnmount(() => {
       :zoom-percent-label="zoomPercentLabel"
       :active-theme-label="themePreference === 'system' ? systemThemeLabel : activeTheme.label"
       :show-debug-tools="showDebugTools"
+      :active-file-label="activeFilePath ? toRelativePath(activeFilePath) : 'No file'"
+      :active-state-label="activeStatus.saving ? 'saving...' : virtualDocs[activeFilePath] ? 'unsaved' : activeStatus.dirty ? 'edit' : 'saved'"
+      :index-state-label="indexStateLabel"
+      :index-state-class="indexStateClass"
+      :workspace-label="filesystem.workingFolderPath.value || 'none'"
       @history-button-click="onHistoryButtonClick"
       @history-button-context-menu="onHistoryButtonContextMenu"
       @history-button-pointer-down="onHistoryButtonPointerDown"
@@ -2096,284 +2089,229 @@ onBeforeUnmount(() => {
       @zoom-out="zoomOutFromOverflow"
       @reset-zoom="resetZoomFromOverflow"
       @open-theme-picker="openThemePickerFromOverflow"
-    />
-
-    <div class="body-row">
-      <SidebarSurface
-        ref="explorerRef"
-        :sidebar-visible="workspace.sidebarVisible.value"
-        :sidebar-mode="workspace.sidebarMode.value"
-        :working-folder-path="filesystem.workingFolderPath.value"
-        :has-workspace="filesystem.hasWorkspace.value"
-        :left-pane-width="leftPaneWidth"
-        :active-file-path="activeFilePath"
-        :favorite-items="favorites.items.value"
-        :favorites-loading="favorites.loading.value"
-        :search-query="searchQuery"
-        :global-search-mode="globalSearchMode"
-        :search-mode-options="searchModeOptions"
-        :show-search-score="showSearchScore"
-        :has-searched="hasSearched"
-        :search-loading="searchLoading"
-        :grouped-search-results="groupedSearchResults"
-        :to-relative-path="toRelativePath"
-        :format-search-score="formatSearchScore"
-        :parse-search-snippet="parseSearchSnippet"
-        @set-sidebar-mode="setSidebarMode"
-        @explorer-open="onExplorerOpen"
-        @explorer-path-renamed="onExplorerPathRenamed"
-        @explorer-paths-moved="onExplorerPathsMoved"
-        @explorer-paths-deleted="onExplorerPathsDeleted"
-        @explorer-request-create="onExplorerRequestCreate"
-        @explorer-selection="onExplorerSelection"
-        @explorer-error="onExplorerError"
-        @favorites-open="openFavoriteFromSidebar"
-        @favorites-remove="removeFavoriteFromList"
-        @select-working-folder="void workspaceRouting.openWorkspacePicker()"
-        @update-search-query="searchQuery = $event"
-        @run-global-search="runGlobalSearch"
-        @select-global-search-mode="onGlobalSearchModeSelect"
-        @open-search-result="onSearchResultOpen"
-      />
-
-      <section class="workspace-column">
-        <div class="workspace-row">
-          <div
-            v-if="workspace.sidebarVisible.value"
-            class="splitter"
-            @mousedown="beginResize('left', $event)"
-          ></div>
-
-          <main class="center-area">
-            <EditorPaneGrid
-              ref="editorRef"
-              :layout="multiPane.layout.value"
-              :active-document-path="activeFilePath"
-              :get-status="editorState.getStatus"
-              :readNoteSnapshot="readNoteSnapshot"
-              :saveNoteBuffer="saveNoteBuffer"
-              :renameFileFromTitle="renameFileFromTitle"
-              :loadLinkTargets="loadWikilinkTargets"
-              :loadLinkHeadings="loadWikilinkHeadings"
-              :loadPropertyTypeSchema="loadPropertyTypeSchema"
-              :savePropertyTypeSchema="savePropertyTypeSchema"
-              :openLinkTarget="openWikilinkTarget"
-              :cosmos="cosmosPaneViewModel"
-              :alters="altersPaneViewModel"
-              :second-brain="secondBrainPaneViewModel"
-              :launchpad="launchpadPaneViewModel"
-              @pane-focus="multiPane.setActivePane($event.paneId)"
-              @pane-tab-click="void onPaneTabClick($event)"
-              @pane-tab-close="onPaneTabClose($event)"
-              @pane-tab-close-others="onPaneTabCloseOthers($event)"
-              @pane-tab-close-all="onPaneTabCloseAll($event)"
-              @pane-request-move-tab="multiPane.moveActiveTabToAdjacentPane($event.direction)"
-              @open-note="void openNoteFromSecondBrain($event)"
-              @pulse-open-second-brain="void openPulseContextInSecondBrain($event)"
-              @external-reload="filesystem.notifyInfo(`Reloaded ${basenameLabel($event.path)} from disk.`)"
-              @second-brain-context-changed="onSecondBrainContextChanged"
-              @second-brain-session-changed="onSecondBrainSessionChanged"
-              @alter-open-second-brain="void openAlterInSecondBrain($event)"
-              @cosmos-query-update="onCosmosQueryUpdate"
-              @cosmos-search-enter="onCosmosSearchEnter"
-              @cosmos-select-match="onCosmosMatchClick"
-              @cosmos-toggle-focus-mode="onCosmosToggleFocusMode"
-              @cosmos-toggle-semantic-edges="onCosmosToggleSemanticEdges"
-              @cosmos-expand-neighborhood="onCosmosExpandNeighborhood"
-              @cosmos-jump-related="onCosmosJumpToRelatedNode"
-              @cosmos-open-selected="void onCosmosOpenSelectedNode()"
-              @cosmos-locate-selected="onCosmosLocateSelectedNode"
-              @cosmos-reset-view="onCosmosResetView"
-              @cosmos-select-node="onCosmosSelectNode"
-              @cosmos-add-to-context="addPathToConstitutedContext($event)"
-              @status="onEditorStatus"
-              @path-renamed="onEditorPathRenamed"
-              @outline="onEditorOutline"
-              @properties="onEditorProperties"
-              @launchpad-open-workspace="void workspaceRouting.openWorkspacePicker()"
-              @launchpad-open-wizard="void workspaceRouting.openWorkspaceSetupWizard()"
-              @launchpad-open-command-palette="void launchpad.openCommandPaletteFromLaunchpad()"
-              @launchpad-open-shortcuts="openShortcutsModal"
-              @launchpad-open-recent-workspace="void workspaceRouting.openRecentWorkspace($event)"
-              @launchpad-open-today="void openTodayNote()"
-              @launchpad-open-quick-open="void launchpad.openQuickOpenFromLaunchpad()"
-              @launchpad-create-note="void createNewFileFromPalette()"
-              @launchpad-open-recent-note="void onExplorerOpen($event)"
-              @launchpad-quick-start="void launchpad.launchQuickStart($event)"
-            />
-          </main>
-
-          <div
-            v-if="workspace.rightPaneVisible.value"
-            class="splitter"
-            @mousedown="beginResize('right', $event)"
-          ></div>
-
-          <EditorRightPane
-            v-if="workspace.rightPaneVisible.value"
-            :width="rightPaneWidth"
-            :active-note-path="activeFilePath"
-            :active-note-title="activeNoteTitle"
-            :active-state-label="activeStateLabel"
-            :backlink-count="backlinkCount"
-            :semantic-link-count="semanticLinkCount"
-            :active-note-in-context="activeNoteInContext"
-            :can-toggle-favorite="Boolean(activeFilePath && isMarkdownPath(activeFilePath))"
-            :is-favorite="Boolean(activeFilePath && favorites.isFavorite(activeFilePath))"
-            :echoes-items="noteEchoesForPanel"
-            :echoes-loading="noteEchoes.loading.value"
-            :echoes-error="noteEchoes.error.value"
-            :echoes-hint-visible="noteEchoesDiscoverability.hintVisible.value"
-            :local-context-items="localContextItems"
-            :pinned-context-items="pinnedContextItems"
-            :can-reason-on-context="!constitutedContext.isEmpty.value"
-            :is-launching-context-action="contextActionLoading"
-            :outline="editorState.activeOutline.value"
-            :semantic-links="semanticLinks"
-            :semantic-links-loading="semanticLinksLoading"
-            :backlinks="backlinks"
-            :backlinks-loading="backlinksLoading"
-            :metadata-rows="metadataRows"
-            :properties-preview="propertiesPreview"
-            :property-parse-error-count="propertyParseErrorCount"
-            :to-relative-path="toRelativePath"
-            @toggle-favorite="void toggleActiveNoteFavoriteFromRightPane()"
-            @active-note-add-to-context="toggleActiveNoteInConstitutedContext()"
-            @active-note-remove-from-context="toggleActiveNoteInConstitutedContext()"
-            @active-note-open-cosmos="void openNoteInCosmosFromPalette()"
-            @echoes-open="void onBacklinkOpen($event)"
-            @echoes-add-to-context="addPathToConstitutedContext($event)"
-            @echoes-remove-from-context="removePathFromConstitutedContext($event)"
-            @outline-click="void onOutlineHeadingClick($event)"
-            @backlink-open="void onBacklinkOpen($event)"
-            @context-open="void onBacklinkOpen($event)"
-            @context-remove-local="removeLocalPathFromConstitutedContext($event)"
-            @context-remove-pinned="removePinnedPathFromConstitutedContext($event)"
-            @context-pin="constitutedContext.pin()"
-            @context-clear-local="constitutedContext.clearLocal()"
-            @context-clear-pinned="constitutedContext.clearPinned()"
-            @context-open-second-brain="void openConstitutedContextInSecondBrain()"
-            @context-open-cosmos="void openConstitutedContextInCosmos()"
-            @context-open-pulse="void openConstitutedContextInPulse()"
-          />
-        </div>
-      </section>
-    </div>
-
-    <WorkspaceStatusBar
-      :active-file-label="activeFilePath ? toRelativePath(activeFilePath) : 'No file'"
-      :active-state-label="activeStatus.saving ? 'saving...' : virtualDocs[activeFilePath] ? 'unsaved' : activeStatus.dirty ? 'edit' : 'saved'"
-      :index-state-label="indexStateLabel"
-      :index-state-class="indexStateClass"
-      :workspace-label="filesystem.workingFolderPath.value || 'none'"
       @open-index-status="openIndexStatusModal"
     />
 
-    <div
-      v-if="filesystem.notificationMessage.value"
-      class="toast"
-      :class="`toast-${filesystem.notificationTone.value}`"
-      role="status"
-      aria-live="polite"
+    <AppShellWorkspaceSurface
+      ref="explorerRef"
+      :sidebar-visible="workspace.sidebarVisible.value"
+      :sidebar-mode="workspace.sidebarMode.value"
+      :working-folder-path="filesystem.workingFolderPath.value"
+      :has-workspace="filesystem.hasWorkspace.value"
+      :left-pane-width="leftPaneWidth"
+      :right-pane-visible="workspace.rightPaneVisible.value"
+      :right-pane-width="rightPaneWidth"
+      :active-file-path="activeFilePath"
+      :active-note-title="activeNoteTitle"
+      :active-state-label="activeStateLabel"
+      :backlink-count="backlinkCount"
+      :semantic-link-count="semanticLinkCount"
+      :active-note-in-context="activeNoteInContext"
+      :favorite-items="favorites.items.value"
+      :favorites-loading="favorites.loading.value"
+      :search-query="searchQuery"
+      :global-search-mode="globalSearchMode"
+      :search-mode-options="searchModeOptions"
+      :show-search-score="showSearchScore"
+      :has-searched="hasSearched"
+      :search-loading="searchLoading"
+      :grouped-search-results="groupedSearchResults"
+      :to-relative-path="toRelativePath"
+      :format-search-score="formatSearchScore"
+      :parse-search-snippet="parseSearchSnippet"
+      :can-toggle-favorite="Boolean(activeFilePath && isMarkdownPath(activeFilePath))"
+      :is-favorite="Boolean(activeFilePath && favorites.isFavorite(activeFilePath))"
+      :echoes-items="noteEchoesForPanel"
+      :echoes-loading="noteEchoes.loading.value"
+      :echoes-error="noteEchoes.error.value"
+      :echoes-hint-visible="noteEchoesDiscoverability.hintVisible.value"
+      :local-context-items="localContextItems"
+      :pinned-context-items="pinnedContextItems"
+      :can-reason-on-context="!constitutedContext.isEmpty.value"
+      :is-launching-context-action="contextActionLoading"
+      :outline="editorState.activeOutline.value"
+      :semantic-links="semanticLinks"
+      :semantic-links-loading="semanticLinksLoading"
+      :backlinks="backlinks"
+      :backlinks-loading="backlinksLoading"
+      :metadata-rows="metadataRows"
+      :properties-preview="propertiesPreview"
+      :property-parse-error-count="propertyParseErrorCount"
+      @set-sidebar-mode="setSidebarMode"
+      @explorer-open="onExplorerOpen"
+      @explorer-path-renamed="onExplorerPathRenamed"
+      @explorer-paths-moved="onExplorerPathsMoved"
+      @explorer-paths-deleted="onExplorerPathsDeleted"
+      @explorer-request-create="onExplorerRequestCreate"
+      @explorer-selection="onExplorerSelection"
+      @explorer-error="onExplorerError"
+      @favorites-open="openFavoriteFromSidebar"
+      @favorites-remove="removeFavoriteFromList"
+      @select-working-folder="void workspaceRouting.openWorkspacePicker()"
+      @update-search-query="searchQuery = $event"
+      @run-global-search="runGlobalSearch"
+      @select-global-search-mode="onGlobalSearchModeSelect"
+      @open-search-result="onSearchResultOpen"
+      @resize-start="beginResize"
+      @toggle-favorite="void toggleActiveNoteFavoriteFromRightPane()"
+      @active-note-add-to-context="toggleActiveNoteInConstitutedContext()"
+      @active-note-remove-from-context="toggleActiveNoteInConstitutedContext()"
+      @active-note-open-cosmos="void openNoteInCosmosFromPalette()"
+      @echoes-open="void onBacklinkOpen($event)"
+      @echoes-add-to-context="addPathToConstitutedContext($event)"
+      @echoes-remove-from-context="removePathFromConstitutedContext($event)"
+      @outline-click="void onOutlineHeadingClick($event)"
+      @backlink-open="void onBacklinkOpen($event)"
+      @context-open="void onBacklinkOpen($event)"
+      @context-remove-local="removeLocalPathFromConstitutedContext($event)"
+      @context-remove-pinned="removePinnedPathFromConstitutedContext($event)"
+      @context-pin="constitutedContext.pin()"
+      @context-clear-local="constitutedContext.clearLocal()"
+      @context-clear-pinned="constitutedContext.clearPinned()"
+      @context-open-second-brain="void openConstitutedContextInSecondBrain()"
+      @context-open-cosmos="void openConstitutedContextInCosmos()"
+      @context-open-pulse="void openConstitutedContextInPulse()"
     >
-      <span>{{ filesystem.notificationMessage.value }}</span>
-      <button type="button" class="toast-close" aria-label="Dismiss notification" @click="filesystem.clearNotification()">
-        ×
-      </button>
-    </div>
+      <template #center>
+        <EditorPaneGrid
+          ref="editorRef"
+          :layout="multiPane.layout.value"
+          :active-document-path="activeFilePath"
+          :get-status="editorState.getStatus"
+          :readNoteSnapshot="readNoteSnapshot"
+          :saveNoteBuffer="saveNoteBuffer"
+          :renameFileFromTitle="renameFileFromTitle"
+          :loadLinkTargets="loadWikilinkTargets"
+          :loadLinkHeadings="loadWikilinkHeadings"
+          :loadPropertyTypeSchema="loadPropertyTypeSchema"
+          :savePropertyTypeSchema="savePropertyTypeSchema"
+          :openLinkTarget="openWikilinkTarget"
+          :cosmos="cosmosPaneViewModel"
+          :alters="altersPaneViewModel"
+          :second-brain="secondBrainPaneViewModel"
+          :launchpad="launchpadPaneViewModel"
+          @pane-focus="multiPane.setActivePane($event.paneId)"
+          @pane-tab-click="void onPaneTabClick($event)"
+          @pane-tab-close="onPaneTabClose($event)"
+          @pane-tab-close-others="onPaneTabCloseOthers($event)"
+          @pane-tab-close-all="onPaneTabCloseAll($event)"
+          @pane-request-move-tab="multiPane.moveActiveTabToAdjacentPane($event.direction)"
+          @open-note="void openNoteFromSecondBrain($event)"
+          @pulse-open-second-brain="void openPulseContextInSecondBrain($event)"
+          @external-reload="filesystem.notifyInfo(`Reloaded ${basenameLabel($event.path)} from disk.`)"
+          @second-brain-context-changed="onSecondBrainContextChanged"
+          @second-brain-session-changed="onSecondBrainSessionChanged"
+          @alter-open-second-brain="void openAlterInSecondBrain($event)"
+          @cosmos-query-update="onCosmosQueryUpdate"
+          @cosmos-search-enter="onCosmosSearchEnter"
+          @cosmos-select-match="onCosmosMatchClick"
+          @cosmos-toggle-focus-mode="onCosmosToggleFocusMode"
+          @cosmos-toggle-semantic-edges="onCosmosToggleSemanticEdges"
+          @cosmos-expand-neighborhood="onCosmosExpandNeighborhood"
+          @cosmos-jump-related="onCosmosJumpToRelatedNode"
+          @cosmos-open-selected="void onCosmosOpenSelectedNode()"
+          @cosmos-locate-selected="onCosmosLocateSelectedNode"
+          @cosmos-reset-view="onCosmosResetView"
+          @cosmos-select-node="onCosmosSelectNode"
+          @cosmos-add-to-context="addPathToConstitutedContext($event)"
+          @status="onEditorStatus"
+          @path-renamed="onEditorPathRenamed"
+          @outline="onEditorOutline"
+          @properties="onEditorProperties"
+          @launchpad-open-workspace="void workspaceRouting.openWorkspacePicker()"
+          @launchpad-open-wizard="void workspaceRouting.openWorkspaceSetupWizard()"
+          @launchpad-open-command-palette="void launchpad.openCommandPaletteFromLaunchpad()"
+          @launchpad-open-shortcuts="openShortcutsModal"
+          @launchpad-open-recent-workspace="void workspaceRouting.openRecentWorkspace($event)"
+          @launchpad-open-today="void openTodayNote()"
+          @launchpad-open-quick-open="void launchpad.openQuickOpenFromLaunchpad()"
+          @launchpad-create-note="void createNewFileFromPalette()"
+          @launchpad-open-recent-note="void onExplorerOpen($event)"
+          @launchpad-quick-start="void launchpad.launchQuickStart($event)"
+        />
+      </template>
+    </AppShellWorkspaceSurface>
 
-    <IndexStatusModal
-      :visible="indexStatusModalVisible"
-      :running="indexRunning"
-      :busy="indexStatusBusy"
-      :runtime-status="indexRuntimeStatus"
-      :badge-label="indexStatusBadgeLabel"
-      :badge-class="indexStatusBadgeClass"
-      :show-progress-bar="indexShowProgressBar"
-      :progress-percent="indexProgressPercent"
-      :progress-label="indexProgressLabel"
-      :progress-summary="indexProgressSummary"
-      :current-path-label="indexRunCurrentPath ? toRelativePath(indexRunCurrentPath) : ''"
-      :current-operation-label="indexCurrentOperationLabel"
-      :current-operation-detail="indexCurrentOperationDetail"
-      :current-operation-path="indexCurrentOperationPath"
-      :current-operation-status-label="indexCurrentOperationStatusLabel"
-      :model-state-class="indexModelStateClass"
-      :model-status-label="indexModelStatusLabel"
-      :show-warmup-note="indexShowWarmupNote"
-      :alert="indexAlert"
-      :log-filter="indexLogFilter"
-      :filtered-rows="filteredIndexActivityRows"
-      :error-count="indexErrorCount"
-      :slow-count="indexSlowCount"
-      :action-label="indexActionLabel"
+    <AppShellOverlays
+      :toast-message="filesystem.notificationMessage.value"
+      :toast-tone="filesystem.notificationTone.value"
+      :to-relative-path="toRelativePath"
+      :index-status-modal-visible="indexStatusModalVisible"
+      :index-running="indexRunning"
+      :index-status-busy="indexStatusBusy"
+      :index-runtime-status="indexRuntimeStatus"
+      :index-status-badge-label="indexStatusBadgeLabel"
+      :index-status-badge-class="indexStatusBadgeClass"
+      :index-show-progress-bar="indexShowProgressBar"
+      :index-progress-percent="indexProgressPercent"
+      :index-progress-label="indexProgressLabel"
+      :index-progress-summary="indexProgressSummary"
+      :index-run-current-path="indexRunCurrentPath"
+      :index-current-operation-label="indexCurrentOperationLabel"
+      :index-current-operation-detail="indexCurrentOperationDetail"
+      :index-current-operation-path="indexCurrentOperationPath"
+      :index-current-operation-status-label="indexCurrentOperationStatusLabel"
+      :index-model-state-class="indexModelStateClass"
+      :index-model-status-label="indexModelStatusLabel"
+      :index-show-warmup-note="indexShowWarmupNote"
+      :index-alert="indexAlert"
+      :index-log-filter="indexLogFilter"
+      :filtered-index-activity-rows="filteredIndexActivityRows"
+      :index-error-count="indexErrorCount"
+      :index-slow-count="indexSlowCount"
+      :index-action-label="indexActionLabel"
       :format-duration-ms="formatDurationMs"
       :format-timestamp="formatTimestamp"
-      @close="closeIndexStatusModal"
-      @action="onIndexPrimaryAction"
-      @update:log-filter="indexLogFilter = $event"
-    />
-
-    <QuickOpenModal
-      :visible="quickOpenVisible"
-      :query="quickOpenQuery"
-      :is-action-mode="quickOpenIsActionMode"
-      :has-text-query="quickOpenHasTextQuery"
-      :action-groups="quickOpenActionGroups"
-      :recent-results="quickOpenBrowseRecentResults"
-      :browse-action-results="quickOpenBrowseActionResults"
-      :file-results="quickOpenResults"
-      :active-index="quickOpenActiveIndex"
-      @close="closeQuickOpen()"
-      @update:query="quickOpenQuery = $event"
-      @keydown="onQuickOpenInputKeydown"
-      @select-action="runQuickOpenAction"
-      @select-result="openQuickResult"
-      @set-active-index="setQuickOpenActiveIndex"
-    />
-
-    <ThemePickerModal
-      :visible="themePickerVisible"
-      :query="themePickerQuery"
-      :items="themePickerItems"
-      :active-index="themePickerActiveIndex"
-      :selected-preference="themePreference"
-      @close="closeThemePickerModal"
-      @update:query="themePickerQuery = $event"
-      @select="selectThemeFromModal"
-      @preview="previewThemePickerItem"
-      @keydown="onThemePickerInputKeydown"
-      @set-active-index="themePickerActiveIndex = $event"
-    />
-
-    <div v-if="cosmosCommandLoadingVisible" class="modal-overlay">
-      <div
-        class="modal confirm-modal cosmos-command-loading-modal"
-        data-modal="cosmos-command-loading"
-        role="dialog"
-        aria-modal="true"
-        aria-live="polite"
-        aria-labelledby="cosmos-command-loading-title"
-        tabindex="-1"
-      >
-        <h3 id="cosmos-command-loading-title" class="confirm-title">Opening Cosmos</h3>
-        <p class="confirm-text">{{ cosmosCommandLoadingLabel }}</p>
-        <div class="cosmos-command-loading-track">
-          <div class="cosmos-command-loading-bar"></div>
-        </div>
-      </div>
-    </div>
-
-    <WorkspaceEntryModals
-      :new-file-visible="newFileModalVisible"
+      :quick-open-visible="quickOpenVisible"
+      :quick-open-query="quickOpenQuery"
+      :quick-open-is-action-mode="quickOpenIsActionMode"
+      :quick-open-has-text-query="quickOpenHasTextQuery"
+      :quick-open-action-groups="quickOpenActionGroups"
+      :quick-open-browse-recent-results="quickOpenBrowseRecentResults"
+      :quick-open-browse-action-results="quickOpenBrowseActionResults"
+      :quick-open-results="quickOpenResults"
+      :quick-open-active-index="quickOpenActiveIndex"
+      :theme-picker-visible="themePickerVisible"
+      :theme-picker-query="themePickerQuery"
+      :theme-picker-items="themePickerItems"
+      :theme-picker-active-index="themePickerActiveIndex"
+      :theme-preference="themePreference"
+      :cosmos-command-loading-visible="cosmosCommandLoadingVisible"
+      :cosmos-command-loading-label="cosmosCommandLoadingLabel"
+      :new-file-modal-visible="newFileModalVisible"
       :new-file-path-input="newFilePathInput"
-      :new-file-error="newFileModalError"
-      :new-folder-visible="newFolderModalVisible"
+      :new-file-modal-error="newFileModalError"
+      :new-folder-modal-visible="newFolderModalVisible"
       :new-folder-path-input="newFolderPathInput"
-      :new-folder-error="newFolderModalError"
-      :open-date-visible="openDateModalVisible"
+      :new-folder-modal-error="newFolderModalError"
+      :open-date-modal-visible="openDateModalVisible"
       :open-date-input="openDateInput"
-      :open-date-error="openDateModalError"
+      :open-date-modal-error="openDateModalError"
+      :workspace-setup-wizard-visible="workspaceSetupWizardVisible"
+      :workspace-setup-wizard-busy="workspaceSetupWizardBusy"
+      :settings-modal-visible="settingsModalVisible"
+      :design-system-debug-visible="designSystemDebugVisible"
+      :shortcuts-modal-visible="shortcutsModalVisible"
+      :shortcuts-filter-query="shortcutsFilterQuery"
+      :filtered-shortcut-sections="filteredShortcutSections"
+      :about-modal-visible="aboutModalVisible"
+      :app-version="appVersion"
+      @dismiss-toast="filesystem.clearNotification()"
+      @close-index-status="closeIndexStatusModal"
+      @index-primary-action="onIndexPrimaryAction"
+      @update-index-log-filter="indexLogFilter = $event"
+      @close-quick-open="closeQuickOpen()"
+      @update-quick-open-query="quickOpenQuery = $event"
+      @quick-open-keydown="onQuickOpenInputKeydown"
+      @quick-open-select-action="runQuickOpenAction"
+      @quick-open-select-result="openQuickResult"
+      @quick-open-set-active-index="setQuickOpenActiveIndex"
+      @close-theme-picker="closeThemePickerModal"
+      @update-theme-picker-query="themePickerQuery = $event"
+      @theme-picker-select="selectThemeFromModal"
+      @theme-picker-preview="previewThemePickerItem"
+      @theme-picker-keydown="onThemePickerInputKeydown"
+      @theme-picker-set-active-index="themePickerActiveIndex = $event"
       @close-new-file="closeNewFileModal"
       @update-new-file-path="newFilePathInput = $event"
       @keydown-new-file="onNewFileInputKeydown"
@@ -2386,40 +2324,15 @@ onBeforeUnmount(() => {
       @update-open-date="openDateInput = $event"
       @keydown-open-date="onOpenDateInputKeydown"
       @submit-open-date="submitOpenDateFromModal"
+      @cancel-workspace-setup-wizard="workspaceRouting.closeWorkspaceSetupWizard()"
+      @submit-workspace-setup-wizard="void workspaceRouting.applyWorkspaceSetupWizard($event)"
+      @cancel-settings="closeSettingsModal"
+      @settings-saved="onSettingsSaved"
+      @close-design-system-debug="closeDesignSystemDebugModal"
+      @close-shortcuts="closeShortcutsModal"
+      @update-shortcuts-filter-query="shortcutsFilterQuery = $event"
+      @close-about="closeAboutModal"
     />
-
-    <WorkspaceSetupWizardModal
-      :visible="workspaceSetupWizardVisible"
-      :busy="workspaceSetupWizardBusy"
-      @cancel="workspaceRouting.closeWorkspaceSetupWizard()"
-      @submit="void workspaceRouting.applyWorkspaceSetupWizard($event)"
-    />
-
-    <SettingsModal
-      :visible="settingsModalVisible"
-      @cancel="closeSettingsModal"
-      @saved="onSettingsSaved"
-    />
-
-    <DesignSystemDebugModal
-      :visible="designSystemDebugVisible"
-      @close="closeDesignSystemDebugModal"
-    />
-
-    <ShortcutsModal
-      :visible="shortcutsModalVisible"
-      :filter-query="shortcutsFilterQuery"
-      :sections="filteredShortcutSections"
-      @close="closeShortcutsModal"
-      @update:filter-query="shortcutsFilterQuery = $event"
-    />
-
-    <AboutModal
-      :visible="aboutModalVisible"
-      :version="appVersion"
-      @close="closeAboutModal"
-    />
-
   </div>
 </template>
 
