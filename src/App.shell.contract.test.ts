@@ -21,6 +21,19 @@ describe('App shell contract', () => {
     expect(appSource).toContain('useAppShellWorkspaceLifecycle')
   })
 
+  it('keeps the app-shell runtime boot and teardown behind a dedicated composable', () => {
+    expect(appSource).not.toContain('onMounted(() => {\n  shellPersistence.initializeShellPersistence()')
+    expect(appSource).not.toContain('onMounted(() => {\n  installOpenDebugLongTaskObserver()')
+    expect(appSource).not.toContain('disposeOpenTraceActivitySubscription')
+    expect(appSource).not.toContain("mediaQuery?.addEventListener('change'")
+    expect(appSource).not.toContain("window.addEventListener('mousedown'")
+    expect(appSource).not.toContain("window.removeEventListener('mousedown'")
+    expect(appSource).not.toContain('void syncAlterSettingsFromDisk()')
+    expect(appSource).not.toContain('onMounted(() => {\n  void workspaceLifecycle.start()')
+    expect(appSource).not.toContain('onBeforeUnmount(() => {\n  workspaceLifecycle.dispose()')
+    expect(appSource).toContain('useAppShellRuntimeLifecycle')
+  })
+
   it('keeps the command palette catalog in a dedicated helper', () => {
     expect(appSource).not.toContain('createPaletteAction(')
     expect(appSource).not.toContain('paletteActionPriority: Record<string, number> = {')

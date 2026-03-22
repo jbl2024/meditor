@@ -51,6 +51,7 @@ Use this as a quick routing table when you need to make a change.
 | Change Type | Start Here | Main Follow-Ups |
 | --- | --- | --- |
 | Workspace boot / restore | `src/app/App.vue` | `src/app/composables/useAppShellWorkspaceLifecycle.ts`, `src/app/composables/useAppShellWorkspaceFsSync.ts`, `src/app/composables/useAppShellPersistence.ts`, `src/app/composables/useAppWorkspaceController.ts` |
+| App runtime bootstrap / teardown | `src/app/composables/useAppShellRuntimeLifecycle.ts` | `src/app/App.vue`, `src/app/composables/useAppShellWorkspaceLifecycle.ts`, `src/app/composables/useAppShellPersistence.ts`, `src/shared/lib/openTrace.ts` |
 | Workspace entry routing | `src/app/composables/useAppShellWorkspaceRouting.ts` | `src/app/composables/useAppShellWorkspaceLifecycle.ts`, `src/app/composables/useAppShellWorkspaceSetup.ts`, `src/app/composables/useAppShellModals.ts`, `src/app/ARCHITECTURE.md` |
 | Workspace setup wizard | `src/app/components/app/WorkspaceSetupWizardModal.vue` | `src/app/composables/useAppShellWorkspaceSetup.ts`, `src/app/lib/workspaceSetupWizard.ts`, `src/app/ARCHITECTURE.md` |
 | Open note | `src/app/composables/useAppShellOpenFlow.ts` | `src/app/composables/useAppNavigationController.ts`, `src/domains/editor/composables/*`, `src-tauri/src/fs_ops.rs` |

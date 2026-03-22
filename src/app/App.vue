@@ -153,6 +153,7 @@ import { useAppShellEntryActions } from './composables/useAppShellEntryActions'
 import { useAppShellModals } from './composables/useAppShellModals'
 import { useAppShellOpenFlow, type RefreshBacklinksOptions } from './composables/useAppShellOpenFlow'
 import { useAppShellPersistence } from './composables/useAppShellPersistence'
+import { useAppShellRuntimeLifecycle } from './composables/useAppShellRuntimeLifecycle'
 import { useAppShellSearch } from './composables/useAppShellSearch'
 import { useAppShellWorkspaceEntries } from './composables/useAppShellWorkspaceEntries'
 import { useAppShellWorkspaceLifecycle } from './composables/useAppShellWorkspaceLifecycle'
@@ -830,7 +831,6 @@ const {
 const mediaQuery = typeof window !== 'undefined'
   ? window.matchMedia('(prefers-color-scheme: dark)')
   : null
-let disposeOpenTraceActivitySubscription: (() => void) | null = null
 
 function openIndexStatusModal() {
   rememberFocusBeforeModalOpen()
@@ -1514,6 +1514,35 @@ const {
   onSelectWorkingFolder,
   openRecentWorkspace
 } = workspaceLifecycle
+const appShellRuntimeLifecycle = useAppShellRuntimeLifecycle({
+  persistencePort: {
+    initializeShellPersistence: () => shellPersistence.initializeShellPersistence()
+  },
+  alterSettingsPort: {
+    syncAlterSettingsFromDisk: () => syncAlterSettingsFromDisk()
+  },
+  workspaceLifecyclePort: {
+    start: () => workspaceLifecycle.start(),
+    dispose: () => workspaceLifecycle.dispose()
+  },
+  openTracePort: {
+    installOpenDebugLongTaskObserver: () => installOpenDebugLongTaskObserver(),
+    subscribeOpenTraceActivity: (listener) => subscribeOpenTraceActivity(listener),
+    onOpenTraceActivityChange: (active) => {
+      echoesEnabled.value = !active
+    }
+  },
+  windowPort: {
+    onGlobalPointerDown,
+    onWindowResize,
+    onPointerMove,
+    stopResize
+  },
+  themePort: {
+    mediaQuery,
+    onSystemThemeChanged
+  }
+})
 const workspaceSetup = useAppShellWorkspaceSetup({
   statePort: {
     workingFolderPath: filesystem.workingFolderPath,
@@ -2295,18 +2324,7 @@ watch(
 )
 
 onMounted(() => {
-  shellPersistence.initializeShellPersistence()
-  installOpenDebugLongTaskObserver()
-  disposeOpenTraceActivitySubscription = subscribeOpenTraceActivity((active) => {
-    echoesEnabled.value = !active
-  })
-  mediaQuery?.addEventListener('change', onSystemThemeChanged)
-  window.addEventListener('mousedown', onGlobalPointerDown, true)
-  window.addEventListener('resize', onWindowResize)
-  window.addEventListener('mousemove', onPointerMove)
-  window.addEventListener('mouseup', stopResize)
-  void syncAlterSettingsFromDisk()
-  void workspaceLifecycle.start()
+  void appShellRuntimeLifecycle.start()
 })
 
 onBeforeUnmount(() => {
@@ -2315,15 +2333,8 @@ onBeforeUnmount(() => {
   disposeShellSearch()
   disposeShellLaunchpad()
   disposeHistoryUi()
-  workspaceLifecycle.dispose()
+  appShellRuntimeLifecycle.dispose()
   keyboard.dispose()
-  disposeOpenTraceActivitySubscription?.()
-  disposeOpenTraceActivitySubscription = null
-  mediaQuery?.removeEventListener('change', onSystemThemeChanged)
-  window.removeEventListener('mousedown', onGlobalPointerDown, true)
-  window.removeEventListener('resize', onWindowResize)
-  window.removeEventListener('mousemove', onPointerMove)
-  window.removeEventListener('mouseup', stopResize)
 })
 </script>
 
