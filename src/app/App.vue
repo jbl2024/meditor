@@ -1172,7 +1172,8 @@ const shellViewModels = useAppShellViewModels({
     availableThemes
   },
   search: {
-    shortcutsFilterQuery
+    shortcutsFilterQuery,
+    themePickerQuery
   },
   workspace: {
     workingFolderPath: filesystem.workingFolderPath,

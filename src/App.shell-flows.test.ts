@@ -418,9 +418,11 @@ describe('App shell flows', () => {
     pickerInput.dispatchEvent(new Event('input', { bubbles: true }))
     await flushUi()
 
-    Array.from(mounted.root.querySelectorAll<HTMLButtonElement>('.theme-picker-item'))
-      .find((item) => item.textContent?.includes('Catppuccin Mocha'))
-      ?.click()
+    const visibleThemeItems = Array.from(mounted.root.querySelectorAll<HTMLButtonElement>('.theme-picker-item'))
+    expect(visibleThemeItems).toHaveLength(1)
+    expect(visibleThemeItems[0]?.textContent).toContain('Catppuccin Mocha')
+
+    visibleThemeItems[0]?.click()
     await flushUi()
 
     expect(document.documentElement.dataset.theme).toBe('catppuccin-mocha')

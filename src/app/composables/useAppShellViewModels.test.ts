@@ -21,6 +21,7 @@ describe('useAppShellViewModels', () => {
       { id: 'tokyo-night', label: 'Tokyo Night', colorScheme: 'dark', group: 'community' }
     ]
     const shortcutsFilterQuery = ref('tokyo')
+    const themePickerQuery = ref('tokyo')
     const activeColorScheme = ref<'light' | 'dark'>('dark')
     const activeFilePath = ref('/vault/notes/alpha.md')
     const activeStatus = computed(() => ({ dirty: false, saving: false }))
@@ -104,7 +105,8 @@ describe('useAppShellViewModels', () => {
         availableThemes
       },
       search: {
-        shortcutsFilterQuery
+        shortcutsFilterQuery,
+        themePickerQuery
       },
       workspace: {
         workingFolderPath: ref('/vault'),
@@ -168,6 +170,10 @@ describe('useAppShellViewModels', () => {
 
     expect(viewModels.systemThemeLabel.value).toBe('System (Tomosona Dark)')
     expect(viewModels.themePickerItems.value.map((item) => item.id)).toEqual(['tokyo-night'])
+    shortcutsFilterQuery.value = 'alpha'
+    expect(viewModels.themePickerItems.value.map((item) => item.id)).toEqual(['tokyo-night'])
+    themePickerQuery.value = 'system'
+    expect(viewModels.themePickerItems.value.map((item) => item.id)).toEqual(['system'])
     expect(viewModels.shortcutSections.value[0].title).toBe('General')
     expect(viewModels.filteredShortcutSections.value).toHaveLength(0)
     expect(viewModels.metadataRows.value[0]).toEqual({ label: 'Path', value: 'notes/alpha.md' })

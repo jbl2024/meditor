@@ -41,6 +41,7 @@ type ViewModelOptions = {
   }
   search: {
     shortcutsFilterQuery: Ref<string>
+    themePickerQuery: Ref<string>
   }
   workspace: {
     workingFolderPath: Ref<string>
@@ -148,7 +149,7 @@ export function useAppShellViewModels(options: ViewModelOptions): AppShellViewMo
     options.libs
       .buildThemePickerItems(options.theme.availableThemes, options.theme.activeColorScheme.value)
       .filter((item) => {
-        const q = options.search.shortcutsFilterQuery.value.trim().toLowerCase()
+        const q = options.search.themePickerQuery.value.trim().toLowerCase()
         if (!q) return true
         return `${item.label} ${item.meta}`.toLowerCase().includes(q)
       })
