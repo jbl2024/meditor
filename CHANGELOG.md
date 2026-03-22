@@ -18,6 +18,54 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.22.0] - 2026-03-22
+
+### Added
+- feat(echoes): add pastel reindex affordance (2e664b1)
+- feat(alters): add new managerial and analytical lenses (b755bcf)
+- feat(alters): add temperature slider and neutral default (adfed2e)
+
+### Changed
+- test: fix preflight type errors in coverage fixtures (cb5f66b)
+- test(coverage): add orchestration tests for editor grid and second brain state (784b0ff)
+- test(coverage): add front and back coverage targets (bfaa86d)
+- refactor(ui): simplify menu icons and add semantic tones (132b84d)
+- test(app): simplify shell contract assertions (0db6ad4)
+- refactor(app): extract shell presentation surfaces from App.vue (28fd3e4)
+- test(vitest): polyfill storage globals for jsdom suite (91b9b88)
+- refactor(app): extract shell helper modules from App.vue (cb5b222)
+- refactor(app): extract pane runtime shell glue (fdc04fe)
+- refactor(app): extract constituted-context shell actions (04fdd61)
+- refactor(app): extract shell chrome runtime from App.vue (6c6b137)
+- refactor(app): extract shell runtime lifecycle composable (54bb67d)
+- efactor(app): extract workspace entry routing bridge (0688e88)
+- refactor(app): extract shell entrypoint bridge from App.vue (5e6f74d)
+- refactor(app): move launchpad routing out of App.vue (2d51fcb)
+- refactor(app): extract command palette catalog from App.vue (c945bd1)
+- refactor(app): split workspace fs sync from lifecycle (409461d)
+- refactor(app): extract workspace setup wizard workflow (5ad96f2)
+- refactor(app): extract shell view models and add guardrails (8398f30)
+- docs: add system flow maps to maintainer guide (e581efa)
+- docs: improve maintainer onboarding guide (f4efd65)
+- docs: add maintainer start here guide (971d70a)
+- refactor(app-shell): extract quick-open and theme picker interactions (2bbbeed)
+- refactor(app-shell): move history ui click routing into composable (cb9c218)
+- refactor(app-shell): extract navigation history helpers (fc68e17)
+- refactor(app-shell): extract open flow from App.vue (184f233)
+- refactor(app-shell): extract shell persistence and presentation helpers (0b42ab5)
+- chore(vscode): add node modules to ignore (f916586)
+- chore(vscode): disable watchters & co (ebe19d8)
+
+### Fixed
+- fix(shell): reduce splitter width (3502bd3)
+- fix(index-modal): prefer rebuild run for last run card (a50addd)
+- fix(test): add index overview stats mocks (a02a805)
+- fix(index): refine index overview telemetry (a207d2f)
+- fix(index-modal): new ui + better kpi (cd6ba15)
+- fix(shell): restore status bar to bottom of layout (2bdf0fc)
+- fix(shell): validate command palette enter against visible grouped actions (c182c41)
+- fix(trace): add fine-grained note-open spans (a1c8dfd)
+
 ## [0.21.7] - 2026-03-20
 
 ### Changed
