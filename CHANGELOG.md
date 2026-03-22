@@ -18,6 +18,14 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.22.2] - 2026-03-22
+
+### Added
+- feat(search): add property-aware autocomplete and quick filters (b3e8390)
+
+### Fixed
+- fix(search): only open autocomplete for list-like properties (5752256)
+
 ## [0.22.1] - 2026-03-22
 
 ### Added
