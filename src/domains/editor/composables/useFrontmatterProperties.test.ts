@@ -1,6 +1,10 @@
 import { ref } from 'vue'
 import { describe, expect, it, vi } from 'vitest'
 import { useFrontmatterProperties } from './useFrontmatterProperties'
+import type {
+  FrontmatterGeneratedProperty,
+  FrontmatterGenerationResponse
+} from '../../../shared/api/frontmatterGenerationApi'
 
 const apiMocks = vi.hoisted(() => ({
   readPropertyValueSuggestions: vi.fn(async (key: string) => {
@@ -10,7 +14,24 @@ const apiMocks = vi.hoisted(() => ({
   })
 }))
 
+const generationMocks = vi.hoisted(() => ({
+  generateFrontmatterProperties: vi.fn(async (): Promise<FrontmatterGenerationResponse> => ({
+    language: 'fr',
+    properties: []
+  })),
+  serializeFrontmatterGenerationField: vi.fn((field: { key: string; type: string; value: unknown }) => ({
+    key: field.key,
+    type: field.type,
+    value: Array.isArray(field.value)
+      ? field.value.join(', ')
+      : typeof field.value === 'boolean'
+        ? String(field.value)
+        : String(field.value ?? '')
+  }))
+}))
+
 vi.mock('../../../shared/api/indexApi', () => apiMocks)
+vi.mock('../../../shared/api/frontmatterGenerationApi', () => generationMocks)
 
 function setup(path = 'notes/a.md') {
   const currentPath = ref(path)
@@ -18,9 +39,13 @@ function setup(path = 'notes/a.md') {
   const onDirty = vi.fn()
   const savePropertyTypeSchema = vi.fn(async () => {})
   const loadPropertyTypeSchema = vi.fn(async () => ({ published: 'checkbox', tags: 'tags', bad: 'nope' }))
+  const getCurrentTitle = vi.fn(() => 'Titre')
+  const getCurrentBodyMarkdown = vi.fn(() => 'Corps de note')
 
   const api = useFrontmatterProperties({
     currentPath,
+    getCurrentTitle,
+    getCurrentBodyMarkdown,
     loadPropertyTypeSchema,
     savePropertyTypeSchema,
     onDirty,
@@ -33,6 +58,8 @@ function setup(path = 'notes/a.md') {
     onDirty,
     savePropertyTypeSchema,
     loadPropertyTypeSchema,
+    getCurrentTitle,
+    getCurrentBodyMarkdown,
     api
   }
 }
@@ -132,5 +159,47 @@ describe('useFrontmatterProperties', () => {
     await new Promise<void>((resolve) => setTimeout(resolve, 0))
 
     expect(api.propertySuggestionsForField(api.activeFields.value[0]!) ).toEqual(['draft', 'review', 'published', 'blocked'])
+  })
+
+  it('applies generated properties without overwriting existing values in auto mode', async () => {
+    const { api, onDirty } = setup()
+    api.parseAndStoreFrontmatter('notes/a.md', '---\nstatus: draft\n---\nBody')
+
+    generationMocks.generateFrontmatterProperties.mockResolvedValueOnce({
+      language: 'fr',
+      properties: [
+        { key: 'status', type: 'text', value: 'publié' },
+        { key: 'tags', type: 'tags', value: ['projet', 'archive'] }
+      ] as FrontmatterGeneratedProperty[]
+    } satisfies FrontmatterGenerationResponse)
+
+    await api.generateAutoProperties()
+
+    expect(api.activeFields.value.some((field) => field.key === 'status' && field.value === 'draft')).toBe(true)
+    expect(api.activeFields.value.some((field) => field.key === 'tags')).toBe(true)
+    expect(onDirty).toHaveBeenCalledWith('notes/a.md')
+    expect(generationMocks.generateFrontmatterProperties).toHaveBeenCalledWith(expect.objectContaining({
+      mode: 'auto',
+      language_hint: expect.any(String),
+      title: 'Titre',
+      body_markdown: 'Corps de note'
+    }))
+  })
+
+  it('replaces only the targeted field in sparkle mode', async () => {
+    const { api } = setup()
+    api.parseAndStoreFrontmatter('notes/a.md', '---\nstatus: draft\ntags: [alpha]\n---\nBody')
+
+    generationMocks.generateFrontmatterProperties.mockResolvedValueOnce({
+      language: 'fr',
+      properties: [
+        { key: 'status', type: 'text', value: 'publié' }
+      ] as FrontmatterGeneratedProperty[]
+    } satisfies FrontmatterGenerationResponse)
+
+    await api.generatePropertyValue(0)
+
+    expect(api.activeFields.value[0]?.value).toBe('publié')
+    expect(api.activeFields.value[1]?.value).toEqual(['alpha'])
   })
 })

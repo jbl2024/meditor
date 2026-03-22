@@ -20,6 +20,7 @@
 - Slash descriptor insertion mapping: `useEditorSlashInsertion`
 - Block handle/menu orchestration and drag lock: `useEditorBlockHandleControls`
 - Header title state and rename sync: `useEditorTitleState`
+- Frontmatter generation, merge, and AI-assisted property actions: `useFrontmatterProperties`
 - Block menu action derivation: `useBlockMenuControls`
 - Table edge visibility + sticky timing: `useTableToolbarControls`
 - Table toolbar/hover/action orchestration: `useEditorTableInteractions`
@@ -43,6 +44,7 @@
 - `useEditorWikilinkOverlayState` should be initialized before binding tiptap callbacks that invoke it.
 - Editor content rendering is multi-instance and path-scoped; only active path is visible/interactable.
 - Title and properties are owned by the Vue header; the TipTap body owns only persisted note content.
+- AI-assisted property generation stays inside the frontmatter runtime and updates the same property state used by manual edits.
 - Loading overlays for complex docs should remain visible until `waitForHeavyRenderIdle` settles after `setContent`.
 - Overlay trigger is not size-only: heavy markdown complexity and runtime pending render signals can escalate loading UI for below-threshold files.
 

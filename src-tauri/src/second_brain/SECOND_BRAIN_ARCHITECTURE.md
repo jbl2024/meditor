@@ -20,10 +20,14 @@
   - prompt text assembly
   - token budgeting
   - Pulse action normalization
+  - frontmatter generation prompt assembly
 - `message_flow.rs`
   - `send_second_brain_message` workflow
 - `pulse_flow.rs`
   - `run_pulse_transformation` workflow
+- `frontmatter_generation.rs`
+  - AI-assisted frontmatter property generation workflow
+  - strict JSON response parsing
 - `draft_publish.rs`
   - draft persistence
   - target note insertion

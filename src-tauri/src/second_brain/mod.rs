@@ -8,6 +8,7 @@ use super::{ensure_index_schema, now_ms, open_db, settings, AppError, Result};
 
 pub mod config;
 mod context;
+mod frontmatter_generation;
 pub mod draft;
 mod draft_publish;
 pub mod llm;
@@ -30,6 +31,10 @@ use draft_publish::{
 };
 use message_flow::send_message;
 use openai_codex::{discover_models, has_codex_tokens, CodexDiscoveredModel};
+use frontmatter_generation::{
+    generate_frontmatter_properties as generate_frontmatter_properties_impl,
+    GenerateFrontmatterPropertiesPayload, GenerateFrontmatterPropertiesResult,
+};
 use pulse_flow::run_pulse;
 use session_store::{create_session, delete_session, list_sessions, load_session, set_session_alter_id, upsert_context};
 use stream_control::request_stream_cancel;
@@ -296,6 +301,13 @@ pub fn read_second_brain_config_status() -> Result<ConfigStatus> {
             error: Some(err.to_string()),
         }),
     }
+}
+
+#[tauri::command]
+pub async fn generate_frontmatter_properties(
+    payload: GenerateFrontmatterPropertiesPayload,
+) -> Result<GenerateFrontmatterPropertiesResult> {
+    generate_frontmatter_properties_impl(payload).await
 }
 
 #[tauri::command]

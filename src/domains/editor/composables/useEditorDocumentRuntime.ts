@@ -10,6 +10,7 @@ import { useEditorPathWatchers } from './useEditorPathWatchers'
 import { useEditorTitleState } from './useEditorTitleState'
 import { useEditorMountedSessions } from './useEditorMountedSessions'
 import { useDocumentEditorSessions, type PaneId } from './useDocumentEditorSessions'
+import { editorDataToMarkdown } from '../lib/markdownBlocks'
 import { toTiptapDoc } from '../lib/tiptap/editorBlocksToTiptapDoc'
 import { fromTiptapDoc } from '../lib/tiptap/tiptapDocToEditorBlocks'
 import type { EditorBlock } from '../lib/markdownBlocks'
@@ -194,6 +195,8 @@ export function useEditorDocumentRuntime(options: UseEditorDocumentRuntimeOption
     structuredPropertyFields,
     structuredPropertyKeys,
     propertySuggestionsForField,
+    propertyGenerationLoading,
+    propertyGenerationTargetIndex,
     ensurePropertySchemaLoaded,
     resetPropertySchemaState,
     parseAndStoreFrontmatter,
@@ -210,9 +213,13 @@ export function useEditorDocumentRuntime(options: UseEditorDocumentRuntimeOption
     propertiesExpanded,
     togglePropertiesVisibility,
     onRawYamlInput,
+    generateAutoProperties,
+    generatePropertyValue,
     movePathState: moveFrontmatterPathState
   } = useFrontmatterProperties({
     currentPath,
+    getCurrentTitle: () => currentTitle.value,
+    getCurrentBodyMarkdown: () => editorDataToMarkdown({ blocks: serializeCurrentDocBlocks() }),
     loadPropertyTypeSchema: input.loadPropertyTypeSchema,
     savePropertyTypeSchema: input.savePropertyTypeSchema,
     onDirty: (path) => markPathDirtyAndQueueAutosave(path),
@@ -231,6 +238,8 @@ export function useEditorDocumentRuntime(options: UseEditorDocumentRuntimeOption
     structuredPropertyFields,
     structuredPropertyKeys,
     propertySuggestionsForField,
+    propertyGenerationLoading,
+    propertyGenerationTargetIndex,
     ensurePropertySchemaLoaded,
     resetPropertySchemaState,
     parseAndStoreFrontmatter,
@@ -247,6 +256,8 @@ export function useEditorDocumentRuntime(options: UseEditorDocumentRuntimeOption
     propertiesExpanded,
     togglePropertiesVisibility,
     onRawYamlInput,
+    generateAutoProperties,
+    generatePropertyValue,
     moveFrontmatterPathState,
     markDocumentDirtyFromMetadataChange: markPathDirtyAndQueueAutosave
   }
@@ -507,6 +518,8 @@ export function useEditorDocumentRuntime(options: UseEditorDocumentRuntimeOption
     structuredPropertyFields,
     structuredPropertyKeys,
     propertySuggestionsForField,
+    propertyGenerationLoading,
+    propertyGenerationTargetIndex,
     ensurePropertySchemaLoaded,
     resetPropertySchemaState,
     parseAndStoreFrontmatter,
@@ -523,6 +536,8 @@ export function useEditorDocumentRuntime(options: UseEditorDocumentRuntimeOption
     propertiesExpanded,
     togglePropertiesVisibility,
     onRawYamlInput,
+    generateAutoProperties,
+    generatePropertyValue,
     moveFrontmatterPathState,
     isLoadingLargeDocument: ui.loading.isLoadingLargeDocument,
     loadStageLabel: ui.loading.loadStageLabel,

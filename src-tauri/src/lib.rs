@@ -439,6 +439,7 @@ pub fn run() {
             alters::preview_alter,
             alters::generate_alter_draft,
             second_brain::read_second_brain_config_status,
+            second_brain::generate_frontmatter_properties,
             second_brain::discover_codex_models,
             second_brain::write_second_brain_global_config,
             second_brain::list_second_brain_sessions,

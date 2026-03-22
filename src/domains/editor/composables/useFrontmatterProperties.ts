@@ -1,7 +1,13 @@
 import { computed, ref, type Ref } from 'vue'
 import { composeMarkdownDocument, parseFrontmatter, serializeFrontmatter, type FrontmatterEnvelope, type FrontmatterField } from '../lib/frontmatter'
 import { readPropertyValueSuggestions } from '../../../shared/api/indexApi'
+import {
+  generateFrontmatterProperties,
+  serializeFrontmatterGenerationField,
+  type FrontmatterGenerationMode
+} from '../../../shared/api/frontmatterGenerationApi'
 import { defaultPropertyTypeForKey, normalizePropertyKey, sanitizePropertyTypeSchema, type PropertyType, type PropertyTypeSchema } from '../lib/propertyTypes'
+import { mergeGeneratedFrontmatterProperties } from '../lib/frontmatterGeneration'
 
 /**
  * useFrontmatterProperties
@@ -22,6 +28,8 @@ const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/
 
 type UseFrontmatterPropertiesOptions = {
   currentPath: Ref<string>
+  getCurrentTitle: () => string
+  getCurrentBodyMarkdown: () => string
   loadPropertyTypeSchema: () => Promise<Record<string, string>>
   savePropertyTypeSchema: (schema: Record<string, string>) => Promise<void>
   onDirty: (path: string) => void
@@ -101,6 +109,8 @@ export function useFrontmatterProperties(options: UseFrontmatterPropertiesOption
   const propertySuggestionsByKey = ref<Record<string, string[]>>({})
   const propertySuggestionsLoadedByKey = ref<Record<string, boolean>>({})
   const propertySuggestionsLoadingByKey = ref<Record<string, boolean>>({})
+  const propertyGenerationLoading = ref(false)
+  const propertyGenerationTargetIndex = ref<number | null>(null)
 
   const activeFrontmatter = computed<FrontmatterEnvelope | null>(() => {
     const path = options.currentPath.value
@@ -171,6 +181,8 @@ export function useFrontmatterProperties(options: UseFrontmatterPropertiesOption
     propertySuggestionsByKey.value = {}
     propertySuggestionsLoadedByKey.value = {}
     propertySuggestionsLoadingByKey.value = {}
+    propertyGenerationLoading.value = false
+    propertyGenerationTargetIndex.value = null
   }
 
   /**
@@ -334,6 +346,56 @@ export function useFrontmatterProperties(options: UseFrontmatterPropertiesOption
       [path]: rawYaml
     }
     emitProperties(path)
+  }
+
+  /**
+   * Applies AI-generated properties into the current frontmatter state.
+   */
+  function applyGeneratedProperties(
+    path: string,
+    generatedProperties: Array<{
+      key: string
+      type: PropertyType
+      value: string | number | boolean | string[]
+    }>,
+    mode: FrontmatterGenerationMode,
+    targetKey: string | null
+  ): string[] {
+    const current = frontmatterByPath.value[path]
+    if (!current) return []
+
+    const merged = mergeGeneratedFrontmatterProperties(current.fields, generatedProperties, {
+      mode,
+      targetKey
+    })
+    if (!merged.appliedKeys.length) return []
+
+    updateFrontmatterFields(path, merged.fields)
+
+    const nextSchema = { ...propertySchema.value }
+    let schemaChanged = false
+    for (const field of merged.fields) {
+      const normalizedKey = normalizePropertyKey(field.key)
+      if (!normalizedKey) continue
+      if (nextSchema[normalizedKey] !== field.type) {
+        nextSchema[normalizedKey] = field.type
+        schemaChanged = true
+      }
+    }
+    if (schemaChanged) {
+      propertySchema.value = nextSchema
+      void persistPropertySchema()
+    }
+
+    for (const key of merged.appliedKeys) {
+      const normalizedKey = normalizePropertyKey(key)
+      const field = merged.fields.find((item) => normalizePropertyKey(item.key) === normalizedKey)
+      if (field && (field.type === 'list' || field.type === 'tags')) {
+        void ensurePropertySuggestionsLoaded(field.key, true)
+      }
+    }
+
+    return merged.appliedKeys
   }
 
   /**
@@ -549,6 +611,83 @@ export function useFrontmatterProperties(options: UseFrontmatterPropertiesOption
   }
 
   /**
+   * Returns a lightweight language hint for the active note.
+   */
+  function currentNoteLanguageHint(): string {
+    const text = [options.getCurrentTitle(), options.getCurrentBodyMarkdown(), activeRawYaml.value]
+      .map((item) => String(item ?? '').trim())
+      .filter(Boolean)
+      .join('\n')
+    if (!text.trim()) return 'unknown'
+
+    const lowered = text.toLowerCase()
+    const frenchScore = [
+      ' le ', ' la ', ' les ', ' des ', ' une ', ' un ', ' et ', ' pour ', ' avec ', ' dans ',
+      ' que ', ' est ', ' être ', ' sur ', ' à ', ' du ', ' de ', ' projet ', ' brouillon '
+    ].reduce((count, hint) => count + (lowered.includes(hint) ? 1 : 0), 0) +
+      (lowered.match(/[àâçéèêëîïôùûü]/g)?.length ?? 0)
+    const englishScore = [
+      ' the ', ' and ', ' with ', ' for ', ' from ', ' note ', ' project ', ' draft ', ' should ',
+      ' this ', ' that ', ' are ', ' is ', ' to ', ' of ', ' in '
+    ].reduce((count, hint) => count + (lowered.includes(hint) ? 1 : 0), 0)
+
+    if (frenchScore === 0 && englishScore === 0) return 'unknown'
+    if (Math.abs(frenchScore - englishScore) <= 1) return 'mixed'
+    return frenchScore > englishScore ? 'fr' : 'en'
+  }
+
+  /**
+   * Calls the backend LLM workflow and applies the structured result.
+   */
+  async function runFrontmatterGeneration(mode: FrontmatterGenerationMode, targetIndex: number | null = null) {
+    const path = options.currentPath.value
+    if (!path || propertyGenerationLoading.value) return
+    const current = frontmatterByPath.value[path]
+    if (!current) return
+
+    const targetField = targetIndex === null ? null : activeFields.value[targetIndex] ?? null
+    if (mode === 'field' && targetField && !targetField.key.trim()) return
+
+    propertyGenerationLoading.value = true
+    propertyGenerationTargetIndex.value = targetIndex
+    try {
+      const result = await generateFrontmatterProperties({
+        path,
+        title: options.getCurrentTitle(),
+        body_markdown: options.getCurrentBodyMarkdown(),
+        raw_yaml: activeRawYaml.value,
+        existing_fields: activeFields.value.map(serializeFrontmatterGenerationField),
+        mode,
+        target_key: mode === 'field' ? (targetField?.key ?? null) : null,
+        language_hint: currentNoteLanguageHint()
+      })
+
+      const appliedKeys = applyGeneratedProperties(
+        path,
+        result.properties,
+        mode,
+        mode === 'field' ? (targetField?.key ?? null) : null
+      )
+      if (appliedKeys.length) {
+        setPropertyDirty(path)
+      }
+    } catch (err) {
+      console.error('[frontmatter-generation] failed', err)
+    } finally {
+      propertyGenerationLoading.value = false
+      propertyGenerationTargetIndex.value = null
+    }
+  }
+
+  function generateAutoProperties() {
+    return runFrontmatterGeneration('auto')
+  }
+
+  function generatePropertyValue(index: number) {
+    return runFrontmatterGeneration('field', index)
+  }
+
+  /**
    * Returns the expansion state for the properties panel.
    */
   function propertiesExpanded(path: string): boolean {
@@ -605,6 +744,8 @@ export function useFrontmatterProperties(options: UseFrontmatterPropertiesOption
     structuredPropertyFields,
     structuredPropertyKeys,
     propertySuggestionsForField,
+    propertyGenerationLoading,
+    propertyGenerationTargetIndex,
     ensurePropertySchemaLoaded,
     resetPropertySchemaState,
     resetPropertySuggestionsState,
@@ -622,6 +763,8 @@ export function useFrontmatterProperties(options: UseFrontmatterPropertiesOption
     propertiesExpanded,
     togglePropertiesVisibility,
     onRawYamlInput,
+    generateAutoProperties,
+    generatePropertyValue,
     movePathState
   }
 }

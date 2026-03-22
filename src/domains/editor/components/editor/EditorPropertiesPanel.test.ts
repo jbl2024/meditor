@@ -33,7 +33,9 @@ describe('EditorPropertiesPanel', () => {
           corePropertyOptions: [],
           propertySuggestionsForField: () => [],
           effectiveTypeForField: (): PropertyType => 'text',
-          isPropertyTypeLocked: () => false
+          isPropertyTypeLocked: () => false,
+          generationPending: false,
+          generationTargetIndex: null
         })
       }
     }))
@@ -67,7 +69,9 @@ describe('EditorPropertiesPanel', () => {
           corePropertyOptions: [],
           propertySuggestionsForField: () => [],
           effectiveTypeForField: (): PropertyType => 'text',
-          isPropertyTypeLocked: () => false
+          isPropertyTypeLocked: () => false,
+          generationPending: false,
+          generationTargetIndex: null
         })
       }
     }))
@@ -100,7 +104,9 @@ describe('EditorPropertiesPanel', () => {
           corePropertyOptions: [],
           propertySuggestionsForField: () => [],
           effectiveTypeForField: (): PropertyType => 'text',
-          isPropertyTypeLocked: () => false
+          isPropertyTypeLocked: () => false,
+          generationPending: false,
+          generationTargetIndex: null
         })
       }
     }))
@@ -113,6 +119,40 @@ describe('EditorPropertiesPanel', () => {
     expect((buttons[0] as HTMLButtonElement).style.height).toBe('1.45rem')
     expect((buttons[1] as HTMLButtonElement).style.height).toBe('1.45rem')
     expect((buttons[0] as HTMLButtonElement).style.fontSize).toBe('10px')
+
+    app.unmount()
+  })
+
+  it('renders generation controls when expanded', async () => {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+
+    const app = createApp(defineComponent({
+      setup() {
+        return () => h(EditorPropertiesPanel, {
+          expanded: true,
+          hasProperties: true,
+          mode: 'structured',
+          canUseStructuredProperties: true,
+          structuredPropertyFields: [{ key: 'status', value: '', type: 'text', order: 0, styleHint: 'plain' }],
+          structuredPropertyKeys: ['status'],
+          activeRawYaml: '',
+          activeParseErrors: [],
+          corePropertyOptions: [],
+          propertySuggestionsForField: () => [],
+          effectiveTypeForField: (): PropertyType => 'text',
+          isPropertyTypeLocked: () => false,
+          generationPending: false,
+          generationTargetIndex: null
+        })
+      }
+    }))
+
+    app.mount(root)
+    await flushUi()
+
+    expect(root.querySelector('.properties-auto-btn')).toBeTruthy()
+    expect(root.querySelector('.properties-sparkle-btn')).toBeTruthy()
 
     app.unmount()
   })
