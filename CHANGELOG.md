@@ -18,6 +18,15 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.22.4] - 2026-03-22
+
+### Added
+- feat(editor): add property autocomplete to structured fields (e9b6363)
+- feat(editor): add llm-powered auto properties generation (f664ae9)
+
+### Fixed
+- fix(search): restore autocomplete for all property keys (e6ddc41)
+
 ## [0.22.3] - 2026-03-22
 
 ### Fixed
