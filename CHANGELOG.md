@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.22.6] - 2026-03-22
+
+### Changed
+- test(editor): isolate DOM stubs in gutter regression test (5242abf)
+
 ## [0.22.5] - 2026-03-22
 
 ### Added
