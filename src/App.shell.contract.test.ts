@@ -44,6 +44,21 @@ describe('App shell contract', () => {
     expect(appSource).toContain('useAppShellChromeRuntime')
   })
 
+  it('keeps pane/editor/Cosmos runtime glue out of App.vue', () => {
+    expect(appSource).not.toContain('function onPaneTabClick(')
+    expect(appSource).not.toContain('function onPaneTabClose(')
+    expect(appSource).not.toContain('function onPaneTabCloseOthers(')
+    expect(appSource).not.toContain('function onPaneTabCloseAll(')
+    expect(appSource).not.toContain('function onEditorStatus(')
+    expect(appSource).not.toContain('function onEditorOutline(')
+    expect(appSource).not.toContain('function onEditorProperties(')
+    expect(appSource).not.toContain('function onCosmosResetView(')
+    expect(appSource).not.toContain('function onCosmosQueryUpdate(')
+    expect(appSource).not.toContain('function onGlobalSearchModeSelect(')
+    expect(appSource).not.toContain('function saveActiveTab(')
+    expect(appSource).toContain('useAppShellPaneRuntime')
+  })
+
   it('keeps constituted-context routing out of App.vue', () => {
     expect(appSource).not.toContain('function addPathToConstitutedContext(')
     expect(appSource).not.toContain('function openConstitutedContextInSecondBrain(')

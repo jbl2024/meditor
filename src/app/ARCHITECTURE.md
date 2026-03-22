@@ -47,6 +47,7 @@
 - `useAppShellHistoryUi`: back/forward menu long press, click routing, outside click, resize positioning.
 - `useAppShellChromeRuntime`: shell chrome resize state, overflow menu toggle, and zoom wrappers.
 - `useAppShellConstitutedContextActions`: constituted-context mutations and cross-surface routing into Second Brain or Cosmos.
+- `useAppShellPaneRuntime`: pane-tab, editor-status, and Cosmos pane event glue.
 - `useAppShellWorkspaceLifecycle`: workspace restore, workspace close/reset, and saved-workspace bootstrap.
 - `useAppShellRuntimeLifecycle`: runtime boot/teardown for persistence, open-trace, global listeners, and workspace lifecycle start/stop.
 - `appNavigationHistory`: pure codecs and labels for pane-native history snapshots.

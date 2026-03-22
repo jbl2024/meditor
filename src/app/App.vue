@@ -164,6 +164,7 @@ import { useAppModalController } from './composables/useAppModalController'
 import { useAppSecondBrainBridge } from './composables/useAppSecondBrainBridge'
 import { useAppShellViewModels } from './composables/useAppShellViewModels'
 import { useAppShellConstitutedContextActions } from './composables/useAppShellConstitutedContextActions'
+import { useAppShellPaneRuntime } from './composables/useAppShellPaneRuntime'
 import { useAppQuickOpen } from './composables/useAppQuickOpen'
 import { useAppTheme, type ThemePreference } from './composables/useAppTheme'
 import { useAppWorkspaceController } from './composables/useAppWorkspaceController'
@@ -934,6 +935,21 @@ async function openHomeHistorySnapshot(_snapshot: HomeHistorySnapshot): Promise<
   return true
 }
 
+function documentPathsForPane(paneId: string): string[] {
+  const pane = multiPane.layout.value.panesById[paneId]
+  if (!pane) return []
+  return pane.openTabs
+    .filter((tab) => tab.type === 'document')
+    .map((tab) => (tab.type === 'document' ? tab.path : ''))
+    .filter(Boolean)
+}
+
+function clearEditorStatusForPaths(paths: string[]) {
+  for (const path of paths) {
+    editorState.clearStatus(path)
+  }
+}
+
 const navigationWorkspacePort = {
   hasWorkspace: filesystem.hasWorkspace,
   allWorkspaceFiles,
@@ -1080,6 +1096,53 @@ const {
   onBacklinkOpen,
   onExplorerOpen
 } = shellOpenFlow
+
+const paneRuntime = useAppShellPaneRuntime({
+  activeFilePath,
+  multiPane,
+  editorState,
+  editorRef,
+  cosmos,
+  workspace: {
+    sidebarMode: workspace.sidebarMode,
+    previousNonCosmosMode,
+    setSidebarMode: (mode) => workspace.setSidebarMode(mode),
+    toggleSidebar: () => workspace.toggleSidebar()
+  },
+  search: {
+    selectGlobalSearchMode: (mode) => selectGlobalSearchMode(mode)
+  },
+  setActiveTabWithAutosave,
+  scheduleCosmosHistorySnapshot,
+  recordCosmosHistorySnapshot,
+  onCosmosOpenNode,
+  propertiesPreview,
+  propertyParseErrorCount
+})
+const {
+  onPaneTabClick,
+  onPaneTabClose,
+  onPaneTabCloseOthers,
+  onPaneTabCloseAll,
+  closeActiveTab,
+  onEditorStatus,
+  onEditorOutline,
+  onEditorProperties,
+  setSidebarMode,
+  onCosmosResetView,
+  onCosmosQueryUpdate,
+  onCosmosToggleFocusMode,
+  onCosmosToggleSemanticEdges,
+  onCosmosSelectNode,
+  onCosmosSearchEnter,
+  onCosmosMatchClick,
+  onCosmosExpandNeighborhood,
+  onCosmosJumpToRelatedNode,
+  onCosmosLocateSelectedNode,
+  onCosmosOpenSelectedNode,
+  onGlobalSearchModeSelect,
+  saveActiveTab
+} = paneRuntime
 
 const shellViewModels = useAppShellViewModels({
   theme: {
@@ -1892,83 +1955,6 @@ async function saveNoteBuffer(path: string, txt: string, options: SaveFileOption
   return result
 }
 
-function onGlobalSearchModeSelect(mode: SearchMode) {
-  const next = selectGlobalSearchMode(mode)
-  void nextTick(() => {
-    const input = document.querySelector<HTMLInputElement>('[data-search-input="true"]')
-    if (!input) return
-    input.focus()
-    input.setSelectionRange(next.caret, next.caret)
-  })
-}
-
-async function onPaneTabClick(payload: { paneId: string; tabId: string }) {
-  multiPane.setActivePane(payload.paneId)
-  const pane = multiPane.layout.value.panesById[payload.paneId]
-  const tab = pane?.openTabs.find((item) => item.id === payload.tabId)
-  if (!tab) return
-  if (tab.type === 'document') {
-    const opened = await setActiveTabWithAutosave(tab.path)
-    if (!opened) return
-    return
-  }
-  multiPane.setActiveTabInPane(payload.paneId, payload.tabId)
-}
-
-function onPaneTabClose(payload: { paneId: string; tabId: string }) {
-  const pane = multiPane.layout.value.panesById[payload.paneId]
-  const tab = pane?.openTabs.find((item) => item.id === payload.tabId)
-  multiPane.closeTabInPane(payload.paneId, payload.tabId)
-  if (tab?.type === 'document') {
-    editorState.clearStatus(tab.path)
-  }
-}
-
-function onPaneTabCloseOthers(payload: { paneId: string; tabId: string }) {
-  multiPane.closeOtherTabsInPane(payload.paneId, payload.tabId)
-}
-
-function onPaneTabCloseAll(payload: { paneId: string }) {
-  const paths = documentPathsForPane(payload.paneId)
-  multiPane.closeAllTabsInPane(payload.paneId)
-  clearEditorStatusForPaths(paths)
-}
-
-function closeActiveTab() {
-  const paneId = multiPane.layout.value.activePaneId
-  const pane = multiPane.layout.value.panesById[paneId]
-  const tab = pane?.openTabs.find((item) => item.id === pane.activeTabId)
-  if (!tab) return
-  multiPane.closeTabInPane(paneId, tab.id)
-  if (tab.type === 'document') {
-    editorState.clearStatus(tab.path)
-  }
-}
-
-function onEditorStatus(payload: { path: string; dirty: boolean; saving: boolean; saveError: string }) {
-  editorState.updateStatus(payload.path, {
-    dirty: payload.dirty,
-    saving: payload.saving,
-    saveError: payload.saveError
-  })
-}
-
-function onEditorOutline(payload: Array<{ level: 1 | 2 | 3; text: string }>) {
-  editorState.setActiveOutline(payload)
-}
-
-function onEditorProperties(payload: { path: string; items: PropertyPreviewRow[]; parseErrorCount: number }) {
-  if (!activeFilePath.value || payload.path !== activeFilePath.value) {
-    if (!payload.path) {
-      propertiesPreview.value = []
-      propertyParseErrorCount.value = 0
-    }
-    return
-  }
-  propertiesPreview.value = payload.items
-  propertyParseErrorCount.value = payload.parseErrorCount
-}
-
 async function onOutlineHeadingClick(payload: { index: number; heading: { level: 1 | 2 | 3; text: string } }) {
   const heading = payload.heading.text.trim()
   if (heading) {
@@ -1978,101 +1964,8 @@ async function onOutlineHeadingClick(payload: { index: number; heading: { level:
   await editorRef.value?.revealOutlineHeading(payload.index)
 }
 
-function setSidebarMode(mode: SidebarMode) {
-  const target = mode === 'search' ? 'search' : mode === 'favorites' ? 'favorites' : 'explorer'
-  const current = workspace.sidebarMode.value
-
-  if (current === target) {
-    workspace.toggleSidebar()
-    return
-  }
-
-  previousNonCosmosMode.value = target
-  workspace.setSidebarMode(target)
-}
-
-function onCosmosResetView() {
-  cosmos.selectedNodeId.value = ''
-  cosmos.focusMode.value = false
-  editorRef.value?.resetCosmosView()
-  recordCosmosHistorySnapshot()
-}
-
-function onCosmosQueryUpdate(value: string) {
-  cosmos.query.value = value
-  scheduleCosmosHistorySnapshot()
-}
-
-function onCosmosToggleFocusMode(value: boolean) {
-  cosmos.focusMode.value = value
-  recordCosmosHistorySnapshot()
-}
-
-function onCosmosToggleSemanticEdges(value: boolean) {
-  cosmos.showSemanticEdges.value = value
-  recordCosmosHistorySnapshot()
-}
-
-function onCosmosSelectNode(nodeId: string) {
-  cosmos.selectNode(nodeId)
-  recordCosmosHistorySnapshot()
-}
-
-function onCosmosSearchEnter() {
-  const nodeId = cosmos.searchEnter()
-  if (!nodeId) return
-  editorRef.value?.focusCosmosNodeById(nodeId)
-  recordCosmosHistorySnapshot()
-}
-
-function onCosmosMatchClick(nodeId: string) {
-  cosmos.focusMatch(nodeId)
-  editorRef.value?.focusCosmosNodeById(nodeId)
-  recordCosmosHistorySnapshot()
-}
-
-function onCosmosExpandNeighborhood() {
-  cosmos.expandNeighborhood()
-  recordCosmosHistorySnapshot()
-}
-
-function onCosmosJumpToRelatedNode(nodeId: string) {
-  cosmos.jumpToRelated(nodeId)
-  editorRef.value?.focusCosmosNodeById(nodeId)
-  recordCosmosHistorySnapshot()
-}
-
-function onCosmosLocateSelectedNode() {
-  const selected = cosmos.selectedNode.value
-  if (!selected) return
-  editorRef.value?.focusCosmosNodeById(selected.id)
-  recordCosmosHistorySnapshot()
-}
-
-async function onCosmosOpenSelectedNode() {
-  const selected = cosmos.openSelected()
-  if (!selected) return
-  await onCosmosOpenNode(selected.path)
-}
-
 function runQuickOpenAction(id: string) {
   shellModalInteractions?.runQuickOpenAction(id)
-}
-
-
-function documentPathsForPane(paneId: string): string[] {
-  const pane = multiPane.layout.value.panesById[paneId]
-  if (!pane) return []
-  return pane.openTabs
-    .filter((tab) => tab.type === 'document')
-    .map((tab) => (tab.type === 'document' ? tab.path : ''))
-    .filter(Boolean)
-}
-
-function clearEditorStatusForPaths(paths: string[]) {
-  for (const path of paths) {
-    editorState.clearStatus(path)
-  }
 }
 
 function onQuickOpenEnter() {
@@ -2139,10 +2032,6 @@ function onNewFolderInputKeydown(event: KeyboardEvent) {
     event.stopPropagation()
     void submitNewFolderFromModal()
   }
-}
-
-async function saveActiveTab() {
-  await editorRef.value?.saveNow()
 }
 
 watch(
