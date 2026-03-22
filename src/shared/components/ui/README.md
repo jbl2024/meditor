@@ -489,6 +489,8 @@ Slots:
 Expected child contract:
 - child action elements should use class `ui-menu-item`
 - items may use `data-active="true"` for selected/highlighted state
+- items may use `data-tone="accent"` or `data-tone="danger"` for contextual emphasis
+- menus should default to text-first labels; reserve icons for stable, high-signal actions
 
 Notes:
 - disabled menu items should use native `disabled`
@@ -500,7 +502,7 @@ Example:
 <UiMenuList>
   <button type="button" class="ui-menu-item" data-active="true">Light</button>
   <button type="button" class="ui-menu-item">Dark</button>
-  <button type="button" class="ui-menu-item" disabled>System</button>
+  <button type="button" class="ui-menu-item" data-tone="danger">Delete workspace</button>
 </UiMenuList>
 ```
 
@@ -695,6 +697,8 @@ Example:
 - Use `UiMenu` for the outer surface
 - Use `UiMenuList` for item stacks
 - Add class `ui-menu-item` to actual action elements
+- Keep rows text-first unless an icon clearly improves scanability
+- Use `data-tone="danger"` only for destructive actions and `data-tone="accent"` sparingly for selected or primary rows
 
 Example:
 

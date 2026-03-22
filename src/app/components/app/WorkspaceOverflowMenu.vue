@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Bars3Icon, BeakerIcon, Cog8ToothIcon, CommandLineIcon, InformationCircleIcon, SwatchIcon } from '@heroicons/vue/24/outline'
+import { Bars3Icon, Cog8ToothIcon, SwatchIcon } from '@heroicons/vue/24/outline'
 import { computed, ref } from 'vue'
 import UiIconButton from '../../../shared/components/ui/UiIconButton.vue'
 import UiMenu from '../../../shared/components/ui/UiMenu.vue'
@@ -69,41 +69,49 @@ defineExpose({
     <UiMenu v-if="open" class-name="overflow-menu">
       <UiMenuList>
       <button type="button" class="ui-menu-item overflow-item" @click="emit('openCommandPalette')">
-        <CommandLineIcon class="overflow-item-icon" />
+        <span class="ui-menu-item-icon-spacer" aria-hidden="true"></span>
         Command palette
       </button>
       <button type="button" class="ui-menu-item overflow-item" @click="emit('openShortcuts')">
-        <svg class="overflow-item-icon" viewBox="0 0 16 16" aria-hidden="true">
-          <rect x="1.5" y="2.5" width="13" height="10.5" rx="1.6" ry="1.6" />
-          <line x1="4" y1="6" x2="12" y2="6" />
-          <line x1="4" y1="9" x2="8.5" y2="9" />
-        </svg>
+        <span class="ui-menu-item-icon-spacer" aria-hidden="true"></span>
         Keyboard shortcuts
       </button>
       <button type="button" class="ui-menu-item overflow-item" @click="emit('openAbout')">
-        <InformationCircleIcon class="overflow-item-icon" />
+        <span class="ui-menu-item-icon-spacer" aria-hidden="true"></span>
         About
       </button>
       <button type="button" class="ui-menu-item overflow-item" @click="emit('openSettings')">
-        <Cog8ToothIcon class="overflow-item-icon" />
+        <span class="ui-menu-item-icon overflow-item-icon" aria-hidden="true">
+          <Cog8ToothIcon />
+        </span>
         Open Settings
       </button>
       <button v-if="showDebugTools" type="button" class="ui-menu-item overflow-item" @click="emit('openDesignSystemDebug')">
-        <BeakerIcon class="overflow-item-icon" />
+        <span class="ui-menu-item-icon-spacer" aria-hidden="true"></span>
         Design system debug
       </button>
       <button type="button" class="ui-menu-item overflow-item" :disabled="rebuildDisabled" @click="emit('rebuildIndex')">
-        <svg class="overflow-item-icon" viewBox="0 0 16 16" aria-hidden="true">
-          <path d="M8 2.5a5.5 5.5 0 1 1-4.4 2.2" />
-          <polyline points="1.8,2.6 4.9,2.6 4.9,5.7" />
-        </svg>
+        <span class="ui-menu-item-icon overflow-item-icon" aria-hidden="true">
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M8 2.5a5.5 5.5 0 1 1-4.4 2.2" />
+            <polyline points="1.8,2.6 4.9,2.6 4.9,5.7" />
+          </svg>
+        </span>
         Reindex workspace
       </button>
-      <button type="button" class="ui-menu-item overflow-item" :disabled="closeDisabled" @click="emit('closeWorkspace')">
-        <svg class="overflow-item-icon" viewBox="0 0 16 16" aria-hidden="true">
-          <line x1="4" y1="4" x2="12" y2="12" />
-          <line x1="12" y1="4" x2="4" y2="12" />
-        </svg>
+      <button
+        type="button"
+        class="ui-menu-item overflow-item"
+        data-tone="danger"
+        :disabled="closeDisabled"
+        @click="emit('closeWorkspace')"
+      >
+        <span class="ui-menu-item-icon overflow-item-icon" aria-hidden="true">
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <line x1="4" y1="4" x2="12" y2="12" />
+            <line x1="12" y1="4" x2="4" y2="12" />
+          </svg>
+        </span>
         Close workspace
       </button>
       </UiMenuList>
@@ -111,15 +119,15 @@ defineExpose({
       <div class="overflow-label">Zoom</div>
       <UiMenuList>
       <button type="button" class="ui-menu-item overflow-item" @click="emit('zoomIn')">
-        <span class="overflow-item-icon overflow-glyph">+</span>
+        <span class="ui-menu-item-icon overflow-item-icon overflow-glyph" aria-hidden="true">+</span>
         Zoom in
       </button>
       <button type="button" class="ui-menu-item overflow-item" @click="emit('zoomOut')">
-        <span class="overflow-item-icon overflow-glyph">-</span>
+        <span class="ui-menu-item-icon overflow-item-icon overflow-glyph" aria-hidden="true">-</span>
         Zoom out
       </button>
       <button type="button" class="ui-menu-item overflow-item" @click="emit('resetZoom')">
-        <span class="overflow-item-icon overflow-glyph">100</span>
+        <span class="ui-menu-item-icon overflow-item-icon overflow-glyph" aria-hidden="true">100</span>
         Reset zoom
       </button>
       </UiMenuList>
@@ -130,9 +138,12 @@ defineExpose({
       <button
         type="button"
         class="ui-menu-item overflow-item"
+        data-tone="accent"
         @click="emit('openThemePicker')"
       >
-        <SwatchIcon class="overflow-item-icon" />
+        <span class="ui-menu-item-icon overflow-item-icon" aria-hidden="true">
+          <SwatchIcon />
+        </span>
         Theme picker
       </button>
       </UiMenuList>

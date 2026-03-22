@@ -55,6 +55,9 @@ describe('WorkspaceOverflowMenu', () => {
     await nextTick()
 
     expect(mounted.events).toEqual(['palette', 'about', 'zoom-in', 'theme-picker'])
+    expect(Array.from(buttons).find((button) => button.textContent?.includes('Command palette'))?.querySelector('svg')).toBeNull()
+    expect(Array.from(buttons).find((button) => button.textContent?.includes('Close workspace'))?.getAttribute('data-tone')).toBe('danger')
+    expect(Array.from(buttons).find((button) => button.textContent?.includes('Command palette'))?.querySelector('.ui-menu-item-icon-spacer')).toBeTruthy()
 
     mounted.app.unmount()
   })

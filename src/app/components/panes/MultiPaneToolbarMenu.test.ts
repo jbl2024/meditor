@@ -40,6 +40,8 @@ describe('MultiPaneToolbarMenu', () => {
     mounted.root.querySelector<HTMLButtonElement>('[aria-label="Multi-pane layout"]')?.click()
     await nextTick()
 
+    expect(mounted.root.querySelectorAll('.multi-pane-item svg')).toHaveLength(0)
+
     const focusNext = Array.from(mounted.root.querySelectorAll<HTMLButtonElement>('.multi-pane-item'))
       .find((button) => button.textContent?.includes('Focus Next Pane'))
     focusNext?.click()

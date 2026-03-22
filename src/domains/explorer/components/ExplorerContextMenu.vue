@@ -3,13 +3,8 @@ import type { Component } from 'vue'
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   ArrowTopRightOnSquareIcon,
-  ClipboardDocumentIcon,
-  DocumentDuplicateIcon,
   DocumentPlusIcon,
-  FolderOpenIcon,
   FolderPlusIcon,
-  PencilSquareIcon,
-  ScissorsIcon,
   TrashIcon
 } from '@heroicons/vue/24/outline'
 import UiMenu from '../../../shared/components/ui/UiMenu.vue'
@@ -45,18 +40,18 @@ const menuRef = ref<InstanceType<typeof UiMenu> | null>(null)
 const clampedX = ref(0)
 const clampedY = ref(0)
 
-const items: Array<{ id: MenuAction; label: string; icon: Component; enabled?: boolean }> = [
-  { id: 'open', label: 'Open', icon: FolderOpenIcon },
+const items: Array<{ id: MenuAction; label: string; icon: Component | null; enabled?: boolean }> = [
+  { id: 'open', label: 'Open', icon: null },
   { id: 'open-external', label: 'Open externally', icon: ArrowTopRightOnSquareIcon },
-  { id: 'reveal', label: 'Reveal in file manager', icon: FolderOpenIcon },
-  { id: 'rename', label: 'Rename', icon: PencilSquareIcon },
-  { id: 'duplicate', label: 'Duplicate', icon: DocumentDuplicateIcon },
+  { id: 'reveal', label: 'Reveal in file manager', icon: null },
+  { id: 'rename', label: 'Rename', icon: null },
+  { id: 'duplicate', label: 'Duplicate', icon: null },
   { id: 'delete', label: 'Delete', icon: TrashIcon },
   { id: 'new-file', label: 'New note', icon: DocumentPlusIcon },
   { id: 'new-folder', label: 'New folder', icon: FolderPlusIcon },
-  { id: 'cut', label: 'Cut', icon: ScissorsIcon },
-  { id: 'copy', label: 'Copy', icon: DocumentDuplicateIcon },
-  { id: 'paste', label: 'Paste', icon: ClipboardDocumentIcon }
+  { id: 'cut', label: 'Cut', icon: null },
+  { id: 'copy', label: 'Copy', icon: null },
+  { id: 'paste', label: 'Paste', icon: null }
 ]
 
 function isDisabled(id: MenuAction): boolean {
@@ -124,10 +119,14 @@ onBeforeUnmount(() => {
         :key="item.id"
         type="button"
         class="ui-menu-item explorer-context-menu-item"
+        :data-tone="item.id === 'delete' ? 'danger' : undefined"
         :disabled="isDisabled(item.id)"
         @click="onAction(item.id)"
       >
-        <component :is="item.icon" class="h-4 w-4 shrink-0" />
+        <span v-if="item.icon" class="ui-menu-item-icon" aria-hidden="true">
+          <component :is="item.icon" />
+        </span>
+        <span v-else class="ui-menu-item-icon-spacer" aria-hidden="true"></span>
         {{ item.label }}
       </button>
       </UiMenuList>
