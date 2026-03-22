@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.22.3] - 2026-03-22
+
+### Fixed
+- fix(search): guard autocomplete by property type and backend availability (c3bc5a8)
+
 ## [0.22.2] - 2026-03-22
 
 ### Added
