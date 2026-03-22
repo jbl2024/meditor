@@ -66,6 +66,7 @@ use search_index::{
 };
 use search_index::{
     fts_search_sync as fts_search_sync_impl,
+    read_property_value_suggestions as read_property_value_suggestions_impl,
     read_property_type_schema as read_property_type_schema_impl,
     write_property_type_schema as write_property_type_schema_impl, Hit,
 };
@@ -226,6 +227,15 @@ fn read_index_runtime_status() -> Result<IndexRuntimeStatus> {
 #[tauri::command]
 fn read_index_logs(limit: Option<usize>) -> Result<Vec<IndexLogEntry>> {
     read_index_logs_impl(limit)
+}
+
+#[tauri::command]
+fn read_property_value_suggestions(
+    key: String,
+    query: Option<String>,
+    limit: Option<usize>,
+) -> Result<Vec<String>> {
+    read_property_value_suggestions_impl(key, query, limit)
 }
 
 #[tauri::command]
@@ -394,6 +404,7 @@ pub fn run() {
             request_index_cancel,
             read_index_runtime_status,
             read_index_logs,
+            read_property_value_suggestions,
             read_index_overview_stats,
             backlinks_for_path,
             semantic_links_for_path,
@@ -625,6 +636,46 @@ mod tests {
         assert!(indexed.iter().any(|item| item.key == "tags"
             && item.kind == "list"
             && item.value_text.as_deref() == Some("urgent")));
+    }
+
+    #[test]
+    fn read_property_value_suggestions_returns_distinct_prefix_filtered_values() {
+        let _guard = workspace_test_guard();
+        let workspace = create_temp_workspace("tomosona-property-suggestions-test");
+        let root = workspace.to_string_lossy().to_string();
+
+        set_active_workspace(&root).expect("set workspace");
+        init_db().expect("init db");
+
+        let note_a = workspace.join("a.md");
+        let note_b = workspace.join("b.md");
+        let note_c = workspace.join("c.md");
+        fs::write(&note_a, "---\nstatus:\n  - draft\n---\nbody").expect("write note a");
+        fs::write(&note_b, "---\nstatus:\n  - review\n---\nbody").expect("write note b");
+        fs::write(&note_c, "---\nstatus:\n  - published\n---\nbody").expect("write note c");
+
+        reindex_markdown_file_lexical_sync(note_a.to_string_lossy().to_string()).expect("index a");
+        reindex_markdown_file_lexical_sync(note_b.to_string_lossy().to_string()).expect("index b");
+        reindex_markdown_file_lexical_sync(note_c.to_string_lossy().to_string()).expect("index c");
+
+        let all = read_property_value_suggestions_impl("status".to_string(), None, Some(20))
+            .expect("read suggestions");
+        assert_eq!(all, vec!["draft", "published", "review"]);
+
+        let filtered = read_property_value_suggestions_impl(
+            "status".to_string(),
+            Some("pub".to_string()),
+            Some(20),
+        )
+        .expect("read filtered suggestions");
+        assert_eq!(filtered, vec!["published"]);
+
+        let limited = read_property_value_suggestions_impl("status".to_string(), None, Some(2))
+            .expect("read limited suggestions");
+        assert_eq!(limited.len(), 2);
+
+        clear_active_workspace().expect("clear workspace");
+        fs::remove_dir_all(&workspace).expect("cleanup workspace");
     }
 
     #[test]

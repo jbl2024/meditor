@@ -31,6 +31,7 @@ describe('EditorPropertiesPanel', () => {
           activeRawYaml: '',
           activeParseErrors: [],
           corePropertyOptions: [],
+          propertySuggestionsForField: () => [],
           effectiveTypeForField: (): PropertyType => 'text',
           isPropertyTypeLocked: () => false
         })
@@ -64,6 +65,7 @@ describe('EditorPropertiesPanel', () => {
           activeRawYaml: '',
           activeParseErrors: [],
           corePropertyOptions: [],
+          propertySuggestionsForField: () => [],
           effectiveTypeForField: (): PropertyType => 'text',
           isPropertyTypeLocked: () => false
         })
@@ -96,6 +98,7 @@ describe('EditorPropertiesPanel', () => {
           activeRawYaml: '',
           activeParseErrors: [],
           corePropertyOptions: [],
+          propertySuggestionsForField: () => [],
           effectiveTypeForField: (): PropertyType => 'text',
           isPropertyTypeLocked: () => false
         })

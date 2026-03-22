@@ -28,6 +28,7 @@ const props = defineProps<{
   activeRawYaml: string
   activeParseErrors: Array<{ line: number; message: string }>
   corePropertyOptions: CorePropertyOption[]
+  propertySuggestionsForField: (field: FrontmatterField) => string[]
   effectiveTypeForField: (field: FrontmatterField) => PropertyType
   isPropertyTypeLocked: (key: string) => boolean
 }>()
@@ -156,6 +157,7 @@ const compactModeButtonStyle: CSSProperties = {
                 v-else-if="props.effectiveTypeForField(field) === 'list' || props.effectiveTypeForField(field) === 'tags'"
                 :model-value="Array.isArray(field.value) ? field.value : []"
                 :placeholder="props.effectiveTypeForField(field) === 'tags' ? 'add tag' : 'add value'"
+                :suggestions="props.propertySuggestionsForField(field)"
                 @update:modelValue="emit('property-tokens-change', { index, tokens: $event })"
               />
               <UiCheckbox

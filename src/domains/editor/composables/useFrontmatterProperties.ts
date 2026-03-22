@@ -1,5 +1,6 @@
 import { computed, ref, type Ref } from 'vue'
 import { composeMarkdownDocument, parseFrontmatter, serializeFrontmatter, type FrontmatterEnvelope, type FrontmatterField } from '../lib/frontmatter'
+import { readPropertyValueSuggestions } from '../../../shared/api/indexApi'
 import { defaultPropertyTypeForKey, normalizePropertyKey, sanitizePropertyTypeSchema, type PropertyType, type PropertyTypeSchema } from '../lib/propertyTypes'
 
 /**
@@ -97,6 +98,9 @@ export function useFrontmatterProperties(options: UseFrontmatterPropertiesOption
   const propertySchema = ref<PropertyTypeSchema>({})
   const propertySchemaLoaded = ref(false)
   const propertySchemaSaving = ref(false)
+  const propertySuggestionsByKey = ref<Record<string, string[]>>({})
+  const propertySuggestionsLoadedByKey = ref<Record<string, boolean>>({})
+  const propertySuggestionsLoadingByKey = ref<Record<string, boolean>>({})
 
   const activeFrontmatter = computed<FrontmatterEnvelope | null>(() => {
     const path = options.currentPath.value
@@ -157,6 +161,16 @@ export function useFrontmatterProperties(options: UseFrontmatterPropertiesOption
   function resetPropertySchemaState() {
     propertySchemaLoaded.value = false
     propertySchema.value = {}
+    resetPropertySuggestionsState()
+  }
+
+  /**
+   * Clears cached property value suggestions for the current workspace session.
+   */
+  function resetPropertySuggestionsState() {
+    propertySuggestionsByKey.value = {}
+    propertySuggestionsLoadedByKey.value = {}
+    propertySuggestionsLoadingByKey.value = {}
   }
 
   /**
@@ -195,6 +209,61 @@ export function useFrontmatterProperties(options: UseFrontmatterPropertiesOption
   }
 
   /**
+   * Returns cached autocomplete suggestions for one property field.
+   */
+  function propertySuggestionsForField(field: FrontmatterField): string[] {
+    const normalized = normalizePropertyKey(field.key)
+    if (!normalized) return []
+    return propertySuggestionsByKey.value[normalized] ?? []
+  }
+
+  /**
+   * Loads and caches workspace values for a property key once per session.
+   */
+  async function ensurePropertySuggestionsLoaded(key: string) {
+    const normalized = normalizePropertyKey(key)
+    if (!normalized) return
+    if (propertySuggestionsLoadedByKey.value[normalized] || propertySuggestionsLoadingByKey.value[normalized]) {
+      return
+    }
+
+    propertySuggestionsLoadingByKey.value = {
+      ...propertySuggestionsLoadingByKey.value,
+      [normalized]: true
+    }
+    try {
+      const suggestions = await readPropertyValueSuggestions(normalized, '', 20)
+      propertySuggestionsByKey.value = {
+        ...propertySuggestionsByKey.value,
+        [normalized]: suggestions
+      }
+    } catch {
+      propertySuggestionsByKey.value = {
+        ...propertySuggestionsByKey.value,
+        [normalized]: []
+      }
+    } finally {
+      propertySuggestionsLoadedByKey.value = {
+        ...propertySuggestionsLoadedByKey.value,
+        [normalized]: true
+      }
+      const nextLoading = { ...propertySuggestionsLoadingByKey.value }
+      delete nextLoading[normalized]
+      propertySuggestionsLoadingByKey.value = nextLoading
+    }
+  }
+
+  /**
+   * Preloads suggestions for list-like fields without blocking render.
+   */
+  function preloadPropertySuggestions(fields: FrontmatterField[]) {
+    for (const field of fields) {
+      if (field.type !== 'list' && field.type !== 'tags') continue
+      void ensurePropertySuggestionsLoaded(field.key)
+    }
+  }
+
+  /**
    * Parses frontmatter from markdown and stores both raw and structured state.
    */
   function parseAndStoreFrontmatter(path: string, sourceMarkdown: string) {
@@ -216,6 +285,7 @@ export function useFrontmatterProperties(options: UseFrontmatterPropertiesOption
         [path]: false
       }
     }
+    preloadPropertySuggestions(envelope.fields)
     emitProperties(path)
   }
 
@@ -333,6 +403,9 @@ export function useFrontmatterProperties(options: UseFrontmatterPropertiesOption
       styleHint: inferredType === 'list' || inferredType === 'tags' ? 'inline-list' : 'plain'
     })
     updateFrontmatterFields(path, fields)
+    if (inferredType === 'list' || inferredType === 'tags') {
+      void ensurePropertySuggestionsLoaded(normalizedKey)
+    }
     if (normalizedKey) {
       const normalizedSchemaKey = normalizePropertyKey(normalizedKey)
       if (normalizedSchemaKey) {
@@ -387,6 +460,9 @@ export function useFrontmatterProperties(options: UseFrontmatterPropertiesOption
       value: nextValue,
       styleHint: nextType === 'list' || nextType === 'tags' ? 'inline-list' : field.styleHint
     })
+    if (normalizedKey && (nextType === 'list' || nextType === 'tags')) {
+      void ensurePropertySuggestionsLoaded(normalizedKey)
+    }
   }
 
   /**
@@ -420,6 +496,11 @@ export function useFrontmatterProperties(options: UseFrontmatterPropertiesOption
       ...(lockedType ? { type: lockedType, value: nextValue, styleHint: lockedType === 'list' || lockedType === 'tags' ? 'inline-list' : 'plain' } : {})
     })
     if (!normalizedNext) return
+
+    const effectiveType = lockedType ?? field?.type
+    if (effectiveType === 'list' || effectiveType === 'tags') {
+      void ensurePropertySuggestionsLoaded(normalizedNext)
+    }
 
     const nextSchema: PropertyTypeSchema = {
       ...propertySchema.value,
@@ -523,8 +604,10 @@ export function useFrontmatterProperties(options: UseFrontmatterPropertiesOption
     canUseStructuredProperties,
     structuredPropertyFields,
     structuredPropertyKeys,
+    propertySuggestionsForField,
     ensurePropertySchemaLoaded,
     resetPropertySchemaState,
+    resetPropertySuggestionsState,
     parseAndStoreFrontmatter,
     serializableFrontmatterFields,
     addPropertyField,

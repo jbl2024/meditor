@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 const props = withDefaults(defineProps<{
   modelValue: string[]
   placeholder?: string
   disabled?: boolean
+  suggestions?: string[]
 }>(), {
   placeholder: '',
-  disabled: false
+  disabled: false,
+  suggestions: () => []
 })
 
 const emit = defineEmits<{
@@ -15,6 +17,22 @@ const emit = defineEmits<{
 }>()
 
 const draft = ref('')
+const suggestionListId = `property-token-input-suggestions-${Math.random().toString(36).slice(2)}`
+
+const normalizedSuggestions = computed(() => {
+  const existing = new Set(normalizeTokens(props.modelValue).map((item) => item.toLowerCase()))
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const suggestion of props.suggestions ?? []) {
+    const trimmed = suggestion.trim()
+    if (!trimmed) continue
+    const normalized = trimmed.toLowerCase()
+    if (existing.has(normalized) || seen.has(normalized)) continue
+    seen.add(normalized)
+    out.push(trimmed)
+  }
+  return out
+})
 
 function normalizeTokens(tokens: string[]): string[] {
   return tokens
@@ -137,12 +155,17 @@ watch(
       :value="draft"
       :placeholder="placeholder"
       :disabled="disabled"
+      :list="normalizedSuggestions.length ? suggestionListId : undefined"
+      autocomplete="off"
       class="token-editor"
       @input="onInput"
       @keydown="onKeydown"
       @blur="commitDraft"
       @paste="onPaste"
     />
+    <datalist v-if="normalizedSuggestions.length" :id="suggestionListId">
+      <option v-for="suggestion in normalizedSuggestions" :key="suggestion" :value="suggestion" />
+    </datalist>
   </div>
 </template>
 

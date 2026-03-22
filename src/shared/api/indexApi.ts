@@ -110,6 +110,19 @@ export async function readIndexLogs(limit = 80): Promise<IndexLogEntry[]> {
   return await invoke('read_index_logs', { limit })
 }
 
+/** Reads indexed property value suggestions for a given property key. */
+export async function readPropertyValueSuggestions(
+  key: string,
+  query = '',
+  limit = 20
+): Promise<string[]> {
+  return await invoke('read_property_value_suggestions', {
+    key,
+    query,
+    limit
+  })
+}
+
 /** Reads the persisted property type schema for the active workspace. */
 export async function readPropertyTypeSchema(): Promise<Record<string, string>> {
   return await invoke('read_property_type_schema')

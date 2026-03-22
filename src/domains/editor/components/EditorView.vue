@@ -264,6 +264,7 @@ const {
   canUseStructuredProperties,
   structuredPropertyFields,
   structuredPropertyKeys,
+  propertySuggestionsForField,
   addPropertyField,
   removePropertyField,
   onPropertyTypeChange,
@@ -532,6 +533,7 @@ defineExpose({
                 :active-raw-yaml="activeRawYaml"
                 :active-parse-errors="activeParseErrors"
                 :core-property-options="CORE_PROPERTY_OPTIONS"
+                :property-suggestions-for-field="propertySuggestionsForField"
                 :effective-type-for-field="effectiveTypeForField"
                 :is-property-type-locked="isPropertyTypeLocked"
                 @toggle-visibility="togglePropertiesVisibility"

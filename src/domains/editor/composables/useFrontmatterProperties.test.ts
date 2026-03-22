@@ -2,6 +2,16 @@ import { ref } from 'vue'
 import { describe, expect, it, vi } from 'vitest'
 import { useFrontmatterProperties } from './useFrontmatterProperties'
 
+const apiMocks = vi.hoisted(() => ({
+  readPropertyValueSuggestions: vi.fn(async (key: string) => {
+    if (key === 'status') return ['draft', 'review', 'published']
+    if (key === 'tags') return ['alpha', 'beta']
+    return ['one', 'two']
+  })
+}))
+
+vi.mock('../../../shared/api/indexApi', () => apiMocks)
+
 function setup(path = 'notes/a.md') {
   const currentPath = ref(path)
   const emitProperties = vi.fn()
@@ -85,5 +95,23 @@ describe('useFrontmatterProperties', () => {
 
     api.onPropertyValueInput(0, 'updated')
     expect(onDirty).toHaveBeenCalledWith('notes/a.md')
+  })
+
+  it('preloads and caches autocomplete suggestions for list-like properties', async () => {
+    const { api } = setup()
+    apiMocks.readPropertyValueSuggestions.mockClear()
+
+    api.parseAndStoreFrontmatter('notes/a.md', '---\nstatus:\n  - draft\ntags:\n  - alpha\n---\nBody')
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+
+    const firstCallCount = apiMocks.readPropertyValueSuggestions.mock.calls.length
+    expect(firstCallCount).toBeGreaterThanOrEqual(2)
+    expect(api.propertySuggestionsForField(api.activeFields.value[0]!) ).toEqual(['draft', 'review', 'published'])
+    expect(api.propertySuggestionsForField(api.activeFields.value[1]!) ).toEqual(['alpha', 'beta'])
+
+    api.parseAndStoreFrontmatter('notes/a.md', '---\nstatus:\n  - draft\ntags:\n  - alpha\n---\nBody')
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+
+    expect(apiMocks.readPropertyValueSuggestions.mock.calls.length).toBe(firstCallCount)
   })
 })
