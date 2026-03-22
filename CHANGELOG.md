@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.22.7] - 2026-03-22
+
+### Fixed
+- fix(editor): fade gutter block controls when idle (8a01c6b)
+
 ## [0.22.6] - 2026-03-22
 
 ### Changed
