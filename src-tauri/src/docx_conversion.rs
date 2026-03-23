@@ -4,7 +4,12 @@
 //! DOCX writing. The frontend only invokes the command; it does not perform
 //! any document generation itself.
 
-use std::{fs, fs::File, io::Read, path::{Path, PathBuf}};
+use std::{
+    fs,
+    fs::File,
+    io::{Read, Write},
+    path::{Path, PathBuf},
+};
 
 use comrak::{
     nodes::{AstNode, ListType, NodeTable, NodeValue, TableAlignment},
@@ -14,7 +19,7 @@ use mermaid_rs_renderer::{
     render_with_options, write_output_png, RenderConfig, RenderOptions, Theme,
 };
 use rdocx::{Alignment, BorderStyle, Document, Length, VerticalAlignment};
-use zip::ZipArchive;
+use zip::{write::SimpleFileOptions, ZipArchive, ZipWriter};
 
 use crate::markdown_index::{parse_yaml_frontmatter_properties, strip_yaml_frontmatter};
 use crate::{
@@ -26,7 +31,11 @@ const DEFAULT_FONT: &str = "Calibri";
 const DEFAULT_BODY_SIZE: u32 = 24;
 const CODE_FONT: &str = "Courier New";
 const CODE_SIZE: u32 = 20;
-const TABLE_CELL_MARGIN: f64 = 1.0;
+const TABLE_WIDTH_IN: f64 = 6.25;
+const TABLE_CELL_MARGIN_X_PT: f64 = 0.6;
+const TABLE_CELL_MARGIN_Y_PT: f64 = 0.8;
+const TABLE_MIN_COLUMN_WIDTH_IN: f64 = 0.75;
+const TABLE_MAX_COLUMN_SHARE: f64 = 0.55;
 const TABLE_BORDER_SIZE: u32 = 2;
 const TABLE_HEADER_FILL: &str = "E8EEF4";
 const TABLE_BORDER_COLOR: &str = "B8C4CF";
@@ -121,6 +130,7 @@ fn convert_markdown_to_docx_sync(path: String) -> Result<String> {
     let output_path = next_available_output_path(&output_path);
     doc.save(&output_path)
         .map_err(|_| AppError::OperationFailed)?;
+    strip_leading_empty_table_paragraphs(&output_path)?;
 
     Ok(output_path.to_string_lossy().to_string())
 }
@@ -237,6 +247,10 @@ fn build_document(markdown: &str, template_style: &TemplateStyle) -> Document {
 
     if !frontmatter_rows.is_empty() {
         render_key_value_table(&mut doc, &frontmatter_rows, template_style);
+        let _ = doc
+            .add_paragraph("")
+            .space_before(Length::pt(0.0))
+            .space_after(Length::pt(12.0));
     }
 
     for child in root.children() {
@@ -839,13 +853,47 @@ fn build_frontmatter_rows(markdown: &str, template: &TemplateStyle) -> Vec<Table
         return Vec::new();
     }
 
-    properties
-        .into_iter()
-        .map(|property| TableRowData {
+    let mut rows: Vec<TableRowData> = Vec::new();
+
+    for property in properties {
+        let key = property.key;
+        let value = property.value_text.unwrap_or_default();
+        if let Some(existing) = rows.iter_mut().find(|row| {
+            row.cells
+                .first()
+                .map(|cell| table_cell_text(cell).eq_ignore_ascii_case(&key))
+                .unwrap_or(false)
+        }) {
+            if let Some(value_cell) = existing.cells.get_mut(1) {
+                if !value.is_empty() {
+                    if !value_cell.is_empty() {
+                        value_cell.push(RunSegment {
+                            text: ", ".to_string(),
+                            style: TextStyle {
+                                font: Some(template.default_font.clone()),
+                                size: Some(template.body_size),
+                                ..Default::default()
+                            },
+                        });
+                    }
+                    value_cell.push(RunSegment {
+                        text: value,
+                        style: TextStyle {
+                            font: Some(template.default_font.clone()),
+                            size: Some(template.body_size),
+                            ..Default::default()
+                        },
+                    });
+                }
+            }
+            continue;
+        }
+
+        rows.push(TableRowData {
             is_header: false,
             cells: vec![
                 vec![RunSegment {
-                    text: property.key,
+                    text: key,
                     style: TextStyle {
                         bold: true,
                         font: Some(template.default_font.clone()),
@@ -854,7 +902,7 @@ fn build_frontmatter_rows(markdown: &str, template: &TemplateStyle) -> Vec<Table
                     },
                 }],
                 vec![RunSegment {
-                    text: property.value_text.unwrap_or_default(),
+                    text: value,
                     style: TextStyle {
                         font: Some(template.default_font.clone()),
                         size: Some(template.body_size),
@@ -863,8 +911,10 @@ fn build_frontmatter_rows(markdown: &str, template: &TemplateStyle) -> Vec<Table
                 }],
             ],
             alignments: vec![TableAlignment::Left, TableAlignment::Left],
-        })
-        .collect()
+        });
+    }
+
+    rows
 }
 
 fn render_compact_table(doc: &mut Document, rows: Vec<TableRowData>, template: &TemplateStyle) {
@@ -879,23 +929,28 @@ fn render_compact_table(doc: &mut Document, rows: Vec<TableRowData>, template: &
         .unwrap_or(1)
         .max(1);
     let row_count = rows.len();
-    let is_key_value_table = column_count == 2 && rows.first().map(|row| row.is_header).unwrap_or(false);
+    let key_value_table = is_key_value_table(&rows);
+    let column_widths = if key_value_table {
+        key_value_column_widths(&rows)
+    } else {
+        compute_table_column_widths(&rows, column_count)
+    };
     let mut table = doc
         .add_table(row_count, column_count)
-        .width(Length::inches(6.5))
+        .width(Length::inches(TABLE_WIDTH_IN))
         .layout_fixed()
         .borders(BorderStyle::Single, TABLE_BORDER_SIZE, TABLE_BORDER_COLOR)
         .cell_margins(
-            Length::pt(TABLE_CELL_MARGIN),
-            Length::pt(TABLE_CELL_MARGIN),
-            Length::pt(TABLE_CELL_MARGIN),
-            Length::pt(TABLE_CELL_MARGIN),
+            Length::pt(TABLE_CELL_MARGIN_Y_PT),
+            Length::pt(TABLE_CELL_MARGIN_X_PT),
+            Length::pt(TABLE_CELL_MARGIN_Y_PT),
+            Length::pt(TABLE_CELL_MARGIN_X_PT),
         );
 
     for (row_idx, row) in rows.into_iter().enumerate() {
         if row.is_header {
             if let Some(r) = table.row(row_idx) {
-                let _ = r.header();
+                let _ = r.header().cant_split();
             }
         }
 
@@ -909,6 +964,9 @@ fn render_compact_table(doc: &mut Document, rows: Vec<TableRowData>, template: &
 
             if let Some(mut cell) = table.cell(row_idx, col_idx) {
                 cell = cell.vertical_alignment(VerticalAlignment::Top);
+                if let Some(width) = column_widths.get(col_idx) {
+                    cell = cell.width(*width);
+                }
                 if row.is_header {
                     cell = cell.shading(TABLE_HEADER_FILL);
                 }
@@ -917,7 +975,7 @@ fn render_compact_table(doc: &mut Document, rows: Vec<TableRowData>, template: &
                     .add_paragraph("")
                     .space_before(Length::pt(0.0))
                     .space_after(Length::pt(0.0))
-                    .line_spacing_multiple(1.0)
+                    .line_spacing_multiple(0.9)
                     .keep_together(true);
                 if let Some(paragraph_alignment) =
                     table_alignment_to_paragraph_alignment(alignment)
@@ -928,21 +986,287 @@ fn render_compact_table(doc: &mut Document, rows: Vec<TableRowData>, template: &
             }
         }
     }
+}
 
-    if is_key_value_table {
-        let key_width = Length::inches(1.8);
-        let value_width = Length::inches(4.7);
-        for row_idx in 0..row_count {
-            if let Some(mut key_cell) = table.cell(row_idx, 0) {
-                key_cell = key_cell.width(key_width);
-                let _ = key_cell;
-            }
-            if let Some(mut value_cell) = table.cell(row_idx, 1) {
-                value_cell = value_cell.width(value_width);
-                let _ = value_cell;
+fn is_key_value_table(rows: &[TableRowData]) -> bool {
+    let Some(first_row) = rows.first() else {
+        return false;
+    };
+    if !first_row.is_header || first_row.cells.len() != 2 {
+        return false;
+    }
+
+    let key = table_cell_text(first_row.cells.first().map(Vec::as_slice).unwrap_or(&[]));
+    let value = table_cell_text(first_row.cells.get(1).map(Vec::as_slice).unwrap_or(&[]));
+    key.eq_ignore_ascii_case("key") && value.eq_ignore_ascii_case("value")
+}
+
+fn key_value_column_widths(rows: &[TableRowData]) -> Vec<Length> {
+    let key_score = rows
+        .iter()
+        .skip(1)
+        .filter_map(|row| row.cells.first())
+        .map(|cell| estimate_table_cell_score(cell, false))
+        .fold(1.5, f64::max)
+        .clamp(1.35, 1.9);
+    let key_width = key_score.max(1.35);
+    let value_width = (TABLE_WIDTH_IN - key_width).max(4.0);
+    vec![Length::inches(key_width), Length::inches(value_width)]
+}
+
+fn compute_table_column_widths(rows: &[TableRowData], column_count: usize) -> Vec<Length> {
+    if column_count == 0 {
+        return Vec::new();
+    }
+
+    let mut scores = vec![1.0; column_count];
+    for row in rows {
+        for (col_idx, cell) in row.cells.iter().enumerate() {
+            let score = estimate_table_cell_score(cell, row.is_header);
+            if let Some(existing) = scores.get_mut(col_idx) {
+                if score > *existing {
+                    *existing = score;
+                }
             }
         }
     }
+
+    let widths = distribute_table_widths(
+        scores,
+        TABLE_WIDTH_IN,
+        TABLE_MIN_COLUMN_WIDTH_IN,
+        TABLE_WIDTH_IN * TABLE_MAX_COLUMN_SHARE,
+    );
+    widths.into_iter().map(Length::inches).collect()
+}
+
+fn distribute_table_widths(
+    scores: Vec<f64>,
+    total_width: f64,
+    min_width: f64,
+    max_width: f64,
+) -> Vec<f64> {
+    let count = scores.len();
+    if count == 0 {
+        return Vec::new();
+    }
+
+    let mut widths = vec![min_width; count];
+    let mut remaining_extra = (total_width - (min_width * count as f64)).max(0.0);
+    let mut active = vec![true; count];
+
+    loop {
+        let active_score_sum: f64 = scores
+            .iter()
+            .enumerate()
+            .filter_map(|(index, score)| active.get(index).copied().unwrap_or(false).then_some(*score))
+            .sum();
+
+        if active_score_sum <= 0.0 || remaining_extra <= 0.0 {
+            break;
+        }
+
+        let mut overflow = 0.0;
+        let mut changed = false;
+
+        for index in 0..count {
+            if !active[index] {
+                continue;
+            }
+
+            let share = remaining_extra * scores[index] / active_score_sum;
+            let proposed = widths[index] + share;
+            if proposed > max_width {
+                overflow += proposed - max_width;
+                widths[index] = max_width;
+                active[index] = false;
+                changed = true;
+            } else {
+                widths[index] = proposed;
+            }
+        }
+
+        if !changed {
+            break;
+        }
+        remaining_extra = overflow;
+    }
+
+    if remaining_extra > 0.0 {
+        let active_indices = active
+            .iter()
+            .enumerate()
+            .filter_map(|(index, active)| active.then_some(index))
+            .collect::<Vec<_>>();
+        if active_indices.is_empty() {
+            if let Some(last) = widths.last_mut() {
+                *last += remaining_extra;
+            }
+        } else {
+            let share = remaining_extra / active_indices.len() as f64;
+            for index in active_indices {
+                widths[index] += share;
+            }
+        }
+    }
+
+    widths
+}
+
+fn estimate_table_cell_score(cell: &[RunSegment], header_row: bool) -> f64 {
+    let text = table_cell_text(cell);
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return if header_row { 1.5 } else { 1.0 };
+    }
+
+    let mut score = trimmed
+        .lines()
+        .map(|line| {
+            let line = line.trim();
+            let line_len = line.chars().count() as f64;
+            let word_count = line.split_whitespace().count() as f64;
+            let max_word = line
+                .split_whitespace()
+                .map(|word| word.chars().count() as f64)
+                .fold(0.0, f64::max);
+            (max_word * 0.16) + (word_count * 0.5) + (line_len * 0.03)
+        })
+        .fold(1.0, f64::max);
+
+    if header_row {
+        score *= 1.15;
+    }
+
+    score.clamp(1.0, 20.0)
+}
+
+fn table_cell_text(cell: &[RunSegment]) -> String {
+    cell.iter().map(|segment| segment.text.as_str()).collect()
+}
+
+fn strip_leading_empty_table_paragraphs(docx_path: &Path) -> Result<()> {
+    let file = File::open(docx_path)?;
+    let mut archive = ZipArchive::new(file).map_err(|err| {
+        AppError::InvalidOperation(format!("DOCX postprocess open failed: {err}"))
+    })?;
+    let temp_path = docx_path.with_extension("docx.tmp");
+    let temp_file = File::create(&temp_path)?;
+    let mut writer = ZipWriter::new(temp_file);
+
+    for index in 0..archive.len() {
+        let mut entry = archive.by_index(index).map_err(|err| {
+            AppError::InvalidOperation(format!("DOCX postprocess read entry failed: {err}"))
+        })?;
+        let options = SimpleFileOptions::default().compression_method(entry.compression());
+        let name = entry.name().to_string();
+        if entry.is_dir() {
+            writer
+                .add_directory(&name, options)
+                .map_err(|err| {
+                    AppError::InvalidOperation(format!(
+                        "DOCX postprocess write directory failed: {err}"
+                    ))
+                })?;
+            continue;
+        }
+
+        let mut bytes = Vec::new();
+        entry
+            .read_to_end(&mut bytes)
+            .map_err(|err| {
+                AppError::InvalidOperation(format!("DOCX postprocess read bytes failed: {err}"))
+            })?;
+        if name == "word/document.xml" {
+            let xml = String::from_utf8(bytes).map_err(|err| {
+                AppError::InvalidOperation(format!("DOCX postprocess decode xml failed: {err}"))
+            })?;
+            bytes = strip_empty_first_table_paragraphs_from_xml(&xml).into_bytes();
+        }
+
+        writer
+            .start_file(&name, options)
+            .map_err(|err| {
+                AppError::InvalidOperation(format!("DOCX postprocess write file failed: {err}"))
+            })?;
+        writer
+            .write_all(&bytes)
+            .map_err(|err| {
+                AppError::InvalidOperation(format!("DOCX postprocess write bytes failed: {err}"))
+            })?;
+    }
+
+    writer.finish().map_err(|err| {
+        AppError::InvalidOperation(format!("DOCX postprocess finish failed: {err}"))
+    })?;
+    fs::rename(&temp_path, docx_path)?;
+    Ok(())
+}
+
+fn strip_empty_first_table_paragraphs_from_xml(xml: &str) -> String {
+    let mut output = String::with_capacity(xml.len());
+    let mut remainder = xml;
+
+    while let Some(cell_start) = remainder.find("<w:tc>") {
+        output.push_str(&remainder[..cell_start]);
+        remainder = &remainder[cell_start..];
+
+        let Some(cell_end) = remainder.find("</w:tc>") else {
+            output.push_str(remainder);
+            return output;
+        };
+
+        let cell_xml = &remainder[..cell_end + "</w:tc>".len()];
+        output.push_str(&strip_empty_first_table_paragraph_from_cell(cell_xml));
+        remainder = &remainder[cell_end + "</w:tc>".len()..];
+    }
+
+    output.push_str(remainder);
+    output
+}
+
+fn strip_empty_first_table_paragraph_from_cell(cell_xml: &str) -> String {
+    let Some(first_para_start) = cell_xml.find("<w:p>") else {
+        return cell_xml.to_string();
+    };
+    let Some(first_para_end) = cell_xml[first_para_start..].find("</w:p>") else {
+        return cell_xml.to_string();
+    };
+
+    let first_para_end = first_para_start + first_para_end + "</w:p>".len();
+    let first_para = &cell_xml[first_para_start..first_para_end];
+    if paragraph_contains_text(first_para) {
+        return cell_xml.to_string();
+    }
+
+    if !cell_xml[first_para_end..].contains("<w:p>") {
+        return cell_xml.to_string();
+    }
+
+    let mut output = String::with_capacity(cell_xml.len());
+    output.push_str(&cell_xml[..first_para_start]);
+    output.push_str(&cell_xml[first_para_end..]);
+    output
+}
+
+fn paragraph_contains_text(paragraph_xml: &str) -> bool {
+    let mut remainder = paragraph_xml;
+    while let Some(text_start) = remainder.find("<w:t") {
+        remainder = &remainder[text_start..];
+        let Some(tag_end) = remainder.find('>') else {
+            break;
+        };
+        let content_start = tag_end + 1;
+        let Some(text_end) = remainder[content_start..].find("</w:t>") else {
+            break;
+        };
+        let text = &remainder[content_start..content_start + text_end];
+        if !text.trim().is_empty() {
+            return true;
+        }
+        remainder = &remainder[content_start + text_end + "</w:t>".len()..];
+    }
+    false
 }
 
 fn build_inline_segments<'a>(
@@ -1200,7 +1524,7 @@ mod tests {
     use super::*;
     use std::{
         fs,
-        io::Write,
+        io::{Read, Write},
         time::{SystemTime, UNIX_EPOCH},
     };
 
@@ -1339,6 +1663,52 @@ mod tests {
         names
     }
 
+    fn read_docx_document_xml(path: &Path) -> String {
+        let file = File::open(path).expect("open docx file");
+        let mut archive = ZipArchive::new(file).expect("open docx zip");
+        let mut xml = String::new();
+        archive
+            .by_name("word/document.xml")
+            .expect("document xml")
+            .read_to_string(&mut xml)
+            .expect("read document xml");
+        xml
+    }
+
+    fn extract_row_widths(row_xml: &str) -> Vec<Option<i32>> {
+        let mut widths = Vec::new();
+        let mut remainder = row_xml;
+        let needle = r#"w:tcW w:w=""#;
+
+        while let Some(pos) = remainder.find(needle) {
+            remainder = &remainder[pos + needle.len()..];
+            let Some(end) = remainder.find('"') else {
+                break;
+            };
+            widths.push(remainder[..end].parse::<i32>().ok());
+            remainder = &remainder[end + 1..];
+        }
+
+        widths
+    }
+
+    fn read_docx_table_cell_widths(path: &Path) -> Vec<Vec<Option<i32>>> {
+        let xml = read_docx_document_xml(path);
+        let mut rows = Vec::new();
+        let mut remainder = xml.as_str();
+
+        while let Some(row_start) = remainder.find("<w:tr") {
+            remainder = &remainder[row_start..];
+            let Some(row_end) = remainder.find("</w:tr>") else {
+                break;
+            };
+            rows.push(extract_row_widths(&remainder[..row_end]));
+            remainder = &remainder[row_end + "</w:tr>".len()..];
+        }
+
+        rows
+    }
+
     #[test]
     fn parse_template_style_reads_default_font_and_size() {
         let xml = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -1436,6 +1806,15 @@ mod tests {
         assert_eq!(shadings[0][0].as_deref(), Some(TABLE_HEADER_FILL));
         assert_eq!(shadings[0][1].as_deref(), Some(TABLE_HEADER_FILL));
         assert_eq!(alignments[0][0], None);
+
+        let doc = Document::open(&output).expect("open docx");
+        let table = doc.tables().into_iter().next().expect("table");
+        let first_body_cell = table.cell(1, 0).expect("first body cell");
+        let first_paragraph = first_body_cell
+            .paragraphs()
+            .next()
+            .expect("first paragraph in cell");
+        assert_eq!(first_paragraph.text().trim(), "1");
     }
 
     #[test]
@@ -1502,6 +1881,34 @@ mod tests {
         assert!(paragraph
             .runs()
             .any(|run| run.text() == "code" && run.font_name() == Some(CODE_FONT)));
+    }
+
+    #[test]
+    fn convert_markdown_to_docx_uses_compact_column_widths_for_tables() {
+        let _guard = workspace_test_guard();
+        let workspace = create_temp_workspace("tomosona-docx-table-widths");
+        fs::create_dir_all(workspace.join("_templates")).expect("templates");
+        let source = workspace.join("widths.md");
+        fs::write(
+            &source,
+            "| Nom | Type | Valeur par défaut | Description |\n| --- | --- | --- | --- |\n| font_size | u32 | 12 | Taille de la police en points |\n| bold | bool | false | Mise en gras |\n",
+        )
+        .expect("write table");
+
+        crate::set_active_workspace(&workspace.to_string_lossy()).expect("set workspace");
+        let output = convert_markdown_to_docx_sync(source.to_string_lossy().to_string())
+            .expect("convert");
+
+        let widths = read_docx_table_cell_widths(Path::new(&output));
+        assert!(!widths.is_empty());
+        let first_row = &widths[0];
+        assert_eq!(first_row.len(), 4);
+        assert!(first_row.iter().all(|width| width.is_some()));
+        let widths: Vec<i32> = first_row.iter().map(|width| width.unwrap()).collect();
+        assert!(widths[0] < widths[2]);
+        assert!(widths[0] < widths[3]);
+        assert!(widths[3] >= widths[1]);
+        assert!(widths.windows(2).any(|pair| pair[0] != pair[1]));
     }
 
     #[test]
@@ -1702,21 +2109,28 @@ mod tests {
 
         let (row_count, column_count, cells, headers, shadings, _) =
             read_docx_table(Path::new(&output));
-        assert_eq!(row_count, 5);
+        assert_eq!(row_count, 4);
         assert_eq!(column_count, 2);
-        assert_eq!(headers, vec![true, false, false, false, false]);
+        assert_eq!(headers, vec![true, false, false, false]);
         assert_eq!(
             cells,
             vec![
                 vec!["Key".to_string(), "Value".to_string()],
                 vec!["title".to_string(), "example".to_string()],
-                vec!["tags".to_string(), "one".to_string()],
-                vec!["tags".to_string(), "two".to_string()],
+                vec!["tags".to_string(), "one, two".to_string()],
                 vec!["draft".to_string(), "true".to_string()],
             ]
         );
         assert_eq!(shadings[0][0].as_deref(), Some(TABLE_HEADER_FILL));
         assert_eq!(shadings[0][1].as_deref(), Some(TABLE_HEADER_FILL));
+
+        let widths = read_docx_table_cell_widths(Path::new(&output));
+        assert!(!widths.is_empty());
+        let first_row = &widths[0];
+        assert_eq!(first_row.len(), 2);
+        assert!(first_row.iter().all(|width| width.is_some()));
+        let widths: Vec<i32> = first_row.iter().map(|width| width.unwrap()).collect();
+        assert!(widths[0] < widths[1]);
 
         let paragraphs = read_docx_paragraphs(Path::new(&output));
         assert!(paragraphs.iter().any(|text| text.contains("Body paragraph.")));
