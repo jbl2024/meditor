@@ -33,6 +33,8 @@ const TABLE_BORDER_COLOR: &str = "B8C4CF";
 const QUOTE_FILL: &str = "F5F7F9";
 const QUOTE_COLOR: &str = "666666";
 const QUOTE_INDENT_PT: f64 = 18.0;
+const CALLOUT_HEADER_TEXT: &str = "333333";
+const CALLOUT_BODY_TEXT: &str = "333333";
 const MERMAID_MAX_WIDTH_IN: f64 = 6.2;
 const MERMAID_FALLBACK_HEIGHT_IN: f64 = 3.5;
 const MERMAID_EMOJI_REPLACEMENTS: &[(&str, &str)] = &[
@@ -249,10 +251,76 @@ fn build_document(markdown: &str, template_style: &TemplateStyle) -> Document {
     doc
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy)]
 struct RenderContext {
     quote_depth: usize,
     list_depth: usize,
+    callout: Option<CalloutKind>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CalloutKind {
+    Note,
+    Abstract,
+    Info,
+    Tip,
+    Success,
+    Question,
+    Warning,
+    Failure,
+    Danger,
+    Bug,
+    Example,
+    Quote,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct CalloutStyle {
+    fill: &'static str,
+    border: &'static str,
+}
+
+impl CalloutKind {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Note => "Note",
+            Self::Abstract => "Abstract",
+            Self::Info => "Info",
+            Self::Tip => "Tip",
+            Self::Success => "Success",
+            Self::Question => "Question",
+            Self::Warning => "Warning",
+            Self::Failure => "Failure",
+            Self::Danger => "Danger",
+            Self::Bug => "Bug",
+            Self::Example => "Example",
+            Self::Quote => "Quote",
+        }
+    }
+
+    fn style(self) -> CalloutStyle {
+        match self {
+            Self::Note | Self::Info => CalloutStyle { fill: "E7F0FB", border: "C9D9EE" },
+            Self::Tip | Self::Success | Self::Example => {
+                CalloutStyle { fill: "E6F1E6", border: "C8DCC8" }
+            }
+            Self::Question => CalloutStyle { fill: "EDE8F6", border: "D5CDEB" },
+            Self::Warning | Self::Failure | Self::Danger | Self::Bug => {
+                CalloutStyle { fill: "F4E8DF", border: "E0CDB8" }
+            }
+            Self::Abstract | Self::Quote => CalloutStyle { fill: "EEF1F4", border: "D6DCE3" },
+        }
+    }
+}
+
+impl Default for RenderContext {
+    fn default() -> Self {
+        Self {
+            quote_depth: 0,
+            list_depth: 0,
+            callout: None,
+        }
+    }
 }
 
 fn render_block<'a>(node: &'a AstNode<'a>, doc: &mut Document, template: &TemplateStyle, ctx: RenderContext) {
@@ -274,16 +342,13 @@ fn render_block<'a>(node: &'a AstNode<'a>, doc: &mut Document, template: &Templa
                 font: Some(template.default_font.clone()),
                 ..Default::default()
             };
-            if ctx.quote_depth > 0 {
+            if ctx.callout.is_some() {
+                style.color = Some(CALLOUT_BODY_TEXT.to_string());
+            } else if ctx.quote_depth > 0 {
                 style.italic = true;
                 style.color = Some(QUOTE_COLOR.to_string());
             }
-            append_paragraph(
-                doc,
-                build_inline_segments(node, style, template, ctx),
-                template,
-                ctx.quote_depth,
-            );
+            append_paragraph(doc, build_inline_segments(node, style, template, ctx), template, ctx);
         }
         NodeValue::Paragraph => {
             let mut style = TextStyle {
@@ -291,24 +356,26 @@ fn render_block<'a>(node: &'a AstNode<'a>, doc: &mut Document, template: &Templa
                 size: Some(template.body_size),
                 ..Default::default()
             };
-            if ctx.quote_depth > 0 {
+            if ctx.callout.is_some() {
+                style.color = Some(CALLOUT_BODY_TEXT.to_string());
+            } else if ctx.quote_depth > 0 {
                 style.italic = true;
                 style.color = Some(QUOTE_COLOR.to_string());
             }
-            append_paragraph(
-                doc,
-                build_inline_segments(node, style, template, ctx),
-                template,
-                ctx.quote_depth,
-            );
+            append_paragraph(doc, build_inline_segments(node, style, template, ctx), template, ctx);
         }
         NodeValue::BlockQuote | NodeValue::MultilineBlockQuote(_) => {
-            let next = RenderContext {
-                quote_depth: ctx.quote_depth + 1,
-                list_depth: ctx.list_depth,
-            };
-            for child in node.children() {
-                render_block(child, doc, template, next);
+            if let Some(callout) = detect_callout(node) {
+                render_callout_block(node, doc, template, ctx, callout);
+            } else {
+                let next = RenderContext {
+                    quote_depth: ctx.quote_depth + 1,
+                    list_depth: ctx.list_depth,
+                    callout: ctx.callout,
+                };
+                for child in node.children() {
+                    render_block(child, doc, template, next);
+                }
             }
         }
         NodeValue::CodeBlock(code_block) => {
@@ -335,24 +402,19 @@ fn render_block<'a>(node: &'a AstNode<'a>, doc: &mut Document, template: &Templa
                         ..Default::default()
                     },
                 }];
-                append_paragraph(doc, segments, template, ctx.quote_depth);
+                append_paragraph(doc, segments, template, ctx);
             }
         }
         NodeValue::ThematicBreak => {
-            append_paragraph(
-                doc,
-                vec![RunSegment {
-                    text: "────────────────".to_string(),
-                    style: TextStyle {
-                        font: Some(template.default_font.clone()),
-                        size: Some(template.body_size),
-                        color: Some("CCCCCC".to_string()),
-                        ..Default::default()
-                    },
-                }],
-                template,
-                ctx.quote_depth,
-            );
+            append_paragraph(doc, vec![RunSegment {
+                text: "────────────────".to_string(),
+                style: TextStyle {
+                    font: Some(template.default_font.clone()),
+                    size: Some(template.body_size),
+                    color: Some("CCCCCC".to_string()),
+                    ..Default::default()
+                },
+            }], template, ctx);
         }
         NodeValue::List(list) => {
             render_list(node, doc, template, ctx, list.list_type, list.start);
@@ -375,6 +437,127 @@ fn render_block<'a>(node: &'a AstNode<'a>, doc: &mut Document, template: &Templa
                 render_block(child, doc, template, ctx);
             }
         }
+    }
+}
+
+fn detect_callout<'a>(node: &'a AstNode<'a>) -> Option<(CalloutKind, Option<String>)> {
+    let mut children = node.children();
+    let first = children.next()?;
+    if !matches!(first.data.borrow().value, NodeValue::Paragraph) {
+        return None;
+    }
+
+    let segments = collect_inline_segments_for_node(
+        first,
+        TextStyle {
+            font: Some(DEFAULT_FONT.to_string()),
+            size: Some(DEFAULT_BODY_SIZE),
+            ..Default::default()
+        },
+        &TemplateStyle::default(),
+    );
+    let text = segments
+        .iter()
+        .map(|segment| segment.text.as_str())
+        .collect::<String>();
+    parse_callout_marker(&text)
+}
+
+fn parse_callout_marker(text: &str) -> Option<(CalloutKind, Option<String>)> {
+    let trimmed = text.trim_start();
+    let rest = trimmed.strip_prefix("[!")?;
+    let end = rest.find(']')?;
+    let kind_token = &rest[..end];
+    let kind = normalize_callout_kind(kind_token)?;
+    let after = rest[end + 1..].trim();
+    let title = after
+        .strip_prefix(':')
+        .map(str::trim_start)
+        .unwrap_or(after)
+        .trim();
+    let title = if title.is_empty() { None } else { Some(title.to_string()) };
+    Some((kind, title))
+}
+
+fn normalize_callout_kind(input: &str) -> Option<CalloutKind> {
+    let token = input
+        .trim()
+        .to_uppercase()
+        .replace(|ch: char| !ch.is_ascii_alphanumeric(), "");
+
+    match token.as_str() {
+        "NOTE" => Some(CalloutKind::Note),
+        "ABSTRACT" | "SUMMARY" | "TLDR" => Some(CalloutKind::Abstract),
+        "INFO" | "TODO" => Some(CalloutKind::Info),
+        "TIP" | "HINT" | "IMPORTANT" => Some(CalloutKind::Tip),
+        "SUCCESS" | "CHECK" | "DONE" => Some(CalloutKind::Success),
+        "QUESTION" | "HELP" | "FAQ" => Some(CalloutKind::Question),
+        "WARNING" | "CAUTION" | "ATTENTION" => Some(CalloutKind::Warning),
+        "FAILURE" | "FAIL" | "MISSING" => Some(CalloutKind::Failure),
+        "DANGER" | "ERROR" => Some(CalloutKind::Danger),
+        "BUG" => Some(CalloutKind::Bug),
+        "EXAMPLE" => Some(CalloutKind::Example),
+        "QUOTE" | "CITE" => Some(CalloutKind::Quote),
+        _ => None,
+    }
+}
+
+fn render_callout_block<'a>(
+    node: &'a AstNode<'a>,
+    doc: &mut Document,
+    template: &TemplateStyle,
+    ctx: RenderContext,
+    callout: (CalloutKind, Option<String>),
+) {
+    let (kind, title) = callout;
+    let mut children = node.children();
+    let _ = children.next();
+
+    let mut header_segments = vec![RunSegment {
+        text: kind.label().to_string(),
+        style: TextStyle {
+            bold: true,
+            font: Some(template.default_font.clone()),
+            size: Some(template.body_size),
+            color: Some(CALLOUT_HEADER_TEXT.to_string()),
+            ..Default::default()
+        },
+    }];
+    if let Some(title) = title {
+        header_segments.push(RunSegment {
+            text: " — ".to_string(),
+            style: TextStyle {
+                font: Some(template.default_font.clone()),
+                size: Some(template.body_size),
+                color: Some(CALLOUT_HEADER_TEXT.to_string()),
+                ..Default::default()
+            },
+        });
+        header_segments.push(RunSegment {
+            text: title,
+            style: TextStyle {
+                font: Some(template.default_font.clone()),
+                size: Some(template.body_size),
+                color: Some(CALLOUT_HEADER_TEXT.to_string()),
+                ..Default::default()
+            },
+        });
+    }
+    let mut header_paragraph = doc.add_paragraph("");
+    header_paragraph = style_paragraph(
+        header_paragraph,
+        ParagraphKind::CalloutHeader { kind },
+    );
+    append_segments_to_paragraph(&mut header_paragraph, header_segments, template, false);
+
+    let body_ctx = RenderContext {
+        quote_depth: ctx.quote_depth,
+        list_depth: ctx.list_depth,
+        callout: Some(kind),
+    };
+
+    for child in children {
+        render_block(child, doc, template, body_ctx);
     }
 }
 
@@ -402,6 +585,7 @@ fn render_list<'a>(
         let item_ctx = RenderContext {
             quote_depth: ctx.quote_depth,
             list_depth: ctx.list_depth + 1,
+            callout: ctx.callout,
         };
         let item_prefix = list_prefix(list_type, item_ctx.list_depth, ordinal);
         let item_prefix = if let Some(task_prefix) = task_prefix {
@@ -437,10 +621,10 @@ fn render_list<'a>(
                                 },
                             });
                         }
-                        append_paragraph(doc, segments, template, item_ctx.quote_depth);
+                        append_paragraph(doc, segments, template, item_ctx);
                         rendered_primary_paragraph = true;
                     } else {
-                        append_paragraph(doc, segments, template, item_ctx.quote_depth);
+                        append_paragraph(doc, segments, template, item_ctx);
                     }
                 }
                 NodeValue::Item(_) | NodeValue::TaskItem(_) | NodeValue::List(_) => {
@@ -453,19 +637,14 @@ fn render_list<'a>(
         }
 
         if !rendered_primary_paragraph {
-            append_paragraph(
-                doc,
-                vec![RunSegment {
-                    text: item_prefix,
-                    style: TextStyle {
-                        font: Some(template.default_font.clone()),
-                        size: Some(template.body_size),
-                        ..Default::default()
-                    },
-                }],
-                template,
-                item_ctx.quote_depth,
-            );
+            append_paragraph(doc, vec![RunSegment {
+                text: item_prefix,
+                style: TextStyle {
+                    font: Some(template.default_font.clone()),
+                    size: Some(template.body_size),
+                    ..Default::default()
+                },
+            }], template, item_ctx);
         }
 
         if matches!(list_type, ListType::Ordered) {
@@ -872,15 +1051,25 @@ fn append_paragraph(
     doc: &mut Document,
     segments: Vec<RunSegment>,
     template: &TemplateStyle,
-    quote_depth: usize,
+    ctx: RenderContext,
 ) {
     let mut paragraph = doc.add_paragraph("");
-    paragraph = style_paragraph(paragraph, ParagraphKind::Body { quote_depth });
+    paragraph = style_paragraph(
+        paragraph,
+        ParagraphKind::Body {
+            quote_depth: ctx.quote_depth,
+            callout: ctx.callout,
+        },
+    );
     append_segments_to_paragraph(&mut paragraph, segments, template, false);
 }
 
 enum ParagraphKind {
-    Body { quote_depth: usize },
+    Body {
+        quote_depth: usize,
+        callout: Option<CalloutKind>,
+    },
+    CalloutHeader { kind: CalloutKind },
 }
 
 fn style_paragraph<'a>(
@@ -888,8 +1077,19 @@ fn style_paragraph<'a>(
     kind: ParagraphKind,
 ) -> rdocx::Paragraph<'a> {
     match kind {
-        ParagraphKind::Body { quote_depth } => {
-            if quote_depth == 0 {
+        ParagraphKind::Body { quote_depth, callout } => {
+            if let Some(callout_kind) = callout {
+                let palette = callout_kind.style();
+                paragraph
+                    .space_before(Length::pt(0.0))
+                    .space_after(Length::pt(2.0))
+                    .indent_left(Length::pt(0.0))
+                    .indent_right(Length::pt(0.0))
+                    .shading(palette.fill)
+                    .border_all(BorderStyle::Single, 8, palette.border)
+                    .line_spacing_multiple(1.0)
+                    .keep_together(true)
+            } else if quote_depth == 0 {
                 paragraph
                     .space_before(Length::pt(0.0))
                     .space_after(Length::pt(5.0))
@@ -902,6 +1102,18 @@ fn style_paragraph<'a>(
                     .shading(QUOTE_FILL)
                     .line_spacing_multiple(1.0)
             }
+        }
+        ParagraphKind::CalloutHeader { kind } => {
+            let palette = kind.style();
+            paragraph
+                .space_before(Length::pt(2.0))
+                .space_after(Length::pt(2.0))
+                .indent_left(Length::pt(0.0))
+                .indent_right(Length::pt(0.0))
+                .shading(palette.fill)
+                .border_all(BorderStyle::Single, 8, palette.border)
+                .line_spacing_multiple(1.0)
+                .keep_together(true)
         }
     }
 }
@@ -1321,6 +1533,57 @@ mod tests {
             .expect("quote paragraph");
         assert_eq!(quote_paragraph.shading_fill(), Some(QUOTE_FILL));
         assert!(quote_paragraph.runs().any(|run| run.is_italic()));
+    }
+
+    #[test]
+    fn convert_markdown_to_docx_renders_callouts() {
+        let _guard = workspace_test_guard();
+        let workspace = create_temp_workspace("tomosona-docx-callout");
+        fs::create_dir_all(workspace.join("_templates")).expect("templates");
+        let source = workspace.join("callouts.md");
+        fs::write(
+            &source,
+            "> [!NOTE]\n>\n> Callouts are useful.\n>\n> They keep related content together.\n\n> [!WARNING]\n>\n> Inline `code` stays readable.\n",
+        )
+        .expect("write callouts");
+
+        crate::set_active_workspace(&workspace.to_string_lossy()).expect("set workspace");
+        let output = convert_markdown_to_docx_sync(source.to_string_lossy().to_string())
+            .expect("convert");
+
+        let doc = Document::open(&output).expect("open docx");
+        let note_fill = CalloutKind::Note.style().fill;
+        let warning_fill = CalloutKind::Warning.style().fill;
+
+        let note_header = doc
+            .paragraphs()
+            .into_iter()
+            .find(|paragraph| paragraph.text().contains("Note"))
+            .expect("note header");
+        assert_eq!(note_header.shading_fill(), Some(note_fill));
+
+        let note_body = doc
+            .paragraphs()
+            .into_iter()
+            .find(|paragraph| paragraph.text().contains("Callouts are useful."))
+            .expect("note body");
+        assert_eq!(note_body.shading_fill(), Some(note_fill));
+        assert!(note_body.text().contains("Callouts are useful."));
+
+        let warning_header = doc
+            .paragraphs()
+            .into_iter()
+            .find(|paragraph| paragraph.text().contains("Warning"))
+            .expect("warning header");
+        assert_eq!(warning_header.shading_fill(), Some(warning_fill));
+
+        let warning_body = doc
+            .paragraphs()
+            .into_iter()
+            .find(|paragraph| paragraph.text().contains("Inline code stays readable."))
+            .expect("warning body");
+        assert_eq!(warning_body.shading_fill(), Some(warning_fill));
+        assert!(warning_body.runs().any(|run| run.text() == "code"));
     }
 
     #[test]
