@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.22.9] - 2026-03-23
+
+### Fixed
+- fix(editor): tolerate simplified ProseMirror selection mocks (70ec82d)
+
 ## [0.22.8] - 2026-03-23
 
 ### Fixed
