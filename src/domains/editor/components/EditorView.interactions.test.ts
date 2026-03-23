@@ -499,6 +499,78 @@ describe('EditorView interactions contract', () => {
     }
   })
 
+  it('keeps the gutter hidden briefly after list edits to avoid a flash on new items', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-03-09T10:00:00Z'))
+
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+    const editorRef = ref<unknown>(null)
+
+    const app = createApp(defineComponent({
+      setup() {
+        return () =>
+          h(EditorView, {
+            ref: editorRef,
+            path: 'a.md',
+            openPaths: ['a.md'],
+            openFile: async () => '# Title\n\n- one',
+            saveFile: async () => ({ persisted: true }),
+            renameFileFromTitle: async (valuePath: string, title: string) => ({ path: valuePath, title }),
+            loadLinkTargets: async () => ['a.md'],
+            loadLinkHeadings: async () => ['H1'],
+            loadPropertyTypeSchema: async () => ({}),
+            savePropertyTypeSchema: async () => {},
+            openLinkTarget: async () => true,
+            onStatus: () => {},
+            onOutline: () => {},
+            onProperties: () => {},
+            onPathRenamed: () => {}
+          })
+      }
+    }))
+
+    app.mount(root)
+    try {
+      await vi.advanceTimersByTimeAsync(20)
+      await flushMicrotasks()
+
+      const setupState = (editorRef.value as { $?: { setupState?: Record<string, any> } })?.$?.setupState
+      if (!setupState) throw new Error('Expected EditorView setup state')
+
+      const activeTarget = {
+        pos: 1,
+        nodeType: 'bulletList',
+        nodeSize: 5,
+        canDelete: true,
+        canConvert: true,
+        text: 'one',
+        attrs: {}
+      }
+
+      setupState.dragHandleUiState.activeTarget = activeTarget
+      await vi.advanceTimersByTimeAsync(560)
+      await flushMicrotasks()
+
+      const handle = root.querySelector('.tomosona-drag-handle') as HTMLElement | null
+      expect(handle).toBeTruthy()
+      expect(handle?.style.opacity).toBe('1')
+
+      setupState.suppressBlockHandleReveal({ durationMs: 500 })
+      await flushMicrotasks()
+      expect(root.querySelector('.tomosona-drag-handle')?.getAttribute('style')).toContain('opacity: 0')
+
+      await vi.advanceTimersByTimeAsync(860)
+      await flushMicrotasks()
+
+      expect(root.querySelector('.tomosona-drag-handle')?.getAttribute('style')).not.toContain('opacity: 0')
+    } finally {
+      vi.useRealTimers()
+      app.unmount()
+      document.body.innerHTML = ''
+    }
+  })
+
   it('opens inline find with Cmd/Ctrl+F and supports filtering controls', async () => {
     const root = document.createElement('div')
     document.body.appendChild(root)

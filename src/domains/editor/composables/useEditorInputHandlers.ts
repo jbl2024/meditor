@@ -11,6 +11,7 @@ import {
 } from '../lib/editorInteractions'
 import { markdownToEditorData, type EditorBlock } from '../lib/markdownBlocks'
 import { toTiptapDoc } from '../lib/tiptap/editorBlocksToTiptapDoc'
+import { isSelectionInsideList } from '../lib/tiptap/blockMenu/guards'
 
 /**
  * useEditorInputHandlers
@@ -51,6 +52,9 @@ export type UseEditorInputHandlersOptions = {
       linkPopoverOpen: Ref<boolean>
       cancelLink: () => void
     }
+  }
+  blockHandlePort: {
+    suppressReveal: (options?: { durationMs?: number }) => void
   }
   uiPort: {
     updateFormattingToolbar: () => void
@@ -139,6 +143,10 @@ export function useEditorInputHandlers(options: UseEditorInputHandlersOptions) {
         options.menusPort.closeSlashMenu()
         return
       }
+    }
+
+    if (event.key === 'Enter' && isSelectionInsideList(options.editingPort.getEditor())) {
+      options.blockHandlePort.suppressReveal()
     }
 
     const context = options.editingPort.currentTextSelectionContext()

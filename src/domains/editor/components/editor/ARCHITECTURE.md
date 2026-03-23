@@ -9,6 +9,7 @@
 - Chrome runtime (toolbars/overlays/layout/pulse): `useEditorChromeRuntime`
   Internal organization should stay in a few local zones (`toolbars`, `blockAndTableControls`, `layoutAndZoom`, `pulseAndDialogs`) rather than new public mini-runtimes.
   Public API should stay grouped by usage (`loading`, `toolbars`, `blockAndTable`, `layout`, `pulse`, `dialogsAndLifecycle`) instead of being flattened back into `EditorView.vue`.
+  The block gutter reveal is intentionally delayed and can be suppressed briefly after typing or list-item insertion so structural edits do not flash the handle.
 - Session lifecycle/status/autosave/request token: `useEditorSessionLifecycle`
 - Session status mutation bridge for session store + lifecycle emits: `useEditorSessionStatus`
 - File load/save orchestration: `useEditorFileLifecycle`

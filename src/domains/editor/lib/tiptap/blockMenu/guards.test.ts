@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getBlockStructureLabel, toBlockMenuTarget, toSelectionBlockMenuTarget } from './guards'
+import { getBlockStructureLabel, isSelectionInsideList, toBlockMenuTarget, toSelectionBlockMenuTarget } from './guards'
 import type { BlockMenuTarget } from './types'
 
 function target(overrides: Partial<BlockMenuTarget>): BlockMenuTarget {
@@ -202,5 +202,42 @@ describe('toSelectionBlockMenuTarget', () => {
     } as any
 
     expect(toSelectionBlockMenuTarget(editor)).toBeNull()
+  })
+})
+
+describe('isSelectionInsideList', () => {
+  it('detects selection inside a nested list block', () => {
+    const editor = {
+      state: {
+        selection: {
+          $from: {
+            depth: 3,
+            node: (depth: number) => {
+              if (depth === 3) return { type: { name: 'paragraph' } }
+              if (depth === 2) return { type: { name: 'listItem' } }
+              if (depth === 1) return { type: { name: 'orderedList' } }
+              return { type: { name: 'doc' } }
+            }
+          }
+        }
+      }
+    } as any
+
+    expect(isSelectionInsideList(editor)).toBe(true)
+  })
+
+  it('returns false for a regular paragraph selection', () => {
+    const editor = {
+      state: {
+        selection: {
+          $from: {
+            depth: 1,
+            node: (depth: number) => (depth === 1 ? { type: { name: 'paragraph' } } : { type: { name: 'doc' } })
+          }
+        }
+      }
+    } as any
+
+    expect(isSelectionInsideList(editor)).toBe(false)
   })
 })

@@ -25,6 +25,7 @@ export type UseEditorSlashInsertionOptions = {
   readSlashContext: () => SlashInsertionContext | null
   currentHeadings: () => Array<{ level: 1 | 2 | 3; text: string }>
   slugifyHeading: (heading: string) => string
+  suppressBlockHandleReveal: (options?: { durationMs?: number }) => void
 }
 
 /**
@@ -197,13 +198,16 @@ export function useEditorSlashInsertion(options: UseEditorSlashInsertionOptions)
       }
       if (style === 'ordered') {
         chain.toggleOrderedList().run()
+        options.suppressBlockHandleReveal()
         return true
       }
       if (style === 'checklist') {
         chain.toggleTaskList().run()
+        options.suppressBlockHandleReveal()
         return true
       }
       chain.toggleBulletList().run()
+      options.suppressBlockHandleReveal()
       return true
     }
 

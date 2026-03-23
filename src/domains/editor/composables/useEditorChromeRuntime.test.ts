@@ -284,6 +284,30 @@ describe('useEditorChromeRuntime', () => {
     await runtime.dialogsAndLifecycle.onUnmountCleanup()
   })
 
+  it('suppresses gutter reveal across structural list edits until the delay expires', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-03-09T10:00:00Z'))
+    const { runtime } = createRuntimeHarness()
+
+    try {
+      runtime.blockAndTable.suppressBlockHandleReveal({ durationMs: 500 })
+
+      expect(runtime.blockAndTable.blockHandleRevealSuppressedUntil.value).toBeGreaterThan(Date.now())
+
+      await vi.advanceTimersByTimeAsync(250)
+      await flushMicrotasks()
+      expect(runtime.blockAndTable.blockHandleRevealSuppressedUntil.value).toBeGreaterThan(Date.now())
+
+      await vi.advanceTimersByTimeAsync(300)
+      await flushMicrotasks()
+      expect(runtime.blockAndTable.blockHandleRevealSuppressedUntil.value).toBe(0)
+
+      await runtime.dialogsAndLifecycle.onUnmountCleanup()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('ignores title-field key events so header Enter does not route through body editor handlers', async () => {
     const { runtime, holder, interactionMocks } = createRuntimeHarness()
     await runtime.dialogsAndLifecycle.onMountInit()

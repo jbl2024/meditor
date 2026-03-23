@@ -73,6 +73,17 @@ export function toSelectionBlockMenuTarget(editor: Editor | null): BlockMenuTarg
   return null
 }
 
+export function isSelectionInsideList(editor: Editor | null): boolean {
+  if (!editor) return false
+  const { selection } = editor.state ?? {}
+  const $from = selection?.$from
+  if (!$from) return false
+  for (let depth = $from.depth; depth >= 0; depth -= 1) {
+    if (LIST_NODE_TYPES.has($from.node(depth).type.name)) return true
+  }
+  return false
+}
+
 export function getBlockStructureLabel(target: BlockMenuTarget | null): string {
   if (!target) return ''
 

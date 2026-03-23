@@ -161,7 +161,8 @@ interactionRuntime = useEditorInteractionRuntime({
       hideTableToolbar: () => chromeRuntime.blockAndTable.hideTableToolbar()
     },
     blockHandles: {
-      syncSelectionTarget: () => chromeRuntime.blockAndTable.onBlockHandleSelectionUpdate()
+      syncSelectionTarget: () => chromeRuntime.blockAndTable.onBlockHandleSelectionUpdate(),
+      suppressReveal: (options) => chromeRuntime.blockAndTable.suppressBlockHandleReveal(options?.durationMs)
     },
     toolbars: {
       updateFormattingToolbar: () => chromeRuntime.toolbars.updateFormattingToolbar(),
@@ -320,6 +321,8 @@ const {
   computedDragLock,
   debugTargetPos,
   typingText,
+  blockHandleRevealSuppressedUntil,
+  suppressBlockHandleReveal,
   dragHandleComputePositionConfig,
   blockMenuOpen,
   blockMenuIndex,
@@ -352,6 +355,7 @@ const {
   onEditorMouseMove,
   onEditorMouseLeave
 } = blockAndTable
+void suppressBlockHandleReveal
 const activeBlockStructureLabel = computed(() => getBlockStructureLabel(dragHandleUiState.value.activeTarget))
 const blockHandleVisible = ref(false)
 let blockHandleVisibilityTimer: ReturnType<typeof setTimeout> | null = null
@@ -364,16 +368,29 @@ function clearBlockHandleVisibilityTimer() {
   blockHandleVisibilityTimer = null
 }
 
-function syncBlockDragHandleVisibilityState() {
+function applyBlockHandleVisibility(nextVisible: boolean) {
   const handleElement = contentShell.value?.querySelector('.tomosona-drag-handle') as HTMLElement | null
   if (!handleElement) return
+  handleElement.style.visibility = 'visible'
+  handleElement.style.opacity = nextVisible ? '1' : '0'
+  handleElement.style.pointerEvents = nextVisible ? 'auto' : 'none'
+}
 
-  const shouldShow = Boolean(dragHandleUiState.value.activeTarget) && !typingText.value
+function syncBlockDragHandleVisibilityState(options?: { immediateHide?: boolean }) {
+  const shouldShow = Boolean(dragHandleUiState.value.activeTarget)
+    && !typingText.value
+    && blockHandleRevealSuppressedUntil.value <= Date.now()
   const nextVisible = shouldShow
+
+  if (options?.immediateHide && !nextVisible) {
+    clearBlockHandleVisibilityTimer()
+    blockHandleVisible.value = false
+    applyBlockHandleVisibility(false)
+    return
+  }
+
   if (blockHandleVisible.value === nextVisible && blockHandleVisibilityTimer === null) {
-    handleElement.style.visibility = 'visible'
-    handleElement.style.opacity = nextVisible ? '1' : '0'
-    handleElement.style.pointerEvents = nextVisible ? 'auto' : 'none'
+    applyBlockHandleVisibility(nextVisible)
     return
   }
 
@@ -381,11 +398,7 @@ function syncBlockDragHandleVisibilityState() {
   blockHandleVisibilityTimer = window.setTimeout(() => {
     blockHandleVisible.value = nextVisible
     blockHandleVisibilityTimer = null
-    const latestHandle = contentShell.value?.querySelector('.tomosona-drag-handle') as HTMLElement | null
-    if (!latestHandle) return
-    latestHandle.style.visibility = 'visible'
-    latestHandle.style.opacity = nextVisible ? '1' : '0'
-    latestHandle.style.pointerEvents = nextVisible ? 'auto' : 'none'
+    applyBlockHandleVisibility(nextVisible)
   }, nextVisible ? BLOCK_HANDLE_SHOW_DELAY_MS : BLOCK_HANDLE_HIDE_DELAY_MS)
 }
 
@@ -444,6 +457,13 @@ watch(
   typingText,
   () => {
     syncBlockDragHandleVisibility()
+  },
+  { immediate: true, flush: 'post' }
+)
+watch(
+  blockHandleRevealSuppressedUntil,
+  () => {
+    syncBlockDragHandleVisibilityState({ immediateHide: true })
   },
   { immediate: true, flush: 'post' }
 )

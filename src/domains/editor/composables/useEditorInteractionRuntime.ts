@@ -46,6 +46,7 @@ export type EditorInteractionRuntimeChromePort = {
   }
   blockHandles: {
     syncSelectionTarget: () => void
+    suppressReveal: (options?: { durationMs?: number }) => void
   }
   toolbars: {
     updateFormattingToolbar: () => void
@@ -144,7 +145,8 @@ export function useEditorInteractionRuntime(options: UseEditorInteractionRuntime
     currentTextSelectionContext: slashMenu.currentTextSelectionContext,
     readSlashContext: slashMenu.readSlashContext,
     currentHeadings: () => navigation.parseOutlineFromDoc(),
-    slugifyHeading
+    slugifyHeading,
+    suppressBlockHandleReveal: (options) => chromePort.blockHandles.suppressReveal(options)
   })
 
   /**
@@ -257,6 +259,9 @@ export function useEditorInteractionRuntime(options: UseEditorInteractionRuntime
     zoomPort: {
       zoomEditorBy: (delta) => chromePort.zoom.zoomEditorBy(delta),
       resetEditorZoom: () => chromePort.zoom.resetEditorZoom()
+    },
+    blockHandlePort: {
+      suppressReveal: (options) => chromePort.blockHandles.suppressReveal(options)
     }
   })
 

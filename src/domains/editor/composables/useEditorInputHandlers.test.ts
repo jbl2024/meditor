@@ -43,6 +43,9 @@ function createHandlers(overrides: Partial<Parameters<typeof useEditorInputHandl
       updateTableToolbar: vi.fn(),
       syncSlashMenuFromSelection: vi.fn()
     },
+    blockHandlePort: {
+      suppressReveal: vi.fn()
+    },
     zoomPort: {
       zoomEditorBy: vi.fn(() => 1),
       resetEditorZoom: vi.fn(() => 1)
@@ -88,6 +91,81 @@ describe('useEditorInputHandlers', () => {
     handlers.onEditorKeydown(event)
     expect(options.menusPort.closeSlashMenu).toHaveBeenCalledTimes(1)
     expect(options.editingPort.insertBlockFromDescriptor).toHaveBeenCalledWith('quote', {})
+  })
+
+  it('suppresses gutter reveal when Enter inserts a new list item', () => {
+    const listEditor = {
+      state: {
+        selection: {
+          $from: {
+            depth: 3,
+            parent: { type: { name: 'paragraph' } },
+            node: (depth: number) => {
+              if (depth === 3) return { type: { name: 'paragraph' } }
+              if (depth === 2) return { type: { name: 'listItem' } }
+              if (depth === 1) return { type: { name: 'bulletList' } }
+              return { type: { name: 'doc' } }
+            }
+          }
+        }
+      }
+    } as unknown as Editor
+
+    const { handlers, options } = createHandlers({
+      menusPort: {
+        visibleSlashCommands: ref([]),
+        slashOpen: ref(false),
+        slashIndex: ref(0),
+        closeSlashMenu: vi.fn(),
+        blockMenuOpen: ref(false),
+        closeBlockMenu: vi.fn(),
+        tableToolbarOpen: ref(false),
+        hideTableToolbar: vi.fn(),
+        inlineFormatToolbar: {
+          linkPopoverOpen: ref(false),
+          cancelLink: vi.fn()
+        }
+      },
+      editingPort: {
+        getEditor: () => listEditor,
+        currentPath: ref('a.md'),
+        captureCaret: vi.fn(),
+        currentTextSelectionContext: () => ({ text: 'alpha', nodeType: 'paragraph', from: 1, to: 6 }),
+        insertBlockFromDescriptor: vi.fn(() => true)
+      }
+    })
+
+    handlers.onEditorKeydown(new KeyboardEvent('keydown', { key: 'Enter' }))
+
+    expect(options.blockHandlePort.suppressReveal).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not suppress gutter reveal when Enter is pressed outside a list', () => {
+    const paragraphEditor = {
+      state: {
+        selection: {
+          $from: {
+            depth: 1,
+            parent: { type: { name: 'paragraph' } },
+            node: (depth: number) => (depth === 1 ? { type: { name: 'paragraph' } } : { type: { name: 'doc' } })
+          }
+        }
+      }
+    } as unknown as Editor
+
+    const { handlers, options } = createHandlers({
+      editingPort: {
+        getEditor: () => paragraphEditor,
+        currentPath: ref('a.md'),
+        captureCaret: vi.fn(),
+        currentTextSelectionContext: () => ({ text: 'alpha', nodeType: 'paragraph', from: 1, to: 6 }),
+        insertBlockFromDescriptor: vi.fn(() => true)
+      }
+    })
+
+    handlers.onEditorKeydown(new KeyboardEvent('keydown', { key: 'Enter' }))
+
+    expect(options.blockHandlePort.suppressReveal).not.toHaveBeenCalled()
   })
 
   it('routes keyup refresh hooks', () => {

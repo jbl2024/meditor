@@ -165,7 +165,8 @@ function createRuntimeHarness(input?: {
         hideTableToolbar: vi.fn()
       },
       blockHandles: {
-        syncSelectionTarget: vi.fn()
+        syncSelectionTarget: vi.fn(),
+        suppressReveal: vi.fn()
       },
       toolbars: {
         updateFormattingToolbar: vi.fn(),

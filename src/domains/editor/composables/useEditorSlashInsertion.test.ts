@@ -17,12 +17,14 @@ describe('useEditorSlashInsertion', () => {
   it('inserts ordered list and consumes slash token range', () => {
     const chain = createChain()
     const editor = { chain: vi.fn(() => chain) } as any
+    const suppressBlockHandleReveal = vi.fn()
     const insertion = useEditorSlashInsertion({
       getEditor: () => editor,
       currentTextSelectionContext: () => ({ text: '/li', nodeType: 'paragraph', from: 10, to: 13 }),
       readSlashContext: () => ({ from: 10, to: 13 }),
       currentHeadings: () => [],
-      slugifyHeading: (heading) => heading.toLowerCase()
+      slugifyHeading: (heading) => heading.toLowerCase(),
+      suppressBlockHandleReveal
     })
 
     const ok = insertion.insertBlockFromDescriptor('list', { style: 'ordered' })
@@ -30,6 +32,7 @@ describe('useEditorSlashInsertion', () => {
     expect(ok).toBe(true)
     expect(chain.deleteRange).toHaveBeenCalledWith({ from: 10, to: 13 })
     expect(chain.toggleOrderedList).toHaveBeenCalled()
+    expect(suppressBlockHandleReveal).toHaveBeenCalledTimes(1)
   })
 
   it('inserts structural content when slash context is absent', () => {
@@ -40,7 +43,8 @@ describe('useEditorSlashInsertion', () => {
       currentTextSelectionContext: () => ({ text: '/h2', nodeType: 'paragraph', from: 5, to: 8 }),
       readSlashContext: () => null,
       currentHeadings: () => [],
-      slugifyHeading: (heading) => heading.toLowerCase()
+      slugifyHeading: (heading) => heading.toLowerCase(),
+      suppressBlockHandleReveal: vi.fn()
     })
 
     const ok = insertion.insertBlockFromDescriptor('header', { level: 2, text: 'Roadmap' }, { replaceRange: { from: 5, to: 8 } })
@@ -61,7 +65,8 @@ describe('useEditorSlashInsertion', () => {
       currentTextSelectionContext: () => ({ text: '', nodeType: 'paragraph', from: 1, to: 1 }),
       readSlashContext: () => null,
       currentHeadings: () => [],
-      slugifyHeading: (heading) => heading.toLowerCase()
+      slugifyHeading: (heading) => heading.toLowerCase(),
+      suppressBlockHandleReveal: vi.fn()
     })
 
     expect(insertion.insertBlockFromDescriptor('code', {})).toBe(false)
@@ -75,7 +80,8 @@ describe('useEditorSlashInsertion', () => {
       currentTextSelectionContext: () => ({ text: '/html', nodeType: 'paragraph', from: 2, to: 7 }),
       readSlashContext: () => ({ from: 2, to: 7 }),
       currentHeadings: () => [],
-      slugifyHeading: (heading) => heading.toLowerCase()
+      slugifyHeading: (heading) => heading.toLowerCase(),
+      suppressBlockHandleReveal: vi.fn()
     })
 
     const ok = insertion.insertBlockFromDescriptor('html', { html: '<div>test</div>' })
@@ -101,7 +107,8 @@ describe('useEditorSlashInsertion', () => {
         { level: 2 as const, text: 'Roadmap' },
         { level: 1 as const, text: 'Appendix' }
       ],
-      slugifyHeading: (heading) => heading.toLowerCase()
+      slugifyHeading: (heading) => heading.toLowerCase(),
+      suppressBlockHandleReveal: vi.fn()
     })
 
     const ok = insertion.insertBlockFromDescriptor('toc', {})
@@ -164,7 +171,8 @@ describe('useEditorSlashInsertion', () => {
       currentTextSelectionContext: () => ({ text: '/toc', nodeType: 'paragraph', from: 4, to: 8 }),
       readSlashContext: () => ({ from: 4, to: 8 }),
       currentHeadings: () => [],
-      slugifyHeading: (heading) => heading.toLowerCase()
+      slugifyHeading: (heading) => heading.toLowerCase(),
+      suppressBlockHandleReveal: vi.fn()
     })
 
     const ok = insertion.insertBlockFromDescriptor('toc', {})
@@ -188,7 +196,8 @@ describe('useEditorSlashInsertion', () => {
         { level: 2 as const, text: 'Architecture' },
         { level: 1 as const, text: 'Appendix' }
       ],
-      slugifyHeading: (heading) => heading.toLowerCase()
+      slugifyHeading: (heading) => heading.toLowerCase(),
+      suppressBlockHandleReveal: vi.fn()
     })
 
     const ok = insertion.insertBlockFromDescriptor('toc', { maxLevel: 1 })

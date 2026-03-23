@@ -138,6 +138,8 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   const pulseAnchorNonce = ref(0)
   const typingText = ref(false)
   let typingTextTimer: ReturnType<typeof setTimeout> | null = null
+  const blockHandleRevealSuppressedUntil = ref(0)
+  let blockHandleRevealSuppressionTimer: ReturnType<typeof setTimeout> | null = null
 
   const lastStableBlockMenuTarget = ref<BlockMenuTarget | null>(null)
   const blockMenuFloatingEl = ref<HTMLDivElement | null>(null)
@@ -173,6 +175,12 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     typingTextTimer = null
   }
 
+  function clearBlockHandleRevealSuppressionTimer() {
+    if (!blockHandleRevealSuppressionTimer) return
+    clearTimeout(blockHandleRevealSuppressionTimer)
+    blockHandleRevealSuppressionTimer = null
+  }
+
   /**
    * Treats printable key presses and direct text-edit keys as active typing so
    * gutter controls can stay out of the way while content is being entered.
@@ -191,6 +199,24 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
       typingText.value = false
       typingTextTimer = null
     }, 220)
+  }
+
+  /**
+   * Delays gutter reappearance after list edits so new list items do not flash
+   * the block handle while the caret is still settling.
+   */
+  function suppressBlockHandleReveal(durationOrOptions?: number | { durationMs?: number }) {
+    const durationMs = typeof durationOrOptions === 'number'
+      ? durationOrOptions
+      : durationOrOptions?.durationMs ?? 500
+    const nextUntil = Date.now() + durationMs
+    blockHandleRevealSuppressedUntil.value = Math.max(blockHandleRevealSuppressedUntil.value, nextUntil)
+    clearBlockHandleRevealSuppressionTimer()
+    const remaining = Math.max(0, blockHandleRevealSuppressedUntil.value - Date.now())
+    blockHandleRevealSuppressionTimer = window.setTimeout(() => {
+      blockHandleRevealSuppressionTimer = null
+      blockHandleRevealSuppressedUntil.value = 0
+    }, remaining)
   }
 
   const inlineFormatToolbar = useInlineFormatToolbar({
@@ -571,6 +597,8 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     closeTransientMenus()
     resetDragHandleState()
     resetTransientCaches()
+    clearBlockHandleRevealSuppressionTimer()
+    blockHandleRevealSuppressedUntil.value = 0
     closeMermaidPreview()
   }
 
@@ -762,7 +790,9 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     mountSequence += 1
     cancelPendingDocumentMouseDownBind()
     clearTypingTextTimer()
+    clearBlockHandleRevealSuppressionTimer()
     typingText.value = false
+    blockHandleRevealSuppressedUntil.value = 0
     tableInteractions.clearTimers()
     if (mermaidReplaceDialog.value.resolve) {
       mermaidReplaceDialog.value.resolve(false)
@@ -880,6 +910,8 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     computedDragLock: blockAndTableControls.computedDragLock,
     debugTargetPos: blockAndTableControls.debugTargetPos,
     typingText,
+    blockHandleRevealSuppressedUntil,
+    suppressBlockHandleReveal,
     dragHandleComputePositionConfig,
     blockMenuOpen: blockAndTableControls.blockMenuControls.blockMenuOpen,
     blockMenuIndex: blockAndTableControls.blockMenuControls.blockMenuIndex,
