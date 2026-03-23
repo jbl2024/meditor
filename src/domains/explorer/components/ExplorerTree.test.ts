@@ -35,6 +35,7 @@ async function mountHarness(initialActivePath = '/vault/a.md') {
   document.body.appendChild(root)
   const activePath = ref(initialActivePath)
   const explorerRef = ref<InstanceType<typeof ExplorerTree> | null>(null)
+  const events: string[] = []
 
   const app = createApp(defineComponent({
     setup() {
@@ -48,7 +49,8 @@ async function mountHarness(initialActivePath = '/vault/a.md') {
           onError: () => {},
           onPathRenamed: () => {},
           onRequestCreate: () => {},
-          onToggleContext: () => {}
+          onToggleContext: () => {},
+          onConvertToWord: (path: string) => events.push(path)
         })
     }
   }))
@@ -57,7 +59,7 @@ async function mountHarness(initialActivePath = '/vault/a.md') {
   await nextTick()
   await nextTick()
 
-  return { app, root, activePath, explorerRef }
+  return { app, root, activePath, explorerRef, events }
 }
 
 describe('ExplorerTree', () => {
@@ -181,6 +183,32 @@ describe('ExplorerTree', () => {
     await nextTick()
 
     expect(openPathExternal).toHaveBeenCalledWith('/vault/a.md')
+
+    mounted.app.unmount()
+  })
+
+  it('emits convert to Word from the explorer context menu', async () => {
+    listChildren.mockImplementation(async (dirPath: string) => {
+      if (dirPath === '/vault') {
+        return [fileNode('/vault/a.md')]
+      }
+      return []
+    })
+
+    const mounted = await mountHarness('/vault/a.md')
+    const row = mounted.root.querySelector('[data-explorer-path="/vault/a.md"]') as HTMLElement
+    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 120, clientY: 80 }))
+    await nextTick()
+
+    const convertButton = Array.from(document.body.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Convert to Word'
+    ) as HTMLButtonElement | undefined
+
+    expect(convertButton).toBeDefined()
+    convertButton?.click()
+    await nextTick()
+
+    expect(mounted.events).toEqual(['/vault/a.md'])
 
     mounted.app.unmount()
   })

@@ -81,6 +81,7 @@ export type AppShellCommandsActionPort = {
   openWorkspacePicker: () => Promise<boolean>
   closeWorkspace: () => Promise<void>
   revealInFileManager: (path: string) => Promise<void>
+  convertMarkdownToWord: (path: string) => Promise<string>
   closeOverflowMenu: () => void
   focusSearchInput: () => void
   scheduleCosmosNodeFocus: (nodeId: string) => void
@@ -279,6 +280,26 @@ export function useAppShellCommands(options: UseAppShellCommandsOptions) {
     }
   }
 
+  async function convertMarkdownToWord(path: string) {
+    const normalizedPath = path.trim()
+    if (!normalizedPath || !options.workspacePort.hasWorkspace.value) return false
+    if (!options.documentPort.isMarkdownPath(normalizedPath)) {
+      options.workspacePort.notifyError('Select a Markdown file to convert.')
+      return false
+    }
+
+    try {
+      const outputPath = await options.actionPort.convertMarkdownToWord(normalizedPath)
+      options.workspacePort.notifySuccess(
+        `Converted ${options.documentPort.toRelativePath(normalizedPath)} to ${options.documentPort.toRelativePath(outputPath)}.`
+      )
+      return true
+    } catch (err) {
+      options.workspacePort.notifyError(err instanceof Error ? err.message : 'Could not convert to Word.')
+      return false
+    }
+  }
+
   async function openCommandPalette() {
     options.actionPort.closeOverflowMenu()
     await options.actionPort.openQuickOpen('>')
@@ -370,6 +391,7 @@ export function useAppShellCommands(options: UseAppShellCommandsOptions) {
     openSearchPanel,
     openFavoriteFromSidebar,
     revealActiveInExplorer,
+    convertMarkdownToWord,
     openCommandPalette,
     closeAllTabsFromPalette,
     closeAllTabsOnCurrentPaneFromPalette,

@@ -20,6 +20,7 @@ function createHarness(options: { isFavorite?: boolean } = {}) {
     addActiveNoteToSecondBrainFromPalette: vi.fn(async () => true),
     addActiveNoteToFavoritesFromPalette: vi.fn(async () => true),
     removeActiveNoteFromFavoritesFromPalette: vi.fn(async () => true),
+    convertMarkdownToWord: vi.fn(async () => true),
     openSettingsFromPalette: vi.fn(async () => true),
     openNoteInCosmosFromPalette: vi.fn(async () => true),
     openWorkspaceFromPalette: vi.fn(async () => true),
@@ -96,6 +97,7 @@ describe('useAppShellPaletteActions', () => {
     expect(actionIds).toContain('theme-select')
     expect(actionIds).toContain('theme-system')
     expect(actionIds.indexOf('theme-system')).toBeLessThan(actionIds.indexOf('theme-tomosona-light'))
+    expect(actionIds).toContain('convert-to-word')
     expect(actionIds[actionIds.length - 2]).toBe('open-file')
     expect(actionIds[actionIds.length - 1]).toBe('reveal-in-explorer')
     expect(api.paletteActionPriority['open-file']).toBe(0)
@@ -122,10 +124,12 @@ describe('useAppShellPaletteActions', () => {
 
     const openHome = api.paletteActions.value.find((item) => item.id === 'open-home-view')
     const openFile = api.paletteActions.value.find((item) => item.id === 'open-file')
+    const convertToWord = api.paletteActions.value.find((item) => item.id === 'convert-to-word')
     const themeSelect = api.paletteActions.value.find((item) => item.id === 'theme-select')
 
     expect(openHome).toBeTruthy()
     expect(openFile).toBeTruthy()
+    expect(convertToWord).toBeTruthy()
     expect(themeSelect).toBeTruthy()
 
     await openHome?.run()
@@ -134,8 +138,22 @@ describe('useAppShellPaletteActions', () => {
     expect(openFile?.run()).toBe(false)
     expect(quickOpenQuery.value).toBe('')
 
+    await convertToWord?.run()
+    expect(actionPort.convertMarkdownToWord).toHaveBeenCalledWith('/vault/note.md')
+
     expect(themeSelect?.run()).toBe(false)
     expect(actionPort.openThemePickerFromPalette).toHaveBeenCalledTimes(1)
     scope.stop()
+  })
+
+  it('hides convert to Word when the active file is not markdown', () => {
+    const { api, scope } = createHarness()
+    const next = createHarness()
+    next.activeFilePath.value = '/vault/note.txt'
+
+    expect(api.paletteActions.value.map((item) => item.id)).toContain('convert-to-word')
+    expect(next.api.paletteActions.value.map((item) => item.id)).not.toContain('convert-to-word')
+    scope.stop()
+    next.scope.stop()
   })
 })

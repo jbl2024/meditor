@@ -97,6 +97,7 @@ const QUICK_OPEN_BROWSE_ACTION_IDS = [
   'open-alters-view',
   'open-today',
   'create-new-file',
+  'convert-to-word',
   'open-favorites',
   'open-settings'
 ] as const

@@ -50,6 +50,7 @@ const emit = defineEmits<{
   explorerRequestCreate: [payload: { parentPath: string; entryKind: 'file' | 'folder' }]
   explorerSelection: [paths: string[]]
   explorerError: [message: string]
+  explorerConvertToWord: [path: string]
   favoritesOpen: [path: string]
   favoritesRemove: [path: string]
   selectWorkingFolder: []
@@ -132,6 +133,7 @@ defineExpose({
           @request-create="emit('explorerRequestCreate', $event)"
           @select="emit('explorerSelection', $event)"
           @error="emit('explorerError', $event)"
+          @convert-to-word="emit('explorerConvertToWord', $event)"
         />
         <div v-else class="placeholder empty-explorer">
           <span>No workspace selected.</span>

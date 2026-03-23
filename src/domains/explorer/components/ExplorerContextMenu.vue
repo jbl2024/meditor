@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Component } from 'vue'
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   ArrowTopRightOnSquareIcon,
   DocumentPlusIcon,
@@ -14,6 +14,7 @@ export type MenuAction =
   | 'open'
   | 'open-external'
   | 'reveal'
+  | 'convert-to-word'
   | 'rename'
   | 'delete'
   | 'duplicate'
@@ -30,6 +31,7 @@ const props = defineProps<{
   canPaste: boolean
   canRename: boolean
   canDelete: boolean
+  canConvert: boolean
 }>()
 
 const emit = defineEmits<{
@@ -40,22 +42,34 @@ const menuRef = ref<InstanceType<typeof UiMenu> | null>(null)
 const clampedX = ref(0)
 const clampedY = ref(0)
 
-const items: Array<{ id: MenuAction; label: string; icon: Component | null; enabled?: boolean }> = [
-  { id: 'open', label: 'Open', icon: null },
-  { id: 'open-external', label: 'Open externally', icon: ArrowTopRightOnSquareIcon },
-  { id: 'reveal', label: 'Reveal in file manager', icon: null },
-  { id: 'rename', label: 'Rename', icon: null },
-  { id: 'duplicate', label: 'Duplicate', icon: null },
-  { id: 'delete', label: 'Delete', icon: TrashIcon },
-  { id: 'new-file', label: 'New note', icon: DocumentPlusIcon },
-  { id: 'new-folder', label: 'New folder', icon: FolderPlusIcon },
-  { id: 'cut', label: 'Cut', icon: null },
-  { id: 'copy', label: 'Copy', icon: null },
-  { id: 'paste', label: 'Paste', icon: null }
-]
+function createMenuItem(
+  id: MenuAction,
+  label: string,
+  icon: Component | null
+): { id: MenuAction; label: string; icon: Component | null } {
+  return { id, label, icon }
+}
+
+const items = computed((): Array<{ id: MenuAction; label: string; icon: Component | null }> => {
+  return [
+    createMenuItem('open', 'Open', null),
+    createMenuItem('open-external', 'Open externally', ArrowTopRightOnSquareIcon as Component),
+    createMenuItem('reveal', 'Reveal in file manager', null),
+    ...(props.canConvert ? [createMenuItem('convert-to-word', 'Convert to Word', null)] : []),
+    createMenuItem('rename', 'Rename', null),
+    createMenuItem('duplicate', 'Duplicate', null),
+    createMenuItem('delete', 'Delete', TrashIcon as Component),
+    createMenuItem('new-file', 'New note', DocumentPlusIcon as Component),
+    createMenuItem('new-folder', 'New folder', FolderPlusIcon as Component),
+    createMenuItem('cut', 'Cut', null),
+    createMenuItem('copy', 'Copy', null),
+    createMenuItem('paste', 'Paste', null)
+  ]
+})
 
 function isDisabled(id: MenuAction): boolean {
   if (id === 'open' || id === 'open-external' || id === 'reveal') return !props.canOpen
+  if (id === 'convert-to-word') return !props.canConvert
   if (id === 'rename') return !props.canRename
   if (id === 'delete') return !props.canDelete
   if (id === 'paste') return !props.canPaste

@@ -79,6 +79,7 @@ function createCommands() {
     openWorkspacePicker: vi.fn(async () => true),
     closeWorkspace: vi.fn(async () => {}),
     revealInFileManager: vi.fn(async () => {}),
+    convertMarkdownToWord: vi.fn(async (path: string) => `${path.replace(/\.md$/i, '')}.docx`),
     closeOverflowMenu: vi.fn(),
     focusSearchInput: vi.fn(),
     scheduleCosmosNodeFocus: vi.fn()
@@ -176,6 +177,28 @@ describe('useAppShellCommands', () => {
     expect(workspacePort.previousNonCosmosMode.value).toBe('search')
     expect(actionPort.closeOverflowMenu).toHaveBeenCalled()
     expect(actionPort.focusSearchInput).toHaveBeenCalled()
+    scope.stop()
+  })
+
+  it('converts the active markdown note to Word through the backend port', async () => {
+    const { api, scope, actionPort, workspacePort } = createCommands()
+
+    expect(await api.convertMarkdownToWord('/vault/a.md')).toBe(true)
+    expect(actionPort.convertMarkdownToWord).toHaveBeenCalledWith('/vault/a.md')
+    expect(workspacePort.notifySuccess).toHaveBeenCalledWith('Converted a.md to a.docx.')
+
+    actionPort.convertMarkdownToWord.mockRejectedValueOnce(new Error('Word conversion failed.'))
+    expect(await api.convertMarkdownToWord('/vault/a.md')).toBe(false)
+    expect(workspacePort.notifyError).toHaveBeenCalledWith('Word conversion failed.')
+    scope.stop()
+  })
+
+  it('rejects non-markdown conversion targets before invoking the backend port', async () => {
+    const { api, scope, actionPort, workspacePort } = createCommands()
+
+    expect(await api.convertMarkdownToWord('/vault/a.txt')).toBe(false)
+    expect(actionPort.convertMarkdownToWord).not.toHaveBeenCalled()
+    expect(workspacePort.notifyError).toHaveBeenCalledWith('Select a Markdown file to convert.')
     scope.stop()
   })
 

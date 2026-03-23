@@ -2,6 +2,7 @@
 //! and Cosmos graph payload generation.
 
 mod db;
+mod docx_conversion;
 mod editor_sync;
 mod echoes;
 mod favorites;
@@ -38,6 +39,7 @@ use fs_ops::{
     read_file_metadata, read_text_file, rename_entry, reveal_in_file_manager,
     select_working_folder, set_working_folder, trash_entry, write_text_file,
 };
+use docx_conversion::convert_markdown_to_docx;
 use editor_sync::{read_note_snapshot, save_note_buffer};
 pub(crate) use index_schema::refresh_semantic_edges_cache_now_sync;
 use index_schema::{
@@ -387,6 +389,7 @@ pub fn run() {
             read_text_file,
             read_file_metadata,
             write_text_file,
+            convert_markdown_to_docx,
             read_note_snapshot,
             save_note_buffer,
             create_entry,

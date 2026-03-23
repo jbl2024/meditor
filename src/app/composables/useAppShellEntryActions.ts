@@ -59,6 +59,7 @@ function createShellPaletteActionPort(): AppShellPaletteActionPort {
     resetZoomFromPalette: () => false,
     openThemePickerFromPalette: () => false,
     setThemeFromPalette: () => false,
+    convertMarkdownToWord: () => Promise.resolve(false),
     openTodayNote: () => false,
     openYesterdayNote: () => false,
     openSpecificDateNote: () => false,

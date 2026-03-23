@@ -137,9 +137,9 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   const pulseSourceText = ref('')
   const pulseAnchorNonce = ref(0)
   const typingText = ref(false)
-  let typingTextTimer: ReturnType<typeof setTimeout> | null = null
+  let typingTextTimer: number | null = null
   const blockHandleRevealSuppressedUntil = ref(0)
-  let blockHandleRevealSuppressionTimer: ReturnType<typeof setTimeout> | null = null
+  let blockHandleRevealSuppressionTimer: number | null = null
 
   const lastStableBlockMenuTarget = ref<BlockMenuTarget | null>(null)
   const blockMenuFloatingEl = ref<HTMLDivElement | null>(null)

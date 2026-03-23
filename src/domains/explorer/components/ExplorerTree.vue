@@ -35,6 +35,7 @@ const emit = defineEmits<{
   'paths-deleted': [paths: string[]]
   'request-create': [payload: { parentPath: string; entryKind: EntryKind }]
   'toggle-context': [path: string]
+  'convert-to-word': [path: string]
 }>()
 
 const treeRef = ref<HTMLElement | null>(null)
@@ -43,7 +44,7 @@ const filterQuery = ref('')
 const debouncedFilterQuery = ref('')
 const filterInputRef = ref<InstanceType<typeof UiInput> | null>(null)
 const isFilterVisible = ref(false)
-let filterDebounceTimer: ReturnType<typeof window.setTimeout> | null = null
+let filterDebounceTimer: number | null = null
 
 const selectionManager = useSelectionManager()
 const isMac = navigator.platform.toLowerCase().includes('mac')
@@ -306,6 +307,13 @@ async function onContextAction(action: MenuAction) {
     await operations.revealInManager(targetPath)
   }
 
+  if (action === 'convert-to-word' && targetPath) {
+    const node = treeState.nodeByPath.value[targetPath]
+    if (node?.is_markdown) {
+      emit('convert-to-word', targetPath)
+    }
+  }
+
   if (action === 'rename' && targetPath) {
     operations.startRename(targetPath)
   }
@@ -476,6 +484,7 @@ onBeforeUnmount(() => {
         :can-paste="operations.canPaste.value"
         :can-rename="Boolean(contextMenu.targetPath)"
         :can-delete="Boolean(contextMenu.targetPath)"
+        :can-convert="Boolean(contextMenu.targetPath && treeState.nodeByPath.value[contextMenu.targetPath]?.is_markdown)"
         @action="onContextAction"
       />
 

@@ -45,6 +45,7 @@ export type AppShellPaletteActionPort = {
   addActiveNoteToSecondBrainFromPalette: () => boolean | Promise<boolean>
   addActiveNoteToFavoritesFromPalette: () => boolean | Promise<boolean>
   removeActiveNoteFromFavoritesFromPalette: () => boolean | Promise<boolean>
+  convertMarkdownToWord: (path: string) => boolean | Promise<boolean>
   openSettingsFromPalette: () => boolean | Promise<boolean>
   openNoteInCosmosFromPalette: () => boolean | Promise<boolean>
   openWorkspaceFromPalette: () => boolean | Promise<boolean>
@@ -106,6 +107,7 @@ export const PALETTE_ACTION_PRIORITY: Record<string, number> = {
   'open-settings': 13,
   'open-note-in-cosmos': 14,
   'reveal-in-explorer': 15,
+  'convert-to-word': 15.5,
   'show-shortcuts': 16,
   'create-new-file': 17,
   'close-other-tabs': 18,
@@ -172,6 +174,16 @@ export function useAppShellPaletteActions(options: UseAppShellPaletteActionsOpti
       run: () => options.actionPort.openAltersViewFromPalette(),
       closeBeforeRun: true
     }),
+    ...(
+      options.statePort.activeFilePath.value &&
+      options.documentPort.isMarkdownPath(options.statePort.activeFilePath.value)
+        ? [createPaletteAction('notes', {
+            id: 'convert-to-word',
+            label: 'Convert to Word',
+            run: () => options.actionPort.convertMarkdownToWord(options.statePort.activeFilePath.value)
+          })]
+        : []
+    ),
     createPaletteAction('notes', {
       id: 'add-active-note-to-second-brain',
       label: 'Add Active Note to Second Brain',

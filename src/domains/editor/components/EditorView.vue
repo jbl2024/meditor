@@ -358,7 +358,7 @@ const {
 void suppressBlockHandleReveal
 const activeBlockStructureLabel = computed(() => getBlockStructureLabel(dragHandleUiState.value.activeTarget))
 const blockHandleVisible = ref(false)
-let blockHandleVisibilityTimer: ReturnType<typeof setTimeout> | null = null
+let blockHandleVisibilityTimer: number | null = null
 const BLOCK_HANDLE_HIDE_DELAY_MS = 120
 const BLOCK_HANDLE_SHOW_DELAY_MS = 320
 

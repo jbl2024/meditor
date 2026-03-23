@@ -91,6 +91,7 @@ const emit = defineEmits<{
   explorerRequestCreate: [payload: { parentPath: string; entryKind: 'file' | 'folder' }]
   explorerSelection: [paths: string[]]
   explorerError: [message: string]
+  explorerConvertToWord: [path: string]
   favoritesOpen: [path: string]
   favoritesRemove: [path: string]
   selectWorkingFolder: []
@@ -202,6 +203,7 @@ defineExpose<AppShellWorkspaceSurfaceExposed>({
       @explorer-request-create="emit('explorerRequestCreate', $event)"
       @explorer-selection="emit('explorerSelection', $event)"
       @explorer-error="emit('explorerError', $event)"
+      @explorer-convert-to-word="emit('explorerConvertToWord', $event)"
       @favorites-open="emit('favoritesOpen', $event)"
       @favorites-remove="emit('favoritesRemove', $event)"
       @select-working-folder="emit('selectWorkingFolder')"

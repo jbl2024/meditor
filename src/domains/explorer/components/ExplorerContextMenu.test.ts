@@ -17,6 +17,7 @@ function mountHarness() {
           canPaste: true,
           canRename: true,
           canDelete: true,
+          canConvert: true,
           onAction: (action: string) => events.push(action)
         })
     }
@@ -51,5 +52,39 @@ describe('ExplorerContextMenu', () => {
     expect(buttons.find((button) => button.textContent?.includes('Open'))?.querySelector('.ui-menu-item-icon-spacer')).toBeTruthy()
 
     mounted.app.unmount()
+  })
+
+  it('renders convert to Word only when a markdown target can be converted', async () => {
+    const events: string[] = []
+    const mounted = createApp(defineComponent({
+      setup() {
+        return () =>
+          h(ExplorerContextMenu, {
+            x: 24,
+            y: 24,
+            canOpen: true,
+            canPaste: true,
+            canRename: true,
+            canDelete: true,
+            canConvert: true,
+            onAction: (action: string) => events.push(action)
+          })
+      }
+    }))
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+    mounted.mount(root)
+    await nextTick()
+
+    const convertButton = Array.from(document.body.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Convert to Word'
+    ) as HTMLButtonElement | undefined
+
+    expect(convertButton).toBeDefined()
+    convertButton?.click()
+    await nextTick()
+    expect(events).toContain('convert-to-word')
+
+    mounted.unmount()
   })
 })

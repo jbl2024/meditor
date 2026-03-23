@@ -20,6 +20,7 @@ import {
   selectWorkingFolder,
   writeTextFile,
 } from '../shared/api/workspaceApi'
+import { convertMarkdownToDocx } from '../shared/api/docxConversionApi'
 import { readAppSettings } from '../shared/api/settingsApi'
 import { readNoteSnapshot as readNoteSnapshotIpc, saveNoteBuffer as saveNoteBufferIpc } from '../shared/api/editorSyncApi'
 import {
@@ -1467,6 +1468,7 @@ const commands = useAppShellCommands({
     openWorkspacePicker: () => onSelectWorkingFolder(),
     closeWorkspace: () => closeWorkspace(),
     revealInFileManager,
+    convertMarkdownToWord: async (path: string) => await convertMarkdownToDocx(path),
     closeOverflowMenu,
     focusSearchInput: () => {
       document.querySelector<HTMLInputElement>('[data-search-input="true"]')?.focus()
@@ -1490,6 +1492,7 @@ const {
   openSearchPanel,
   openFavoriteFromSidebar,
   revealActiveInExplorer,
+  convertMarkdownToWord,
   openCommandPalette,
   closeAllTabsFromPalette,
   closeAllTabsOnCurrentPaneFromPalette,
@@ -1533,6 +1536,7 @@ entryActions.bindShellPaletteActionPort({
   openYesterdayNote,
   openSpecificDateNote,
   createNewFileFromPalette,
+  convertMarkdownToWord,
   closeAllTabsFromPalette,
   closeAllTabsOnCurrentPaneFromPalette,
   closeOtherTabsFromPalette,
@@ -1818,6 +1822,10 @@ function onExplorerPathsDeleted(paths: string[]) {
     favorites.markFavoriteMissing(path)
     removeLaunchpadRecentNote(path)
   }
+}
+
+function onExplorerConvertToWord(path: string) {
+  void convertMarkdownToWord(path)
 }
 
 async function readNoteSnapshot(path: string): Promise<ReadNoteSnapshotResult> {
@@ -2161,6 +2169,7 @@ onBeforeUnmount(() => {
       @explorer-request-create="onExplorerRequestCreate"
       @explorer-selection="onExplorerSelection"
       @explorer-error="onExplorerError"
+      @explorer-convert-to-word="onExplorerConvertToWord"
       @favorites-open="openFavoriteFromSidebar"
       @favorites-remove="removeFavoriteFromList"
       @select-working-folder="void workspaceRouting.openWorkspacePicker()"
