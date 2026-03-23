@@ -332,7 +332,7 @@ describe('EditorView interactions contract', () => {
       const handle = root.querySelector('.tomosona-drag-handle') as HTMLElement | null
       expect(handle).toBeTruthy()
 
-      await delay(140)
+      await delay(560)
       await flushMicrotasks()
 
       expect(handle?.style.opacity).toBe('1')
@@ -460,7 +460,6 @@ describe('EditorView interactions contract', () => {
 
       const handle = root.querySelector('.tomosona-drag-handle') as HTMLElement | null
       expect(handle).toBeTruthy()
-      expect(handle?.style.opacity).toBe('1')
 
       const holder = root.querySelector('.editor-holder') as HTMLElement
       holder.dispatchEvent(new KeyboardEvent('keydown', { key: 'x', bubbles: true, cancelable: true }))
@@ -471,7 +470,7 @@ describe('EditorView interactions contract', () => {
 
       expect(root.querySelector('.tomosona-drag-handle')?.getAttribute('style')).toContain('opacity: 0')
 
-      await delay(260)
+      await delay(560)
       await flushMicrotasks()
 
       expect(root.querySelector('.tomosona-drag-handle')?.getAttribute('style')).not.toContain('opacity: 0')

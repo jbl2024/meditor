@@ -355,6 +355,8 @@ const {
 const activeBlockStructureLabel = computed(() => getBlockStructureLabel(dragHandleUiState.value.activeTarget))
 const blockHandleVisible = ref(false)
 let blockHandleVisibilityTimer: ReturnType<typeof setTimeout> | null = null
+const BLOCK_HANDLE_HIDE_DELAY_MS = 120
+const BLOCK_HANDLE_SHOW_DELAY_MS = 320
 
 function clearBlockHandleVisibilityTimer() {
   if (!blockHandleVisibilityTimer) return
@@ -384,7 +386,7 @@ function syncBlockDragHandleVisibilityState() {
     latestHandle.style.visibility = 'visible'
     latestHandle.style.opacity = nextVisible ? '1' : '0'
     latestHandle.style.pointerEvents = nextVisible ? 'auto' : 'none'
-  }, 120)
+  }, nextVisible ? BLOCK_HANDLE_SHOW_DELAY_MS : BLOCK_HANDLE_HIDE_DELAY_MS)
 }
 
 function syncBlockDragHandleVisibility() {
