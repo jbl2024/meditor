@@ -24,6 +24,16 @@ async function flushUi() {
   await nextTick()
 }
 
+async function flushMicrotasks() {
+  await nextTick()
+  await Promise.resolve()
+  await nextTick()
+}
+
+async function delay(ms: number) {
+  await new Promise<void>((resolve) => setTimeout(resolve, ms))
+}
+
 type Deferred<T> = {
   promise: Promise<T>
   resolve: (value: T) => void
@@ -317,11 +327,15 @@ describe('EditorView interactions contract', () => {
 
       editor.commands.focus()
       editor.commands.setTextSelection(1)
-      await flushUi()
+      await flushMicrotasks()
 
       const handle = root.querySelector('.tomosona-drag-handle') as HTMLElement | null
       expect(handle).toBeTruthy()
-      expect(handle?.style.visibility).not.toBe('hidden')
+
+      await delay(140)
+      await flushMicrotasks()
+
+      expect(handle?.style.opacity).toBe('1')
       expect(handle?.style.left).not.toBe('0px')
       expect(root.querySelector('.tomosona-block-structure-label')?.textContent).toBe('H1')
       expect(root.querySelector('button[aria-label="Insert below"]')).toBeTruthy()
@@ -340,12 +354,129 @@ describe('EditorView interactions contract', () => {
       await flushUi()
 
       const paragraphHandle = root.querySelector('.tomosona-drag-handle') as HTMLElement | null
-      expect(paragraphHandle?.style.visibility).not.toBe('hidden')
+      expect(paragraphHandle?.style.opacity).not.toBe('0')
       expect(paragraphHandle?.style.left).not.toBe('0px')
       expect(root.querySelector('.tomosona-block-structure-label')?.textContent).toBe('P')
       expect(root.querySelector('button[aria-label="Insert below"]')).toBeTruthy()
       expect(root.querySelector('button[aria-label="Open block menu"]')).toBeTruthy()
     } finally {
+      if (originalWindowScrollBy) {
+        Object.defineProperty(window, 'scrollBy', originalWindowScrollBy)
+      }
+      if (originalElementScrollTo) {
+        Object.defineProperty(HTMLElement.prototype, 'scrollTo', originalElementScrollTo)
+      }
+      for (const entry of originalRects) {
+        if (entry.clientRects) {
+          Object.defineProperty(entry.prototype, 'getClientRects', entry.clientRects)
+        } else {
+          Reflect.deleteProperty(entry.prototype, 'getClientRects')
+        }
+        if (entry.boundingRect) {
+          Object.defineProperty(entry.prototype, 'getBoundingClientRect', entry.boundingRect)
+        } else {
+          Reflect.deleteProperty(entry.prototype, 'getBoundingClientRect')
+        }
+      }
+      app.unmount()
+      document.body.innerHTML = ''
+    }
+  })
+
+  it('hides the gutter controls while text is being typed', async () => {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+    const editorRef = ref<unknown>(null)
+
+    const app = createApp(defineComponent({
+      setup() {
+        return () =>
+          h(EditorView, {
+            ref: editorRef,
+            path: 'a.md',
+            openPaths: ['a.md'],
+            openFile: async () => '# Title\n\nBody',
+            saveFile: async () => ({ persisted: true }),
+            renameFileFromTitle: async (valuePath: string, title: string) => ({ path: valuePath, title }),
+            loadLinkTargets: async () => ['a.md'],
+            loadLinkHeadings: async () => ['H1'],
+            loadPropertyTypeSchema: async () => ({}),
+            savePropertyTypeSchema: async () => {},
+            openLinkTarget: async () => true,
+            onStatus: () => {},
+            onOutline: () => {},
+            onProperties: () => {},
+            onPathRenamed: () => {}
+          })
+      }
+    }))
+
+    app.mount(root)
+    await flushUi()
+
+    const setupState = (editorRef.value as { $?: { setupState?: Record<string, any> } })?.$?.setupState
+    if (!setupState) throw new Error('Expected EditorView setup state')
+
+    const editor = setupState.renderedEditorsByPath?.['a.md']
+    if (!editor) throw new Error('Expected a rendered editor for a.md')
+
+    const originalWindowScrollBy = Object.getOwnPropertyDescriptor(window, 'scrollBy')
+    const originalElementScrollTo = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollTo')
+    const prototypes = [Node.prototype, Element.prototype, HTMLElement.prototype, Text.prototype, Range.prototype]
+    const originalRects = prototypes.map((prototype) => ({
+      prototype,
+      clientRects: Object.getOwnPropertyDescriptor(prototype, 'getClientRects'),
+      boundingRect: Object.getOwnPropertyDescriptor(prototype, 'getBoundingClientRect')
+    }))
+
+    try {
+      Object.defineProperty(window, 'scrollBy', {
+        configurable: true,
+        value: vi.fn()
+      })
+      Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
+        configurable: true,
+        value: vi.fn()
+      })
+
+      const rectList = () => [{ left: 0, top: 0, right: 40, bottom: 16, width: 40, height: 16 }]
+      const rect = () => ({ left: 0, top: 0, right: 40, bottom: 16, width: 40, height: 16 })
+      for (const prototype of prototypes) {
+        Object.defineProperty(prototype, 'getClientRects', {
+          configurable: true,
+          value: rectList
+        })
+        Object.defineProperty(prototype, 'getBoundingClientRect', {
+          configurable: true,
+          value: rect
+        })
+      }
+
+      editor.commands.focus()
+      editor.commands.setTextSelection(1)
+      await flushMicrotasks()
+      await delay(140)
+      await flushMicrotasks()
+
+      const handle = root.querySelector('.tomosona-drag-handle') as HTMLElement | null
+      expect(handle).toBeTruthy()
+      expect(handle?.style.opacity).toBe('1')
+
+      const holder = root.querySelector('.editor-holder') as HTMLElement
+      holder.dispatchEvent(new KeyboardEvent('keydown', { key: 'x', bubbles: true, cancelable: true }))
+      await flushMicrotasks()
+
+      await delay(140)
+      await flushMicrotasks()
+
+      expect(root.querySelector('.tomosona-drag-handle')?.getAttribute('style')).toContain('opacity: 0')
+
+      await delay(260)
+      await flushMicrotasks()
+
+      expect(root.querySelector('.tomosona-drag-handle')?.getAttribute('style')).not.toContain('opacity: 0')
+    } finally {
+      vi.useRealTimers()
       if (originalWindowScrollBy) {
         Object.defineProperty(window, 'scrollBy', originalWindowScrollBy)
       }

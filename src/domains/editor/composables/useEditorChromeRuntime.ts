@@ -136,6 +136,8 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   const pulseSelectionRange = ref<{ from: number; to: number } | null>(null)
   const pulseSourceText = ref('')
   const pulseAnchorNonce = ref(0)
+  const typingText = ref(false)
+  let typingTextTimer: ReturnType<typeof setTimeout> | null = null
 
   const lastStableBlockMenuTarget = ref<BlockMenuTarget | null>(null)
   const blockMenuFloatingEl = ref<HTMLDivElement | null>(null)
@@ -164,6 +166,32 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   const renderedEditor = computed(() => host.getEditor())
   const computedDragLock = computed(() => computeHandleLock(dragHandleUiState.value))
   const debugTargetPos = computed(() => String(dragHandleUiState.value.activeTarget?.pos ?? ''))
+
+  function clearTypingTextTimer() {
+    if (!typingTextTimer) return
+    clearTimeout(typingTextTimer)
+    typingTextTimer = null
+  }
+
+  /**
+   * Treats printable key presses and direct text-edit keys as active typing so
+   * gutter controls can stay out of the way while content is being entered.
+   */
+  function isTypingInputKey(event: KeyboardEvent) {
+    if (event.isComposing) return true
+    if (event.metaKey || event.ctrlKey || event.altKey) return false
+    if (event.key.length === 1) return true
+    return event.key === 'Backspace' || event.key === 'Delete' || event.key === 'Enter'
+  }
+
+  function markTypingText() {
+    typingText.value = true
+    clearTypingTextTimer()
+    typingTextTimer = window.setTimeout(() => {
+      typingText.value = false
+      typingTextTimer = null
+    }, 220)
+  }
 
   const inlineFormatToolbar = useInlineFormatToolbar({
     holder: host.holder,
@@ -607,6 +635,9 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     onHolderKeydown(event: KeyboardEvent) {
       if (holderEvents.isTitleFieldEventTarget(event.target)) return
       interaction.editorEvents.markEditorInteraction()
+      if (isTypingInputKey(event)) {
+        markTypingText()
+      }
       if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === 'f') {
         event.preventDefault()
         event.stopPropagation()
@@ -730,6 +761,8 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   async function onUnmountCleanup() {
     mountSequence += 1
     cancelPendingDocumentMouseDownBind()
+    clearTypingTextTimer()
+    typingText.value = false
     tableInteractions.clearTimers()
     if (mermaidReplaceDialog.value.resolve) {
       mermaidReplaceDialog.value.resolve(false)
@@ -846,6 +879,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     dragHandleUiState: blockAndTableControls.dragHandleUiState,
     computedDragLock: blockAndTableControls.computedDragLock,
     debugTargetPos: blockAndTableControls.debugTargetPos,
+    typingText,
     dragHandleComputePositionConfig,
     blockMenuOpen: blockAndTableControls.blockMenuControls.blockMenuOpen,
     blockMenuIndex: blockAndTableControls.blockMenuControls.blockMenuIndex,

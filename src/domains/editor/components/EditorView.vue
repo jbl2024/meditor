@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, type Ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch, type Ref } from 'vue'
 import { Editor, EditorContent } from '@tiptap/vue-3'
 import { DragHandle as DragHandleVue3 } from '@tiptap/extension-drag-handle-vue-3'
 import { openExternalUrl } from '../../../shared/api/workspaceApi'
@@ -319,6 +319,7 @@ const {
   dragHandleUiState,
   computedDragLock,
   debugTargetPos,
+  typingText,
   dragHandleComputePositionConfig,
   blockMenuOpen,
   blockMenuIndex,
@@ -352,14 +353,42 @@ const {
   onEditorMouseLeave
 } = blockAndTable
 const activeBlockStructureLabel = computed(() => getBlockStructureLabel(dragHandleUiState.value.activeTarget))
+const blockHandleVisible = ref(false)
+let blockHandleVisibilityTimer: ReturnType<typeof setTimeout> | null = null
 
-function syncBlockDragHandleVisibility() {
+function clearBlockHandleVisibilityTimer() {
+  if (!blockHandleVisibilityTimer) return
+  clearTimeout(blockHandleVisibilityTimer)
+  blockHandleVisibilityTimer = null
+}
+
+function syncBlockDragHandleVisibilityState() {
   const handleElement = contentShell.value?.querySelector('.tomosona-drag-handle') as HTMLElement | null
   if (!handleElement) return
 
-  const shouldShow = Boolean(dragHandleUiState.value.activeTarget)
-  handleElement.style.visibility = shouldShow ? 'visible' : 'hidden'
-  handleElement.style.pointerEvents = shouldShow ? 'auto' : 'none'
+  const shouldShow = Boolean(dragHandleUiState.value.activeTarget) && !typingText.value
+  const nextVisible = shouldShow
+  if (blockHandleVisible.value === nextVisible && blockHandleVisibilityTimer === null) {
+    handleElement.style.visibility = 'visible'
+    handleElement.style.opacity = nextVisible ? '1' : '0'
+    handleElement.style.pointerEvents = nextVisible ? 'auto' : 'none'
+    return
+  }
+
+  clearBlockHandleVisibilityTimer()
+  blockHandleVisibilityTimer = window.setTimeout(() => {
+    blockHandleVisible.value = nextVisible
+    blockHandleVisibilityTimer = null
+    const latestHandle = contentShell.value?.querySelector('.tomosona-drag-handle') as HTMLElement | null
+    if (!latestHandle) return
+    latestHandle.style.visibility = 'visible'
+    latestHandle.style.opacity = nextVisible ? '1' : '0'
+    latestHandle.style.pointerEvents = nextVisible ? 'auto' : 'none'
+  }, 120)
+}
+
+function syncBlockDragHandleVisibility() {
+  syncBlockDragHandleVisibilityState()
 }
 
 function syncBlockDragHandlePosition() {
@@ -410,6 +439,13 @@ watch(
   { immediate: true, flush: 'post' }
 )
 watch(
+  typingText,
+  () => {
+    syncBlockDragHandleVisibility()
+  },
+  { immediate: true, flush: 'post' }
+)
+watch(
   renderedEditor,
   () => {
     syncBlockDragHandleVisibility()
@@ -417,6 +453,9 @@ watch(
   },
   { immediate: true, flush: 'post' }
 )
+onBeforeUnmount(() => {
+  clearBlockHandleVisibilityTimer()
+})
 const {
   pulseOpen,
   pulse: pulseState,

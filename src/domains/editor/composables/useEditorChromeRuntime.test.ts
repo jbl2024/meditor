@@ -52,6 +52,12 @@ async function flushUi() {
   await nextTick()
 }
 
+async function flushMicrotasks() {
+  await nextTick()
+  await Promise.resolve()
+  await nextTick()
+}
+
 function createEditorStub(selection = { from: 1, to: 2, empty: false }) {
   return {
     commands: {
@@ -254,6 +260,26 @@ describe('useEditorChromeRuntime', () => {
     holder.value?.dispatchEvent(new KeyboardEvent('keydown', { key: 'x', bubbles: true }))
     await flushUi()
     expect(interactionMocks.onEditorKeydown).toHaveBeenCalled()
+
+    await runtime.dialogsAndLifecycle.onUnmountCleanup()
+  })
+
+  it('marks text typing activity on printable keydown and clears it after idle', async () => {
+    vi.useFakeTimers()
+    const { runtime, holder, interactionMocks } = createRuntimeHarness()
+    await runtime.dialogsAndLifecycle.onMountInit()
+
+    holder.value?.dispatchEvent(new KeyboardEvent('keydown', { key: 'x', bubbles: true }))
+    await flushMicrotasks()
+
+    expect(interactionMocks.markEditorInteraction).toHaveBeenCalled()
+    expect(interactionMocks.onEditorKeydown).toHaveBeenCalled()
+    expect(runtime.blockAndTable.typingText.value).toBe(true)
+
+    await vi.advanceTimersByTimeAsync(240)
+    await flushMicrotasks()
+
+    expect(runtime.blockAndTable.typingText.value).toBe(false)
 
     await runtime.dialogsAndLifecycle.onUnmountCleanup()
   })

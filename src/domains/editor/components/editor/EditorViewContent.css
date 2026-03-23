@@ -418,6 +418,8 @@
 
 .editor-holder .tomosona-drag-handle {
   z-index: 35;
+  opacity: 1;
+  transition: opacity 280ms ease;
 }
 
 .editor-holder .tomosona-block-controls {
