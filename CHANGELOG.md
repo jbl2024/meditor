@@ -18,6 +18,18 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.23.1] - 2026-03-24
+
+### Changed
+- chore(logging): remove workspace and docx debug traces (951ea8c)
+- refactor(docx): group export modules under dedicated namespace (d5a67da)
+- refactor(docx): split default and template style handling (c0d830e)
+
+### Fixed
+- fix(editor): auto-open mermaid block editor on insertion (e33db80)
+- fix(docx): render headings through DOCX styles only (1052be3)
+- fix(docx): prefer localized heading styles and support h4-h6 (bbbf34d)
+
 ## [0.23.0] - 2026-03-23
 
 ### Added
