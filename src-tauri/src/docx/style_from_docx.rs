@@ -38,27 +38,42 @@ fn extract_template_style(doc: &Document) -> TemplateStyle {
         .or(styles.body.run.size)
         .unwrap_or(DEFAULT_BODY_SIZE);
 
-    styles.body = extract_block_style(doc, &["Normal"], styles.body.clone());
-    styles.title = extract_block_style(doc, &["Title"], styles.title.clone());
-    styles.heading1 = extract_block_style(doc, &["Heading1"], styles.heading1.clone());
-    styles.heading2 = extract_block_style(doc, &["Heading2"], styles.heading2.clone());
-    styles.heading3 = extract_block_style(doc, &["Heading3"], styles.heading3.clone());
-    styles.quote = extract_block_style(doc, &["Quote", "IntenseQuote"], styles.quote.clone());
+    styles.body = extract_block_style(doc, "body", &["Normal"], styles.body.clone());
+    styles.title = extract_block_style(doc, "title", &["Titre", "Title"], styles.title.clone());
+    styles.heading1 = extract_block_style(doc, "heading1", &["Titre1", "Heading1"], styles.heading1.clone());
+    styles.heading2 = extract_block_style(doc, "heading2", &["Titre2", "Heading2"], styles.heading2.clone());
+    styles.heading3 = extract_block_style(doc, "heading3", &["Titre3", "Heading3"], styles.heading3.clone());
+    styles.heading4 = extract_block_style(doc, "heading4", &["Titre4", "Heading4"], styles.heading4.clone());
+    styles.heading5 = extract_block_style(doc, "heading5", &["Titre5", "Heading5"], styles.heading5.clone());
+    styles.heading6 = extract_block_style(doc, "heading6", &["Titre6", "Heading6"], styles.heading6.clone());
+    styles.quote = extract_block_style(
+        doc,
+        "quote",
+        &["Citation", "CitationIntense", "Quote", "IntenseQuote"],
+        styles.quote.clone(),
+    );
     styles.list = extract_block_style(
         doc,
-        &["ListParagraph", "ListBullet", "ListNumber"],
+        "list",
+        &["Paragraphedeliste", "ListParagraph", "ListBullet", "ListNumber"],
         styles.list.clone(),
     );
 
     styles
 }
 
-fn extract_block_style(doc: &Document, style_ids: &[&str], fallback: BlockStyle) -> BlockStyle {
+fn extract_block_style(
+    doc: &Document,
+    _label: &str,
+    style_ids: &[&str],
+    fallback: BlockStyle,
+) -> BlockStyle {
     for style_id in style_ids {
         if doc.style(style_id).is_some() {
             let ppr = doc.resolve_paragraph_properties(Some(style_id));
             let rpr = doc.resolve_run_properties(Some(style_id), None);
             return BlockStyle {
+                style_id: Some((*style_id).to_string()),
                 run: TextStyle {
                     bold: rpr.bold.unwrap_or(fallback.run.bold),
                     italic: rpr.italic.unwrap_or(fallback.run.italic),
@@ -75,15 +90,31 @@ fn extract_block_style(doc: &Document, style_ids: &[&str], fallback: BlockStyle)
                     color: rpr.color.clone().or(fallback.run.color.clone()),
                 },
                 paragraph: ParagraphStyle {
-                    space_before: ppr.space_before.map(|value| value.to_pt()).or(fallback.paragraph.space_before),
-                    space_after: ppr.space_after.map(|value| value.to_pt()).or(fallback.paragraph.space_after),
-                    indent_left: ppr.ind_left.map(|value| value.to_pt()).or(fallback.paragraph.indent_left),
-                    indent_right: ppr.ind_right.map(|value| value.to_pt()).or(fallback.paragraph.indent_right),
+                    space_before: ppr
+                        .space_before
+                        .map(|value| value.to_pt())
+                        .or(fallback.paragraph.space_before),
+                    space_after: ppr
+                        .space_after
+                        .map(|value| value.to_pt())
+                        .or(fallback.paragraph.space_after),
+                    indent_left: ppr
+                        .ind_left
+                        .map(|value| value.to_pt())
+                        .or(fallback.paragraph.indent_left),
+                    indent_right: ppr
+                        .ind_right
+                        .map(|value| value.to_pt())
+                        .or(fallback.paragraph.indent_right),
                     line_spacing_multiple: match (ppr.line_spacing, ppr.line_rule.as_deref()) {
                         (Some(line_spacing), Some("auto")) => Some(line_spacing.0 as f64 / 240.0),
                         _ => fallback.paragraph.line_spacing_multiple,
                     },
-                    shading_fill: ppr.shading.as_ref().and_then(|shading| shading.fill.clone()).or(fallback.paragraph.shading_fill.clone()),
+                    shading_fill: ppr
+                        .shading
+                        .as_ref()
+                        .and_then(|shading| shading.fill.clone())
+                        .or(fallback.paragraph.shading_fill.clone()),
                     border_bottom: ppr
                         .borders
                         .as_ref()
@@ -205,7 +236,7 @@ mod tests {
       <w:spacing w:after="240" />
     </w:pPr>
   </w:style>
-  <w:style w:type="paragraph" w:styleId="Heading1">
+  <w:style w:type="paragraph" w:styleId="Titre1">
     <w:name w:val="Titre 1" />
     <w:rPr>
       <w:rFonts w:ascii="Inter" w:hAnsi="Inter" />
@@ -216,11 +247,26 @@ mod tests {
     <w:pPr>
       <w:spacing w:before="360" w:after="120" />
       <w:pBdr>
-        <w:bottom w:val="single" w:sz="6" w:color="112233" />
+      <w:bottom w:val="single" w:sz="6" w:color="112233" />
       </w:pBdr>
     </w:pPr>
   </w:style>
-  <w:style w:type="paragraph" w:styleId="ListParagraph">
+  <w:style w:type="paragraph" w:styleId="Titre2">
+    <w:name w:val="Titre 2" />
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="Titre3">
+    <w:name w:val="Titre 3" />
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="Titre4">
+    <w:name w:val="Titre 4" />
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="Titre5">
+    <w:name w:val="Titre 5" />
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="Titre6">
+    <w:name w:val="Titre 6" />
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="Paragraphedeliste">
     <w:name w:val="Liste" />
     <w:pPr>
       <w:spacing w:after="80" />
@@ -243,6 +289,11 @@ mod tests {
         assert_eq!(style.heading1.run.color.as_deref(), Some("112233"));
         assert_eq!(style.heading1.paragraph.space_before, Some(18.0));
         assert_eq!(style.heading1.paragraph.space_after, Some(6.0));
+        assert_eq!(style.heading2.style_id.as_deref(), Some("Titre2"));
+        assert_eq!(style.heading3.style_id.as_deref(), Some("Titre3"));
+        assert_eq!(style.heading4.style_id.as_deref(), Some("Titre4"));
+        assert_eq!(style.heading5.style_id.as_deref(), Some("Titre5"));
+        assert_eq!(style.heading6.style_id.as_deref(), Some("Titre6"));
         assert_eq!(style.list.paragraph.space_after, Some(4.0));
         assert_eq!(style.list.paragraph.indent_left, Some(36.0));
     }
@@ -268,6 +319,9 @@ mod tests {
         let style = read_template_style(&path).expect("extract style");
         assert_eq!(style.title.run.size, Some(42));
         assert_eq!(style.heading2.run.size, Some(28));
+        assert_eq!(style.heading4.run.size, Some(22));
+        assert_eq!(style.heading5.run.size, Some(20));
+        assert_eq!(style.heading6.run.size, Some(18));
         assert_eq!(style.quote.paragraph.shading_fill.as_deref(), Some("F5F7F9"));
         assert_eq!(style.list.paragraph.space_after, Some(4.0));
     }

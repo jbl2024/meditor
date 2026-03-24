@@ -62,6 +62,7 @@ impl BorderSpec {
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub(crate) struct BlockStyle {
+    pub style_id: Option<String>,
     pub run: TextStyle,
     pub paragraph: ParagraphStyle,
 }
@@ -75,6 +76,9 @@ pub(crate) struct TemplateStyle {
     pub heading1: BlockStyle,
     pub heading2: BlockStyle,
     pub heading3: BlockStyle,
+    pub heading4: BlockStyle,
+    pub heading5: BlockStyle,
+    pub heading6: BlockStyle,
     pub quote: BlockStyle,
     pub list: BlockStyle,
 }
@@ -82,6 +86,7 @@ pub(crate) struct TemplateStyle {
 impl Default for TemplateStyle {
     fn default() -> Self {
         let body = BlockStyle {
+            style_id: Some("Normal".to_string()),
             run: TextStyle {
                 font: Some(DEFAULT_FONT.to_string()),
                 size: Some(DEFAULT_BODY_SIZE),
@@ -94,6 +99,7 @@ impl Default for TemplateStyle {
         };
 
         let heading1 = BlockStyle {
+            style_id: Some("Heading1".to_string()),
             run: TextStyle {
                 bold: true,
                 font: Some(DEFAULT_FONT.to_string()),
@@ -110,6 +116,7 @@ impl Default for TemplateStyle {
         };
 
         let heading2 = BlockStyle {
+            style_id: Some("Heading2".to_string()),
             run: TextStyle {
                 bold: true,
                 font: Some(DEFAULT_FONT.to_string()),
@@ -125,6 +132,7 @@ impl Default for TemplateStyle {
         };
 
         let heading3 = BlockStyle {
+            style_id: Some("Heading3".to_string()),
             run: TextStyle {
                 bold: true,
                 font: Some(DEFAULT_FONT.to_string()),
@@ -139,7 +147,56 @@ impl Default for TemplateStyle {
             },
         };
 
+        let heading4 = BlockStyle {
+            style_id: Some("Heading4".to_string()),
+            run: TextStyle {
+                bold: true,
+                font: Some(DEFAULT_FONT.to_string()),
+                size: Some(22),
+                color: Some("505050".to_string()),
+                ..Default::default()
+            },
+            paragraph: ParagraphStyle {
+                space_before: Some(8.0),
+                space_after: Some(4.0),
+                ..Default::default()
+            },
+        };
+
+        let heading5 = BlockStyle {
+            style_id: Some("Heading5".to_string()),
+            run: TextStyle {
+                bold: true,
+                font: Some(DEFAULT_FONT.to_string()),
+                size: Some(20),
+                color: Some("606060".to_string()),
+                ..Default::default()
+            },
+            paragraph: ParagraphStyle {
+                space_before: Some(6.0),
+                space_after: Some(3.0),
+                ..Default::default()
+            },
+        };
+
+        let heading6 = BlockStyle {
+            style_id: Some("Heading6".to_string()),
+            run: TextStyle {
+                bold: true,
+                font: Some(DEFAULT_FONT.to_string()),
+                size: Some(18),
+                color: Some("707070".to_string()),
+                ..Default::default()
+            },
+            paragraph: ParagraphStyle {
+                space_before: Some(4.0),
+                space_after: Some(3.0),
+                ..Default::default()
+            },
+        };
+
         let title = BlockStyle {
+            style_id: Some("Title".to_string()),
             run: TextStyle {
                 bold: true,
                 font: Some(DEFAULT_FONT.to_string()),
@@ -154,6 +211,7 @@ impl Default for TemplateStyle {
         };
 
         let quote = BlockStyle {
+            style_id: Some("Quote".to_string()),
             run: TextStyle {
                 italic: true,
                 font: Some(DEFAULT_FONT.to_string()),
@@ -172,6 +230,7 @@ impl Default for TemplateStyle {
         };
 
         let list = BlockStyle {
+            style_id: Some("ListParagraph".to_string()),
             run: TextStyle {
                 font: Some(DEFAULT_FONT.to_string()),
                 size: Some(DEFAULT_BODY_SIZE),
@@ -191,6 +250,9 @@ impl Default for TemplateStyle {
             heading1,
             heading2,
             heading3,
+            heading4,
+            heading5,
+            heading6,
             quote,
             list,
         }
@@ -210,7 +272,10 @@ impl TemplateStyle {
             1 => &self.heading1,
             2 => &self.heading2,
             3 => &self.heading3,
-            _ => &self.heading3,
+            4 => &self.heading4,
+            5 => &self.heading5,
+            6 => &self.heading6,
+            _ => &self.heading6,
         }
     }
 
@@ -264,22 +329,30 @@ mod tests {
         assert_eq!(style.body.run.font.as_deref(), Some(DEFAULT_FONT));
         assert_eq!(style.body.run.size, Some(DEFAULT_BODY_SIZE));
         assert_eq!(style.body.paragraph.space_after, Some(5.0));
+        assert_eq!(style.body.style_id.as_deref(), Some("Normal"));
 
         assert_eq!(style.title.run.bold, true);
         assert_eq!(style.title.run.size, Some(42));
         assert_eq!(style.title.paragraph.space_after, Some(12.0));
+        assert_eq!(style.title.style_id.as_deref(), Some("Title"));
 
         assert_eq!(style.heading1.run.size, Some(36));
         assert_eq!(style.heading2.run.size, Some(28));
         assert_eq!(style.heading3.run.size, Some(24));
+        assert_eq!(style.heading4.run.size, Some(22));
+        assert_eq!(style.heading5.run.size, Some(20));
+        assert_eq!(style.heading6.run.size, Some(18));
         assert_eq!(style.heading1.paragraph.border_bottom.as_ref().map(|spec| spec.color.as_str()), Some("1F3864"));
+        assert_eq!(style.heading1.style_id.as_deref(), Some("Heading1"));
 
         assert_eq!(style.quote.run.italic, true);
         assert_eq!(style.quote.paragraph.shading_fill.as_deref(), Some("F5F7F9"));
         assert_eq!(style.quote.paragraph.indent_left, Some(18.0));
+        assert_eq!(style.quote.style_id.as_deref(), Some("Quote"));
 
         assert_eq!(style.list.run.font.as_deref(), Some(DEFAULT_FONT));
         assert_eq!(style.list.paragraph.space_after, Some(4.0));
+        assert_eq!(style.list.style_id.as_deref(), Some("ListParagraph"));
 
         assert_eq!(style.list_prefix(ListType::Bullet, 1, 0), "• ");
         assert_eq!(style.list_prefix(ListType::Bullet, 2, 0), "  ◦ ");
@@ -296,6 +369,9 @@ mod tests {
             &style.heading1,
             &style.heading2,
             &style.heading3,
+            &style.heading4,
+            &style.heading5,
+            &style.heading6,
             &style.quote,
             &style.list,
         ];

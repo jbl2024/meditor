@@ -57,6 +57,10 @@ const MERMAID_EMOJI_REPLACEMENTS: &[(&str, &str)] = &[
     ("🔵", "[info]"),
 ];
 
+fn log_docx(message: &str) {
+    eprintln!("[docx] {message}");
+}
+
 #[derive(Debug, Clone)]
 struct RunSegment {
     text: String,
@@ -91,10 +95,24 @@ fn convert_markdown_to_docx_sync(path: String) -> Result<String> {
     }
 
     let markdown = fs::read_to_string(&source_path)?;
-    let template = resolve_template_path(&workspace_root)?;
-    let template_style = match template {
-        Some(ref path) => read_template_style(path).unwrap_or_default(),
-        None => TemplateStyle::default(),
+    let template_path = resolve_template_path(&workspace_root)?;
+    let mut copied_styles_path: Option<PathBuf> = None;
+    let template_style = match template_path {
+        Some(ref path) => match read_template_style(path) {
+            Ok(style) => {
+                log_docx(&format!("template:loaded path={} font={} body_size={}", path.display(), style.default_font, style.body_size));
+                copied_styles_path = Some(path.clone());
+                style
+            }
+            Err(err) => {
+                log_docx(&format!("template:fallback path={} reason={}", path.display(), err));
+                TemplateStyle::default()
+            }
+        },
+        None => {
+            log_docx("template:none using built-in defaults");
+            TemplateStyle::default()
+        }
     };
 
     let mut doc = build_document(&markdown, &template_style);
@@ -102,6 +120,9 @@ fn convert_markdown_to_docx_sync(path: String) -> Result<String> {
     let output_path = next_available_output_path(&output_path);
     doc.save(&output_path)
         .map_err(|_| AppError::OperationFailed)?;
+    if let Some(template_path) = copied_styles_path.as_ref() {
+        copy_template_styles_into_output(&output_path, template_path)?;
+    }
     strip_leading_empty_table_paragraphs(&output_path)?;
 
     Ok(output_path.to_string_lossy().to_string())
@@ -143,6 +164,10 @@ fn next_available_output_path(path: &Path) -> PathBuf {
 fn resolve_template_path(root: &Path) -> Result<Option<PathBuf>> {
     let templates_dir = root.join(TEMPLATE_DIR_NAME);
     if !templates_dir.is_dir() {
+        log_docx(&format!(
+            "template:dir_missing path={}",
+            templates_dir.display()
+        ));
         return Ok(None);
     }
 
@@ -158,7 +183,33 @@ fn resolve_template_path(root: &Path) -> Result<Option<PathBuf>> {
         })
         .collect::<Vec<_>>();
     candidates.sort_by(|left, right| left.file_name().cmp(&right.file_name()));
-    Ok(candidates.into_iter().next())
+    if candidates.is_empty() {
+        log_docx("template:dir_empty no_docx_found");
+        return Ok(None);
+    }
+
+    let chosen = candidates.into_iter().next();
+    if let Some(path) = &chosen {
+        log_docx(&format!("template:chosen path={}", path.display()));
+    }
+    Ok(chosen)
+}
+
+fn copy_template_styles_into_output(output_path: &Path, template_path: &Path) -> Result<()> {
+    let template_file = File::open(template_path)?;
+    let mut template_zip = ZipArchive::new(template_file).map_err(|err| {
+        AppError::InvalidOperation(format!("DOCX template styles open failed: {err}"))
+    })?;
+    let mut styles_xml = Vec::new();
+    template_zip
+        .by_name("word/styles.xml")
+        .map_err(|err| AppError::InvalidOperation(format!("DOCX template styles missing: {err}")))?
+        .read_to_end(&mut styles_xml)
+        .map_err(|err| {
+            AppError::InvalidOperation(format!("DOCX template styles read failed: {err}"))
+        })?;
+
+    replace_docx_entry(output_path, "word/styles.xml", &styles_xml)
 }
 
 fn build_document(markdown: &str, template_style: &TemplateStyle) -> Document {
@@ -278,6 +329,9 @@ fn render_block<'a>(node: &'a AstNode<'a>, doc: &mut Document, template: &Templa
                 style.color = Some("666666".to_string());
             }
             let mut paragraph = doc.add_paragraph("");
+            if let Some(style_id) = heading_style.style_id.as_deref() {
+                paragraph = paragraph.style(style_id);
+            }
             paragraph = apply_paragraph_style(paragraph, &heading_style.paragraph, 1.0);
             append_segments_to_paragraph(
                 &mut paragraph,
@@ -1033,6 +1087,32 @@ fn table_cell_text(cell: &[RunSegment]) -> String {
 }
 
 fn strip_leading_empty_table_paragraphs(docx_path: &Path) -> Result<()> {
+    rewrite_docx(docx_path, |name, bytes| {
+        if name == "word/document.xml" {
+            let xml = String::from_utf8(bytes.to_vec()).map_err(|err| {
+                AppError::InvalidOperation(format!("DOCX postprocess decode xml failed: {err}"))
+            })?;
+            Ok(strip_empty_first_table_paragraphs_from_xml(&xml).into_bytes())
+        } else {
+            Ok(bytes.to_vec())
+        }
+    })
+}
+
+fn replace_docx_entry(docx_path: &Path, target_name: &str, replacement: &[u8]) -> Result<()> {
+    rewrite_docx(docx_path, |name, bytes| {
+        if name == target_name {
+            Ok(replacement.to_vec())
+        } else {
+            Ok(bytes.to_vec())
+        }
+    })
+}
+
+fn rewrite_docx<F>(docx_path: &Path, mut transform: F) -> Result<()>
+where
+    F: FnMut(&str, &[u8]) -> Result<Vec<u8>>,
+{
     let file = File::open(docx_path)?;
     let mut archive = ZipArchive::new(file).map_err(|err| {
         AppError::InvalidOperation(format!("DOCX postprocess open failed: {err}"))
@@ -1064,12 +1144,7 @@ fn strip_leading_empty_table_paragraphs(docx_path: &Path) -> Result<()> {
             .map_err(|err| {
                 AppError::InvalidOperation(format!("DOCX postprocess read bytes failed: {err}"))
             })?;
-        if name == "word/document.xml" {
-            let xml = String::from_utf8(bytes).map_err(|err| {
-                AppError::InvalidOperation(format!("DOCX postprocess decode xml failed: {err}"))
-            })?;
-            bytes = strip_empty_first_table_paragraphs_from_xml(&xml).into_bytes();
-        }
+        bytes = transform(&name, &bytes)?;
 
         writer
             .start_file(&name, options)
@@ -1278,6 +1353,9 @@ fn append_paragraph(
 
 fn append_list_paragraph(doc: &mut Document, segments: Vec<RunSegment>, template: &TemplateStyle) {
     let mut paragraph = doc.add_paragraph("");
+    if let Some(style_id) = template.list().style_id.as_deref() {
+        paragraph = paragraph.style(style_id);
+    }
     paragraph = apply_paragraph_style(paragraph, &template.list().paragraph, 1.0);
     append_segments_to_paragraph(&mut paragraph, segments, template, false);
 }
@@ -1309,8 +1387,18 @@ fn style_paragraph<'a>(
                     .line_spacing_multiple(1.0)
                     .keep_together(true)
             } else if quote_depth == 0 {
+                let paragraph = if let Some(style_id) = template.body().style_id.as_deref() {
+                    paragraph.style(style_id)
+                } else {
+                    paragraph
+                };
                 apply_paragraph_style(paragraph, &template.body().paragraph, 1.0)
             } else {
+                let paragraph = if let Some(style_id) = template.quote().style_id.as_deref() {
+                    paragraph.style(style_id)
+                } else {
+                    paragraph
+                };
                 apply_paragraph_style(paragraph, &template.quote().paragraph, quote_depth as f64)
             }
         }
@@ -1545,6 +1633,14 @@ mod tests {
         doc.paragraphs().into_iter().map(|para| para.text()).collect()
     }
 
+    fn read_docx_paragraph_style_ids(path: &Path) -> Vec<Option<String>> {
+        let doc = Document::open(path).expect("open docx");
+        doc.paragraphs()
+            .into_iter()
+            .map(|para| para.style_id().map(|value| value.to_string()))
+            .collect()
+    }
+
     fn read_docx_table(path: &Path) -> (usize, usize, Vec<Vec<String>>, Vec<bool>, Vec<Vec<Option<String>>>, Vec<Vec<Option<Alignment>>>) {
         let doc = Document::open(path).expect("open docx");
         let tables = doc.tables();
@@ -1598,14 +1694,18 @@ mod tests {
     }
 
     fn read_docx_document_xml(path: &Path) -> String {
+        read_docx_entry_text(path, "word/document.xml")
+    }
+
+    fn read_docx_entry_text(path: &Path, entry_name: &str) -> String {
         let file = File::open(path).expect("open docx file");
         let mut archive = ZipArchive::new(file).expect("open docx zip");
         let mut xml = String::new();
         archive
-            .by_name("word/document.xml")
-            .expect("document xml")
+            .by_name(entry_name)
+            .expect("docx entry")
             .read_to_string(&mut xml)
-            .expect("read document xml");
+            .expect("read docx entry");
         xml
     }
 
@@ -1686,7 +1786,46 @@ mod tests {
         let workspace = create_temp_workspace("tomosona-docx-convert");
         let templates = workspace.join("_templates");
         fs::create_dir_all(&templates).expect("create templates");
-        write_minimal_docx(&templates.join("template.docx"), "Aptos", 30);
+        write_valid_docx_with_styles(
+            &templates.join("template.docx"),
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:docDefaults>
+    <w:rPrDefault>
+      <w:rPr>
+        <w:rFonts w:ascii="Aptos" w:hAnsi="Aptos" />
+        <w:sz w:val="30" />
+      </w:rPr>
+    </w:rPrDefault>
+  </w:docDefaults>
+  <w:style w:type="paragraph" w:styleId="Normal">
+    <w:name w:val="Normal" />
+    <w:rPr>
+      <w:rFonts w:ascii="Aptos" w:hAnsi="Aptos" />
+      <w:sz w:val="30" />
+    </w:rPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="Titre1">
+    <w:name w:val="heading 1" />
+    <w:basedOn w:val="Normal" />
+    <w:next w:val="Normal" />
+    <w:pPr>
+      <w:spacing w:before="240" w:after="0" />
+    </w:pPr>
+    <w:rPr>
+      <w:b />
+      <w:sz w:val="32" />
+    </w:rPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="Paragraphedeliste">
+    <w:name w:val="List Paragraph" />
+    <w:basedOn w:val="Normal" />
+    <w:pPr>
+      <w:ind w:left="720" />
+    </w:pPr>
+  </w:style>
+</w:styles>"#,
+        );
 
         let source = workspace.join("note.md");
         fs::write(
@@ -1733,6 +1872,15 @@ mod tests {
             .next()
             .expect("first paragraph in cell");
         assert_eq!(first_paragraph.text().trim(), "1");
+
+        let styles_xml = read_docx_entry_text(Path::new(&output), "word/styles.xml");
+        assert!(styles_xml.contains(r#"w:styleId="Titre1""#));
+        assert!(styles_xml.contains(r#"w:styleId="Paragraphedeliste""#));
+        assert!(!styles_xml.contains(r#"w:styleId="Heading1""#));
+
+        let style_ids = read_docx_paragraph_style_ids(Path::new(&output));
+        assert!(style_ids.iter().any(|style_id| style_id.as_deref() == Some("Titre1")));
+        assert!(style_ids.iter().any(|style_id| style_id.as_deref() == Some("Paragraphedeliste")));
     }
 
     #[test]
