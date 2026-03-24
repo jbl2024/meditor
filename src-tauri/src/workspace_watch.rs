@@ -27,10 +27,6 @@ const GITIGNORE_FILE_NAME: &str = ".gitignore";
 const TOMOSONA_IGNORE_FILE_NAME: &str = ".tomosonaignore";
 const FS_EVENT_NAME: &str = "workspace://fs-changed";
 
-fn log_editor_sync_watch(message: &str) {
-    eprintln!("[editor-sync/watch] {message}");
-}
-
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum WorkspaceFsChangeKind {
@@ -270,10 +266,6 @@ fn should_filter_internal_write(
     };
 
     if same_version(version, Some(&record.resulting_version)) {
-        log_editor_sync_watch(&format!(
-            "suppress version_match path={} source={:?} request_id={} version={:?}",
-            record.path, record.source, record.request_id, version
-        ));
         return true;
     }
 
@@ -282,31 +274,19 @@ fn should_filter_internal_write(
     };
 
     if current_hash == record.content_hash {
-        log_editor_sync_watch(&format!(
-            "suppress hash_match path={} source={:?} request_id={}",
-            record.path, record.source, record.request_id
-        ));
         return true;
     }
 
-    log_editor_sync_watch(&format!(
-        "keep path={} source={:?} request_id={} version={:?}",
-        record.path, record.source, record.request_id, version
-    ));
     false
 }
 
 fn should_filter_internal_remove(normalized: &str) -> bool {
-    let Some(record) = recent_internal_write_for(normalized) else {
+    let Some(_record) = recent_internal_write_for(normalized) else {
         return false;
     };
 
     let path = PathBuf::from(normalized);
     if path.exists() {
-        log_editor_sync_watch(&format!(
-            "suppress remove_existing_path path={} source={:?} request_id={}",
-            record.path, record.source, record.request_id
-        ));
         return true;
     }
 
@@ -381,19 +361,7 @@ fn handle_notify_event(
         watcher_started_at_ms,
         event,
     );
-    if !changes.is_empty() {
-        log_editor_sync_watch(&format!(
-            "mapped session_id={session_id} changes={:?}",
-            changes
-        ));
-    }
     let changes = enrich_change_versions_and_filter_internal_writes(changes);
-    if !changes.is_empty() {
-        log_editor_sync_watch(&format!(
-            "emit session_id={session_id} changes={:?}",
-            changes
-        ));
-    }
     emit_changes(app_handle, session_id, root_normalized, changes);
 }
 

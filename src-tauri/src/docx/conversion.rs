@@ -57,10 +57,6 @@ const MERMAID_EMOJI_REPLACEMENTS: &[(&str, &str)] = &[
     ("🔵", "[info]"),
 ];
 
-fn log_docx(message: &str) {
-    eprintln!("[docx] {message}");
-}
-
 #[derive(Debug, Clone)]
 struct RunSegment {
     text: String,
@@ -100,28 +96,12 @@ fn convert_markdown_to_docx_sync(path: String) -> Result<String> {
     let template_style = match template_path {
         Some(ref path) => match read_template_style(path) {
             Ok(style) => {
-                log_docx(&format!(
-                    "template:loaded path={} font={} body_size={}",
-                    path.display(),
-                    style.default_font,
-                    style.body_size
-                ));
                 copied_styles_path = Some(path.clone());
                 style
             }
-            Err(err) => {
-                log_docx(&format!(
-                    "template:fallback path={} reason={}",
-                    path.display(),
-                    err
-                ));
-                TemplateStyle::default()
-            }
+            Err(_err) => TemplateStyle::default(),
         },
-        None => {
-            log_docx("template:none using built-in defaults");
-            TemplateStyle::default()
-        }
+        None => TemplateStyle::default(),
     };
 
     let mut doc = build_document(&markdown, &template_style);
@@ -178,10 +158,6 @@ fn next_available_output_path(path: &Path) -> PathBuf {
 fn resolve_template_path(root: &Path) -> Result<Option<PathBuf>> {
     let templates_dir = root.join(TEMPLATE_DIR_NAME);
     if !templates_dir.is_dir() {
-        log_docx(&format!(
-            "template:dir_missing path={}",
-            templates_dir.display()
-        ));
         return Ok(None);
     }
 
@@ -198,15 +174,10 @@ fn resolve_template_path(root: &Path) -> Result<Option<PathBuf>> {
         .collect::<Vec<_>>();
     candidates.sort_by(|left, right| left.file_name().cmp(&right.file_name()));
     if candidates.is_empty() {
-        log_docx("template:dir_empty no_docx_found");
         return Ok(None);
     }
 
-    let chosen = candidates.into_iter().next();
-    if let Some(path) = &chosen {
-        log_docx(&format!("template:chosen path={}", path.display()));
-    }
-    Ok(chosen)
+    Ok(candidates.into_iter().next())
 }
 
 fn copy_template_styles_into_output(output_path: &Path, template_path: &Path) -> Result<()> {
@@ -230,7 +201,6 @@ fn ensure_builtin_heading_styles(output_path: &Path) -> Result<()> {
     let styles_xml = read_docx_entry_text_file(output_path, "word/styles.xml")?;
     let insertion = builtin_heading_styles_xml();
     let replacement = if styles_xml.contains("</w:styles>") {
-        log_docx("styles:injecting_builtin_headings");
         styles_xml.replacen("</w:styles>", &format!("{insertion}\n</w:styles>"), 1)
     } else {
         return Err(AppError::InvalidOperation(
@@ -839,8 +809,6 @@ fn render_mermaid_block(code: &str, doc: &mut Document) -> bool {
     }
 
     let Ok(png) = fs::read(&png_path) else {
-        #[cfg(test)]
-        eprintln!("mermaid png read failed: {}", png_path.display());
         let _ = fs::remove_file(&png_path);
         return false;
     };
