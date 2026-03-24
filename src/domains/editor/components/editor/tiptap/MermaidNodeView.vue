@@ -2,6 +2,7 @@
 import mermaid from 'mermaid'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { NodeViewWrapper } from '@tiptap/vue-3'
+import { TextSelection } from '@tiptap/pm/state'
 import UiFilterableDropdown, { type FilterableDropdownItem } from '../../../../../shared/components/ui/UiFilterableDropdown.vue'
 import { beginHeavyRender, endHeavyRender } from '../../../lib/tiptap/renderStabilizer'
 import {
@@ -13,9 +14,18 @@ import {
 import type { MermaidPreviewPayload } from '../../../composables/useMermaidPreviewDialog'
 
 const props = defineProps<{
-  node: { attrs: { code?: string } }
+  node: { attrs: { code?: string; autoEdit?: boolean }; nodeSize?: number }
   updateAttributes: (attrs: Record<string, unknown>) => void
-  editor: { isEditable: boolean }
+  editor: {
+    isEditable: boolean
+    state?: {
+      doc?: { nodeAt: (pos: number) => { nodeSize: number } | null }
+      selection?: { from?: number }
+      tr?: { setSelection: (selection: TextSelection) => unknown }
+    }
+    view?: { dispatch: (transaction: unknown) => void }
+  }
+  getPos?: () => number | undefined
   extension: {
     options?: {
       confirmReplace?: (payload: { templateLabel: string }) => Promise<boolean>
@@ -298,6 +308,79 @@ function sanitizeRenderedSvg(markup: string) {
   return new XMLSerializer().serializeToString(svgRoot)
 }
 
+function requestAnimationFrameLike(callback: FrameRequestCallback) {
+  if (typeof requestAnimationFrame === 'function') return requestAnimationFrame(callback)
+  return window.setTimeout(() => callback(performance.now()), 16)
+}
+
+function focusCodeTextarea() {
+  const textarea = textareaEl.value
+  if (!textarea) return false
+  const active = document.activeElement
+  if (active instanceof HTMLElement && active !== textarea) {
+    active.blur()
+  }
+  textarea.focus({ preventScroll: true })
+  return document.activeElement === textarea
+}
+
+function scheduleCodeFocus(placeCaretAtEnd = true) {
+  void nextTick().then(() => {
+    window.setTimeout(() => {
+      const focusTarget = () => {
+        if (!focusCodeTextarea()) {
+          requestAnimationFrameLike(() => {
+            if (focusCodeTextarea() && placeCaretAtEnd) {
+              const size = textareaEl.value?.value.length ?? 0
+              textareaEl.value?.setSelectionRange(size, size)
+            }
+          })
+          return
+        }
+        if (placeCaretAtEnd) {
+          const size = textareaEl.value?.value.length ?? 0
+          textareaEl.value?.setSelectionRange(size, size)
+        }
+      }
+      focusTarget()
+    }, 0)
+  })
+}
+
+function focusMermaidNodeSelection() {
+  const pos = props.getPos?.()
+  const state = props.editor.state
+  const view = props.editor.view
+  if (typeof pos !== 'number' || !state?.doc || !view?.dispatch) return
+
+  const node = state.doc.nodeAt(pos)
+  const nodeSize = props.node.nodeSize ?? node?.nodeSize ?? 1
+  try {
+    const selection = TextSelection.create(state.doc as never, pos + nodeSize)
+    const currentFrom = state.selection?.from
+    if (currentFrom === selection.from) return
+    const transaction = state.tr
+    if (!transaction?.setSelection) return
+    view.dispatch(transaction.setSelection(selection))
+  } catch {
+    // Ignore selection anchoring failures and fall back to direct textarea focus.
+  }
+}
+
+function openCodeEditor() {
+  if (!props.editor.isEditable) return
+  focusMermaidNodeSelection()
+  showCodeEditor.value = true
+  scheduleCodeFocus()
+}
+
+function consumeAutoEdit() {
+  if (!props.editor.isEditable) return
+  if (!props.node.attrs.autoEdit) return
+  openCodeEditor()
+  props.updateAttributes({ autoEdit: false })
+}
+
 async function renderPreview() {
   const target = previewEl.value
   if (!target) return
@@ -377,6 +460,7 @@ onMounted(() => {
     fonts.addEventListener('loadingdone', fontsReadyHandler)
     fonts.addEventListener('loadingerror', fontsReadyHandler)
   }
+  consumeAutoEdit()
   void renderPreview()
 })
 
@@ -395,16 +479,15 @@ watch(code, () => {
   void nextTick().then(renderPreview)
 })
 
+watch(() => props.node.attrs.autoEdit, () => {
+  consumeAutoEdit()
+})
+
 function onPreviewClick(event: MouseEvent) {
   if (!props.editor.isEditable) return
   event.preventDefault()
   event.stopPropagation()
-  showCodeEditor.value = true
-  void nextTick().then(() => {
-    textareaEl.value?.focus()
-    const size = textareaEl.value?.value.length ?? 0
-    textareaEl.value?.setSelectionRange(size, size)
-  })
+  openCodeEditor()
 }
 
 function onPreviewPointerDown(event: MouseEvent) {
@@ -416,10 +499,11 @@ function onEditorToggle(event?: MouseEvent) {
     event.preventDefault()
     event.stopPropagation()
   }
-  showCodeEditor.value = !showCodeEditor.value
   if (showCodeEditor.value) {
-    void nextTick().then(() => textareaEl.value?.focus())
+    showCodeEditor.value = false
+    return
   }
+  openCodeEditor()
 }
 
 function onEditorKeydown(event: KeyboardEvent) {

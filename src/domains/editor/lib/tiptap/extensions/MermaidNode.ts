@@ -20,6 +20,10 @@ export const MermaidNode = Node.create({
     return {
       code: {
         default: ''
+      },
+      autoEdit: {
+        default: false,
+        renderHTML: () => ({})
       }
     }
   },

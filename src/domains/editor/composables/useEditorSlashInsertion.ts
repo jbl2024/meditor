@@ -232,7 +232,7 @@ export function useEditorSlashInsertion(options: UseEditorSlashInsertionOptions)
         case 'callout':
           return { type: 'calloutBlock', attrs: { kind: String(data.kind ?? 'NOTE'), message: '' } }
         case 'mermaid':
-          return { type: 'mermaidBlock', attrs: { code: String(data.code ?? '') } }
+          return { type: 'mermaidBlock', attrs: { code: String(data.code ?? ''), autoEdit: true } }
         case 'code':
           return { type: 'codeBlock', attrs: { language: '' }, content: [] }
         case 'html':

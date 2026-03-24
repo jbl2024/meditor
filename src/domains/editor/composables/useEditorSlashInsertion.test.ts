@@ -94,6 +94,28 @@ describe('useEditorSlashInsertion', () => {
     })
   })
 
+  it('inserts mermaid block in auto-edit mode', () => {
+    const chain = createChain()
+    const editor = { chain: vi.fn(() => chain) } as any
+    const insertion = useEditorSlashInsertion({
+      getEditor: () => editor,
+      currentTextSelectionContext: () => ({ text: '/mermaid', nodeType: 'paragraph', from: 7, to: 15 }),
+      readSlashContext: () => ({ from: 7, to: 15 }),
+      currentHeadings: () => [],
+      slugifyHeading: (heading) => heading.toLowerCase(),
+      suppressBlockHandleReveal: vi.fn()
+    })
+
+    const ok = insertion.insertBlockFromDescriptor('mermaid', { code: 'flowchart TD\n  A --> B' })
+
+    expect(ok).toBe(true)
+    expect(chain.deleteRange).toHaveBeenCalledWith({ from: 7, to: 15 })
+    expect(chain.insertContent).toHaveBeenCalledWith({
+      type: 'mermaidBlock',
+      attrs: { code: 'flowchart TD\n  A --> B', autoEdit: true }
+    })
+  })
+
   it('inserts a nested table of contents from current headings', () => {
     const chain = createChain()
     const editor = { chain: vi.fn(() => chain) } as any

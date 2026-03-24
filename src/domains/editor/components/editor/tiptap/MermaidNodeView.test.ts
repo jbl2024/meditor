@@ -36,6 +36,20 @@ async function flush() {
   await nextTick()
   await Promise.resolve()
   await nextTick()
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  await new Promise<void>((resolve) => {
+    let remainingFrames = 4
+    const step = () => {
+      remainingFrames -= 1
+      if (remainingFrames <= 0) {
+        resolve()
+        return
+      }
+      requestAnimationFrame(step)
+    }
+    requestAnimationFrame(step)
+  })
+  await nextTick()
 }
 
 function deferred<T>() {
@@ -74,6 +88,7 @@ function createMockFonts(ready: Promise<unknown> = Promise.resolve()): MockFontF
 function mountHarness(options?: {
   editable?: boolean
   initialCode?: string
+  initialAutoEdit?: boolean
   confirmReplace?: (payload: { templateLabel: string }) => Promise<boolean>
   openPreview?: (payload: { svg: string; code: string; templateId: string }) => void
 }) {
@@ -81,17 +96,21 @@ function mountHarness(options?: {
   document.body.appendChild(root)
 
   const code = ref(options?.initialCode ?? 'flowchart TD\n  A --> B')
+  const autoEdit = ref(options?.initialAutoEdit ?? false)
   const editable = options?.editable ?? true
   const updateAttributes = vi.fn((attrs: Record<string, unknown>) => {
     if (typeof attrs.code === 'string') {
       code.value = attrs.code
+    }
+    if (typeof attrs.autoEdit === 'boolean') {
+      autoEdit.value = attrs.autoEdit
     }
   })
 
   const HarnessComponent = defineComponent({
     setup() {
       return () => h(MermaidNodeView, {
-        node: { attrs: { code: code.value } },
+        node: { attrs: { code: code.value, autoEdit: autoEdit.value } },
         updateAttributes,
         editor: { isEditable: editable },
         extension: { options: { confirmReplace: options?.confirmReplace, openPreview: options?.openPreview } }
@@ -104,7 +123,7 @@ function mountHarness(options?: {
   app.provide('decorationClasses', ref(''))
   app.mount(root)
 
-  return { app, root, code, updateAttributes }
+  return { app, root, code, autoEdit, updateAttributes }
 }
 
 describe('MermaidNodeView', () => {
@@ -265,6 +284,20 @@ describe('MermaidNodeView', () => {
     expect(wrapper.classList.contains('is-editing')).toBe(true)
     expect(harness.root.querySelector('.tomosona-mermaid-code')).toBeTruthy()
     expect(harness.root.querySelector('.tomosona-mermaid-preview')).toBeTruthy()
+
+    harness.app.unmount()
+  })
+
+  it('opens code editor and focuses textarea when auto-edit is requested', async () => {
+    const harness = mountHarness({ initialCode: 'flowchart TD\n  A --> B', initialAutoEdit: true })
+    await flush()
+
+    const textarea = harness.root.querySelector('.tomosona-mermaid-code') as HTMLTextAreaElement
+    expect(textarea).toBeTruthy()
+    expect(document.activeElement).toBe(textarea)
+    expect(textarea.selectionStart).toBe(textarea.value.length)
+    expect(textarea.selectionEnd).toBe(textarea.value.length)
+    expect(harness.updateAttributes).toHaveBeenCalledWith({ autoEdit: false })
 
     harness.app.unmount()
   })
