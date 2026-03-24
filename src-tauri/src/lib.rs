@@ -2,6 +2,7 @@
 //! and Cosmos graph payload generation.
 
 mod db;
+mod default_style;
 mod docx_conversion;
 mod editor_sync;
 mod echoes;
@@ -12,6 +13,7 @@ mod app_meta;
 mod alters;
 mod markdown_index;
 mod search_index;
+mod style_from_docx;
 mod second_brain;
 mod semantic;
 mod settings;

@@ -21,14 +21,14 @@ use mermaid_rs_renderer::{
 use rdocx::{Alignment, BorderStyle, Document, Length, VerticalAlignment};
 use zip::{write::SimpleFileOptions, ZipArchive, ZipWriter};
 
+use crate::default_style::{ParagraphStyle, TemplateStyle, TextStyle};
 use crate::markdown_index::{parse_yaml_frontmatter_properties, strip_yaml_frontmatter};
+use crate::style_from_docx::read_template_style;
 use crate::{
     active_workspace_root, ensure_within_root, normalize_workspace_path, AppError, Result,
 };
 
 const TEMPLATE_DIR_NAME: &str = "_templates";
-const DEFAULT_FONT: &str = "Calibri";
-const DEFAULT_BODY_SIZE: u32 = 24;
 const CODE_FONT: &str = "Courier New";
 const CODE_SIZE: u32 = 20;
 const TABLE_WIDTH_IN: f64 = 6.25;
@@ -39,9 +39,6 @@ const TABLE_MAX_COLUMN_SHARE: f64 = 0.55;
 const TABLE_BORDER_SIZE: u32 = 2;
 const TABLE_HEADER_FILL: &str = "E8EEF4";
 const TABLE_BORDER_COLOR: &str = "B8C4CF";
-const QUOTE_FILL: &str = "F5F7F9";
-const QUOTE_COLOR: &str = "666666";
-const QUOTE_INDENT_PT: f64 = 18.0;
 const CALLOUT_HEADER_TEXT: &str = "333333";
 const CALLOUT_BODY_TEXT: &str = "333333";
 const MERMAID_MAX_WIDTH_IN: f64 = 6.2;
@@ -59,31 +56,6 @@ const MERMAID_EMOJI_REPLACEMENTS: &[(&str, &str)] = &[
     ("🟡", "[warn]"),
     ("🔵", "[info]"),
 ];
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct TemplateStyle {
-    default_font: String,
-    body_size: u32,
-}
-
-impl Default for TemplateStyle {
-    fn default() -> Self {
-        Self {
-            default_font: DEFAULT_FONT.to_string(),
-            body_size: DEFAULT_BODY_SIZE,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Default, PartialEq)]
-struct TextStyle {
-    bold: bool,
-    italic: bool,
-    code: bool,
-    font: Option<String>,
-    size: Option<u32>,
-    color: Option<String>,
-}
 
 #[derive(Debug, Clone)]
 struct RunSegment {
@@ -187,49 +159,6 @@ fn resolve_template_path(root: &Path) -> Result<Option<PathBuf>> {
         .collect::<Vec<_>>();
     candidates.sort_by(|left, right| left.file_name().cmp(&right.file_name()));
     Ok(candidates.into_iter().next())
-}
-
-fn read_template_style(template_path: &Path) -> Result<TemplateStyle> {
-    let file = File::open(template_path)?;
-    let mut archive = ZipArchive::new(file).map_err(|_| AppError::InvalidOperation(
-        "Template DOCX is not a valid Word file.".to_string(),
-    ))?;
-    let mut styles_xml = String::new();
-    archive
-        .by_name("word/styles.xml")
-        .map_err(|_| AppError::InvalidOperation(
-            "Template DOCX is missing styles.".to_string(),
-        ))?
-        .read_to_string(&mut styles_xml)
-        .map_err(|_| AppError::OperationFailed)?;
-    Ok(parse_template_style(&styles_xml))
-}
-
-fn parse_template_style(styles_xml: &str) -> TemplateStyle {
-    let normal_block = styles_xml
-        .find(r#"w:styleId="Normal""#)
-        .map(|index| &styles_xml[index..])
-        .unwrap_or(styles_xml);
-
-    let default_font = extract_xml_attr(normal_block, r#"w:ascii=""#)
-        .or_else(|| extract_xml_attr(styles_xml, r#"w:ascii=""#))
-        .unwrap_or_else(|| DEFAULT_FONT.to_string());
-    let body_size = extract_xml_attr(normal_block, r#"w:sz w:val=""#)
-        .or_else(|| extract_xml_attr(styles_xml, r#"w:sz w:val=""#))
-        .and_then(|value| value.parse::<u32>().ok())
-        .unwrap_or(DEFAULT_BODY_SIZE);
-
-    TemplateStyle {
-        default_font,
-        body_size,
-    }
-}
-
-fn extract_xml_attr(haystack: &str, needle: &str) -> Option<String> {
-    let start = haystack.find(needle)? + needle.len();
-    let remainder = &haystack[start..];
-    let end = remainder.find('"')?;
-    Some(remainder[..end].to_string())
 }
 
 fn build_document(markdown: &str, template_style: &TemplateStyle) -> Document {
@@ -340,46 +269,34 @@ impl Default for RenderContext {
 fn render_block<'a>(node: &'a AstNode<'a>, doc: &mut Document, template: &TemplateStyle, ctx: RenderContext) {
     match &node.data.borrow().value {
         NodeValue::Heading(heading) => {
-            let mut style = TextStyle {
-                bold: true,
-                color: Some(match heading.level {
-                    1 => "1F3864".to_string(),
-                    2 => "2E5090".to_string(),
-                    _ => "404040".to_string(),
-                }),
-                size: Some(match heading.level {
-                    1 => 36,
-                    2 => 28,
-                    3 => 24,
-                    _ => 22,
-                }),
-                font: Some(template.default_font.clone()),
-                ..Default::default()
-            };
+            let heading_style = template.heading(heading.level as u8);
+            let mut style = heading_style.run.clone();
             if ctx.callout.is_some() {
                 style.color = Some(CALLOUT_BODY_TEXT.to_string());
             } else if ctx.quote_depth > 0 {
                 style.italic = true;
-                style.color = Some(QUOTE_COLOR.to_string());
+                style.color = Some("666666".to_string());
             }
-            append_paragraph(doc, build_inline_segments(node, style, template, ctx), template, ctx);
+            let mut paragraph = doc.add_paragraph("");
+            paragraph = apply_paragraph_style(paragraph, &heading_style.paragraph, 1.0);
+            append_segments_to_paragraph(
+                &mut paragraph,
+                build_inline_segments(node, style, template, ctx),
+                template,
+                false,
+            );
         }
         NodeValue::Paragraph => {
-            let mut style = TextStyle {
-                font: Some(template.default_font.clone()),
-                size: Some(template.body_size),
-                ..Default::default()
-            };
+            let mut style = template.body().run.clone();
             if ctx.callout.is_some() {
                 style.color = Some(CALLOUT_BODY_TEXT.to_string());
             } else if ctx.quote_depth > 0 {
-                style.italic = true;
-                style.color = Some(QUOTE_COLOR.to_string());
+                style = template.quote().run.clone();
             }
             append_paragraph(doc, build_inline_segments(node, style, template, ctx), template, ctx);
         }
         NodeValue::BlockQuote | NodeValue::MultilineBlockQuote(_) => {
-            if let Some(callout) = detect_callout(node) {
+            if let Some(callout) = detect_callout(node, template) {
                 render_callout_block(node, doc, template, ctx, callout);
             } else {
                 let next = RenderContext {
@@ -454,7 +371,10 @@ fn render_block<'a>(node: &'a AstNode<'a>, doc: &mut Document, template: &Templa
     }
 }
 
-fn detect_callout<'a>(node: &'a AstNode<'a>) -> Option<(CalloutKind, Option<String>)> {
+fn detect_callout<'a>(
+    node: &'a AstNode<'a>,
+    template: &TemplateStyle,
+) -> Option<(CalloutKind, Option<String>)> {
     let mut children = node.children();
     let first = children.next()?;
     if !matches!(first.data.borrow().value, NodeValue::Paragraph) {
@@ -463,12 +383,8 @@ fn detect_callout<'a>(node: &'a AstNode<'a>) -> Option<(CalloutKind, Option<Stri
 
     let segments = collect_inline_segments_for_node(
         first,
-        TextStyle {
-            font: Some(DEFAULT_FONT.to_string()),
-            size: Some(DEFAULT_BODY_SIZE),
-            ..Default::default()
-        },
-        &TemplateStyle::default(),
+        template.body().run.clone(),
+        template,
     );
     let text = segments
         .iter()
@@ -531,29 +447,23 @@ fn render_callout_block<'a>(
         text: kind.label().to_string(),
         style: TextStyle {
             bold: true,
-            font: Some(template.default_font.clone()),
-            size: Some(template.body_size),
             color: Some(CALLOUT_HEADER_TEXT.to_string()),
-            ..Default::default()
+            ..template.body().run.clone()
         },
     }];
     if let Some(title) = title {
         header_segments.push(RunSegment {
             text: " — ".to_string(),
             style: TextStyle {
-                font: Some(template.default_font.clone()),
-                size: Some(template.body_size),
                 color: Some(CALLOUT_HEADER_TEXT.to_string()),
-                ..Default::default()
+                ..template.body().run.clone()
             },
         });
         header_segments.push(RunSegment {
             text: title,
             style: TextStyle {
-                font: Some(template.default_font.clone()),
-                size: Some(template.body_size),
                 color: Some(CALLOUT_HEADER_TEXT.to_string()),
-                ..Default::default()
+                ..template.body().run.clone()
             },
         });
     }
@@ -561,6 +471,7 @@ fn render_callout_block<'a>(
     header_paragraph = style_paragraph(
         header_paragraph,
         ParagraphKind::CalloutHeader { kind },
+        template,
     );
     append_segments_to_paragraph(&mut header_paragraph, header_segments, template, false);
 
@@ -601,7 +512,16 @@ fn render_list<'a>(
             list_depth: ctx.list_depth + 1,
             callout: ctx.callout,
         };
-        let item_prefix = list_prefix(list_type, item_ctx.list_depth, ordinal);
+        let item_prefix = template.list_prefix(list_type, item_ctx.list_depth, ordinal);
+        let base_style = if ctx.callout.is_some() {
+            let mut style = template.body().run.clone();
+            style.color = Some(CALLOUT_BODY_TEXT.to_string());
+            style
+        } else if ctx.quote_depth > 0 {
+            template.quote().run.clone()
+        } else {
+            template.list().run.clone()
+        };
         let item_prefix = if let Some(task_prefix) = task_prefix {
             format!("{item_prefix}{task_prefix}")
         } else {
@@ -614,11 +534,7 @@ fn render_list<'a>(
                 NodeValue::Paragraph => {
                     let mut segments = build_inline_segments(
                         child,
-                        TextStyle {
-                            font: Some(template.default_font.clone()),
-                            size: Some(template.body_size),
-                            ..Default::default()
-                        },
+                        base_style.clone(),
                         template,
                         item_ctx,
                     );
@@ -628,17 +544,13 @@ fn render_list<'a>(
                         } else {
                             segments.push(RunSegment {
                                 text: item_prefix.clone(),
-                                style: TextStyle {
-                                    font: Some(template.default_font.clone()),
-                                    size: Some(template.body_size),
-                                    ..Default::default()
-                                },
+                                style: base_style.clone(),
                             });
                         }
-                        append_paragraph(doc, segments, template, item_ctx);
+                        append_list_paragraph(doc, segments, template);
                         rendered_primary_paragraph = true;
                     } else {
-                        append_paragraph(doc, segments, template, item_ctx);
+                        append_list_paragraph(doc, segments, template);
                     }
                 }
                 NodeValue::Item(_) | NodeValue::TaskItem(_) | NodeValue::List(_) => {
@@ -651,14 +563,7 @@ fn render_list<'a>(
         }
 
         if !rendered_primary_paragraph {
-            append_paragraph(doc, vec![RunSegment {
-                text: item_prefix,
-                style: TextStyle {
-                    font: Some(template.default_font.clone()),
-                    size: Some(template.body_size),
-                    ..Default::default()
-                },
-            }], template, item_ctx);
+            append_list_paragraph(doc, vec![RunSegment { text: item_prefix, style: base_style }], template);
         }
 
         if matches!(list_type, ListType::Ordered) {
@@ -695,11 +600,7 @@ fn render_table<'a>(
             }
             cells.push(collect_inline_segments_for_node(
                 cell,
-                TextStyle {
-                    font: Some(template.default_font.clone()),
-                    size: Some(template.body_size),
-                    ..Default::default()
-                },
+                template.body().run.clone(),
                 template,
             ));
         }
@@ -730,18 +631,14 @@ fn render_key_value_table(doc: &mut Document, rows: &[TableRowData], template: &
                 text: "Key".to_string(),
                 style: TextStyle {
                     bold: true,
-                    font: Some(template.default_font.clone()),
-                    size: Some(template.body_size),
-                    ..Default::default()
+                    ..template.body().run.clone()
                 },
             }],
             vec![RunSegment {
                 text: "Value".to_string(),
                 style: TextStyle {
                     bold: true,
-                    font: Some(template.default_font.clone()),
-                    size: Some(template.body_size),
-                    ..Default::default()
+                    ..template.body().run.clone()
                 },
             }],
         ],
@@ -869,19 +766,13 @@ fn build_frontmatter_rows(markdown: &str, template: &TemplateStyle) -> Vec<Table
                     if !value_cell.is_empty() {
                         value_cell.push(RunSegment {
                             text: ", ".to_string(),
-                            style: TextStyle {
-                                font: Some(template.default_font.clone()),
-                                size: Some(template.body_size),
-                                ..Default::default()
-                            },
+                            style: template.body().run.clone(),
                         });
                     }
                     value_cell.push(RunSegment {
                         text: value,
                         style: TextStyle {
-                            font: Some(template.default_font.clone()),
-                            size: Some(template.body_size),
-                            ..Default::default()
+                            ..template.body().run.clone()
                         },
                     });
                 }
@@ -896,17 +787,13 @@ fn build_frontmatter_rows(markdown: &str, template: &TemplateStyle) -> Vec<Table
                     text: key,
                     style: TextStyle {
                         bold: true,
-                        font: Some(template.default_font.clone()),
-                        size: Some(template.body_size),
-                        ..Default::default()
+                        ..template.body().run.clone()
                     },
                 }],
                 vec![RunSegment {
                     text: value,
                     style: TextStyle {
-                        font: Some(template.default_font.clone()),
-                        size: Some(template.body_size),
-                        ..Default::default()
+                        ..template.body().run.clone()
                     },
                 }],
             ],
@@ -1384,7 +1271,14 @@ fn append_paragraph(
             quote_depth: ctx.quote_depth,
             callout: ctx.callout,
         },
+        template,
     );
+    append_segments_to_paragraph(&mut paragraph, segments, template, false);
+}
+
+fn append_list_paragraph(doc: &mut Document, segments: Vec<RunSegment>, template: &TemplateStyle) {
+    let mut paragraph = doc.add_paragraph("");
+    paragraph = apply_paragraph_style(paragraph, &template.list().paragraph, 1.0);
     append_segments_to_paragraph(&mut paragraph, segments, template, false);
 }
 
@@ -1399,6 +1293,7 @@ enum ParagraphKind {
 fn style_paragraph<'a>(
     paragraph: rdocx::Paragraph<'a>,
     kind: ParagraphKind,
+    template: &TemplateStyle,
 ) -> rdocx::Paragraph<'a> {
     match kind {
         ParagraphKind::Body { quote_depth, callout } => {
@@ -1414,17 +1309,9 @@ fn style_paragraph<'a>(
                     .line_spacing_multiple(1.0)
                     .keep_together(true)
             } else if quote_depth == 0 {
-                paragraph
-                    .space_before(Length::pt(0.0))
-                    .space_after(Length::pt(5.0))
+                apply_paragraph_style(paragraph, &template.body().paragraph, 1.0)
             } else {
-                let indent = QUOTE_INDENT_PT * quote_depth as f64;
-                paragraph
-                    .indent_left(Length::pt(indent))
-                    .space_before(Length::pt(2.0))
-                    .space_after(Length::pt(2.0))
-                    .shading(QUOTE_FILL)
-                    .line_spacing_multiple(1.0)
+                apply_paragraph_style(paragraph, &template.quote().paragraph, quote_depth as f64)
             }
         }
         ParagraphKind::CalloutHeader { kind } => {
@@ -1440,6 +1327,42 @@ fn style_paragraph<'a>(
                 .keep_together(true)
         }
     }
+}
+
+fn apply_paragraph_style<'a>(
+    mut paragraph: rdocx::Paragraph<'a>,
+    style: &ParagraphStyle,
+    indent_multiplier: f64,
+) -> rdocx::Paragraph<'a> {
+    if let Some(space_before) = style.space_before {
+        paragraph = paragraph.space_before(Length::pt(space_before));
+    }
+    if let Some(space_after) = style.space_after {
+        paragraph = paragraph.space_after(Length::pt(space_after));
+    }
+    if let Some(indent_left) = style.indent_left {
+        paragraph = paragraph.indent_left(Length::pt(indent_left * indent_multiplier.max(1.0)));
+    }
+    if let Some(indent_right) = style.indent_right {
+        paragraph = paragraph.indent_right(Length::pt(indent_right));
+    }
+    if let Some(line_spacing_multiple) = style.line_spacing_multiple {
+        paragraph = paragraph.line_spacing_multiple(line_spacing_multiple);
+    }
+    if let Some(shading_fill) = style.shading_fill.as_deref() {
+        paragraph = paragraph.shading(shading_fill);
+    }
+    if let Some(border_bottom) = &style.border_bottom {
+        paragraph = paragraph.border_bottom(
+            border_bottom.style,
+            border_bottom.size_eighths_pt,
+            &border_bottom.color,
+        );
+    }
+    if style.keep_together {
+        paragraph = paragraph.keep_together(true);
+    }
+    paragraph
 }
 
 fn append_segments_to_paragraph<'a>(
@@ -1487,27 +1410,6 @@ fn apply_run_style<'a>(
         run = run.color(color);
     }
     run
-}
-
-fn list_prefix(list_type: ListType, depth: usize, ordinal: usize) -> String {
-    let indent = "  ".repeat(depth.saturating_sub(1));
-    match list_type {
-        ListType::Bullet => {
-            let bullet = match depth {
-                0 | 1 => '•',
-                _ => '◦',
-            };
-            format!("{indent}{bullet} ")
-        }
-        ListType::Ordered => {
-            let marker = if ordinal == 0 {
-                "1.".to_string()
-            } else {
-                format!("{ordinal}.")
-            };
-            format!("{indent}{marker} ")
-        }
-    }
 }
 
 fn table_alignment_to_paragraph_alignment(alignment: TableAlignment) -> Option<Alignment> {
@@ -1604,6 +1506,38 @@ mod tests {
             .expect("write doc rels");
         zip.write_all(document_rels.as_bytes()).expect("doc rels");
         zip.finish().expect("finish docx");
+    }
+
+    fn write_valid_docx_with_styles(path: &Path, styles_xml: &str) {
+        Document::new().save(path).expect("create base docx");
+
+        let file = File::open(path).expect("open base docx");
+        let mut archive = ZipArchive::new(file).expect("open docx zip");
+        let temp_path = path.with_extension("docx.tmp");
+        let temp_file = File::create(&temp_path).expect("create temp docx");
+        let mut writer = ZipWriter::new(temp_file);
+
+        for index in 0..archive.len() {
+            let mut entry = archive.by_index(index).expect("zip entry");
+            let options = SimpleFileOptions::default().compression_method(entry.compression());
+            let name = entry.name().to_string();
+            if entry.is_dir() {
+                writer.add_directory(&name, options).expect("write dir");
+                continue;
+            }
+
+            let mut bytes = Vec::new();
+            entry.read_to_end(&mut bytes).expect("read entry");
+            if name == "word/styles.xml" {
+                bytes = styles_xml.as_bytes().to_vec();
+            }
+
+            writer.start_file(&name, options).expect("write entry");
+            writer.write_all(&bytes).expect("write bytes");
+        }
+
+        writer.finish().expect("finish docx");
+        fs::rename(&temp_path, path).expect("replace docx");
     }
 
     fn read_docx_paragraphs(path: &Path) -> Vec<String> {
@@ -1710,31 +1644,6 @@ mod tests {
     }
 
     #[test]
-    fn parse_template_style_reads_default_font_and_size() {
-        let xml = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-  <w:docDefaults>
-    <w:rPrDefault>
-      <w:rPr>
-        <w:rFonts w:ascii="Aptos" w:hAnsi="Aptos" />
-        <w:sz w:val="30" />
-      </w:rPr>
-    </w:rPrDefault>
-  </w:docDefaults>
-  <w:style w:type="paragraph" w:styleId="Normal">
-    <w:name w:val="Normal" />
-    <w:rPr>
-      <w:rFonts w:ascii="Aptos" w:hAnsi="Aptos" />
-      <w:sz w:val="30" />
-    </w:rPr>
-  </w:style>
-</w:styles>"#;
-        let style = parse_template_style(xml);
-        assert_eq!(style.default_font, "Aptos");
-        assert_eq!(style.body_size, 30);
-    }
-
-    #[test]
     fn resolve_template_path_picks_first_docx() {
         let _guard = workspace_test_guard();
         let workspace = create_temp_workspace("tomosona-docx-template");
@@ -1749,6 +1658,15 @@ mod tests {
             template.as_ref().and_then(|path| path.file_name()).and_then(|name| name.to_str()),
             Some("a.docx")
         );
+    }
+
+    #[test]
+    fn resolve_template_path_returns_none_without_templates_dir() {
+        let _guard = workspace_test_guard();
+        let workspace = create_temp_workspace("tomosona-docx-no-template-dir");
+
+        let template = resolve_template_path(&workspace).expect("resolve template");
+        assert!(template.is_none());
     }
 
     #[test]
@@ -1938,8 +1856,68 @@ mod tests {
             .into_iter()
             .find(|paragraph| paragraph.text().trim() == "First line")
             .expect("quote paragraph");
-        assert_eq!(quote_paragraph.shading_fill(), Some(QUOTE_FILL));
+        assert_eq!(
+            quote_paragraph.shading_fill(),
+            Some(TemplateStyle::default().quote.paragraph.shading_fill.as_deref().unwrap())
+        );
         assert!(quote_paragraph.runs().any(|run| run.is_italic()));
+    }
+
+    #[test]
+    fn convert_markdown_to_docx_uses_heading_style_from_template() {
+        let _guard = workspace_test_guard();
+        let workspace = create_temp_workspace("tomosona-docx-heading-style");
+        let templates = workspace.join("_templates");
+        fs::create_dir_all(&templates).expect("templates");
+        let template_styles = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:docDefaults>
+    <w:rPrDefault>
+      <w:rPr>
+        <w:rFonts w:ascii="Aptos" w:hAnsi="Aptos" />
+        <w:sz w:val="30" />
+      </w:rPr>
+    </w:rPrDefault>
+  </w:docDefaults>
+  <w:style w:type="paragraph" w:styleId="Normal">
+    <w:name w:val="Normal" />
+    <w:rPr>
+      <w:rFonts w:ascii="Aptos" w:hAnsi="Aptos" />
+      <w:sz w:val="30" />
+    </w:rPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="Heading1">
+    <w:name w:val="Titre 1" />
+    <w:rPr>
+      <w:rFonts w:ascii="Inter" w:hAnsi="Inter" />
+      <w:b />
+      <w:sz w:val="42" />
+      <w:color w:val="1357AF" />
+    </w:rPr>
+    <w:pPr>
+      <w:spacing w:before="360" w:after="120" />
+    </w:pPr>
+  </w:style>
+</w:styles>"#;
+        write_valid_docx_with_styles(&templates.join("template.docx"), template_styles);
+
+        let source = workspace.join("styled.md");
+        fs::write(&source, "# Styled heading").expect("write source");
+
+        crate::set_active_workspace(&workspace.to_string_lossy()).expect("set workspace");
+        let output = convert_markdown_to_docx_sync(source.to_string_lossy().to_string())
+            .expect("convert");
+
+        let doc = Document::open(&output).expect("open docx");
+        let heading = doc
+            .paragraphs()
+            .into_iter()
+            .find(|paragraph| paragraph.text().trim() == "Styled heading")
+            .expect("heading paragraph");
+        let first_run = heading.runs().next().expect("heading run");
+        assert_eq!(first_run.font_name(), Some("Inter"));
+        assert!(first_run.is_bold());
+        assert_eq!(first_run.size(), Some(21.0));
     }
 
     #[test]
@@ -2175,6 +2153,21 @@ mod tests {
         fs::write(templates.join("broken.docx"), "not a zip").expect("broken template");
         let source = workspace.join("note.md");
         fs::write(&source, "# Title").expect("write note");
+
+        crate::set_active_workspace(&workspace.to_string_lossy()).expect("set workspace");
+        let output = convert_markdown_to_docx_sync(source.to_string_lossy().to_string())
+            .expect("convert");
+
+        assert!(output.ends_with("note.docx"));
+        assert!(Path::new(&output).exists());
+    }
+
+    #[test]
+    fn convert_markdown_to_docx_falls_back_without_template_dir() {
+        let _guard = workspace_test_guard();
+        let workspace = create_temp_workspace("tomosona-docx-no-template");
+        let source = workspace.join("note.md");
+        fs::write(&source, "# Title\n\nBody.\n").expect("write note");
 
         crate::set_active_workspace(&workspace.to_string_lossy()).expect("set workspace");
         let output = convert_markdown_to_docx_sync(source.to_string_lossy().to_string())
