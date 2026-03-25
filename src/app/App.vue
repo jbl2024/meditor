@@ -21,7 +21,6 @@ import {
   writeTextFile,
 } from '../shared/api/workspaceApi'
 import { convertMarkdownToDocx } from '../shared/api/docxConversionApi'
-import { readAppSettings } from '../shared/api/settingsApi'
 import {
   addFavorite,
   listFavorites,
@@ -152,6 +151,7 @@ import { useAppShellWorkspaceSetup } from './composables/useAppShellWorkspaceSet
 import { useAppShellWorkspaceRouting } from './composables/useAppShellWorkspaceRouting'
 import { useAppModalController } from './composables/useAppModalController'
 import { useAppNotePersistence } from './composables/useAppNotePersistence'
+import { useAppSettingsWorkflow } from './composables/useAppSettingsWorkflow'
 import { useAppSecondBrainBridge } from './composables/useAppSecondBrainBridge'
 import { useAppShellViewModels } from './composables/useAppShellViewModels'
 import { useAppShellConstitutedContextActions } from './composables/useAppShellConstitutedContextActions'
@@ -875,6 +875,13 @@ const {
   openSettingsFromOverflow,
   openShortcutsFromPalette
 } = shellModals
+const settingsWorkflow = useAppSettingsWorkflow({
+  altersSettings,
+  markIndexOutOfSync,
+  notifySuccess: (message: string) => filesystem.notifySuccess(message),
+  notifyInfo: (message: string) => filesystem.notifyInfo(message),
+  closeSettingsModal: () => closeSettingsModal()
+})
 closeQuickOpenProxy = () => closeQuickOpen()
 const workspaceEntries = useAppShellWorkspaceEntries({
   statePort: {
@@ -1632,7 +1639,7 @@ const appShellRuntimeLifecycle = useAppShellRuntimeLifecycle({
     initializeShellPersistence: () => shellPersistence.initializeShellPersistence()
   },
   alterSettingsPort: {
-    syncAlterSettingsFromDisk: () => syncAlterSettingsFromDisk()
+    syncAlterSettingsFromDisk: () => settingsWorkflow.syncAlterSettingsFromDisk()
   },
   workspaceLifecyclePort: {
     start: () => workspaceLifecycle.start(),
@@ -1791,31 +1798,6 @@ function onThemePickerEnter() {
 
 function openThemePickerFromOverflow() {
   shellModalInteractions?.openThemePickerFromOverflow()
-}
-
-function onSettingsSaved(result: { path: string; embeddings_changed: boolean }) {
-  filesystem.notifySuccess(`Settings saved at ${result.path}.`)
-  if ('alters' in result) {
-    altersSettings.value = (result as typeof result & { alters: AppSettingsAlters }).alters
-  }
-  if (result.embeddings_changed) {
-    markIndexOutOfSync()
-    filesystem.notifyInfo('Embedding settings changed. Rebuild index to resync semantic search.')
-  }
-  closeSettingsModal()
-}
-
-async function syncAlterSettingsFromDisk() {
-  try {
-    const settings = await readAppSettings()
-    altersSettings.value = settings.alters
-  } catch {
-    altersSettings.value = {
-      default_mode: 'neutral',
-      show_badge_in_chat: true,
-      default_influence_intensity: 'balanced'
-    }
-  }
 }
 
 function onExplorerError(message: string) {
@@ -2288,7 +2270,7 @@ onBeforeUnmount(() => {
       @cancel-workspace-setup-wizard="workspaceRouting.closeWorkspaceSetupWizard()"
       @submit-workspace-setup-wizard="void workspaceRouting.applyWorkspaceSetupWizard($event)"
       @cancel-settings="closeSettingsModal"
-      @settings-saved="onSettingsSaved"
+      @settings-saved="settingsWorkflow.onSettingsSaved"
       @close-design-system-debug="closeDesignSystemDebugModal"
       @close-shortcuts="closeShortcutsModal"
       @update-shortcuts-filter-query="shortcutsFilterQuery = $event"
