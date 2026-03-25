@@ -18,6 +18,37 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.23.2] - 2026-03-25
+
+### Changed
+- Merge pull request #53 from jbl2024/dependabot/cargo/src-tauri/sqlite-vec-0.1.7 (64c3cd7)
+- chore(deps): bump sqlite-vec from 0.1.6 to 0.1.7 in /src-tauri (78452ee)
+- Merge pull request #50 from jbl2024/dependabot/cargo/src-tauri/rusqlite-0.39.0 (91a1c1b)
+- Merge pull request #55 from jbl2024/dependabot/cargo/src-tauri/fastembed-5.13.0 (1124d17)
+- Merge pull request #57 from jbl2024/dependabot/npm_and_yarn/floating-ui/vue-1.1.11 (f40e74a)
+- Merge pull request #56 from jbl2024/dependabot/npm_and_yarn/tiptap/extension-placeholder-3.20.4 (407c8f4)
+- Merge pull request #52 from jbl2024/dependabot/npm_and_yarn/tiptap/extension-code-block-lowlight-3.20.4 (3195fe5)
+- Merge pull request #51 from jbl2024/dependabot/npm_and_yarn/vite-8.0.1 (30a2ad7)
+- test(editor): stabilize HtmlNodeView integration wait (2d4dc04)
+- test(editor): stabilize HtmlNodeView integration wait (23d3ad5)
+- test(editor): stabilize HtmlNodeView integration wait (9bda8dd)
+- chore(release): prepare v0.23.1 (2e25417)
+- chore(logging): remove workspace and docx debug traces (951ea8c)
+- refactor(docx): group export modules under dedicated namespace (d5a67da)
+- refactor(docx): split default and template style handling (c0d830e)
+- chore(deps-dev): bump vite from 7.3.1 to 8.0.1 (ccf4263)
+- chore(deps): bump @floating-ui/vue from 1.1.10 to 1.1.11 (178e86a)
+- chore(deps): bump rusqlite from 0.38.0 to 0.39.0 in /src-tauri (80c94f9)
+- chore(deps): bump fastembed from 5.12.1 to 5.13.0 in /src-tauri (89c770e)
+- chore(deps): bump @tiptap/extension-placeholder from 3.20.1 to 3.20.4 (1112e50)
+- chore(deps): bump @tiptap/extension-code-block-lowlight (c80516b)
+
+### Fixed
+- fix(editor-sync): remove unused internal write fields (2c3e7ad)
+- fix(editor): auto-open mermaid block editor on insertion (e33db80)
+- fix(docx): render headings through DOCX styles only (1052be3)
+- fix(docx): prefer localized heading styles and support h4-h6 (bbbf34d)
+
 ## [0.23.1] - 2026-03-24
 
 ### Changed
