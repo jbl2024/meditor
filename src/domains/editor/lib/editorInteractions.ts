@@ -1,6 +1,7 @@
 /**
  * Shared editor interaction helpers used by keyboard/paste handlers.
  */
+import type { EditorView } from '@tiptap/pm/view'
 import { clipboardHtmlToMarkdown } from './markdownBlocks'
 
 type ListStyle = 'unordered' | 'ordered' | 'checklist'
@@ -91,6 +92,45 @@ export function isZoomOutShortcut(event: Pick<KeyboardEvent, 'key' | 'code'>): b
 
 export function isZoomResetShortcut(event: Pick<KeyboardEvent, 'key' | 'code'>): boolean {
   return event.key === '0' || event.code === 'Digit0' || event.code === 'Numpad0'
+}
+
+/**
+ * Adjusts a heading level when Tab is pressed at the start of the block.
+ *
+ * This keeps heading tab navigation local to the editor and prevents the browser
+ * from moving focus into adjacent chrome, which is especially important on Linux
+ * where contenteditable focus traversal is more aggressive.
+ */
+export function adjustHeadingLevelFromTab(
+  view: EditorView,
+  event: Pick<KeyboardEvent, 'key' | 'code' | 'shiftKey' | 'preventDefault' | 'stopPropagation'>
+): boolean {
+  if (event.key !== 'Tab' && event.key !== 'ISO_Left_Tab' && event.code !== 'Tab') return false
+
+  const { selection } = view.state
+  if (!selection.empty) return false
+
+  const { $from } = selection
+  const parent = $from.parent
+  if (parent.type.name !== 'heading') return false
+  if ($from.parentOffset !== 0) return false
+
+  const currentLevel = Number(parent.attrs?.level ?? 1)
+  const nextLevel = Math.max(1, Math.min(6, currentLevel + (event.shiftKey ? -1 : 1)))
+
+  event.preventDefault()
+  event.stopPropagation()
+
+  if (nextLevel === currentLevel) return true
+
+  const headingPos = $from.before($from.depth)
+  view.dispatch(
+    view.state.tr.setNodeMarkup(headingPos, undefined, {
+      ...parent.attrs,
+      level: nextLevel
+    })
+  )
+  return true
 }
 
 export function looksLikeMarkdown(text: string): boolean {

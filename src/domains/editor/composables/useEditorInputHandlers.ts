@@ -3,6 +3,7 @@ import type { Editor } from '@tiptap/vue-3'
 import type { SlashCommand } from '../lib/editorSlashCommands'
 import {
   applyMarkdownShortcut,
+  adjustHeadingLevelFromTab,
   isEditorZoomModifier,
   selectSmartPasteMarkdown,
   isZoomInShortcut,
@@ -82,7 +83,12 @@ export function useEditorInputHandlers(options: UseEditorInputHandlersOptions) {
   }
 
   function onEditorKeydown(event: KeyboardEvent) {
-    if (!options.editingPort.getEditor()) return
+    const editor = options.editingPort.getEditor()
+    if (!editor) return
+
+    if (adjustHeadingLevelFromTab(editor.view, event)) {
+      return
+    }
 
     const slashInteractionKey =
       event.key === 'ArrowDown' ||

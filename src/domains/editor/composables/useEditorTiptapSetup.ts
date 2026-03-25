@@ -15,6 +15,7 @@ import { WikilinkNode } from '../lib/tiptap/extensions/WikilinkNode'
 import { CodeBlockNode } from '../lib/tiptap/extensions/CodeBlockNode'
 import { TableCellAlign } from '../lib/tiptap/extensions/TableCellAlign'
 import { EditorFindExtension } from '../lib/tiptap/extensions/EditorFind'
+import { adjustHeadingLevelFromTab } from '../lib/editorInteractions'
 import { WIKILINK_STATE_KEY, type WikilinkCandidate } from '../lib/tiptap/plugins/wikilinkState'
 import { enterWikilinkEditFromNode } from '../lib/tiptap/extensions/wikilinkCommands'
 import type { RevealAnchorRequest } from './useEditorNavigation'
@@ -72,7 +73,7 @@ export type UseEditorTiptapSetupOptions = {
  */
 export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
   const ISO_DATE_TOKEN_REGEX = /^\d{4}-\d{2}-\d{2}$/
-  const TAB_KEYS = new Set(['Tab', 'ISO_Left_Tab'])
+  const EDITOR_LANGUAGE = 'fr'
 
   function closestAnchorFromEventTarget(target: EventTarget | null): HTMLAnchorElement | null {
     const element = target instanceof Element
@@ -221,35 +222,6 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
     return true
   }
 
-  function adjustHeadingLevelFromTab(view: ProseMirrorEditorView, event: KeyboardEvent): boolean {
-    if (!TAB_KEYS.has(event.key) && event.code !== 'Tab') return false
-
-    const { selection } = view.state
-    if (!selection.empty) return false
-
-    const { $from } = selection
-    const parent = $from.parent
-    if (parent.type.name !== 'heading') return false
-    if ($from.parentOffset !== 0) return false
-
-    const currentLevel = Number(parent.attrs?.level ?? 1)
-    const nextLevel = Math.max(1, Math.min(6, currentLevel + (event.shiftKey ? -1 : 1)))
-
-    event.preventDefault()
-    event.stopPropagation()
-
-    if (nextLevel === currentLevel) return true
-
-    const headingPos = $from.before($from.depth)
-    view.dispatch(
-      view.state.tr.setNodeMarkup(headingPos, undefined, {
-        ...parent.attrs,
-        level: nextLevel
-      })
-    )
-    return true
-  }
-
   function createEditorOptions(path: string) {
     return {
       autofocus: false,
@@ -296,7 +268,9 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
       ],
       editorProps: {
         attributes: {
-          class: 'ProseMirror tomosona-prosemirror'
+          class: 'ProseMirror tomosona-prosemirror',
+          spellcheck: 'true',
+          lang: EDITOR_LANGUAGE
         },
         handleDOMEvents: {
           click: (view: ProseMirrorEditorView, event: MouseEvent) => handleAnchorClick(view, path, -1, event)

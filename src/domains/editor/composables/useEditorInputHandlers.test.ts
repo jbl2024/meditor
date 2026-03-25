@@ -93,6 +93,49 @@ describe('useEditorInputHandlers', () => {
     expect(options.editingPort.insertBlockFromDescriptor).toHaveBeenCalledWith('quote', {})
   })
 
+  it('adjusts heading level on Tab before focus can leave the editor', () => {
+    const setNodeMarkup = vi.fn(() => ({ step: 'setNodeMarkup' }))
+    const dispatch = vi.fn()
+    const editor = {
+      view: {
+        state: {
+          selection: {
+            empty: true,
+            $from: {
+              parent: {
+                type: { name: 'heading' },
+                attrs: { level: 2 }
+              },
+              parentOffset: 0,
+              depth: 1,
+              before: vi.fn(() => 12)
+            }
+          },
+          tr: {
+            setNodeMarkup
+          }
+        },
+        dispatch
+      }
+    } as unknown as Editor
+    const { handlers } = createHandlers({
+      editingPort: {
+        getEditor: () => editor,
+        currentPath: ref('a.md'),
+        captureCaret: vi.fn(),
+        currentTextSelectionContext: () => ({ text: 'alpha', nodeType: 'heading', from: 1, to: 6 }),
+        insertBlockFromDescriptor: vi.fn(() => true)
+      }
+    })
+
+    const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
+    handlers.onEditorKeydown(event)
+
+    expect(setNodeMarkup).toHaveBeenCalledWith(12, undefined, { level: 3 })
+    expect(dispatch).toHaveBeenCalledWith({ step: 'setNodeMarkup' })
+    expect(event.defaultPrevented).toBe(true)
+  })
+
   it('suppresses gutter reveal when Enter inserts a new list item', () => {
     const listEditor = {
       state: {

@@ -50,6 +50,8 @@ describe('useEditorTiptapSetup', () => {
     expect(editorOptions.injectCSS).toBe(false)
     expect(extensionNames).toContain('tableCellAlign')
     expect(codeBlock?.options?.exitOnTripleEnter).toBe(false)
+    expect(editorOptions.editorProps.attributes.spellcheck).toBe('true')
+    expect(editorOptions.editorProps.attributes.lang).toBe('fr')
     expect(typeof editorOptions.editorProps.handleDOMEvents.click).toBe('function')
     expect(typeof editorOptions.editorProps.handleClick).toBe('function')
   })
