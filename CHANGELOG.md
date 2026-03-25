@@ -18,6 +18,19 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.24.0] - 2026-03-25
+
+### Changed
+- docs(architecture): clarify ownership and module purpose (baac0fb)
+- refactor(app): extract settings workflow from root shell (491d2bb)
+- refactor(app): extract note persistence workflow from root shell (286b070)
+- test(second-brain): cover extracted session and stream workflows (7b60ce6)
+- docs(second-brain): add module and function docs (5dc8c46)
+- refactor(second-brain): split stream runtime from composer workflow (12da6f0)
+- docs(start-here): reflect second brain workflow split (2e71a20)
+- refactor(second-brain): split session and conversation workflows (76cf2ed)
+- refactor(second-brain): move view orchestration into domain composable (e881387)
+
 ## [0.23.3] - 2026-03-25
 
 ### Fixed
