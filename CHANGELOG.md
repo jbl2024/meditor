@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.23.3] - 2026-03-25
+
+### Fixed
+- fix(editor): keep tab on headings from escaping to gutter (56848a6)
+
 ## [0.23.2] - 2026-03-25
 
 ### Changed
