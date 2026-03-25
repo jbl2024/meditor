@@ -3,6 +3,16 @@
 ## Scope
 This folder contains the modular frontend surface for the Second Brain view.
 
+## Ownership Map
+
+| Module | Owns | Exists To |
+| --- | --- | --- |
+| `SecondBrainView.vue` | render shell, props, emits, local DOM refs | keep the view thin so it does not own backend or workflow state |
+| `useSecondBrainViewState.ts` | façade that assembles the sub-workflows | give the shell one stable surface without merging responsibilities |
+| `useSecondBrainSessionWorkflow.ts` | session loading, explicit context updates, Alter selection, Echoes anchoring, session lifecycle | keep persistence and session state separate from composer and stream timing |
+| `useSecondBrainStreamRuntime.ts` | stream subscriptions, cancellation, auto-scroll, assistant render buffer | keep backend stream timing and DOM observer details out of the composer |
+| `useSecondBrainConversationRuntime.ts` | composer input, mentions, Pulse prompts, copy/export | keep user input and export behavior separate from session persistence and stream lifecycle |
+
 ## Components
 - `SecondBrainView.vue`: render shell for the chat surface.
 - `SecondBrainSessionDropdown.vue`: quick session switch/create/delete from the header.

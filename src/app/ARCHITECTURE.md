@@ -4,6 +4,7 @@
 - `App.vue` is the shell composer for the desktop frontend.
 - It wires domain controllers, shell workflows, and shell UI surfaces.
 - It must not become the implementation home for cross-cutting workflows.
+- The shell docs should answer two questions immediately: who owns the workflow, and why that workflow stays in `app` instead of a domain.
 
 ## Boundaries
 - Allowed dependency direction: `app -> domains`.
@@ -31,6 +32,11 @@
   - `appShellDocuments`
   - `appShellPane`
   - `appShellPathMoveEffects`
+- Small shell workflows live in `src/app/composables/*` when they own a narrow shell responsibility:
+  - `useAppWorkspaceController` owns workspace-scoped file state and metadata.
+  - `useAppShellRuntimeLifecycle` owns global boot/teardown wiring.
+  - `useAppNotePersistence` owns root note snapshot, rename, and save orchestration.
+  - `useAppSettingsWorkflow` owns shell settings hydration and save-result side effects.
 - Presentation surfaces keep the root template small by grouping existing UI into
   explicit shells:
   - `AppShellChromeSurface`
@@ -59,6 +65,8 @@
 - `useAppShellPaneRuntime`: pane-tab, editor-status, and Cosmos pane event glue.
 - `useAppShellWorkspaceLifecycle`: workspace restore, workspace close/reset, and saved-workspace bootstrap.
 - `useAppShellRuntimeLifecycle`: runtime boot/teardown for persistence, open-trace, global listeners, and workspace lifecycle start/stop.
+- `useAppNotePersistence`: note snapshot, title-based rename, and save-buffer orchestration for the shell-owned root editor path.
+- `useAppSettingsWorkflow`: settings hydration from disk and save-result reactions that affect shell state.
 - `appNavigationHistory`: pure codecs and labels for pane-native history snapshots.
 - Existing higher-level controllers remain domain or shell orchestrators:
   - `useAppWorkspaceController`

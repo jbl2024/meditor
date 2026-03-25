@@ -18,6 +18,16 @@ The main rule is simple:
 
 If you keep that boundary intact, the code stays manageable.
 
+## How To Read The Docs
+
+The architecture notes are only useful if they answer the same three questions every time:
+
+- Who owns this state or workflow?
+- Why does this module exist instead of living somewhere larger?
+- What boundary must not be crossed?
+
+If a module or doc does not answer those questions, treat it as incomplete and prefer the smaller owner.
+
 ## Read This In Order
 
 1. `README.md`
@@ -61,6 +71,8 @@ Use this as a quick routing table when you need to make a change.
 | Workspace setup wizard | `src/app/components/app/WorkspaceSetupWizardModal.vue` | `src/app/composables/useAppShellWorkspaceSetup.ts`, `src/app/lib/workspaceSetupWizard.ts`, `src/app/ARCHITECTURE.md` |
 | Open note | `src/app/composables/useAppShellOpenFlow.ts` | `src/app/composables/useAppNavigationController.ts`, `src/domains/editor/composables/*`, `src-tauri/src/fs_ops.rs` |
 | Save note | `src/domains/editor/components/EditorView.vue` | `src/domains/editor/composables/useEditorFileLifecycle.ts`, `src/domains/editor/composables/useEditorDocumentRuntime.ts`, `src-tauri/src/editor_sync.rs` |
+| Root note persistence | `src/app/composables/useAppNotePersistence.ts` | `src/app/App.vue`, `src/app/composables/useAppWorkspaceController.ts`, `src/shared/api/editorSyncApi.ts` |
+| Root settings / alters sync | `src/app/composables/useAppSettingsWorkflow.ts` | `src/app/App.vue`, `src/app/components/settings/SettingsModal.vue`, `src/shared/api/settingsApi.ts` |
 | Shell keyboard / command routing | `src/app/composables/useAppShellKeyboard.ts` | `src/app/composables/useAppShellCommands.ts`, `src/app/composables/useAppShellPaletteActions.ts`, `src/app/composables/useAppShellModalInteractions.ts` |
 | Command palette catalog | `src/app/composables/useAppShellPaletteActions.ts` | `src/app/composables/useAppShellCommands.ts`, `src/app/composables/useAppShellModalInteractions.ts`, `src/app/ARCHITECTURE.md` |
 | Shell entrypoint bridge | `src/app/composables/useAppShellEntryActions.ts` | `src/app/composables/useAppShellLaunchpad.ts`, `src/app/composables/useAppShellPaletteActions.ts`, `src/app/ARCHITECTURE.md` |
