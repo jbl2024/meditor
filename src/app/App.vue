@@ -22,7 +22,6 @@ import {
 } from '../shared/api/workspaceApi'
 import { convertMarkdownToDocx } from '../shared/api/docxConversionApi'
 import { readAppSettings } from '../shared/api/settingsApi'
-import { readNoteSnapshot as readNoteSnapshotIpc, saveNoteBuffer as saveNoteBufferIpc } from '../shared/api/editorSyncApi'
 import {
   addFavorite,
   listFavorites,
@@ -70,7 +69,6 @@ import {
 } from '../domains/second-brain/lib/secondBrainContextPaths'
 import {
   dailyNotePath,
-  fileName,
   formatIsoDate,
   formatTimestamp,
   isIsoDate,
@@ -85,12 +83,9 @@ import {
   extractHeadingsFromMarkdown,
   hasForbiddenEntryNameChars,
   isReservedEntryName,
-  isTitleOnlyContent,
-  markdownExtensionFromPath,
   noteTitleFromPath,
   parentPrefixForModal,
   resolveExistingWikilinkPath,
-  sanitizeTitleForFileName
 } from './lib/appShellDocuments'
 import { formatDurationMs } from './lib/indexActivity'
 import {
@@ -156,6 +151,7 @@ import { useAppShellWorkspaceLifecycle } from './composables/useAppShellWorkspac
 import { useAppShellWorkspaceSetup } from './composables/useAppShellWorkspaceSetup'
 import { useAppShellWorkspaceRouting } from './composables/useAppShellWorkspaceRouting'
 import { useAppModalController } from './composables/useAppModalController'
+import { useAppNotePersistence } from './composables/useAppNotePersistence'
 import { useAppSecondBrainBridge } from './composables/useAppSecondBrainBridge'
 import { useAppShellViewModels } from './composables/useAppShellViewModels'
 import { useAppShellConstitutedContextActions } from './composables/useAppShellConstitutedContextActions'
@@ -533,6 +529,19 @@ const {
   runWorkspaceMutation,
   dispose: disposeIndexingController
 } = indexing
+const notePersistence = useAppNotePersistence({
+  workingFolderPath: filesystem.workingFolderPath,
+  virtualDocs,
+  allWorkspaceFiles,
+  workspaceMutationEchoesToken,
+  ensureParentFolders,
+  refreshActiveFileMetadata,
+  upsertWorkspaceFilePath,
+  loadAllFiles,
+  enqueueMarkdownReindex,
+  pathExists,
+  renameEntry
+})
 
 const indexNotesTotalCount = computed(() => indexOverviewStats.value?.workspace_notes_count ?? allWorkspaceFiles.value.length)
 const indexNotesTotalLoading = computed(() => loadingAllFiles.value)
@@ -1828,21 +1837,6 @@ function onExplorerConvertToWord(path: string) {
   void convertMarkdownToWord(path)
 }
 
-async function readNoteSnapshot(path: string): Promise<ReadNoteSnapshotResult> {
-  if (!filesystem.workingFolderPath.value) {
-    throw new Error('Working folder is not set.')
-  }
-  const virtual = virtualDocs.value[path]
-  if (virtual) {
-    return {
-      path,
-      content: virtual.content,
-      version: null
-    }
-  }
-  return await readNoteSnapshotIpc(path)
-}
-
 function onEditorPathRenamed(payload: { from: string; to: string; manual: boolean }) {
   void workspaceMutationEffects.handlePathRenamed(payload).catch((err) => {
     filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not update wikilinks.'
@@ -1861,91 +1855,16 @@ function onExplorerPathsMoved(moves: PathMove[]) {
   })
 }
 
+async function readNoteSnapshot(path: string): Promise<ReadNoteSnapshotResult> {
+  return await notePersistence.readNoteSnapshot(path)
+}
+
 async function renameFileFromTitle(path: string, rawTitle: string): Promise<RenameFromTitleResult> {
-  const root = filesystem.workingFolderPath.value
-  if (!root) {
-    throw new Error('Working folder is not set.')
-  }
-
-  const normalizedTitle = sanitizeTitleForFileName(rawTitle)
-  const ext = markdownExtensionFromPath(path)
-  const nextName = `${normalizedTitle}${ext}`
-
-  if (fileName(path) === nextName) {
-    return { path, title: normalizedTitle }
-  }
-
-  const exists = await pathExists(path)
-  if (!exists) {
-    const parent = path.replace(/\\/g, '/').replace(/\/[^/]+$/, '')
-    let candidate = `${parent}/${nextName}`
-    let idx = 1
-    while (await pathExists(candidate)) {
-      const alt = `${normalizedTitle} (${idx})${ext}`
-      candidate = `${parent}/${alt}`
-      idx += 1
-      if (idx > 9_999) {
-        throw new Error('Could not choose a unique filename.')
-      }
-    }
-    return {
-      path: candidate,
-      title: noteTitleFromPath(candidate)
-    }
-  }
-
-  const renamedPath = await renameEntry(path, nextName, 'rename')
-  return {
-    path: renamedPath,
-    title: noteTitleFromPath(renamedPath)
-  }
+  return await notePersistence.renameFileFromTitle(path, rawTitle)
 }
 
 async function saveNoteBuffer(path: string, txt: string, options: SaveFileOptions): Promise<SaveFileResult> {
-  if (!filesystem.workingFolderPath.value) {
-    throw new Error('Working folder is not set.')
-  }
-  const virtual = virtualDocs.value[path]
-  if (virtual && !options.explicit && isTitleOnlyContent(txt, virtual.titleLine)) {
-    return {
-      ok: true,
-      version: options.expectedBaseVersion
-    }
-  }
-
-  await ensureParentFolders(path)
-  const result = await saveNoteBufferIpc({
-    path,
-    content: txt,
-    expectedBaseVersion: options.expectedBaseVersion,
-    requestId: crypto.randomUUID(),
-    force: options.force
-  })
-
-  if (!result.ok) {
-    return result
-  }
-
-  await refreshActiveFileMetadata(path)
-
-  if (virtual) {
-    const nextVirtual = { ...virtualDocs.value }
-    delete nextVirtual[path]
-    virtualDocs.value = nextVirtual
-  }
-
-  const normalizedPathKey = normalizePathKey(path)
-  const isNewWorkspacePath = !allWorkspaceFiles.value.some((item) => normalizePathKey(item) === normalizedPathKey)
-
-  upsertWorkspaceFilePath(path)
-  enqueueMarkdownReindex(path)
-
-  const shouldRefreshWorkspaceFiles = virtual || isNewWorkspacePath
-  if (shouldRefreshWorkspaceFiles) {
-    await loadAllFiles()
-    workspaceMutationEchoesToken.value += 1
-  }
-  return result
+  return await notePersistence.saveNoteBuffer(path, txt, options)
 }
 
 async function onOutlineHeadingClick(payload: { index: number; heading: { level: 1 | 2 | 3; text: string } }) {
