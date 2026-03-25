@@ -89,10 +89,7 @@ pub enum SaveNoteResult {
 
 #[derive(Debug, Clone)]
 pub(crate) struct InternalWriteRecord {
-    pub path: String,
-    pub request_id: String,
     pub timestamp_ms: u64,
-    pub source: InternalWriteSource,
     pub resulting_version: FileVersion,
     pub content_hash: String,
 }
@@ -186,10 +183,7 @@ pub(crate) fn record_internal_write_with_source(
     writes.insert(
         normalized.clone(),
         InternalWriteRecord {
-            path: normalized,
-            request_id,
             timestamp_ms: now,
-            source,
             resulting_version: version,
             content_hash: blake3::hash(content.as_bytes()).to_hex().to_string(),
         },
@@ -233,7 +227,6 @@ pub(crate) fn record_workspace_mutation_write_from_disk(path: &Path) {
     let Some(version) = version_from_path(path) else {
         return;
     };
-    let request_id = format!("workspace-mutation:{}", now_ms());
     let normalized = normalize_slashes(path);
     let mut writes = match internal_write_slot().lock() {
         Ok(guard) => guard,
@@ -244,10 +237,7 @@ pub(crate) fn record_workspace_mutation_write_from_disk(path: &Path) {
     writes.insert(
         normalized.clone(),
         InternalWriteRecord {
-            path: normalized,
-            request_id,
             timestamp_ms: now,
-            source: InternalWriteSource::WorkspaceMutation,
             resulting_version: version,
             content_hash: blake3::hash(&bytes).to_hex().to_string(),
         },
