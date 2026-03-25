@@ -14,6 +14,8 @@ This folder contains the modular frontend surface for the Second Brain view.
 - `useSecondBrainSessionWorkflow.ts` owns session loading, explicit context
   updates, Alter selection, Echoes context anchoring, and session lifecycle
   actions.
+- `useSecondBrainStreamRuntime.ts` owns stream subscriptions, cancellation,
+  thread scroll state, and assistant message rendering.
 - `useSecondBrainConversationRuntime.ts` owns assistant streaming,
   copy/export helpers, Pulse prompt presets, and mention-driven context
   orchestration.
@@ -29,4 +31,5 @@ This folder contains the modular frontend surface for the Second Brain view.
 - Use explicit context and no implicit cross-session memory.
 - Do not auto-resume the latest session on pane open; session restore must be explicit.
 - Do not reintroduce direct backend API calls or stream subscriptions into `SecondBrainView.vue`.
-- Keep persistence in the session workflow and transport/runtime behavior in the conversation workflow.
+- Keep persistence in the session workflow, composition behavior in the conversation workflow, and streaming behavior in the stream runtime.
+- Keep assistant streaming and thread behavior in the stream runtime.

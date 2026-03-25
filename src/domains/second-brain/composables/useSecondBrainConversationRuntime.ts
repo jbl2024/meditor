@@ -1,15 +1,10 @@
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch, type Ref } from 'vue'
 import type { FilterableDropdownItem } from '../../../shared/components/ui/UiFilterableDropdown.vue'
 import type { PulseActionId, SecondBrainMessage, SecondBrainSessionSummary } from '../../../shared/api/apiTypes'
 import { writeClipboardText } from '../../../shared/api/clipboardApi'
 import { readTextFile } from '../../../shared/api/workspaceApi'
 import { PULSE_ACTIONS_BY_SOURCE, getPulseDropdownItems } from '../../pulse/lib/pulse'
-import {
-  cancelDeliberationStream,
-  runDeliberation,
-  subscribeSecondBrainStream
-} from '../lib/secondBrainApi'
-import { renderSecondBrainMarkdownPreview } from '../lib/secondBrainMarkdownPreview'
+import { runDeliberation } from '../lib/secondBrainApi'
 import { useSecondBrainAtMentions, type SecondBrainAtMentionItem } from './useSecondBrainAtMentions'
 
 type CopyToast = {
@@ -25,14 +20,19 @@ export type UseSecondBrainConversationRuntimeOptions = {
   allWorkspaceFiles: Ref<string[]>
   contextPaths: Ref<string[]>
   messages: Ref<SecondBrainMessage[]>
-  streamByMessage: Ref<Record<string, string>>
   mentionInfo: Ref<string>
   composerContextPaths: Ref<string[]>
   sessionId: Ref<string>
   sessionTitle: Ref<string>
   selectedAlterId: Ref<string>
   sessionsIndex: Ref<SecondBrainSessionSummary[]>
-  scrollRequestNonce: Ref<number>
+  requestInFlight: Ref<boolean>
+  sending: Ref<boolean>
+  sendError: Ref<string>
+  activeAssistantStreamMessageId: Ref<string | null>
+  suppressCancellationError: Ref<boolean>
+  displayMessage: (message: SecondBrainMessage) => string
+  scrollThreadToBottom: (config?: { force?: boolean }) => Promise<void>
   mergeContextPaths: (nextPaths: string[]) => string[]
   replaceContextPaths: (nextPaths: string[], config?: { revertOnFailure?: boolean }) => Promise<ContextSyncResult>
   refreshSessionsIndex: () => Promise<void>
@@ -41,18 +41,14 @@ export type UseSecondBrainConversationRuntimeOptions = {
 }
 
 /**
- * Owns the runtime chat surface for Second Brain.
+ * Owns the Second Brain composer surface.
  *
- * This composable is intentionally limited to message composition, streaming,
- * copy/export affordances, Pulse prompts, and mention handling. Session and
- * context persistence stay in the sibling session workflow composable.
+ * This composable keeps prompt input, mention resolution, Pulse presets, and
+ * clipboard/export helpers together. Streaming state is owned by the sibling
+ * stream runtime.
  */
 export function useSecondBrainConversationRuntime(options: UseSecondBrainConversationRuntimeOptions) {
   const inputMessage = ref('')
-  const sending = ref(false)
-  const requestInFlight = ref(false)
-  const sendError = ref('')
-  const suppressCancellationError = ref(false)
   const copiedByMessageId = ref<Record<string, boolean>>({})
   const copyToast = ref<CopyToast>({
     visible: false,
@@ -60,20 +56,13 @@ export function useSecondBrainConversationRuntime(options: UseSecondBrainConvers
     message: ''
   })
   const composerRef = ref<HTMLTextAreaElement | null>(null)
-  const threadRef = ref<HTMLElement | null>(null)
-  const threadBottomSentinel = ref<HTMLElement | null>(null)
-  const threadAutoScrollEnabled = ref(true)
-  const activeAssistantStreamMessageId = ref<string | null>(null)
   const pulseActionId = ref<PulseActionId>('synthesize')
   const pulseDropdownOpen = ref(false)
   const pulseDropdownQuery = ref('')
   const pulseDropdownActiveIndex = ref(0)
 
-  const streamUnsubscribers: Array<() => void> = []
-  const ignoredAssistantMessageIds = new Set<string>()
   const copyFeedbackTimers: Record<string, ReturnType<typeof setTimeout>> = {}
   let copyToastTimer: ReturnType<typeof setTimeout> | null = null
-  let threadBottomObserver: IntersectionObserver | null = null
 
   const mentions = useSecondBrainAtMentions({
     workspacePath: options.workspacePath,
@@ -87,7 +76,7 @@ export function useSecondBrainConversationRuntime(options: UseSecondBrainConvers
   )
 
   const canCopyConversation = computed(() =>
-    Boolean(options.sessionId.value && !requestInFlight.value && (options.contextPaths.value.length > 0 || options.messages.value.length > 0))
+    Boolean(options.sessionId.value && !options.requestInFlight.value && (options.contextPaths.value.length > 0 || options.messages.value.length > 0))
   )
 
   function toRelativePath(path: string): string {
@@ -97,59 +86,6 @@ export function useSecondBrainConversationRuntime(options: UseSecondBrainConvers
     if (value === root) return '.'
     if (value.startsWith(`${root}/`)) return value.slice(root.length + 1)
     return value
-  }
-
-  function displayMessage(message: SecondBrainMessage): string {
-    if (message.role === 'assistant') {
-      return options.streamByMessage.value[message.id] ?? message.content_md
-    }
-    return message.content_md
-  }
-
-  function renderAssistantMarkdown(message: SecondBrainMessage): string {
-    return renderSecondBrainMarkdownPreview(displayMessage(message))
-  }
-
-  function isThreadNearBottom(thread: HTMLElement): boolean {
-    const remaining = thread.scrollHeight - thread.scrollTop - thread.clientHeight
-    return remaining <= 8
-  }
-
-  async function scrollThreadToBottom(config: { force?: boolean } = {}) {
-    await nextTick()
-    const thread = threadRef.value
-    if (!thread) return
-    if (!config.force && !threadAutoScrollEnabled.value) return
-    const sentinel = threadBottomSentinel.value
-    if (sentinel && typeof sentinel.scrollIntoView === 'function') {
-      sentinel.scrollIntoView({ block: 'end', inline: 'nearest', behavior: 'auto' })
-    } else {
-      thread.scrollTop = thread.scrollHeight
-    }
-    threadAutoScrollEnabled.value = true
-  }
-
-  function onThreadScroll() {
-    const thread = threadRef.value
-    if (!thread) return
-    if (threadBottomObserver) return
-    threadAutoScrollEnabled.value = isThreadNearBottom(thread)
-  }
-
-  function setupThreadBottomObserver() {
-    if (typeof IntersectionObserver === 'undefined') return
-    const thread = threadRef.value
-    const sentinel = threadBottomSentinel.value
-    if (!thread || !sentinel) return
-
-    threadBottomObserver?.disconnect()
-    threadBottomObserver = new IntersectionObserver(([entry]) => {
-      threadAutoScrollEnabled.value = Boolean(entry?.isIntersecting)
-    }, {
-      root: thread,
-      threshold: 1
-    })
-    threadBottomObserver.observe(sentinel)
   }
 
   function showCopyToast(kind: 'success' | 'error', message: string, durationMs = 2000) {
@@ -175,7 +111,7 @@ export function useSecondBrainConversationRuntime(options: UseSecondBrainConvers
     lines.push('## Conversation', '')
     for (const message of options.messages.value) {
       lines.push(`### ${message.role === 'assistant' ? 'Assistant' : 'You'}`, '')
-      lines.push(displayMessage(message).trimEnd(), '')
+      lines.push(options.displayMessage(message).trimEnd(), '')
     }
 
     return lines.join('\n').trim()
@@ -215,7 +151,7 @@ export function useSecondBrainConversationRuntime(options: UseSecondBrainConvers
 
   async function onCopyAssistantMessage(message: SecondBrainMessage) {
     if (message.role !== 'assistant') return
-    const content = displayMessage(message).trim()
+    const content = options.displayMessage(message).trim()
     if (!content) return
 
     try {
@@ -363,12 +299,12 @@ export function useSecondBrainConversationRuntime(options: UseSecondBrainConvers
   }
 
   async function onSendMessage() {
-    if (!options.sessionId.value || !inputMessage.value.trim() || requestInFlight.value) return
-    requestInFlight.value = true
-    sending.value = true
-    sendError.value = ''
+    if (!options.sessionId.value || !inputMessage.value.trim() || options.requestInFlight.value) return
+    options.requestInFlight.value = true
+    options.sending.value = true
+    options.sendError.value = ''
     options.mentionInfo.value = ''
-    activeAssistantStreamMessageId.value = null
+    options.activeAssistantStreamMessageId.value = null
     const outgoing = inputMessage.value.trim()
 
     const mentionResolution = mentions.resolveMentionedPaths(outgoing)
@@ -401,7 +337,7 @@ export function useSecondBrainConversationRuntime(options: UseSecondBrainConvers
       attachments_json: '[]',
       created_at_ms: Date.now()
     }]
-    void scrollThreadToBottom({ force: true })
+    void options.scrollThreadToBottom({ force: true })
 
     try {
       const result = await runDeliberation(
@@ -428,12 +364,12 @@ export function useSecondBrainConversationRuntime(options: UseSecondBrainConvers
           id: result.assistantMessageId,
           role: 'assistant',
           mode: 'freestyle',
-          content_md: options.streamByMessage.value[result.assistantMessageId] ?? '',
+          content_md: '',
           citations_json: JSON.stringify(options.contextPaths.value.map((path) => path.replace(`${options.workspacePath.value}/`, ''))),
           attachments_json: '[]',
           created_at_ms: Date.now()
         }]
-        void scrollThreadToBottom({ force: true })
+        void options.scrollThreadToBottom({ force: true })
       }
 
       await options.refreshSessionsIndex()
@@ -443,137 +379,18 @@ export function useSecondBrainConversationRuntime(options: UseSecondBrainConvers
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not send message.'
-      if (suppressCancellationError.value && /cancel/i.test(message)) {
-        sendError.value = ''
+      if (options.suppressCancellationError.value && /cancel/i.test(message)) {
+        options.sendError.value = ''
       } else {
-        sendError.value = message
+        options.sendError.value = message
       }
     } finally {
-      sending.value = false
-      requestInFlight.value = false
-      activeAssistantStreamMessageId.value = null
-      suppressCancellationError.value = false
+      options.sending.value = false
+      options.requestInFlight.value = false
+      options.activeAssistantStreamMessageId.value = null
+      options.suppressCancellationError.value = false
     }
   }
-
-  async function onStopStreaming() {
-    if (!requestInFlight.value || !sending.value) return
-    sending.value = false
-    suppressCancellationError.value = true
-    const activeId = activeAssistantStreamMessageId.value
-    if (activeId) {
-      ignoredAssistantMessageIds.add(activeId)
-    }
-    if (!options.sessionId.value) return
-    try {
-      await cancelDeliberationStream({
-        sessionId: options.sessionId.value,
-        messageId: activeId
-      })
-    } catch (err) {
-      suppressCancellationError.value = false
-      sendError.value = err instanceof Error ? err.message : 'Could not stop generation.'
-    }
-  }
-
-  onMounted(async () => {
-    await nextTick()
-    setupThreadBottomObserver()
-
-    streamUnsubscribers.push(await subscribeSecondBrainStream('second-brain://assistant-start', (payload) => {
-      if (payload.session_id !== options.sessionId.value) return
-      activeAssistantStreamMessageId.value = payload.message_id
-      if (ignoredAssistantMessageIds.has(payload.message_id)) return
-      options.streamByMessage.value = {
-        ...options.streamByMessage.value,
-        [payload.message_id]: ''
-      }
-      if (!options.messages.value.some((message) => message.id === payload.message_id)) {
-        options.messages.value = [...options.messages.value, {
-          id: payload.message_id,
-          role: 'assistant',
-          mode: 'freestyle',
-          content_md: '',
-          citations_json: JSON.stringify(options.contextPaths.value.map((path) => path.replace(`${options.workspacePath.value}/`, ''))),
-          attachments_json: '[]',
-          created_at_ms: Date.now()
-        }]
-        void scrollThreadToBottom()
-      }
-    }))
-
-    streamUnsubscribers.push(await subscribeSecondBrainStream('second-brain://assistant-delta', (payload) => {
-      if (payload.session_id !== options.sessionId.value) return
-      if (ignoredAssistantMessageIds.has(payload.message_id)) return
-      const current = options.streamByMessage.value[payload.message_id] ?? ''
-      options.streamByMessage.value = {
-        ...options.streamByMessage.value,
-        [payload.message_id]: `${current}${payload.chunk}`
-      }
-      if (!options.messages.value.some((message) => message.id === payload.message_id)) {
-        options.messages.value = [...options.messages.value, {
-          id: payload.message_id,
-          role: 'assistant',
-          mode: 'freestyle',
-          content_md: '',
-          citations_json: JSON.stringify(options.contextPaths.value.map((path) => path.replace(`${options.workspacePath.value}/`, ''))),
-          attachments_json: '[]',
-          created_at_ms: Date.now()
-        }]
-      }
-      void scrollThreadToBottom()
-    }))
-
-    streamUnsubscribers.push(await subscribeSecondBrainStream('second-brain://assistant-complete', (payload) => {
-      if (payload.session_id !== options.sessionId.value) return
-      if (ignoredAssistantMessageIds.has(payload.message_id)) {
-        ignoredAssistantMessageIds.delete(payload.message_id)
-        if (activeAssistantStreamMessageId.value === payload.message_id) {
-          activeAssistantStreamMessageId.value = null
-        }
-        return
-      }
-      options.streamByMessage.value = {
-        ...options.streamByMessage.value,
-        [payload.message_id]: payload.chunk
-      }
-      if (activeAssistantStreamMessageId.value === payload.message_id) {
-        activeAssistantStreamMessageId.value = null
-      }
-      sending.value = false
-    }))
-
-    streamUnsubscribers.push(await subscribeSecondBrainStream('second-brain://assistant-error', (payload) => {
-      if (payload.session_id !== options.sessionId.value) return
-      if (ignoredAssistantMessageIds.has(payload.message_id)) {
-        ignoredAssistantMessageIds.delete(payload.message_id)
-        if (activeAssistantStreamMessageId.value === payload.message_id) {
-          activeAssistantStreamMessageId.value = null
-        }
-        return
-      }
-      if (activeAssistantStreamMessageId.value === payload.message_id) {
-        activeAssistantStreamMessageId.value = null
-      }
-      sending.value = false
-      sendError.value = payload.error || 'Assistant stream failed.'
-    }))
-  })
-
-  onBeforeUnmount(() => {
-    if (copyToastTimer) {
-      clearTimeout(copyToastTimer)
-      copyToastTimer = null
-    }
-    threadBottomObserver?.disconnect()
-    threadBottomObserver = null
-    for (const timer of Object.values(copyFeedbackTimers)) {
-      clearTimeout(timer)
-    }
-    for (const unsubscribe of streamUnsubscribers) {
-      unsubscribe()
-    }
-  })
 
   watch(
     () => `${options.requestedPromptNonce.value}::${options.requestedPrompt.value}`,
@@ -586,21 +403,23 @@ export function useSecondBrainConversationRuntime(options: UseSecondBrainConvers
     { immediate: true }
   )
 
-  watch(
-    () => options.scrollRequestNonce.value,
-    () => {
-      void scrollThreadToBottom({ force: true })
+  onBeforeUnmount(() => {
+    if (copyToastTimer) {
+      clearTimeout(copyToastTimer)
+      copyToastTimer = null
     }
-  )
+    for (const timer of Object.values(copyFeedbackTimers)) {
+      clearTimeout(timer)
+    }
+  })
 
   return {
     activePulseAction,
     applyMentionSuggestion,
     canCopyConversation,
     composerRef,
-    copyToast,
     copiedByMessageId,
-    displayMessage,
+    copyToast,
     inputMessage,
     mentionInfo: options.mentionInfo,
     mentions,
@@ -612,20 +431,11 @@ export function useSecondBrainConversationRuntime(options: UseSecondBrainConvers
     onPulseAction,
     onPulseDropdownSelect,
     onSendMessage,
-    onStopStreaming,
-    onThreadScroll,
     pulseDropdownActiveIndex,
     pulseDropdownItems,
     pulseDropdownMatcher,
     pulseDropdownOpen,
     pulseDropdownQuery,
-    requestInFlight,
-    renderAssistantMarkdown,
-    sendError,
-    sending,
-    streamByMessage: options.streamByMessage,
-    threadBottomSentinel,
-    threadRef,
     updateMentionTriggerFromComposer
   }
 }

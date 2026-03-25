@@ -17,6 +17,7 @@ describe('second brain architecture guardrails', () => {
   it('documents the composable-owned orchestration boundary', () => {
     expect(architectureDoc).toContain('useSecondBrainViewState.ts')
     expect(architectureDoc).toContain('useSecondBrainSessionWorkflow.ts')
+    expect(architectureDoc).toContain('useSecondBrainStreamRuntime.ts')
     expect(architectureDoc).toContain('useSecondBrainConversationRuntime.ts')
     expect(architectureDoc).toContain('render shell')
     expect(architectureDoc).toContain('Do not reintroduce direct backend API calls')
