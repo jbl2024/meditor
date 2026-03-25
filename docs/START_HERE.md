@@ -68,7 +68,7 @@ Use this as a quick routing table when you need to make a change.
 | Explorer rename / move | `src/domains/explorer/components/ExplorerTree.vue` | `src/domains/explorer/composables/useExplorerOperations.ts`, `src/domains/explorer/lib/explorerDndRules.ts`, `src-tauri/src/fs_ops.rs` |
 | Search / indexing | `src-tauri/src/markdown_index.rs` | `src-tauri/src/search_index.rs`, `src-tauri/src/index_schema.rs`, `src/app/composables/useAppIndexingController.ts` |
 | Cosmos graph behavior | `src/domains/cosmos/components/CosmosView.vue` | `src/domains/cosmos/composables/useCosmosController.ts`, `src-tauri/src/wikilink_graph.rs` |
-| Second Brain chat flow | `src/domains/second-brain/components/SecondBrainView.vue` | `src/domains/second-brain/composables/useSecondBrainSessions.ts`, `src/domains/second-brain/composables/useSecondBrainDeliberation.ts`, `src-tauri/src/second_brain/*` |
+| Second Brain chat flow | `src/domains/second-brain/components/SecondBrainView.vue` | `src/domains/second-brain/composables/useSecondBrainViewState.ts`, `src/domains/second-brain/composables/useSecondBrainSessionWorkflow.ts`, `src/domains/second-brain/composables/useSecondBrainConversationRuntime.ts`, `src-tauri/src/second_brain/*` |
 | Second Brain config / models | `src/app/components/settings/SettingsModal.vue` | `src/shared/api/settingsApi.ts`, `src-tauri/src/second_brain/config.rs`, `src-tauri/src/second_brain/openai_codex.rs` |
 | Alter manager | `src/domains/alters/components/AlterManagerView.vue` | `src/domains/alters/composables/useAlterManager.ts`, `src-tauri/src/alters.rs` |
 | UI primitives / shared shells | `src/shared/components/ui/ARCHITECTURE.md` | `src/shared/components/ui/*`, `src/assets/tailwind.css` |
@@ -250,7 +250,8 @@ Second Brain is split across:
 
 - shell wiring in `App.vue`
 - frontend chat surface in `SecondBrainView.vue`
-- frontend session/context composables
+- frontend session/context workflow in `useSecondBrainSessionWorkflow.ts`
+- frontend conversation runtime in `useSecondBrainConversationRuntime.ts`
 - backend session store, prompt builder, and message flow
 
 If the change affects explicit context or streaming, check both frontend and backend.
