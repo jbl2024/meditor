@@ -62,6 +62,7 @@ const props = defineProps<{
   loadPropertyTypeSchema: () => Promise<Record<string, string>>
   savePropertyTypeSchema: (schema: Record<string, string>) => Promise<void>
   openLinkTarget: (target: string) => Promise<boolean>
+  spellcheckEnabled?: boolean
 }>()
 
 const emit = defineEmits([
@@ -105,6 +106,7 @@ const pathRef = computed(() => props.path ?? '')
 const workspacePathRef = computed(() => props.workspacePath ?? '')
 const openPathsRef = computed(() => props.openPaths ?? [])
 const currentPathSource = computed(() => props.path?.trim() || '')
+const spellcheckEnabledRef = computed(() => Boolean(props.spellcheckEnabled))
 const workspaceSpellcheck = useWorkspaceSpellcheckDictionary({ workspacePath: workspacePathRef })
 
 let chromeRuntime!: ReturnType<typeof useEditorChromeRuntime>
@@ -161,6 +163,7 @@ interactionRuntime = useEditorInteractionRuntime({
     activeEditor,
     getSession: (path) => getSession(path),
     getSpellcheckLanguage: (path) => documentRuntime?.getSpellcheckLanguage(path) ?? 'en',
+    spellcheckEnabled: spellcheckEnabledRef,
     isSpellcheckWordIgnored: (_path, word) => workspaceSpellcheck.isIgnoredWord(word) || chromeRuntime.spellcheck.isSessionIgnoredWord(word),
     saveCurrentFile: (manual) => documentRuntime?.saveCurrentFile(manual),
     onEditorDocChanged: (path) => documentRuntime?.onEditorDocChanged(path)
@@ -331,6 +334,15 @@ const {
   ignoreWord: ignoreSpellcheckWord,
   addToWorkspaceDictionary: addSpellcheckWordToWorkspaceDictionary
 } = chromeRuntime.spellcheck
+
+watch(
+  () => props.spellcheckEnabled,
+  () => {
+    const path = currentPathSource.value
+    if (!path) return
+    interactionRuntime?.refreshSpellcheckForPath(path)
+  }
+)
 
 function onSpellcheckMenuEl(element: HTMLDivElement | null) {
   spellcheckFloatingEl.value = element

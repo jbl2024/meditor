@@ -22,6 +22,7 @@ describe('useAppShellRuntimeLifecycle', () => {
     let openTraceListener: ((active: boolean) => void) | null = null
 
     const initializeShellPersistence = vi.fn()
+    const loadSpellcheckPreference = vi.fn()
     const syncAlterSettingsFromDisk = vi.fn(async () => {})
     const workspaceStart = vi.fn(async () => {})
     const workspaceDispose = vi.fn()
@@ -42,6 +43,9 @@ describe('useAppShellRuntimeLifecycle', () => {
     const runtime = useAppShellRuntimeLifecycle({
       persistencePort: {
         initializeShellPersistence
+      },
+      spellcheckPort: {
+        loadSpellcheckPreference
       },
       alterSettingsPort: {
         syncAlterSettingsFromDisk
@@ -71,6 +75,7 @@ describe('useAppShellRuntimeLifecycle', () => {
     await runtime.start()
 
     expect(initializeShellPersistence).toHaveBeenCalledTimes(1)
+    expect(loadSpellcheckPreference).toHaveBeenCalledTimes(1)
     expect(warmupSpellcheckDictionaries).toHaveBeenCalledTimes(1)
     expect(installOpenDebugLongTaskObserver).toHaveBeenCalledTimes(1)
     expect(subscribeOpenTraceActivity).toHaveBeenCalledTimes(1)

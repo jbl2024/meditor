@@ -142,6 +142,7 @@ function createRuntimeHarness(input?: {
   document.body.appendChild(holder.value)
   const saveCurrentFile = vi.fn(async () => {})
   const openLinkTarget = vi.fn(async () => true)
+  const spellcheckEnabled = ref(false)
   const runtime = useEditorInteractionRuntime({
     interactionDocumentPort: {
       currentPath: ref(input?.currentPath ?? 'a.md'),
@@ -149,6 +150,7 @@ function createRuntimeHarness(input?: {
       activeEditor,
       getSession: () => (input?.session ?? null) as any,
       getSpellcheckLanguage: () => 'en',
+      spellcheckEnabled,
       isSpellcheckWordIgnored: () => false,
       saveCurrentFile,
       onEditorDocChanged: vi.fn()

@@ -30,6 +30,7 @@ function createSetup(overrides: Partial<Parameters<typeof useEditorTiptapSetup>[
     sanitizeExternalHref: (v) => v,
     openExternalUrl: vi.fn(async () => {}),
     getSpellcheckLanguage: vi.fn(() => 'fr' as const),
+    spellcheckEnabled: ref(false),
     isSpellcheckWordIgnored: vi.fn(() => false),
     inlineFormatToolbar: {
       updateFormattingToolbar: vi.fn(),

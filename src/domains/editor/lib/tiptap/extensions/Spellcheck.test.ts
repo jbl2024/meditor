@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Editor } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
-import { collectSpellcheckDecorationRanges, SpellcheckExtension, getSpellcheckSuggestions } from './Spellcheck'
+import { collectSpellcheckDecorationRanges, SpellcheckExtension, getSpellcheckState, getSpellcheckSuggestions } from './Spellcheck'
 
 describe('SpellcheckExtension', () => {
   it('adds the spellcheck extension without changing the editor contract', () => {
@@ -34,6 +34,22 @@ describe('SpellcheckExtension', () => {
 
     expect(editor.extensionManager.extensions.some((extension) => extension.name === 'spellcheck')).toBe(true)
     expect(getLanguage).toHaveBeenCalled()
+    editor.destroy()
+  })
+
+  it('stays empty when spellcheck is disabled', () => {
+    const editor = new Editor({
+      content: '<p>Hello wrld</p>',
+      extensions: [
+        StarterKit,
+        SpellcheckExtension.configure({
+          getLanguage: () => 'en',
+          isEnabled: () => false
+        })
+      ]
+    })
+
+    expect(getSpellcheckState(editor.state).decorations.find(0, editor.state.doc.content.size)).toHaveLength(0)
     editor.destroy()
   })
 

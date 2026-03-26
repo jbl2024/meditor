@@ -57,6 +57,7 @@ function createShellPaletteActionPort(): AppShellPaletteActionPort {
     zoomInFromPalette: () => false,
     zoomOutFromPalette: () => false,
     resetZoomFromPalette: () => false,
+    toggleSpellcheckFromPalette: () => false,
     openThemePickerFromPalette: () => false,
     setThemeFromPalette: () => false,
     convertMarkdownToWord: () => Promise.resolve(false),

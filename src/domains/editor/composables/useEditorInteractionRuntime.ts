@@ -32,6 +32,7 @@ export type EditorInteractionRuntimeDocumentPort = {
   activeEditor: Ref<Editor | null>
   getSession: (path: string) => DocumentSession | null
   getSpellcheckLanguage: (path: string) => import('../lib/spellcheck').SpellcheckLanguage
+  spellcheckEnabled: Ref<boolean>
   isSpellcheckWordIgnored: (path: string, word: string) => boolean
   saveCurrentFile: (manual?: boolean) => Promise<void>
   onEditorDocChanged: (path: string) => void
@@ -233,6 +234,7 @@ export function useEditorInteractionRuntime(options: UseEditorInteractionRuntime
     sanitizeExternalHref,
     openExternalUrl: ioPort.openExternalUrl,
     getSpellcheckLanguage: (path) => documentPort.getSpellcheckLanguage(path),
+    spellcheckEnabled: documentPort.spellcheckEnabled,
     isSpellcheckWordIgnored: (path, word) => documentPort.isSpellcheckWordIgnored(path, word),
     inlineFormatToolbar: {
       updateFormattingToolbar: chromePort.toolbars.inlineFormatToolbar.updateFormattingToolbar,

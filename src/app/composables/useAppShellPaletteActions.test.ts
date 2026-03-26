@@ -6,6 +6,7 @@ import type { AppThemeDefinition } from '../../shared/lib/themeRegistry'
 function createHarness(options: { isFavorite?: boolean } = {}) {
   const activeFilePath = ref('/vault/note.md')
   const quickOpenQuery = ref('query')
+  const spellcheckEnabled = ref(false)
   const availableThemes: readonly AppThemeDefinition[] = [
     { id: 'tomosona-light', label: 'Tomosona Light', colorScheme: 'light', group: 'official' },
     { id: 'tokyo-night', label: 'Tokyo Night', colorScheme: 'dark', group: 'community' }
@@ -29,6 +30,7 @@ function createHarness(options: { isFavorite?: boolean } = {}) {
     zoomInFromPalette: vi.fn(() => false),
     zoomOutFromPalette: vi.fn(() => false),
     resetZoomFromPalette: vi.fn(() => false),
+    toggleSpellcheckFromPalette: vi.fn(() => false),
     openThemePickerFromPalette: vi.fn(() => false),
     setThemeFromPalette: vi.fn(() => false),
     openTodayNote: vi.fn(async () => true),
@@ -59,7 +61,8 @@ function createHarness(options: { isFavorite?: boolean } = {}) {
   const api = scope.run(() => useAppShellPaletteActions({
     statePort: {
       activeFilePath,
-      quickOpenQuery
+      quickOpenQuery,
+      spellcheckEnabled
     },
     documentPort,
     favoritesPort,
@@ -75,6 +78,7 @@ function createHarness(options: { isFavorite?: boolean } = {}) {
     scope,
     activeFilePath,
     quickOpenQuery,
+    spellcheckEnabled,
     availableThemes,
     documentPort,
     favoritesPort,
@@ -98,6 +102,7 @@ describe('useAppShellPaletteActions', () => {
     expect(actionIds).toContain('theme-system')
     expect(actionIds.indexOf('theme-system')).toBeLessThan(actionIds.indexOf('theme-tomosona-light'))
     expect(actionIds).toContain('convert-to-word')
+    expect(actionIds).toContain('toggle-spellcheck')
     expect(actionIds[actionIds.length - 2]).toBe('open-file')
     expect(actionIds[actionIds.length - 1]).toBe('reveal-in-explorer')
     expect(api.paletteActionPriority['open-file']).toBe(0)
@@ -119,17 +124,32 @@ describe('useAppShellPaletteActions', () => {
     removeHarness.scope.stop()
   })
 
+  it('labels the spellcheck toggle according to the global preference', () => {
+    const disabledHarness = createHarness()
+    const disabledToggle = disabledHarness.api.paletteActions.value.find((item) => item.id === 'toggle-spellcheck')
+    expect(disabledToggle?.label).toBe('Enable Spellcheck')
+    disabledHarness.scope.stop()
+
+    const enabledHarness = createHarness()
+    enabledHarness.spellcheckEnabled.value = true
+    const enabledToggle = enabledHarness.api.paletteActions.value.find((item) => item.id === 'toggle-spellcheck')
+    expect(enabledToggle?.label).toBe('Disable Spellcheck')
+    enabledHarness.scope.stop()
+  })
+
   it('wires palette actions to the underlying command handlers', async () => {
     const { api, scope, actionPort, quickOpenQuery } = createHarness()
 
     const openHome = api.paletteActions.value.find((item) => item.id === 'open-home-view')
     const openFile = api.paletteActions.value.find((item) => item.id === 'open-file')
     const convertToWord = api.paletteActions.value.find((item) => item.id === 'convert-to-word')
+    const toggleSpellcheck = api.paletteActions.value.find((item) => item.id === 'toggle-spellcheck')
     const themeSelect = api.paletteActions.value.find((item) => item.id === 'theme-select')
 
     expect(openHome).toBeTruthy()
     expect(openFile).toBeTruthy()
     expect(convertToWord).toBeTruthy()
+    expect(toggleSpellcheck).toBeTruthy()
     expect(themeSelect).toBeTruthy()
 
     await openHome?.run()
@@ -140,6 +160,9 @@ describe('useAppShellPaletteActions', () => {
 
     await convertToWord?.run()
     expect(actionPort.convertMarkdownToWord).toHaveBeenCalledWith('/vault/note.md')
+
+    expect(toggleSpellcheck?.run()).toBe(false)
+    expect(actionPort.toggleSpellcheckFromPalette).toHaveBeenCalledTimes(1)
 
     expect(themeSelect?.run()).toBe(false)
     expect(actionPort.openThemePickerFromPalette).toHaveBeenCalledTimes(1)

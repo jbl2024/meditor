@@ -57,6 +57,7 @@ const props = defineProps<{
   loadPropertyTypeSchema: () => Promise<Record<string, string>>
   savePropertyTypeSchema: (schema: Record<string, string>) => Promise<void>
   openLinkTarget: (target: string) => Promise<boolean>
+  spellcheckEnabled?: boolean
   cosmos: AppShellCosmosViewModel
   alters: AppShellAltersViewModel
   secondBrain: AppShellSecondBrainViewModel
@@ -352,6 +353,7 @@ onBeforeUnmount(() => {
         :loadPropertyTypeSchema="loadPropertyTypeSchema"
         :savePropertyTypeSchema="savePropertyTypeSchema"
         :openLinkTarget="openLinkTarget"
+        :spellcheck-enabled="spellcheckEnabled"
         @status="emit('status', $event)"
         @path-renamed="emit('path-renamed', $event)"
         @outline="emit('outline', $event)"

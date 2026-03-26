@@ -26,6 +26,7 @@ type SpellcheckPluginState = {
 type SpellcheckRefreshMeta = {
   type: 'refresh'
   language?: SpellcheckLanguage
+  enabled?: boolean
 }
 
 export type SpellcheckDecorationRange = {
@@ -42,6 +43,7 @@ export type SpellcheckWordHit = {
 
 export type SpellcheckExtensionOptions = {
   getLanguage: () => SpellcheckLanguage
+  isEnabled?: () => boolean
   isWordIgnored?: (word: string) => boolean
 }
 
@@ -388,8 +390,15 @@ function isSpellcheckWordKnown(spellchecker: Spellchecker, token: string, langua
 function buildSpellcheckState(
   doc: ProseMirrorNode,
   language: SpellcheckLanguage,
+  enabled: boolean,
   options?: { isWordIgnored?: (word: string) => boolean }
 ): SpellcheckPluginState {
+  if (!enabled) {
+    return {
+      language,
+      decorations: DecorationSet.empty
+    }
+  }
   const spellchecker = getSpellchecker(language)
   const decorations = spellchecker ? collectSpellcheckDecorations(doc, language, spellchecker, options) : DecorationSet.empty
   return {
@@ -458,13 +467,15 @@ export async function warmupSpellcheckDictionaries(): Promise<void> {
 function requestSpellcheckerRefresh(
   view: { dispatch: (transaction: Transaction) => void; state: EditorState; isDestroyed?: boolean },
   language: SpellcheckLanguage,
-  getLanguage: () => SpellcheckLanguage
+  getLanguage: () => SpellcheckLanguage,
+  getEnabled: () => boolean
 ) {
+  if (!getEnabled()) return
   void ensureSpellchecker(language)
     .then(() => {
       if (view.isDestroyed) return
       if (getLanguage() !== language) return
-      view.dispatch(view.state.tr.setMeta(SPELLCHECK_REFRESH_KEY, { type: 'refresh', language } satisfies SpellcheckRefreshMeta))
+      view.dispatch(view.state.tr.setMeta(SPELLCHECK_REFRESH_KEY, { type: 'refresh', language, enabled: true } satisfies SpellcheckRefreshMeta))
     })
     .catch((err: unknown) => {
       console.error('[spellcheck] failed to load dictionary', err)
@@ -476,6 +487,7 @@ export const SpellcheckExtension = Extension.create<SpellcheckExtensionOptions>(
 
   addProseMirrorPlugins() {
     const getLanguage = this.options.getLanguage
+    const getEnabled = this.options.isEnabled ?? (() => true)
     const isWordIgnored = this.options.isWordIgnored
 
     return [
@@ -484,18 +496,19 @@ export const SpellcheckExtension = Extension.create<SpellcheckExtensionOptions>(
         state: {
           init: (_, state) => {
             const language = getLanguage()
-            return buildSpellcheckState(state.doc, language, { isWordIgnored })
+            return buildSpellcheckState(state.doc, language, getEnabled(), { isWordIgnored })
           },
           apply(tr, pluginState, _oldState, newState) {
             const meta = tr.getMeta(SPELLCHECK_REFRESH_KEY) as SpellcheckRefreshMeta | undefined
             const language = meta?.language ?? pluginState.language
+            const enabled = meta?.enabled ?? getEnabled()
 
             if (meta?.type === 'refresh') {
-              return buildSpellcheckState(newState.doc, language, { isWordIgnored })
+              return buildSpellcheckState(newState.doc, language, enabled, { isWordIgnored })
             }
 
             if (tr.docChanged) {
-              return buildSpellcheckState(newState.doc, language, { isWordIgnored })
+              return buildSpellcheckState(newState.doc, language, enabled, { isWordIgnored })
             }
 
             return pluginState
@@ -503,12 +516,20 @@ export const SpellcheckExtension = Extension.create<SpellcheckExtensionOptions>(
         },
         view(view) {
           let requestedLanguage: SpellcheckLanguage | null = null
+          let requestedEnabled: boolean | null = null
 
           const ensureLanguage = () => {
             const language = getLanguage()
-            if (requestedLanguage === language) return
+            const enabled = getEnabled()
+            if (!enabled) {
+              requestedLanguage = language
+              requestedEnabled = false
+              return
+            }
+            if (requestedLanguage === language && requestedEnabled === enabled) return
             requestedLanguage = language
-            requestSpellcheckerRefresh(view, language, getLanguage)
+            requestedEnabled = enabled
+            requestSpellcheckerRefresh(view, language, getLanguage, getEnabled)
           }
 
           ensureLanguage()

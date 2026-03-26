@@ -57,6 +57,7 @@ export type UseEditorTiptapSetupOptions = {
   sanitizeExternalHref: (value: string) => string | null
   openExternalUrl: (value: string) => Promise<void>
   getSpellcheckLanguage: (path: string) => SpellcheckLanguage
+  spellcheckEnabled: Ref<boolean>
   isSpellcheckWordIgnored: (path: string, word: string) => boolean
   inlineFormatToolbar: {
     updateFormattingToolbar: () => void
@@ -264,6 +265,7 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
         CodeBlockNode,
         SpellcheckExtension.configure({
           getLanguage: () => options.getSpellcheckLanguage(path),
+          isEnabled: () => options.spellcheckEnabled.value,
           isWordIgnored: (word: string) => options.isSpellcheckWordIgnored(path, word)
         }),
         EditorFindExtension,

@@ -24,6 +24,11 @@ export type AppShellRuntimeWorkspaceLifecyclePort = {
   dispose: () => void
 }
 
+/** Groups the global spellcheck preference boot hook. */
+export type AppShellRuntimeSpellcheckPort = {
+  loadSpellcheckPreference: () => void
+}
+
 /** Groups the open-trace hooks used to toggle shell echo behavior. */
 export type AppShellRuntimeOpenTracePort = {
   installOpenDebugLongTaskObserver: () => void
@@ -48,6 +53,7 @@ export type AppShellRuntimeThemePort = {
 /** Declares the dependencies required by the app-shell runtime lifecycle controller. */
 export type UseAppShellRuntimeLifecycleOptions = {
   persistencePort: AppShellRuntimePersistencePort
+  spellcheckPort: AppShellRuntimeSpellcheckPort
   alterSettingsPort: AppShellRuntimeAlterSettingsPort
   workspaceLifecyclePort: AppShellRuntimeWorkspaceLifecyclePort
   openTracePort: AppShellRuntimeOpenTracePort
@@ -94,6 +100,7 @@ export function useAppShellRuntimeLifecycle(options: UseAppShellRuntimeLifecycle
     startPromise = (async () => {
       void warmupSpellcheckDictionaries()
       options.persistencePort.initializeShellPersistence()
+      options.spellcheckPort.loadSpellcheckPreference()
       options.openTracePort.installOpenDebugLongTaskObserver()
       disposeOpenTraceActivitySubscription = options.openTracePort.subscribeOpenTraceActivity((active) => {
         options.openTracePort.onOpenTraceActivityChange(active)

@@ -158,6 +158,7 @@ import { useAppShellConstitutedContextActions } from './composables/useAppShellC
 import { useAppShellPaneRuntime } from './composables/useAppShellPaneRuntime'
 import { useAppQuickOpen } from './composables/useAppQuickOpen'
 import { useAppTheme, type ThemePreference } from './composables/useAppTheme'
+import { useAppSpellcheckPreference } from './composables/useAppSpellcheckPreference'
 import { useAppWorkspaceController } from './composables/useAppWorkspaceController'
 import { useEditorState } from '../domains/editor/composables/useEditorState'
 import { useEchoesDiscoverability } from '../domains/echoes/composables/useEchoesDiscoverability'
@@ -224,6 +225,11 @@ const {
   persistThemePreference,
   onSystemThemeChanged
 } = useAppTheme({ storageKey: THEME_STORAGE_KEY })
+const {
+  spellcheckEnabled,
+  loadSpellcheckPreference,
+  toggleSpellcheckEnabled
+} = useAppSpellcheckPreference()
 const isMacOs = typeof navigator !== 'undefined' && /(Mac|iPhone|iPad|iPod)/i.test(navigator.platform || navigator.userAgent)
 
 const quickOpenVisible = ref(false)
@@ -737,7 +743,8 @@ const searchModeOptions: Array<{ mode: SearchMode; label: string }> = [
 const { paletteActions } = useAppShellPaletteActions({
   statePort: {
     activeFilePath,
-    quickOpenQuery
+    quickOpenQuery,
+    spellcheckEnabled
   },
   documentPort: {
     isMarkdownPath
@@ -1523,6 +1530,12 @@ const {
   joinPanesFromPalette,
   resetPaneLayoutFromPalette
 } = commands
+
+function toggleSpellcheckFromPalette() {
+  toggleSpellcheckEnabled()
+  return true
+}
+
 entryActions.bindLaunchpadActionPort({
   openQuickOpen: (initialQuery = '') => openQuickOpen(initialQuery),
   openCommandPalette: () => openCommandPalette(),
@@ -1548,6 +1561,7 @@ entryActions.bindShellPaletteActionPort({
   zoomInFromPalette,
   zoomOutFromPalette,
   resetZoomFromPalette,
+  toggleSpellcheckFromPalette,
   openTodayNote,
   openYesterdayNote,
   openSpecificDateNote,
@@ -1637,6 +1651,9 @@ const {
 const appShellRuntimeLifecycle = useAppShellRuntimeLifecycle({
   persistencePort: {
     initializeShellPersistence: () => shellPersistence.initializeShellPersistence()
+  },
+  spellcheckPort: {
+    loadSpellcheckPreference
   },
   alterSettingsPort: {
     syncAlterSettingsFromDisk: () => settingsWorkflow.syncAlterSettingsFromDisk()
@@ -2104,6 +2121,7 @@ onBeforeUnmount(() => {
           ref="editorRef"
           :layout="multiPane.layout.value"
           :active-document-path="activeFilePath"
+          :spellcheck-enabled="spellcheckEnabled"
           :get-status="editorState.getStatus"
           :readNoteSnapshot="readNoteSnapshot"
           :saveNoteBuffer="saveNoteBuffer"

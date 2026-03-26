@@ -38,6 +38,7 @@ const props = defineProps<{
   loadPropertyTypeSchema: () => Promise<Record<string, string>>
   savePropertyTypeSchema: (schema: Record<string, string>) => Promise<void>
   openLinkTarget: (target: string) => Promise<boolean>
+  spellcheckEnabled?: boolean
   activeDocumentPath: string
   cosmos: AppShellCosmosViewModel
   alters?: AppShellAltersViewModel
@@ -172,6 +173,7 @@ defineExpose<EditorSurfaceExposed>({
     :loadPropertyTypeSchema="loadPropertyTypeSchema"
     :savePropertyTypeSchema="savePropertyTypeSchema"
     :openLinkTarget="openLinkTarget"
+    :spellcheckEnabled="spellcheckEnabled"
     @status="emit('status', $event)"
     @path-renamed="emit('path-renamed', $event)"
     @outline="emit('outline', $event)"
