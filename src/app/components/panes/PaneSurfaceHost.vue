@@ -83,6 +83,7 @@ const emit = defineEmits<{
   'second-brain-context-changed': [paths: string[]]
   'second-brain-session-changed': [sessionId: string]
   'second-brain-open-alter-exploration': []
+  'alter-exploration-notify': [payload: { tone: 'info' | 'success' | 'error'; message: string }]
   'alter-open-second-brain': [alterId: string]
 }>()
 
@@ -269,6 +270,7 @@ defineExpose<EditorSurfaceExposed>({
     :all-workspace-files="secondBrainViewModel.allWorkspaceFiles"
     :active-note-path="secondBrainViewModel.activeNotePath"
     @open-note="emit('open-note', $event)"
+    @notify="emit('alter-exploration-notify', $event)"
   />
 
   <AlterManagerView

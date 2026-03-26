@@ -62,6 +62,7 @@ export type UseAlterExplorationOptions = {
   allWorkspaceFiles?: Ref<string[]>
   activeNotePath?: Ref<string | undefined>
   emitOpenNote?: (path: string) => void
+  notify?: (payload: { tone: 'info' | 'success' | 'error'; message: string }) => void
 }
 
 /**
@@ -92,6 +93,20 @@ export function useAlterExploration(options?: UseAlterExplorationOptions) {
   const saving = ref(false)
   const error = ref('')
   const notice = ref('')
+
+  function emitNotification(payload: { tone: 'info' | 'success' | 'error'; message: string }) {
+    options?.notify?.(payload)
+  }
+
+  function setError(message: string) {
+    error.value = message
+    emitNotification({ tone: 'error', message })
+  }
+
+  function setNotice(message: string, tone: 'info' | 'success' = 'info') {
+    notice.value = message
+    emitNotification({ tone, message })
+  }
 
   const selectedAlters = computed(() => {
     const byId = new Map(availableAlters.value.map((item) => [item.id, item]))
@@ -196,7 +211,7 @@ export function useAlterExploration(options?: UseAlterExplorationOptions) {
       return
     }
     if (selectedAlterIds.value.length >= MAX_ALTERS) {
-      error.value = `Select up to ${MAX_ALTERS} Alters.`
+      setError(`Select up to ${MAX_ALTERS} Alters.`)
       return
     }
     selectedAlterIds.value = [...selectedAlterIds.value, alterId]
@@ -373,7 +388,7 @@ export function useAlterExploration(options?: UseAlterExplorationOptions) {
 
   async function writeSessionArtifact(kind: 'summary' | 'draft' | 'plan'): Promise<string | null> {
     if (!session.value || !session.value.final_synthesis?.trim()) {
-      error.value = 'No completed synthesis is available yet.'
+      setError('No completed synthesis is available yet.')
       return null
     }
 
@@ -384,10 +399,10 @@ export function useAlterExploration(options?: UseAlterExplorationOptions) {
       const label = `${kind === 'summary' ? 'Summary' : kind === 'draft' ? 'Draft' : 'Plan'} - ${session.value.subject.text}`
       const path = await chooseUniqueWorkspaceNotePath(label)
       await writeTextFile(path, buildSessionMarkdown(kind))
-      notice.value = `Saved exploration artifact to ${path}.`
+      setNotice(`Saved exploration artifact to ${path}.`, 'success')
       return path
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Could not save the exploration artifact.'
+      setError(err instanceof Error ? err.message : 'Could not save the exploration artifact.')
       return null
     } finally {
       saving.value = false
@@ -400,7 +415,7 @@ export function useAlterExploration(options?: UseAlterExplorationOptions) {
     try {
       sessions.value = await fetchAlterExplorationSessions(MAX_HISTORY_ITEMS)
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Could not load exploration sessions.'
+      setError(err instanceof Error ? err.message : 'Could not load exploration sessions.')
     } finally {
       loadingSessions.value = false
     }
@@ -423,9 +438,9 @@ export function useAlterExploration(options?: UseAlterExplorationOptions) {
       mode.value = session.value.mode
       rounds.value = session.value.rounds
       outputFormat.value = session.value.output_format
-      notice.value = 'Loaded exploration session.'
+      setNotice('Loaded exploration session.', 'info')
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Could not load exploration session.'
+      setError(err instanceof Error ? err.message : 'Could not load exploration session.')
     }
   }
 
@@ -435,7 +450,7 @@ export function useAlterExploration(options?: UseAlterExplorationOptions) {
     rounds.value = normalizeRounds(rounds.value)
 
     if (!subjectText.value.trim()) {
-      error.value = 'Subject is required.'
+      setError('Subject is required.')
       return false
     }
 
@@ -444,11 +459,11 @@ export function useAlterExploration(options?: UseAlterExplorationOptions) {
     }
 
     if (selectedAlterIds.value.length < MIN_ALTERS) {
-      error.value = `Select at least ${MIN_ALTERS} Alters.`
+      setError(`Select at least ${MIN_ALTERS} Alters.`)
       return false
     }
     if (selectedAlterIds.value.length > MAX_ALTERS) {
-      error.value = `Select no more than ${MAX_ALTERS} Alters.`
+      setError(`Select no more than ${MAX_ALTERS} Alters.`)
       return false
     }
 
@@ -463,11 +478,11 @@ export function useAlterExploration(options?: UseAlterExplorationOptions) {
       })
       session.value = await runWorkspaceAlterExplorationSession({ session_id: created.id })
       selectedAlterIds.value = [...session.value.alter_ids]
-      notice.value = 'Alter exploration completed.'
+      setNotice('Alter exploration completed.', 'success')
       await refreshSessions()
       return true
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Alter exploration failed.'
+      setError(err instanceof Error ? err.message : 'Alter exploration failed.')
       return false
     } finally {
       running.value = false
@@ -480,11 +495,11 @@ export function useAlterExploration(options?: UseAlterExplorationOptions) {
     notice.value = ''
     try {
       await cancelWorkspaceAlterExplorationSession({ session_id: session.value.id })
-      notice.value = 'Cancellation requested.'
+      setNotice('Cancellation requested.', 'info')
       await refreshSessions()
       return true
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Could not cancel exploration.'
+      setError(err instanceof Error ? err.message : 'Could not cancel exploration.')
       return false
     }
   }
@@ -496,11 +511,11 @@ export function useAlterExploration(options?: UseAlterExplorationOptions) {
   async function insertSynthesisIntoActiveNote(): Promise<boolean> {
     const activeNotePathValue = activeNotePath.value?.trim()
     if (!activeNotePathValue) {
-      error.value = 'No active note is open.'
+      setError('No active note is open.')
       return false
     }
     if (!session.value?.final_synthesis?.trim()) {
-      error.value = 'No completed synthesis is available yet.'
+      setError('No completed synthesis is available yet.')
       return false
     }
 
@@ -517,10 +532,10 @@ export function useAlterExploration(options?: UseAlterExplorationOptions) {
       const insertion = `\n\n## Alter Exploration\n\n${buildSessionMarkdown('summary').trim()}\n`
       const nextContent = current.trimEnd() ? `${current.trimEnd()}${insertion}` : insertion.trimStart()
       await writeTextFile(activeNotePathValue, nextContent)
-      notice.value = `Inserted exploration synthesis into ${activeNotePathValue}.`
+      setNotice(`Inserted exploration synthesis into ${activeNotePathValue}.`, 'success')
       return true
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Could not update the active note.'
+      setError(err instanceof Error ? err.message : 'Could not update the active note.')
       return false
     } finally {
       saving.value = false

@@ -18,6 +18,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'open-note': [path: string]
+  notify: [payload: { tone: 'info' | 'success' | 'error'; message: string }]
 }>()
 
 const manager = useAlterManager()
@@ -37,6 +38,7 @@ onMounted(() => {
       :active-note-path="props.activeNotePath"
       :available-alters="availableAlters"
       @open-note="emit('open-note', $event)"
+      @notify="emit('notify', $event)"
     />
   </div>
 </template>

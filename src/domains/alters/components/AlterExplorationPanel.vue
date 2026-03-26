@@ -34,6 +34,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'open-note': [path: string]
+  notify: [payload: { tone: 'info' | 'success' | 'error'; message: string }]
 }>()
 
 const exploration = useAlterExploration({
@@ -41,7 +42,8 @@ const exploration = useAlterExploration({
   availableAlters: computed(() => props.availableAlters),
   allWorkspaceFiles: computed(() => props.allWorkspaceFiles),
   activeNotePath: computed(() => props.activeNotePath),
-  emitOpenNote: (path) => emit('open-note', path)
+  emitOpenNote: (path) => emit('open-note', path),
+  notify: (payload) => emit('notify', payload)
 })
 
 const {
@@ -65,8 +67,6 @@ const {
   loadingSessions,
   running,
   saving,
-  error,
-  notice,
   roundGroups,
   addPromptContextPath,
   isPromptPathInContext,
@@ -301,14 +301,6 @@ const formatOptions = [
           </UiButton>
         </div>
       </header>
-
-      <div v-if="error" class="alter-exploration__error">
-        {{ error }}
-      </div>
-
-      <div v-if="notice" class="alter-exploration__notice">
-        {{ notice }}
-      </div>
 
       <div class="alter-exploration__workspace">
         <div class="alter-exploration__scroll">

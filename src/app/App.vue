@@ -971,6 +971,18 @@ function closeSpellcheckDictionaryModal() {
   })
 }
 
+function onAlterExplorationNotify(payload: { tone: 'info' | 'success' | 'error'; message: string }) {
+  if (payload.tone === 'error') {
+    filesystem.notifyError(payload.message)
+    return
+  }
+  if (payload.tone === 'success') {
+    filesystem.notifySuccess(payload.message)
+    return
+  }
+  filesystem.notifyInfo(payload.message)
+}
+
 async function onIndexPrimaryAction() {
   const shouldReloadFiles = !indexRunning.value
   await onIndexPrimaryActionInternal()
@@ -2176,6 +2188,7 @@ onBeforeUnmount(() => {
           @second-brain-context-changed="onSecondBrainContextChanged"
           @second-brain-session-changed="onSecondBrainSessionChanged"
           @second-brain-open-alter-exploration="void openAlterExplorationViewFromPalette()"
+          @alter-exploration-notify="onAlterExplorationNotify"
           @alter-open-second-brain="void openAlterInSecondBrain($event)"
           @cosmos-query-update="onCosmosQueryUpdate"
           @cosmos-search-enter="onCosmosSearchEnter"

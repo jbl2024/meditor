@@ -103,6 +103,7 @@ const emit = defineEmits<{
   'second-brain-context-changed': [paths: string[]]
   'second-brain-session-changed': [sessionId: string]
   'second-brain-open-alter-exploration': []
+  'alter-exploration-notify': [payload: { tone: 'info' | 'success' | 'error'; message: string }]
   'alter-open-second-brain': [alterId: string]
 }>()
 
@@ -387,6 +388,7 @@ onBeforeUnmount(() => {
         @second-brain-context-changed="emit('second-brain-context-changed', $event)"
         @second-brain-session-changed="emit('second-brain-session-changed', $event)"
         @second-brain-open-alter-exploration="emit('second-brain-open-alter-exploration')"
+        @alter-exploration-notify="emit('alter-exploration-notify', $event)"
         @alter-open-second-brain="emit('alter-open-second-brain', $event)"
       />
     </section>
