@@ -18,6 +18,47 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.25.0] - 2026-03-26
+
+### Added
+- feat(alter-exploration): add mode-to-format defaults and help text (03f5b41)
+- feat(alters): add structured exploration roundtable (e67b900)
+- feat(shell): add workspace spellcheck dictionary modal (f304f8e)
+- feat(shell): add workspace spellcheck dictionary modal (9ee2ef1)
+- feat(shell): add global spellcheck toggle to status bar (5cf36f3)
+- feat(editor): add global spellcheck toggle preference (f10c4e9)
+- feat(editor): add frontend spellcheck with nspell (dd0c1ff)
+
+### Changed
+- style(alter-exploration): soften reader to composer transition (c160389)
+- style(alter-exploration): refine reader navigation pills (e0bbd0b)
+- refactor(alter-exploration): turn exploration into a focused reader (c9f1ff2)
+- refactor(app-shell): centralize surface icon mapping (c7d9219)
+- refactor(workspace): improve composer action button (4989540)
+- refactor(alter-exploration): match second brain session toolbar (7d83a26)
+- style(shell): remove spellcheck status pulse (84c30d4)
+- perf(editor): warm up spellcheck dictionaries on app boot (918f51f)
+
+### Fixed
+- fix(alter-exploration): remove redundant composer header copy (156f5be)
+- fix(alter-exploration): replace reset button with icon-only new exploration (825880e)
+- fix(alter-exploration): route notifications through global toast (1904da0)
+- fix(alter-exploration): apply markdown table styles without scoped css (f48f1b2)
+- fix(alter-exploration): render markdown results and synthesis (4e4325c)
+- fix(alter-exploration): inject source notes into prompts (e14e96c)
+- fix(alter-exploration): align theme tokens with second brain (ccbd2e6)
+- fix(alter-exploration): inline prompt action button like second brain (9dafa9b)
+- fix(alter-exploration): match second brain border styling (3cd6e48)
+- fix(alter-exploration): match second brain echoes behavior (4e5af34)
+- fix(alters): add header divider to wizard modal (121f42e)
+- fix(alters): reorder wizard footer actions (88a1035)
+- fix(alters): match wizard modal background to index modal (27e7829)
+- fix(alters): tighten wizard intro typography (ce2a5d5)
+- fix(alters): improve wizard footer button spacing (61a8d89)
+- fix(second-brain): portal alter dropdown to avoid layout shift (7bea7fa)
+- fix(second-brain): keep header on one line (132964f)
+- fix(second-brain): autosize composer textarea (04b4686)
+
 ## [0.24.0] - 2026-03-25
 
 ### Changed
