@@ -76,6 +76,7 @@ const menuEl = ref<HTMLElement | null>(null)
 const inputRef = ref<HTMLInputElement | null>(null)
 const listRef = ref<HTMLElement | null>(null)
 const portalMenuStyle = ref<CSSProperties>({})
+let focusTimerId: number | null = null
 
 /**
  * Stable DOM id used by the filter input and listbox relationship.
@@ -128,6 +129,28 @@ const api = useFilterableListbox({
   }
 })
 
+function focusOpenControl() {
+  if (!props.autoFocusOnOpen) return
+  if (props.showFilter) {
+    inputRef.value?.focus()
+    inputRef.value?.select()
+    return
+  }
+  menuEl.value?.focus()
+}
+
+function scheduleOpenFocus() {
+  if (focusTimerId !== null) {
+    window.clearTimeout(focusTimerId)
+    focusTimerId = null
+  }
+  if (!props.autoFocusOnOpen) return
+  focusTimerId = window.setTimeout(() => {
+    focusTimerId = null
+    focusOpenControl()
+  }, 32)
+}
+
 /**
  * Initializes headless state from controlled props.
  *
@@ -156,20 +179,27 @@ watch(() => props.activeIndex, (value) => {
 })
 
 watch(() => api.open.value, (value) => {
+  if (focusTimerId !== null) {
+    window.clearTimeout(focusTimerId)
+    focusTimerId = null
+  }
   if (value !== props.modelValue) emit('open-change', value)
   if (!value) return
   if (props.menuMode === 'portal') {
     void nextTick(() => updatePortalPosition())
   }
-  if (!props.autoFocusOnOpen) return
-  void nextTick(() => {
-    if (props.showFilter) {
-      inputRef.value?.focus()
-      inputRef.value?.select()
-      return
-    }
-    menuEl.value?.focus()
-  })
+  void nextTick(() => scheduleOpenFocus())
+})
+
+onMounted(() => {
+  if (!api.open.value) return
+  void nextTick(() => scheduleOpenFocus())
+})
+
+onBeforeUnmount(() => {
+  if (focusTimerId === null) return
+  window.clearTimeout(focusTimerId)
+  focusTimerId = null
 })
 
 watch(() => api.query.value, (value) => {

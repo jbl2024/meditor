@@ -21,6 +21,14 @@ import { usePulseTransformation } from '../../pulse/composables/usePulseTransfor
 import { PULSE_ACTIONS_BY_SOURCE } from '../../pulse/lib/pulse'
 import type { PulseActionId } from '../../../shared/api/apiTypes'
 import type { DocumentSession } from './useDocumentEditorSessions'
+import type { SpellcheckLanguage } from '../lib/spellcheck'
+import {
+  getSpellcheckSuggestions,
+  rankSpellcheckSuggestions,
+  resolveSpellcheckSuggestionPresentation,
+  getSpellcheckWordHitAtPos,
+  normalizeSpellcheckToken
+} from '../lib/tiptap/extensions/Spellcheck'
 
 /**
  * Chrome here means the editor UI surrounding document content itself:
@@ -35,6 +43,7 @@ export type EditorChromeRuntimeHostPort = {
   holder: Ref<HTMLDivElement | null>
   contentShell: Ref<HTMLDivElement | null>
   pulsePanelWrap: Ref<HTMLDivElement | null>
+  currentPath: Ref<string>
   getCurrentPath: () => string
   getEditor: () => Editor | null
   getSession: (path: string) => DocumentSession | null
@@ -57,6 +66,10 @@ export type EditorChromeRuntimeInteractionPort = {
   }
   caches: {
     resetWikilinkDataCache: () => void
+  }
+  spellcheck: {
+    addIgnoredWord: (word: string) => void
+    refreshForPath: (path: string) => void
   }
 }
 
@@ -150,6 +163,23 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   const tableToolbarViewportLeft = ref(0)
   const tableToolbarViewportTop = ref(0)
   const tableToolbarViewportMaxHeight = ref(420)
+  const spellcheckMenuOpen = ref(false)
+  const spellcheckMenuFloatingEl = ref<HTMLDivElement | null>(null)
+  const spellcheckMenuLeft = ref(0)
+  const spellcheckMenuTop = ref(0)
+  const spellcheckMenuMode = ref<'single' | 'list'>('list')
+  const spellcheckMenuWord = ref('')
+  const spellcheckMenuLanguage = ref<SpellcheckLanguage>('en')
+  const spellcheckMenuRange = ref<{ from: number; to: number } | null>(null)
+  const spellcheckMenuPrimarySuggestion = ref('')
+  const spellcheckMenuSuggestions = ref<string[]>([])
+  const spellcheckMenuLoading = ref(false)
+  let spellcheckMenuRequestNonce = 0
+  const spellcheckSessionIgnoredWords = ref(new Set<string>())
+  const spellcheckMenuAnchorLeft = ref(0)
+  const spellcheckMenuAnchorTop = ref(0)
+  const spellcheckMenuAnchorBottom = ref(0)
+  const spellcheckMenuAnchorReady = ref(false)
   const tableMenuBtnLeft = ref(0)
   const tableMenuBtnTop = ref(0)
   const tableBoxLeft = ref(0)
@@ -264,6 +294,165 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
       }
       : undefined
   })
+
+  function closeSpellcheckMenu() {
+    spellcheckMenuOpen.value = false
+    spellcheckMenuLeft.value = 0
+    spellcheckMenuTop.value = 0
+    spellcheckMenuMode.value = 'list'
+    spellcheckMenuWord.value = ''
+    spellcheckMenuLanguage.value = 'en'
+    spellcheckMenuRange.value = null
+    spellcheckMenuPrimarySuggestion.value = ''
+    spellcheckMenuSuggestions.value = []
+    spellcheckMenuLoading.value = false
+    spellcheckMenuAnchorLeft.value = 0
+    spellcheckMenuAnchorTop.value = 0
+    spellcheckMenuAnchorBottom.value = 0
+    spellcheckMenuAnchorReady.value = false
+    spellcheckMenuRequestNonce += 1
+  }
+
+  function getSpellcheckMenuAnchor(editor: Editor, from: number, to: number) {
+    try {
+      const fromCoords = editor.view.coordsAtPos(from)
+      const toCoords = editor.view.coordsAtPos(to)
+      return {
+        left: fromCoords.left,
+        top: fromCoords.top,
+        bottom: toCoords.bottom
+      }
+    } catch {
+      return null
+    }
+  }
+
+  function estimateSpellcheckMenuSize(mode: 'single' | 'list', suggestionCount: number) {
+    if (mode === 'single') {
+      return { width: 320, height: 136 }
+    }
+
+    const rows = Math.max(1, suggestionCount) + 1
+    return {
+      width: 540,
+      height: Math.min(420, 96 + rows * 40)
+    }
+  }
+
+  function positionSpellcheckMenu() {
+    if (!spellcheckMenuOpen.value) return
+    if (!spellcheckMenuAnchorReady.value) return
+    const anchorLeft = spellcheckMenuAnchorLeft.value
+    const anchorTop = spellcheckMenuAnchorTop.value
+    const anchorBottom = spellcheckMenuAnchorBottom.value
+
+    const bounds = spellcheckMenuFloatingEl.value?.getBoundingClientRect()
+    const estimate = estimateSpellcheckMenuSize(spellcheckMenuMode.value, spellcheckMenuSuggestions.value.length)
+    const width = bounds?.width ?? estimate.width
+    const height = bounds?.height ?? estimate.height
+    const viewportPadding = 8
+    const left = Math.min(
+      Math.max(viewportPadding, anchorLeft),
+      Math.max(viewportPadding, window.innerWidth - width - viewportPadding)
+    )
+    const belowTop = anchorBottom + 8
+    const aboveTop = anchorTop - height - 8
+    const fitsBelow = belowTop + height <= window.innerHeight - viewportPadding
+    const top = fitsBelow ? belowTop : Math.max(viewportPadding, aboveTop)
+
+    spellcheckMenuLeft.value = left
+    spellcheckMenuTop.value = top
+  }
+
+  function onSpellcheckMenuLoaded() {
+    requestAnimationFrame(() => {
+      positionSpellcheckMenu()
+      const focusTarget = spellcheckMenuFloatingEl.value?.querySelector<HTMLButtonElement>('button:not([disabled])')
+      focusTarget?.focus()
+    })
+  }
+
+  async function openSpellcheckMenuFromContextMenu(_event: MouseEvent, hit: { from: number; to: number; word: string; language: SpellcheckLanguage }) {
+    const editor = host.getEditor()
+    closeTransientMenus()
+    spellcheckMenuRequestNonce += 1
+    const requestNonce = spellcheckMenuRequestNonce
+    spellcheckMenuLoading.value = true
+    const suggestions = await getSpellcheckSuggestions(hit.language, hit.word)
+    if (spellcheckMenuRequestNonce !== requestNonce) return
+
+    const presentation = resolveSpellcheckSuggestionPresentation(hit.word, suggestions)
+    const normalizedWord = normalizeSpellcheckToken(hit.word)
+    const displaySuggestions = presentation.mode === 'list'
+      ? rankSpellcheckSuggestions(hit.word, suggestions)
+          .map((entry) => entry.suggestion)
+          .filter((suggestion) => normalizeSpellcheckToken(suggestion) !== normalizedWord)
+      : []
+
+    spellcheckMenuMode.value = presentation.mode
+    spellcheckMenuPrimarySuggestion.value = presentation.primarySuggestion ?? ''
+    spellcheckMenuSuggestions.value = displaySuggestions
+    spellcheckMenuWord.value = hit.word
+    spellcheckMenuLanguage.value = hit.language
+    spellcheckMenuRange.value = { from: hit.from, to: hit.to }
+    spellcheckMenuAnchorLeft.value = 0
+    spellcheckMenuAnchorTop.value = 0
+    spellcheckMenuAnchorBottom.value = 0
+
+    const anchor = editor ? getSpellcheckMenuAnchor(editor, hit.from, hit.to) : null
+    if (anchor) {
+      spellcheckMenuAnchorLeft.value = anchor.left
+      spellcheckMenuAnchorTop.value = anchor.top
+      spellcheckMenuAnchorBottom.value = anchor.bottom
+      spellcheckMenuAnchorReady.value = true
+      positionSpellcheckMenu()
+    }
+
+    spellcheckMenuOpen.value = true
+    spellcheckMenuLoading.value = false
+    onSpellcheckMenuLoaded()
+  }
+
+  function replaceSpellcheckWord(suggestion: string) {
+    const editor = host.getEditor()
+    const range = spellcheckMenuRange.value
+    if (!editor || !range) return
+    editor.commands.insertContentAt(range, suggestion)
+    closeSpellcheckMenu()
+  }
+
+  function ignoreSpellcheckWord() {
+    const word = spellcheckMenuWord.value
+    if (!word) return
+    spellcheckSessionIgnoredWords.value = new Set([...spellcheckSessionIgnoredWords.value, normalizeSpellcheckToken(word)])
+    interaction.spellcheck.refreshForPath(host.getCurrentPath())
+    closeSpellcheckMenu()
+  }
+
+  function addSpellcheckWordToWorkspaceDictionary() {
+    const word = spellcheckMenuWord.value
+    if (!word) return
+    interaction.spellcheck.addIgnoredWord(word)
+    closeSpellcheckMenu()
+  }
+
+  function isSessionIgnoredWord(word: string) {
+    return spellcheckSessionIgnoredWords.value.has(normalizeSpellcheckToken(word))
+  }
+
+  watch(
+    () => host.currentPath.value,
+    () => {
+      spellcheckSessionIgnoredWords.value = new Set()
+      closeSpellcheckMenu()
+    }
+  )
+
+  watch([spellcheckMenuOpen, spellcheckMenuFloatingEl, spellcheckMenuMode, spellcheckMenuSuggestions], async ([open]) => {
+    if (!open) return
+    await nextTick()
+    positionSpellcheckMenu()
+  }, { flush: 'post' })
 
   const tableControls = useTableToolbarControls({
     showThreshold: TABLE_EDGE_SHOW_THRESHOLD,
@@ -574,6 +763,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   function closeTransientMenus() {
     interaction.menus.dismissSlashMenu()
     interaction.menus.closeWikilinkMenu()
+    closeSpellcheckMenu()
     blockHandleControls.closeBlockMenu()
     blockMenuControls.blockMenuTarget.value = null
     inlineFormatToolbar.dismissToolbar()
@@ -612,6 +802,11 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
         if (blockMenuFloatingEl.value?.contains(target)) return
         if (handleRoot) return
         blockHandleControls.closeBlockMenu()
+      }
+
+      if (spellcheckMenuOpen.value) {
+        if (spellcheckMenuFloatingEl.value?.contains(target)) return
+        closeSpellcheckMenu()
       }
 
       if (tableInteractions.tableToolbarOpen.value) {
@@ -682,6 +877,19 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
 
     onHolderContextMenu(event: MouseEvent) {
       interaction.editorEvents.markEditorInteraction()
+      const editor = host.getEditor()
+      if (editor) {
+        const position = editor.view.posAtCoords({ left: event.clientX, top: event.clientY })
+        if (position) {
+          const hit = getSpellcheckWordHitAtPos(editor.state, position.pos)
+          if (hit) {
+            event.preventDefault()
+            event.stopPropagation()
+            void openSpellcheckMenuFromContextMenu(event, hit)
+            return
+          }
+        }
+      }
       interaction.editorEvents.onEditorContextMenu(event)
     },
 
@@ -948,6 +1156,24 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     onEditorMouseMove: blockAndTableControls.onEditorMouseMove,
     onEditorMouseLeave: blockAndTableControls.onEditorMouseLeave
   }
+  const spellcheck = {
+    open: spellcheckMenuOpen,
+    floatingEl: spellcheckMenuFloatingEl,
+    left: spellcheckMenuLeft,
+    top: spellcheckMenuTop,
+    mode: spellcheckMenuMode,
+    word: spellcheckMenuWord,
+    language: spellcheckMenuLanguage,
+    range: spellcheckMenuRange,
+    primarySuggestion: spellcheckMenuPrimarySuggestion,
+    suggestions: spellcheckMenuSuggestions,
+    loading: spellcheckMenuLoading,
+    close: closeSpellcheckMenu,
+    selectSuggestion: replaceSpellcheckWord,
+    ignoreWord: ignoreSpellcheckWord,
+    addToWorkspaceDictionary: addSpellcheckWordToWorkspaceDictionary,
+    isSessionIgnoredWord
+  }
   const layout = {
     renderedEditor,
     editorZoomStyle: layoutAndZoom.editorZoomStyle,
@@ -1007,6 +1233,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
       onDocumentContentChanged: toolbars.onDocumentContentChanged
     },
     blockAndTable,
+    spellcheck,
     layout,
     pulse: pulseApi,
     dialogsAndLifecycle

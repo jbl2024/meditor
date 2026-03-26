@@ -43,6 +43,23 @@ vi.mock('../lib/editorClipboard', () => ({
   writeSelectionPayloadToClipboard: (payload: unknown, format: unknown) => writeSelectionPayloadToClipboardMock(payload, format)
 }))
 
+const spellcheckSuggestionsMock = vi.fn(async (_language: string, _word: string) => ['world'])
+const spellcheckWordHitMock = vi.fn((_state: unknown, _pos: number) => ({ from: 2, to: 6, word: 'wrld', language: 'en' as const }))
+
+vi.mock('../lib/tiptap/extensions/Spellcheck', () => ({
+  getSpellcheckSuggestions: (language: string, word: string) => spellcheckSuggestionsMock(language, word),
+  getSpellcheckWordHitAtPos: (state: unknown, pos: number) => spellcheckWordHitMock(state, pos),
+  normalizeSpellcheckToken: (value: string) => String(value ?? '').toLowerCase(),
+  rankSpellcheckSuggestions: (_original: string, suggestions: string[]) =>
+    suggestions.map((suggestion, index) => ({ suggestion, confidence: 1 - index * 0.1 })),
+  resolveSpellcheckSuggestionPresentation: () => ({
+    mode: 'single' as const,
+    primarySuggestion: 'world',
+    confidence: 0.99
+  }),
+  applySpellcheckSuggestionCase: (_original: string, suggestion: string) => suggestion
+}))
+
 import { useEditorChromeRuntime } from './useEditorChromeRuntime'
 
 async function flushUi() {
@@ -59,10 +76,12 @@ async function flushMicrotasks() {
 }
 
 function createEditorStub(selection = { from: 1, to: 2, empty: false }) {
+  const insertContentAt = vi.fn(() => ({ run: vi.fn(() => true) }))
   return {
     commands: {
       focus: vi.fn(),
-      setMeta: vi.fn()
+      setMeta: vi.fn(),
+      insertContentAt
     },
     state: {
       selection,
@@ -74,6 +93,7 @@ function createEditorStub(selection = { from: 1, to: 2, empty: false }) {
       }
     },
     view: {
+      posAtCoords: vi.fn(() => ({ pos: 2 })),
       dispatch: vi.fn()
     },
     getText: vi.fn(() => 'Alpha'),
@@ -81,8 +101,7 @@ function createEditorStub(selection = { from: 1, to: 2, empty: false }) {
       focus: vi.fn(() => ({
         setTextSelection: vi.fn(() => ({
           insertContent: vi.fn(() => ({ run: vi.fn(() => true) }))
-        })),
-        insertContent: vi.fn(() => ({ run: vi.fn(() => true) }))
+        }))
       }))
     }))
   } as unknown as Editor
@@ -110,6 +129,7 @@ function createRuntimeHarness(input?: {
   currentPath?: string
 }) {
   const activeEditor = input?.activeEditor ?? (ref<Editor | null>(createEditorStub()) as Ref<Editor | null>)
+  const currentPath = ref(input?.currentPath ?? 'a.md')
   const holder = ref(document.createElement('div'))
   const contentShell = ref(document.createElement('div'))
   const pulsePanelWrap = ref(document.createElement('div'))
@@ -126,7 +146,9 @@ function createRuntimeHarness(input?: {
     onEditorContextMenu: vi.fn(),
     onEditorPaste: vi.fn(),
     markEditorInteraction: vi.fn(),
-    resetWikilinkDataCache: vi.fn()
+    resetWikilinkDataCache: vi.fn(),
+    addIgnoredWord: vi.fn(),
+    refreshSpellcheckForPath: vi.fn()
   }
   const emitPulseOpenSecondBrain = vi.fn()
   const runtime = useEditorChromeRuntime({
@@ -134,7 +156,8 @@ function createRuntimeHarness(input?: {
       holder,
       contentShell,
       pulsePanelWrap,
-      getCurrentPath: () => input?.currentPath ?? 'a.md',
+      currentPath,
+      getCurrentPath: () => currentPath.value,
       getEditor: () => activeEditor.value,
       getSession: vi.fn(() => null)
     },
@@ -154,6 +177,10 @@ function createRuntimeHarness(input?: {
       },
       caches: {
         resetWikilinkDataCache: interactionMocks.resetWikilinkDataCache
+      },
+      spellcheck: {
+        addIgnoredWord: interactionMocks.addIgnoredWord,
+        refreshForPath: interactionMocks.refreshSpellcheckForPath
       }
     },
     chromeOutputPort: {
@@ -186,6 +213,8 @@ describe('useEditorChromeRuntime', () => {
     resetMock.mockClear()
     extractSelectionClipboardPayloadMock.mockReset()
     writeSelectionPayloadToClipboardMock.mockReset()
+    spellcheckSuggestionsMock.mockClear()
+    spellcheckWordHitMock.mockClear()
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
       callback(0)
       return 1
@@ -203,6 +232,55 @@ describe('useEditorChromeRuntime', () => {
     runtime.layout.focusEditor()
 
     expect(activeEditor.value?.commands.focus).toHaveBeenCalled()
+  })
+
+  it('opens a spellcheck suggestion menu on misspelled word contextmenu and can ignore the word', async () => {
+    const { runtime, activeEditor, interactionMocks, holder } = createRuntimeHarness()
+    const editor = activeEditor.value as ReturnType<typeof createEditorStub>
+    const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 32, clientY: 48 })
+
+    runtime.layout.focusEditor()
+    activeEditor.value = editor
+    await runtime.dialogsAndLifecycle.onMountInit()
+    holder.value.dispatchEvent(event)
+    await flushUi()
+
+    expect(event.defaultPrevented).toBe(true)
+    expect(spellcheckWordHitMock).toHaveBeenCalled()
+    expect(runtime.spellcheck.open.value).toBe(true)
+    expect(runtime.spellcheck.word.value).toBe('wrld')
+    if (runtime.spellcheck.mode.value === 'single') {
+      expect(runtime.spellcheck.primarySuggestion.value).toBe('world')
+    } else {
+      expect(runtime.spellcheck.suggestions.value).toEqual(['world'])
+    }
+
+    runtime.spellcheck.ignoreWord()
+    expect(interactionMocks.refreshSpellcheckForPath).toHaveBeenCalledWith('a.md')
+    expect(runtime.spellcheck.open.value).toBe(false)
+
+    runtime.spellcheck.open.value = true
+    runtime.spellcheck.word.value = 'wrld'
+    runtime.spellcheck.addToWorkspaceDictionary()
+    expect(interactionMocks.addIgnoredWord).toHaveBeenCalledWith('wrld')
+  })
+
+  it('replaces the misspelled word range when a suggestion is selected', async () => {
+    const { runtime, activeEditor } = createRuntimeHarness()
+    const editor = activeEditor.value as ReturnType<typeof createEditorStub>
+    const insertContentAt = vi.fn(() => ({ run: vi.fn(() => true) }))
+    Object.assign(editor as any, {
+      commands: {
+      ...editor.commands,
+      insertContentAt
+      }
+    })
+
+    runtime.spellcheck.open.value = true
+    runtime.spellcheck.range.value = { from: 10, to: 14 }
+    runtime.spellcheck.selectSuggestion('word')
+
+    expect(insertContentAt).toHaveBeenCalledWith({ from: 10, to: 14 }, 'word')
   })
 
   it('keeps nested drag-handle edge detection disabled so top text blocks stay targetable', () => {

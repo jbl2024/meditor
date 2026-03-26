@@ -31,6 +31,8 @@ export type EditorInteractionRuntimeDocumentPort = {
   holder: Ref<HTMLDivElement | null>
   activeEditor: Ref<Editor | null>
   getSession: (path: string) => DocumentSession | null
+  getSpellcheckLanguage: (path: string) => import('../lib/spellcheck').SpellcheckLanguage
+  isSpellcheckWordIgnored: (path: string, word: string) => boolean
   saveCurrentFile: (manual?: boolean) => Promise<void>
   onEditorDocChanged: (path: string) => void
 }
@@ -202,6 +204,13 @@ export function useEditorInteractionRuntime(options: UseEditorInteractionRuntime
     await ioPort.openLinkTarget(target)
   }
 
+  /**
+   * Refreshes spellcheck decorations for one mounted session editor.
+   */
+  function refreshSpellcheckForPath(path: string) {
+    tiptapSetup.refreshSpellcheckForPath(path)
+  }
+
   const tiptapSetup = useEditorTiptapSetup({
     currentPath: documentPort.currentPath,
     getCurrentEditor: () => documentPort.activeEditor.value,
@@ -223,6 +232,8 @@ export function useEditorInteractionRuntime(options: UseEditorInteractionRuntime
     resolveWikilinkTarget: wikilinkDataSource.resolveWikilinkTarget,
     sanitizeExternalHref,
     openExternalUrl: ioPort.openExternalUrl,
+    getSpellcheckLanguage: (path) => documentPort.getSpellcheckLanguage(path),
+    isSpellcheckWordIgnored: (path, word) => documentPort.isSpellcheckWordIgnored(path, word),
     inlineFormatToolbar: {
       updateFormattingToolbar: chromePort.toolbars.inlineFormatToolbar.updateFormattingToolbar,
       openLinkPopover: chromePort.toolbars.inlineFormatToolbar.openLinkPopover
@@ -333,6 +344,7 @@ export function useEditorInteractionRuntime(options: UseEditorInteractionRuntime
     restoreCaret: caretAndOutline.restoreCaret,
     clearOutlineTimer: caretAndOutline.clearOutlineTimer,
     emitOutlineSoon: caretAndOutline.emitOutlineSoon,
+    refreshSpellcheckForPath,
     insertBlockFromDescriptor: slashAndInsertion.slashInsertion.insertBlockFromDescriptor,
     onEditorKeydown: editorInputAndNavigation.onEditorKeydown,
     onEditorKeyup: editorInputAndNavigation.onEditorKeyup,

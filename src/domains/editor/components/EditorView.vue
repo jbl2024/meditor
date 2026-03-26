@@ -18,12 +18,14 @@ import EditorLargeDocOverlay from './editor/EditorLargeDocOverlay.vue'
 import EditorMermaidPreviewDialog from './editor/EditorMermaidPreviewDialog.vue'
 import EditorMermaidReplaceDialog from './editor/EditorMermaidReplaceDialog.vue'
 import EditorPropertiesPanel from './editor/EditorPropertiesPanel.vue'
+import EditorSpellcheckMenu from './editor/EditorSpellcheckMenu.vue'
 import EditorSlashOverlay from './editor/EditorSlashOverlay.vue'
 import EditorTableEdgeControls from './editor/EditorTableEdgeControls.vue'
 import EditorTitleField from './editor/EditorTitleField.vue'
 import EditorWikilinkOverlay from './editor/EditorWikilinkOverlay.vue'
 import PulsePanel from '../../pulse/components/PulsePanel.vue'
 import './editor/EditorViewContent.css'
+import { useWorkspaceSpellcheckDictionary } from '../composables/useWorkspaceSpellcheckDictionary'
 
 type HeadingNode = { text: string; level: number; id?: string }
 type CorePropertyOption = { key: string; label?: string; description?: string }
@@ -35,6 +37,7 @@ const CORE_PROPERTY_OPTIONS: CorePropertyOption[] = [
   { key: 'deadline', label: 'deadline', description: 'Due date (YYYY-MM-DD)' },
   { key: 'status', label: 'status', description: 'Workflow state' },
   { key: 'category', label: 'category', description: 'Content category' },
+  { key: 'language', label: 'language', description: 'Preferred note language for spellcheck' },
   { key: 'created', label: 'created', description: 'Creation date (YYYY-MM-DD)' },
   { key: 'updated', label: 'updated', description: 'Last update date (YYYY-MM-DD)' },
   { key: 'priority', label: 'priority', description: 'Priority level' },
@@ -99,8 +102,10 @@ const contentShell = ref<HTMLDivElement | null>(null)
 const pulsePanelWrap = ref<HTMLDivElement | null>(null)
 const activeEditor = ref<Editor | null>(null) as Ref<Editor | null>
 const pathRef = computed(() => props.path ?? '')
+const workspacePathRef = computed(() => props.workspacePath ?? '')
 const openPathsRef = computed(() => props.openPaths ?? [])
 const currentPathSource = computed(() => props.path?.trim() || '')
+const workspaceSpellcheck = useWorkspaceSpellcheckDictionary({ workspacePath: workspacePathRef })
 
 let chromeRuntime!: ReturnType<typeof useEditorChromeRuntime>
 let interactionRuntime!: ReturnType<typeof useEditorInteractionRuntime>
@@ -111,6 +116,7 @@ chromeRuntime = useEditorChromeRuntime({
     holder,
     contentShell,
     pulsePanelWrap,
+    currentPath: currentPathSource,
     getCurrentPath: () => currentPathSource.value,
     getEditor: () => activeEditor.value,
     getSession: (path) => getSession(path)
@@ -131,6 +137,16 @@ chromeRuntime = useEditorChromeRuntime({
     },
     caches: {
       resetWikilinkDataCache: () => interactionRuntime?.resetWikilinkDataCache()
+    },
+    spellcheck: {
+      addIgnoredWord: (word: string) => {
+        workspaceSpellcheck.addIgnoredWord(word)
+        const path = currentPathSource.value
+        if (path) {
+          interactionRuntime?.refreshSpellcheckForPath(path)
+        }
+      },
+      refreshForPath: (path: string) => interactionRuntime?.refreshSpellcheckForPath(path)
     }
   },
   chromeOutputPort: {
@@ -144,6 +160,8 @@ interactionRuntime = useEditorInteractionRuntime({
     holder,
     activeEditor,
     getSession: (path) => getSession(path),
+    getSpellcheckLanguage: (path) => documentRuntime?.getSpellcheckLanguage(path) ?? 'en',
+    isSpellcheckWordIgnored: (_path, word) => workspaceSpellcheck.isIgnoredWord(word) || chromeRuntime.spellcheck.isSessionIgnoredWord(word),
     saveCurrentFile: (manual) => documentRuntime?.saveCurrentFile(manual),
     onEditorDocChanged: (path) => documentRuntime?.onEditorDocChanged(path)
   },
@@ -262,10 +280,11 @@ const setPulseInstruction = pulse.setPulseInstruction
 const pulseSelectionRange = pulse.pulseSelectionRange
 void setPulseInstruction
 void pulseSelectionRange
-  const {
+const {
   propertyEditorMode,
   activeParseErrors,
   activeRawYaml,
+  activeSpellcheckLanguage,
   canUseStructuredProperties,
   structuredPropertyFields,
   structuredPropertyKeys,
@@ -297,6 +316,26 @@ const {
   DRAG_HANDLE_PLUGIN_KEY,
   DRAG_HANDLE_DEBUG,
 } = chromeRuntime
+const {
+  open: spellcheckOpen,
+  floatingEl: spellcheckFloatingEl,
+  left: spellcheckLeft,
+  top: spellcheckTop,
+  mode: spellcheckMode,
+  word: spellcheckWord,
+  primarySuggestion: spellcheckPrimarySuggestion,
+  suggestions: spellcheckSuggestions,
+  loading: spellcheckLoading,
+  close: closeSpellcheckMenu,
+  selectSuggestion: selectSpellcheckSuggestion,
+  ignoreWord: ignoreSpellcheckWord,
+  addToWorkspaceDictionary: addSpellcheckWordToWorkspaceDictionary
+} = chromeRuntime.spellcheck
+
+function onSpellcheckMenuEl(element: HTMLDivElement | null) {
+  spellcheckFloatingEl.value = element
+}
+
 const TABLE_MARKDOWN_MODE = chromeRuntime.TABLE_MARKDOWN_MODE
 const { titleEditorFocused } = loading
 const {
@@ -472,6 +511,14 @@ watch(
   () => {
     syncBlockDragHandleVisibility()
     syncBlockDragHandlePosition()
+  },
+  { immediate: true, flush: 'post' }
+)
+watch(
+  [currentPath, activeSpellcheckLanguage, workspacePathRef],
+  ([path]) => {
+    if (!path) return
+    interactionRuntime?.refreshSpellcheckForPath(path)
   },
   { immediate: true, flush: 'post' }
 )
@@ -838,6 +885,22 @@ defineExpose({
             @table:menu-el="tableToolbarFloatingEl = $event"
             @table:select="onTableToolbarSelect($event)"
             @table:close="hideTableToolbar()"
+          />
+
+          <EditorSpellcheckMenu
+            :open="spellcheckOpen"
+            :left="spellcheckLeft"
+            :top="spellcheckTop"
+            :mode="spellcheckMode"
+            :word="spellcheckWord"
+            :primary-suggestion="spellcheckPrimarySuggestion"
+            :suggestions="spellcheckSuggestions"
+            :loading="spellcheckLoading"
+            @menu-el="onSpellcheckMenuEl"
+            @select="selectSpellcheckSuggestion($event)"
+            @ignore="ignoreSpellcheckWord()"
+            @add-to-dictionary="addSpellcheckWordToWorkspaceDictionary()"
+            @close="closeSpellcheckMenu()"
           />
 
           <div v-if="pulseOpen" ref="pulsePanelWrap" class="editor-pulse-panel-wrap" :style="pulsePanelStyle">

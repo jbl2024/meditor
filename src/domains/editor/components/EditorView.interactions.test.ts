@@ -881,4 +881,243 @@ describe('EditorView interactions contract', () => {
     document.body.innerHTML = ''
   })
 
+  it('replaces the misspelled word in the mounted editor when the spellcheck suggestion handler runs', async () => {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+    const editorRef = ref<any>(null)
+
+    const app = createApp(defineComponent({
+      setup() {
+        return () =>
+          h(EditorView, {
+            ref: editorRef,
+            path: 'spellcheck.md',
+            openPaths: ['spellcheck.md'],
+            openFile: async () => 'orthografe',
+            saveFile: async () => ({ persisted: true }),
+            renameFileFromTitle: async (valuePath: string, title: string) => ({ path: valuePath, title }),
+            loadLinkTargets: async () => ['spellcheck.md'],
+            loadLinkHeadings: async () => ['H1'],
+            loadPropertyTypeSchema: async () => ({}),
+            savePropertyTypeSchema: async () => {},
+            openLinkTarget: async () => true,
+            onStatus: () => {},
+            onOutline: () => {},
+            onProperties: () => {},
+            onPathRenamed: () => {}
+          })
+      }
+    }))
+
+    app.mount(root)
+    await flushUi()
+
+    const setupState = (editorRef.value as { $?: { setupState?: Record<string, any> } })?.$?.setupState
+    if (!setupState) throw new Error('Expected EditorView setup state')
+    const chromeRuntime = setupState.chromeRuntime as {
+      spellcheck: {
+        open: { value: boolean }
+        range: { value: { from: number; to: number } | null }
+        word: { value: string }
+        selectSuggestion: (suggestion: string) => void
+      }
+      layout: {
+        renderedEditor: { value: any }
+      }
+    }
+    const editor = setupState.renderedEditorsByPath?.['spellcheck.md']
+    if (!editor) throw new Error('Expected mounted spellcheck editor')
+    expect(chromeRuntime.layout.renderedEditor.value).toBe(editor)
+
+    const textNode: { from: number; to: number; text: string } = (() => {
+      let result: { from: number; to: number; text: string } | null = null
+      editor.state.doc.descendants((node: any, pos: number) => {
+        if (result || !node.isText || !node.text) return true
+        const from = pos + 1
+        result = { from, to: from + node.text.length, text: node.text }
+        return false
+      })
+      if (!result) throw new Error('Expected a text node in the editor document')
+      return result
+    })()
+    const dispatchSpy = vi.spyOn(editor.view, 'dispatch')
+
+    chromeRuntime.spellcheck.open.value = true
+    chromeRuntime.spellcheck.range.value = { from: textNode.from, to: textNode.to }
+    chromeRuntime.spellcheck.word.value = textNode.text
+    chromeRuntime.spellcheck.selectSuggestion('orthographe')
+    await flushUi()
+
+    expect(dispatchSpy).toHaveBeenCalled()
+    expect(editor.state.doc.textBetween(0, editor.state.doc.content.size, '\n', '\0')).toContain('orthographe')
+    expect(editor.state.doc.textBetween(0, editor.state.doc.content.size, '\n', '\0')).not.toContain('orthografe')
+
+    app.unmount()
+    document.body.innerHTML = ''
+  })
+
+  it('replaces the misspelled word when a spellcheck suggestion button is clicked', async () => {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+    const editorRef = ref<any>(null)
+
+    const app = createApp(defineComponent({
+      setup() {
+        return () =>
+          h(EditorView, {
+            ref: editorRef,
+            path: 'spellcheck.md',
+            openPaths: ['spellcheck.md'],
+            openFile: async () => 'orthografe',
+            saveFile: async () => ({ persisted: true }),
+            renameFileFromTitle: async (valuePath: string, title: string) => ({ path: valuePath, title }),
+            loadLinkTargets: async () => ['spellcheck.md'],
+            loadLinkHeadings: async () => ['H1'],
+            loadPropertyTypeSchema: async () => ({}),
+            savePropertyTypeSchema: async () => {},
+            openLinkTarget: async () => true,
+            onStatus: () => {},
+            onOutline: () => {},
+            onProperties: () => {},
+            onPathRenamed: () => {}
+          })
+      }
+    }))
+
+    app.mount(root)
+    await flushUi()
+
+    const setupState = (editorRef.value as { $?: { setupState?: Record<string, any> } })?.$?.setupState
+    if (!setupState) throw new Error('Expected EditorView setup state')
+    const chromeRuntime = setupState.chromeRuntime as {
+      spellcheck: {
+        open: { value: boolean }
+        range: { value: { from: number; to: number } | null }
+        word: { value: string }
+        suggestions: { value: string[] }
+      }
+      layout: {
+        renderedEditor: { value: any }
+      }
+    }
+    const editor = setupState.renderedEditorsByPath?.['spellcheck.md']
+    if (!editor) throw new Error('Expected mounted spellcheck editor')
+    expect(chromeRuntime.layout.renderedEditor.value).toBe(editor)
+
+    const textNode: { from: number; to: number; text: string } = (() => {
+      let result: { from: number; to: number; text: string } | null = null
+      editor.state.doc.descendants((node: any, pos: number) => {
+        if (result || !node.isText || !node.text) return true
+        const from = pos + 1
+        result = { from, to: from + node.text.length, text: node.text }
+        return false
+      })
+      if (!result) throw new Error('Expected a text node in the editor document')
+      return result
+    })()
+
+    chromeRuntime.spellcheck.open.value = true
+    chromeRuntime.spellcheck.range.value = { from: textNode.from, to: textNode.to }
+    chromeRuntime.spellcheck.word.value = textNode.text
+    chromeRuntime.spellcheck.suggestions.value = ['orthographe']
+    await flushUi()
+
+    const suggestionButton = Array.from(document.body.querySelectorAll('.tomosona-spellcheck-menu button')).find((button) =>
+      button.textContent?.toLowerCase().includes('orthographe')
+    ) as HTMLButtonElement | undefined
+    if (!suggestionButton) throw new Error('Expected a spellcheck suggestion button')
+
+    suggestionButton.click()
+    await flushUi()
+
+    expect(editor.state.doc.textBetween(0, editor.state.doc.content.size, '\n', '\0')).toContain('orthographe')
+    expect(editor.state.doc.textBetween(0, editor.state.doc.content.size, '\n', '\0')).not.toContain('orthografe')
+
+    app.unmount()
+    document.body.innerHTML = ''
+  })
+
+  it('replaces the misspelled word when a spellcheck suggestion is chosen on mouse pointerdown', async () => {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+    const editorRef = ref<any>(null)
+
+    const app = createApp(defineComponent({
+      setup() {
+        return () =>
+          h(EditorView, {
+            ref: editorRef,
+            path: 'spellcheck.md',
+            openPaths: ['spellcheck.md'],
+            openFile: async () => 'orthografe',
+            saveFile: async () => ({ persisted: true }),
+            renameFileFromTitle: async (valuePath: string, title: string) => ({ path: valuePath, title }),
+            loadLinkTargets: async () => ['spellcheck.md'],
+            loadLinkHeadings: async () => ['H1'],
+            loadPropertyTypeSchema: async () => ({}),
+            savePropertyTypeSchema: async () => {},
+            openLinkTarget: async () => true,
+            onStatus: () => {},
+            onOutline: () => {},
+            onProperties: () => {},
+            onPathRenamed: () => {}
+          })
+      }
+    }))
+
+    app.mount(root)
+    await flushUi()
+
+    const setupState = (editorRef.value as { $?: { setupState?: Record<string, any> } })?.$?.setupState
+    if (!setupState) throw new Error('Expected EditorView setup state')
+    const chromeRuntime = setupState.chromeRuntime as {
+      spellcheck: {
+        open: { value: boolean }
+        range: { value: { from: number; to: number } | null }
+        word: { value: string }
+        suggestions: { value: string[] }
+      }
+      layout: {
+        renderedEditor: { value: any }
+      }
+    }
+    const editor = setupState.renderedEditorsByPath?.['spellcheck.md']
+    if (!editor) throw new Error('Expected mounted spellcheck editor')
+    expect(chromeRuntime.layout.renderedEditor.value).toBe(editor)
+
+    const textNode: { from: number; to: number; text: string } = (() => {
+      let result: { from: number; to: number; text: string } | null = null
+      editor.state.doc.descendants((node: any, pos: number) => {
+        if (result || !node.isText || !node.text) return true
+        const from = pos + 1
+        result = { from, to: from + node.text.length, text: node.text }
+        return false
+      })
+      if (!result) throw new Error('Expected a text node in the editor document')
+      return result
+    })()
+
+    chromeRuntime.spellcheck.open.value = true
+    chromeRuntime.spellcheck.range.value = { from: textNode.from, to: textNode.to }
+    chromeRuntime.spellcheck.word.value = textNode.text
+    chromeRuntime.spellcheck.suggestions.value = ['orthographe']
+    await flushUi()
+
+    const suggestionButton = Array.from(document.body.querySelectorAll('.tomosona-spellcheck-menu button')).find((button) =>
+      button.textContent?.toLowerCase().includes('orthographe')
+    ) as HTMLButtonElement | undefined
+    if (!suggestionButton) throw new Error('Expected a spellcheck suggestion button')
+
+    suggestionButton.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true }))
+    suggestionButton.dispatchEvent(new MouseEvent('pointerup', { bubbles: true, cancelable: true }))
+    suggestionButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    await flushUi()
+
+    expect(editor.state.doc.textBetween(0, editor.state.doc.content.size, '\n', '\0')).toContain('orthographe')
+    expect(editor.state.doc.textBetween(0, editor.state.doc.content.size, '\n', '\0')).not.toContain('orthografe')
+
+    app.unmount()
+    document.body.innerHTML = ''
+  })
+
 })

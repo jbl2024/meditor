@@ -29,6 +29,8 @@ function createSetup(overrides: Partial<Parameters<typeof useEditorTiptapSetup>[
     resolveWikilinkTarget: vi.fn(async () => true),
     sanitizeExternalHref: (v) => v,
     openExternalUrl: vi.fn(async () => {}),
+    getSpellcheckLanguage: vi.fn(() => 'fr' as const),
+    isSpellcheckWordIgnored: vi.fn(() => false),
     inlineFormatToolbar: {
       updateFormattingToolbar: vi.fn(),
       openLinkPopover: vi.fn()
@@ -48,6 +50,7 @@ describe('useEditorTiptapSetup', () => {
     expect(Array.isArray(editorOptions.extensions)).toBe(true)
     expect(editorOptions.extensions.length).toBeGreaterThan(8)
     expect(editorOptions.injectCSS).toBe(false)
+    expect(extensionNames).toContain('spellcheck')
     expect(extensionNames).toContain('tableCellAlign')
     expect(codeBlock?.options?.exitOnTripleEnter).toBe(false)
     expect(editorOptions.editorProps.attributes.spellcheck).toBe('true')

@@ -15,7 +15,9 @@ import { WikilinkNode } from '../lib/tiptap/extensions/WikilinkNode'
 import { CodeBlockNode } from '../lib/tiptap/extensions/CodeBlockNode'
 import { TableCellAlign } from '../lib/tiptap/extensions/TableCellAlign'
 import { EditorFindExtension } from '../lib/tiptap/extensions/EditorFind'
+import { SpellcheckExtension, refreshSpellcheckDecorations } from '../lib/tiptap/extensions/Spellcheck'
 import { adjustHeadingLevelFromTab } from '../lib/editorInteractions'
+import type { SpellcheckLanguage } from '../lib/spellcheck'
 import { WIKILINK_STATE_KEY, type WikilinkCandidate } from '../lib/tiptap/plugins/wikilinkState'
 import { enterWikilinkEditFromNode } from '../lib/tiptap/extensions/wikilinkCommands'
 import type { RevealAnchorRequest } from './useEditorNavigation'
@@ -54,6 +56,8 @@ export type UseEditorTiptapSetupOptions = {
   resolveWikilinkTarget: (target: string) => Promise<boolean>
   sanitizeExternalHref: (value: string) => string | null
   openExternalUrl: (value: string) => Promise<void>
+  getSpellcheckLanguage: (path: string) => SpellcheckLanguage
+  isSpellcheckWordIgnored: (path: string, word: string) => boolean
   inlineFormatToolbar: {
     updateFormattingToolbar: () => void
     openLinkPopover: () => void
@@ -258,6 +262,10 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
         QuoteNode,
         HtmlNode,
         CodeBlockNode,
+        SpellcheckExtension.configure({
+          getLanguage: () => options.getSpellcheckLanguage(path),
+          isWordIgnored: (word: string) => options.isSpellcheckWordIgnored(path, word)
+        }),
         EditorFindExtension,
         WikilinkNode.configure({
           getCandidates: (query: string) => options.getWikilinkCandidates(query),
@@ -343,8 +351,18 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
     })
   }
 
+  /**
+   * Refreshes spellcheck decorations after a language change or frontmatter edit.
+   */
+  function refreshSpellcheckForPath(path: string) {
+    const editor = options.getSessionEditor(path) ?? options.getCurrentEditor()
+    if (!editor) return
+    refreshSpellcheckDecorations(editor, options.getSpellcheckLanguage(path))
+  }
+
   return {
     createEditorOptions,
-    createSessionEditor
+    createSessionEditor,
+    refreshSpellcheckForPath
   }
 }

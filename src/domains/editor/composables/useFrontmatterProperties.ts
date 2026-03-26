@@ -8,6 +8,7 @@ import {
 } from '../../../shared/api/frontmatterGenerationApi'
 import { defaultPropertyTypeForKey, normalizePropertyKey, sanitizePropertyTypeSchema, type PropertyType, type PropertyTypeSchema } from '../lib/propertyTypes'
 import { mergeGeneratedFrontmatterProperties } from '../lib/frontmatterGeneration'
+import { resolveSpellcheckLanguage, type SpellcheckLanguage } from '../lib/spellcheck'
 
 /**
  * useFrontmatterProperties
@@ -128,6 +129,22 @@ export function useFrontmatterProperties(options: UseFrontmatterPropertiesOption
     if (!path) return ''
     return rawYamlByPath.value[path] ?? ''
   })
+  const activeSpellcheckLanguage = computed<SpellcheckLanguage>(() =>
+    resolveSpellcheckLanguage({
+      frontmatter: activeFrontmatter.value,
+      systemLocale: typeof navigator !== 'undefined' ? navigator.language : null
+    })
+  )
+
+  /**
+   * Resolves the spellcheck language for one note path.
+   */
+  function getSpellcheckLanguage(path: string): SpellcheckLanguage {
+    return resolveSpellcheckLanguage({
+      frontmatter: frontmatterByPath.value[path] ?? null,
+      systemLocale: typeof navigator !== 'undefined' ? navigator.language : null
+    })
+  }
 
   const canUseStructuredProperties = computed(() => !activeParseErrors.value.length)
   const structuredPropertyFields = computed(() => activeFields.value)
@@ -767,6 +784,8 @@ export function useFrontmatterProperties(options: UseFrontmatterPropertiesOption
     activeFields,
     activeParseErrors,
     activeRawYaml,
+    activeSpellcheckLanguage,
+    getSpellcheckLanguage,
     canUseStructuredProperties,
     structuredPropertyFields,
     structuredPropertyKeys,

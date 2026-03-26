@@ -148,6 +148,8 @@ function createRuntimeHarness(input?: {
       holder,
       activeEditor,
       getSession: () => (input?.session ?? null) as any,
+      getSpellcheckLanguage: () => 'en',
+      isSpellcheckWordIgnored: () => false,
       saveCurrentFile,
       onEditorDocChanged: vi.fn()
     },
