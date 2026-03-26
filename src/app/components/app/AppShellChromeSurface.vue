@@ -52,6 +52,7 @@ const emit = defineEmits<{
   openToday: []
   openCosmos: []
   openSecondBrain: []
+  openAlterExploration: []
   splitRight: []
   splitDown: []
   focusPane: [index: number]
@@ -128,6 +129,7 @@ defineExpose<AppShellChromeSurfaceExposed>({
       @open-today="emit('openToday')"
       @open-cosmos="emit('openCosmos')"
       @open-second-brain="emit('openSecondBrain')"
+      @open-alter-exploration="emit('openAlterExploration')"
       @split-right="emit('splitRight')"
       @split-down="emit('splitDown')"
       @focus-pane="emit('focusPane', $event)"

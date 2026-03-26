@@ -4,7 +4,7 @@ import { documentPathsForPane } from '../lib/appShellPane'
 
 type PaneAxis = 'row' | 'column'
 type PaneDirection = 'next' | 'previous'
-type SurfaceType = 'home' | 'cosmos' | 'second-brain-chat' | 'alters'
+type SurfaceType = 'home' | 'cosmos' | 'second-brain-chat' | 'alter-exploration' | 'alters'
 
 /** Groups shell workspace state and shell-owned UI persistence used by commands. */
 export type AppShellCommandsWorkspacePort = {
@@ -135,6 +135,19 @@ export function useAppShellCommands(options: UseAppShellCommandsOptions) {
     options.actionPort.primeSecondBrainSessionRequest()
     options.panePort.openSurfaceInPane('second-brain-chat')
     options.navigationPort.recordSecondBrainHistorySnapshot()
+    if (!options.workspacePort.allWorkspaceFiles.value.length) {
+      await options.actionPort.loadAllFiles()
+    }
+    return true
+  }
+
+  async function openAlterExplorationViewFromPalette() {
+    if (!options.workspacePort.hasWorkspace.value) {
+      options.workspacePort.notifyError('Open a workspace first.')
+      return false
+    }
+
+    options.panePort.openSurfaceInPane('alter-exploration')
     if (!options.workspacePort.allWorkspaceFiles.value.length) {
       await options.actionPort.loadAllFiles()
     }
@@ -378,6 +391,7 @@ export function useAppShellCommands(options: UseAppShellCommandsOptions) {
   return {
     openCosmosViewFromPalette,
     openSecondBrainViewFromPalette,
+    openAlterExplorationViewFromPalette,
     openHomeViewFromPalette,
     openAltersViewFromPalette,
     openFavoritesPanelFromPalette,

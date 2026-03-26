@@ -96,6 +96,7 @@ const QUICK_OPEN_BROWSE_ACTION_IDS = [
   'open-home-view',
   'open-alters-view',
   'open-today',
+  'open-alter-exploration-view',
   'create-new-file',
   'convert-to-word',
   'open-favorites',

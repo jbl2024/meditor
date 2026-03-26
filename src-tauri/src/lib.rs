@@ -2,6 +2,7 @@
 //! and Cosmos graph payload generation.
 
 mod alters;
+mod alter_exploration;
 mod app_meta;
 mod db;
 mod docx;
@@ -442,6 +443,11 @@ pub fn run() {
             alters::load_alter_revision,
             alters::preview_alter,
             alters::generate_alter_draft,
+            alter_exploration::create_alter_exploration_session,
+            alter_exploration::load_alter_exploration_session,
+            alter_exploration::list_alter_exploration_sessions,
+            alter_exploration::run_alter_exploration_session,
+            alter_exploration::cancel_alter_exploration_session,
             second_brain::read_second_brain_config_status,
             second_brain::generate_frontmatter_properties,
             second_brain::discover_codex_models,

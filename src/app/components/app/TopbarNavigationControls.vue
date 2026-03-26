@@ -4,6 +4,7 @@ import {
   ArrowRightIcon,
   CommandLineIcon,
   HomeIcon,
+  UserGroupIcon,
   ShareIcon,
   SparklesIcon
 } from '@heroicons/vue/24/outline'
@@ -62,6 +63,7 @@ const emit = defineEmits<{
   openToday: []
   openCosmos: []
   openSecondBrain: []
+  openAlterExploration: []
   splitRight: []
   splitDown: []
   focusPane: [index: number]
@@ -253,6 +255,15 @@ defineExpose({
             @click="emit('openSecondBrain')"
           >
             <SparklesIcon />
+          </UiIconButton>
+          <UiIconButton
+            class-name="toolbar-icon-btn"
+            :disabled="!hasWorkspace"
+            title="Alter Exploration"
+            aria-label="Alter Exploration"
+            @click="emit('openAlterExploration')"
+          >
+            <UserGroupIcon />
           </UiIconButton>
         </div>
 

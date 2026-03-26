@@ -17,6 +17,7 @@ function createLaunchpad(overrides: Partial<Parameters<typeof useAppShellLaunchp
     openTodayNote: vi.fn(async () => true),
     openCosmosView: vi.fn(async () => true),
     openSecondBrainView: vi.fn(async () => true),
+    openAlterExplorationView: vi.fn(async () => true),
     openAltersView: vi.fn(async () => true)
   }
 

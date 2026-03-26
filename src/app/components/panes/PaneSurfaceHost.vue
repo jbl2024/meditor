@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import EditorView from '../../../domains/editor/components/EditorView.vue'
 import CosmosPaneSurface from '../../../domains/cosmos/components/CosmosPaneSurface.vue'
 import SecondBrainPaneSurface from '../../../domains/second-brain/components/SecondBrainPaneSurface.vue'
+import AlterExplorationPaneSurface from '../../../domains/alters/components/AlterExplorationPaneSurface.vue'
 import AlterManagerView from '../../../domains/alters/components/AlterManagerView.vue'
 import WorkspaceLaunchpad from './WorkspaceLaunchpad.vue'
 import type { PaneTab } from '../../composables/useMultiPaneWorkspaceState'
@@ -81,6 +82,7 @@ const emit = defineEmits<{
   'launchpad-quick-start': [kind: 'today' | 'second-brain' | 'cosmos' | 'command-palette' | 'alters']
   'second-brain-context-changed': [paths: string[]]
   'second-brain-session-changed': [sessionId: string]
+  'second-brain-open-alter-exploration': []
   'alter-open-second-brain': [alterId: string]
 }>()
 
@@ -105,9 +107,11 @@ const editorSurfaceRef = ref<EditorSurfaceExposed | null>(null)
 const cosmosSurfaceRef = ref<{ resetView: () => void; focusNodeById: (nodeId: string) => boolean } | null>(null)
 const hasCosmosTab = computed(() => props.openTabs.some((tab) => tab.type === 'cosmos'))
 const hasSecondBrainTab = computed(() => props.openTabs.some((tab) => tab.type === 'second-brain-chat'))
+const hasAlterExplorationTab = computed(() => props.openTabs.some((tab) => tab.type === 'alter-exploration'))
 const hasAltersTab = computed(() => props.openTabs.some((tab) => tab.type === 'alters'))
 const showCosmosSurface = computed(() => props.activeTab?.type === 'cosmos')
 const showSecondBrainSurface = computed(() => props.activeTab?.type === 'second-brain-chat')
+const showAlterExplorationSurface = computed(() => props.activeTab?.type === 'alter-exploration')
 const showAltersSurface = computed(() => props.activeTab?.type === 'alters')
 const defaultAlterSettings: AppSettingsAlters = {
   default_mode: 'neutral',
@@ -253,14 +257,25 @@ defineExpose<EditorSurfaceExposed>({
     :echoes-refresh-token="secondBrainViewModel.echoesRefreshToken"
     :settings="secondBrainViewModel.settings"
     @open-note="emit('open-note', $event)"
+    @open-alter-exploration="emit('second-brain-open-alter-exploration')"
     @context-changed="emit('second-brain-context-changed', $event)"
     @session-changed="emit('second-brain-session-changed', $event)"
+  />
+
+  <AlterExplorationPaneSurface
+    v-if="hasAlterExplorationTab"
+    v-show="showAlterExplorationSurface"
+    :workspace-path="secondBrainViewModel.workspacePath"
+    :all-workspace-files="secondBrainViewModel.allWorkspaceFiles"
+    :active-note-path="secondBrainViewModel.activeNotePath"
+    @open-note="emit('open-note', $event)"
   />
 
   <AlterManagerView
     v-if="hasAltersTab"
     v-show="showAltersSurface"
     :workspace-path="altersViewModel.workspacePath"
+    :active-note-path="activeDocumentPath"
     :settings="altersViewModel.settings"
     @open-second-brain="emit('alter-open-second-brain', $event)"
   />

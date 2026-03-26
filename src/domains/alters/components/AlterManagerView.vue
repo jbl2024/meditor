@@ -31,6 +31,7 @@ import { QuickStartLibraryItem, builtInAlters } from '../lib/loadBuiltInAlters'
 
 const props = defineProps<{
   workspacePath: string
+  activeNotePath: string
   settings: AppSettingsAlters
 }>()
 
@@ -508,6 +509,7 @@ onMounted(() => {
             </div>
           </div>
         </UiPanel>
+
       </main>
     </div>
 

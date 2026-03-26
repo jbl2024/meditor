@@ -28,11 +28,14 @@ describe('useMultiPaneWorkspaceState', () => {
   it('keeps special surfaces unique across panes', () => {
     const store = useMultiPaneWorkspaceState()
     store.openSurfaceInPane('cosmos')
+    store.openSurfaceInPane('alter-exploration')
     const pane2 = store.splitPane('pane-1', 'row')
     store.openSurfaceInPane('cosmos', pane2!)
+    store.openSurfaceInPane('alter-exploration', pane2!)
 
     expect(store.layout.value.activePaneId).toBe('pane-1')
     expect(store.findPaneContainingSurface('cosmos')).toBe('pane-1')
+    expect(store.findPaneContainingSurface('alter-exploration')).toBe('pane-1')
   })
 
   it('supports split and max 4 panes', () => {

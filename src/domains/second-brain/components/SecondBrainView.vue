@@ -8,6 +8,7 @@
 import { computed, ref, watch } from 'vue'
 import { ClipboardDocumentIcon, PaperAirplaneIcon, PlusIcon, SparklesIcon } from '@heroicons/vue/24/outline'
 import type { AppSettingsAlters } from '../../../shared/api/apiTypes'
+import UiButton from '../../../shared/components/ui/UiButton.vue'
 import UiIconButton from '../../../shared/components/ui/UiIconButton.vue'
 import UiFilterableDropdown, { type FilterableDropdownItem } from '../../../shared/components/ui/UiFilterableDropdown.vue'
 import SecondBrainAtMentionsMenu from './SecondBrainAtMentionsMenu.vue'
@@ -39,6 +40,7 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
   'open-note': [path: string]
+  'open-alter-exploration': []
   'context-changed': [paths: string[]]
   'session-changed': [sessionId: string]
 }>()
@@ -165,6 +167,10 @@ function onAlterDropdownSelect(item: AlterDropdownItem) {
   alterDropdownQuery.value = ''
 }
 
+function openAlterExploration() {
+  emit('open-alter-exploration')
+}
+
 watch(selectedAlterId, () => {
   syncAlterDropdownActiveIndex()
 }, { immediate: true })
@@ -240,6 +246,18 @@ void threadRef
             @select="loadSession"
             @delete="onDeleteSession"
           />
+          <UiButton
+            size="sm"
+            variant="secondary"
+            class="sb-explore-btn"
+            :disabled="loading || creatingSession || !props.workspacePath"
+            @click="openAlterExploration()"
+          >
+            <template #leading>
+              <SparklesIcon class="h-4 w-4" />
+            </template>
+            Explore with Alters
+          </UiButton>
         </div>
       </header>
       <p v-if="configError || sessionLoadError" class="sb-error">{{ configError || sessionLoadError }}</p>
@@ -411,6 +429,7 @@ void threadRef
         </div>
       </transition>
     </section>
+
   </div>
 </template>
 
@@ -455,6 +474,7 @@ void threadRef
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
 }
 
 .sb-session-copy-btn {
@@ -486,6 +506,10 @@ void threadRef
 .sb-session-create-btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+.sb-explore-btn {
+  white-space: nowrap;
 }
 
 .sb-center-head h2 {

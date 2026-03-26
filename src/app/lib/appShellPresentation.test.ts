@@ -77,6 +77,19 @@ describe('appShellPresentation', () => {
       { label: 'Surface', value: 'Cosmos' },
       { label: 'Metadata', value: 'No document metadata for this surface' }
     ])
+
+    const explorationRows = buildMetadataRows({
+      activeFilePath: '',
+      activeStatus: { dirty: false, saving: false },
+      virtualDocExists: false,
+      activeTab: { type: 'alter-exploration' },
+      activeFileMetadata: null,
+      workspacePath: '/vault',
+      toRelativePath: (path) => path.replace('/vault/', ''),
+      formatTimestamp: (value) => (value == null ? '-' : String(value))
+    })
+
+    expect(explorationRows[0]).toEqual({ label: 'Surface', value: 'Alter Exploration' })
   })
 
   it('formats relative times using the same shell wording', () => {

@@ -43,6 +43,7 @@ export type AppShellPaletteActionPort = {
   openFavoritesPanelFromPalette: () => boolean | Promise<boolean>
   openCosmosViewFromPalette: () => boolean | Promise<boolean>
   openSecondBrainViewFromPalette: () => boolean | Promise<boolean>
+  openAlterExplorationViewFromPalette: () => boolean | Promise<boolean>
   openAltersViewFromPalette: () => boolean | Promise<boolean>
   addActiveNoteToSecondBrainFromPalette: () => boolean | Promise<boolean>
   addActiveNoteToFavoritesFromPalette: () => boolean | Promise<boolean>
@@ -104,7 +105,8 @@ export const PALETTE_ACTION_PRIORITY: Record<string, number> = {
   'open-specific-date': 6,
   'open-cosmos-view': 7,
   'open-second-brain-view': 8,
-  'open-alters-view': 9,
+  'open-alter-exploration-view': 9,
+  'open-alters-view': 10,
   'add-active-note-to-second-brain': 10,
   'add-active-note-to-favorites': 11,
   'remove-active-note-from-favorites': 12,
@@ -172,6 +174,12 @@ export function useAppShellPaletteActions(options: UseAppShellPaletteActionsOpti
       id: 'open-second-brain-view',
       label: 'Open Second Brain View',
       run: () => options.actionPort.openSecondBrainViewFromPalette(),
+      closeBeforeRun: true
+    }),
+    createPaletteAction('navigation', {
+      id: 'open-alter-exploration-view',
+      label: 'Open Alter Exploration',
+      run: () => options.actionPort.openAlterExplorationViewFromPalette(),
       closeBeforeRun: true
     }),
     createPaletteAction('navigation', {

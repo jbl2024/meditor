@@ -24,6 +24,7 @@ defineProps<{
 
 const emit = defineEmits<{
   'open-note': [path: string]
+  'open-alter-exploration': []
   'context-changed': [paths: string[]]
   'session-changed': [sessionId: string]
 }>()
@@ -44,6 +45,7 @@ const emit = defineEmits<{
       :echoes-refresh-token="echoesRefreshToken"
       :settings="settings"
       @open-note="emit('open-note', $event)"
+      @open-alter-exploration="emit('open-alter-exploration')"
       @context-changed="emit('context-changed', $event)"
       @session-changed="emit('session-changed', $event)"
     />

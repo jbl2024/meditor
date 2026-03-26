@@ -46,7 +46,7 @@ export type MetadataRow = {
   value: string
 }
 
-export type ShellSurfaceType = 'document' | 'home' | 'cosmos' | 'second-brain-chat' | 'alters'
+export type ShellSurfaceType = 'document' | 'home' | 'cosmos' | 'second-brain-chat' | 'alter-exploration' | 'alters'
 
 export type BuildMetadataRowsOptions = {
   activeFilePath: string
@@ -201,6 +201,8 @@ export function buildMetadataRows(options: BuildMetadataRowsOptions): MetadataRo
         ? 'Cosmos'
         : activeTab.type === 'second-brain-chat'
           ? 'Second Brain'
+          : activeTab.type === 'alter-exploration'
+            ? 'Alter Exploration'
           : 'Surface'
     return [
       { label: 'Surface', value: label },

@@ -102,6 +102,7 @@ const emit = defineEmits<{
   'launchpad-quick-start': [kind: 'today' | 'second-brain' | 'cosmos' | 'command-palette' | 'alters']
   'second-brain-context-changed': [paths: string[]]
   'second-brain-session-changed': [sessionId: string]
+  'second-brain-open-alter-exploration': []
   'alter-open-second-brain': [alterId: string]
 }>()
 
@@ -385,6 +386,7 @@ onBeforeUnmount(() => {
         @launchpad-quick-start="emit('launchpad-quick-start', $event)"
         @second-brain-context-changed="emit('second-brain-context-changed', $event)"
         @second-brain-session-changed="emit('second-brain-session-changed', $event)"
+        @second-brain-open-alter-exploration="emit('second-brain-open-alter-exploration')"
         @alter-open-second-brain="emit('alter-open-second-brain', $event)"
       />
     </section>

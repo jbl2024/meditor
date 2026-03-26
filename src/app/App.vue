@@ -1052,8 +1052,8 @@ const navigationPanePort = {
   openPathInPane: (path: string, paneId?: string) => multiPane.openPathInPane(path, paneId),
   revealDocumentInPane: (path: string, paneId?: string) => multiPane.revealDocumentInPane(path, paneId),
   setActivePathInPane: (paneId: string, path: string) => multiPane.setActivePathInPane(paneId, path),
-  openSurfaceInPane: (type: 'home' | 'cosmos' | 'second-brain-chat' | 'alters', paneId?: string) => multiPane.openSurfaceInPane(type, paneId),
-  findPaneContainingSurface: (type: 'home' | 'cosmos' | 'second-brain-chat' | 'alters') => multiPane.findPaneContainingSurface(type)
+  openSurfaceInPane: (type: 'home' | 'cosmos' | 'second-brain-chat' | 'alter-exploration' | 'alters', paneId?: string) => multiPane.openSurfaceInPane(type, paneId),
+  findPaneContainingSurface: (type: 'home' | 'cosmos' | 'second-brain-chat' | 'alter-exploration' | 'alters') => multiPane.findPaneContainingSurface(type)
 }
 
 const navigationHistoryPort = {
@@ -1522,6 +1522,7 @@ const commands = useAppShellCommands({
 const {
   openCosmosViewFromPalette,
   openSecondBrainViewFromPalette,
+  openAlterExplorationViewFromPalette,
   openHomeViewFromPalette,
   openAltersViewFromPalette,
   openFavoritesPanelFromPalette,
@@ -1566,6 +1567,7 @@ entryActions.bindLaunchpadActionPort({
   openTodayNote: () => openTodayNote(),
   openCosmosView: () => openCosmosViewFromPalette(),
   openSecondBrainView: () => openSecondBrainViewFromPalette(),
+  openAlterExplorationView: () => openAlterExplorationViewFromPalette(),
   openAltersView: () => openAltersViewFromPalette()
 })
 entryActions.bindShellPaletteActionPort({
@@ -1573,6 +1575,7 @@ entryActions.bindShellPaletteActionPort({
   openFavoritesPanelFromPalette,
   openCosmosViewFromPalette,
   openSecondBrainViewFromPalette,
+  openAlterExplorationViewFromPalette,
   openAltersViewFromPalette,
   addActiveNoteToSecondBrainFromPalette,
   addActiveNoteToFavoritesFromPalette,
@@ -2034,6 +2037,7 @@ onBeforeUnmount(() => {
       @open-today="void openHomeViewFromPalette()"
       @open-cosmos="void openCosmosViewFromPalette()"
       @open-second-brain="void openSecondBrainViewFromPalette()"
+      @open-alter-exploration="void openAlterExplorationViewFromPalette()"
       @split-right="splitPaneFromPalette('row')"
       @split-down="splitPaneFromPalette('column')"
       @focus-pane="focusPaneFromPalette($event)"
@@ -2171,6 +2175,7 @@ onBeforeUnmount(() => {
           @external-reload="filesystem.notifyInfo(`Reloaded ${basenameLabel($event.path)} from disk.`)"
           @second-brain-context-changed="onSecondBrainContextChanged"
           @second-brain-session-changed="onSecondBrainSessionChanged"
+          @second-brain-open-alter-exploration="void openAlterExplorationViewFromPalette()"
           @alter-open-second-brain="void openAlterInSecondBrain($event)"
           @cosmos-query-update="onCosmosQueryUpdate"
           @cosmos-search-enter="onCosmosSearchEnter"

@@ -18,6 +18,7 @@ function createHarness(options: { isFavorite?: boolean } = {}) {
     openFavoritesPanelFromPalette: vi.fn(async () => true),
     openCosmosViewFromPalette: vi.fn(async () => true),
     openSecondBrainViewFromPalette: vi.fn(async () => true),
+    openAlterExplorationViewFromPalette: vi.fn(async () => true),
     openAltersViewFromPalette: vi.fn(async () => true),
     addActiveNoteToSecondBrainFromPalette: vi.fn(async () => true),
     addActiveNoteToFavoritesFromPalette: vi.fn(async () => true),
@@ -100,8 +101,9 @@ describe('useAppShellPaletteActions', () => {
       'open-favorites',
       'open-cosmos-view',
       'open-second-brain-view',
-      'open-alters-view'
+      'open-alter-exploration-view'
     ])
+    expect(actionIds).toContain('open-alters-view')
     expect(actionIds).toContain('theme-select')
     expect(actionIds).toContain('theme-system')
     expect(actionIds.indexOf('theme-system')).toBeLessThan(actionIds.indexOf('theme-tomosona-light'))

@@ -49,6 +49,7 @@ export type UseAppShellLaunchpadActionPort = {
   openTodayNote: () => boolean | Promise<boolean | void> | void
   openCosmosView: () => boolean | Promise<boolean | void> | void
   openSecondBrainView: () => boolean | Promise<boolean | void> | void
+  openAlterExplorationView: () => boolean | Promise<boolean | void> | void
   openAltersView: () => boolean | Promise<boolean | void> | void
 }
 
