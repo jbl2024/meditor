@@ -7,10 +7,11 @@
  * instead of a free-form chat log.
  */
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
-import { ArrowPathIcon, DocumentTextIcon, PencilSquareIcon } from '@heroicons/vue/24/outline'
+import { DocumentTextIcon, PencilSquareIcon, PlusIcon } from '@heroicons/vue/24/outline'
 import UiBadge from '../../../shared/components/ui/UiBadge.vue'
 import UiButton from '../../../shared/components/ui/UiButton.vue'
 import UiField from '../../../shared/components/ui/UiField.vue'
+import UiIconButton from '../../../shared/components/ui/UiIconButton.vue'
 import UiPanel from '../../../shared/components/ui/UiPanel.vue'
 import UiSelect from '../../../shared/components/ui/UiSelect.vue'
 import WorkspaceComposerActionButton from '../../../shared/components/workspace/WorkspaceComposerActionButton.vue'
@@ -293,12 +294,16 @@ const formatOptions = [
             :show-delete="false"
             @select="void showSession($event)"
           />
-          <UiButton size="sm" variant="secondary" :disabled="running" @click="resetSetupAndSession()">
-            <template #leading>
-              <ArrowPathIcon class="alter-exploration__icon" />
-            </template>
-            Reset setup
-          </UiButton>
+          <UiIconButton
+            variant="secondary"
+            size="sm"
+            :disabled="running"
+            title="New exploration"
+            aria-label="New exploration"
+            @click="resetSetupAndSession()"
+          >
+            <PlusIcon class="alter-exploration__icon" />
+          </UiIconButton>
         </div>
       </header>
 
