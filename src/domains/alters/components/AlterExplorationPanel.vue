@@ -7,7 +7,7 @@
  * instead of a free-form chat log.
  */
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
-import { ArrowPathIcon, ClockIcon, DocumentTextIcon, PencilSquareIcon, PlayIcon } from '@heroicons/vue/24/outline'
+import { ArrowPathIcon, ClockIcon, DocumentTextIcon, PencilSquareIcon, PaperAirplaneIcon } from '@heroicons/vue/24/outline'
 import UiBadge from '../../../shared/components/ui/UiBadge.vue'
 import UiButton from '../../../shared/components/ui/UiButton.vue'
 import UiField from '../../../shared/components/ui/UiField.vue'
@@ -523,58 +523,50 @@ const formatOptions = [
             @remove="removePromptContextPath"
           />
 
-          <UiField label="Prompt" for-id="alter-exploration-subject">
-            <template #default="{ describedBy }">
-              <div class="alter-exploration__prompt-input-wrap">
-                <textarea
-                  id="alter-exploration-subject"
-                  ref="subjectTextareaRef"
-                  v-model="subjectText"
-                  :aria-describedby="describedBy"
-                  :rows="1"
-                  class="alter-exploration__subject-input"
-                  placeholder="Should Tomosona support executable runtime note blocks? Type @ to add workspace notes."
-                  @input="queueMentionUpdate"
-                  @keyup="queueMentionUpdate"
-                  @click="queueMentionUpdate"
-                  @keydown="onSubjectKeydown"
-                ></textarea>
-                <SecondBrainAtMentionsMenu
-                  :open="mentions.isOpen.value"
-                  :suggestions="mentions.suggestions.value"
-                  :active-index="mentions.activeIndex.value"
-                  @select="applyMention($event)"
-                  @update:active-index="mentions.setActiveIndex"
-                />
-              </div>
-            </template>
-          </UiField>
-
-          <p class="alter-exploration__hint alter-exploration__hint--composer">
-            Type `@` to add workspace notes. Selected notes stay visible as chips and can drive Echoes suggestions.
-          </p>
-
-          <div class="alter-exploration__composer-actions">
-            <UiButton
-              size="sm"
-              variant="primary"
-              :disabled="!canStart || running"
-              :loading="running"
-              @click="void startExploration()"
-            >
-              <template #leading>
-                <PlayIcon class="alter-exploration__icon" />
-              </template>
-              Start exploration
-            </UiButton>
-            <UiButton
-              size="sm"
-              variant="secondary"
-              :disabled="!session"
-              @click="void cancelExploration()"
-            >
-              Cancel
-            </UiButton>
+          <div class="alter-exploration__prompt-input-wrap">
+            <textarea
+              id="alter-exploration-subject"
+              ref="subjectTextareaRef"
+              v-model="subjectText"
+              :rows="1"
+              class="alter-exploration__subject-input"
+              placeholder="Should Tomosona support executable runtime note blocks? Type @ to add workspace notes."
+              @input="queueMentionUpdate"
+              @keyup="queueMentionUpdate"
+              @click="queueMentionUpdate"
+              @keydown="onSubjectKeydown"
+            ></textarea>
+            <SecondBrainAtMentionsMenu
+              :open="mentions.isOpen.value"
+              :suggestions="mentions.suggestions.value"
+              :active-index="mentions.activeIndex.value"
+              @select="applyMention($event)"
+              @update:active-index="mentions.setActiveIndex"
+            />
+            <div class="composer-action">
+              <button
+                v-if="running"
+                type="button"
+                class="send-icon-btn send-icon-btn-stop"
+                :disabled="!session"
+                title="Stop exploration"
+                aria-label="Stop exploration"
+                @click="void cancelExploration()"
+              >
+                <span class="sb-loader" aria-label="Thinking"></span>
+              </button>
+              <button
+                v-else
+                type="button"
+                class="send-icon-btn"
+                :disabled="!canStart || running"
+                title="Start exploration"
+                aria-label="Start exploration"
+                @click="void startExploration()"
+              >
+                <PaperAirplaneIcon class="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </footer>
       </div>
@@ -817,10 +809,6 @@ const formatOptions = [
   outline: none;
   border-color: var(--sb-input-border);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--sb-input-border) 26%, transparent);
-}
-
-.alter-exploration__hint--composer {
-  margin-top: -0.1rem;
 }
 
 .alter-exploration__echoes {
