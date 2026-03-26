@@ -1496,6 +1496,10 @@ onMounted(() => {
   backdrop-filter: blur(18px) saturate(120%);
 }
 
+:deep(.alter-wizard-modal .ui-modal-shell__header) {
+  border-bottom: 1px solid color-mix(in srgb, var(--panel-border) 54%, transparent);
+}
+
 .alter-wizard {
   display: grid;
   grid-template-columns: 18rem minmax(0, 1fr);
