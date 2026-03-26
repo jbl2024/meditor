@@ -2,6 +2,7 @@
 import QuickOpenModal from './QuickOpenModal.vue'
 import ThemePickerModal from './ThemePickerModal.vue'
 import IndexStatusModal from './IndexStatusModal.vue'
+import WorkspaceSpellcheckDictionaryModal from './WorkspaceSpellcheckDictionaryModal.vue'
 import WorkspaceEntryModals from './WorkspaceEntryModals.vue'
 import WorkspaceSetupWizardModal from './WorkspaceSetupWizardModal.vue'
 import SettingsModal from '../settings/SettingsModal.vue'
@@ -92,6 +93,9 @@ defineProps<{
   openDateModalVisible: boolean
   openDateInput: string
   openDateModalError: string
+  spellcheckDictionaryModalVisible: boolean
+  spellcheckDictionaryWorkspacePath: string
+  spellcheckDictionaryWorkspaceLabel: string
   workspaceSetupWizardVisible: boolean
   workspaceSetupWizardBusy: boolean
   settingsModalVisible: boolean
@@ -132,6 +136,7 @@ const emit = defineEmits<{
   updateOpenDate: [value: string]
   keydownOpenDate: [event: KeyboardEvent]
   submitOpenDate: []
+  closeSpellcheckDictionary: []
   cancelWorkspaceSetupWizard: []
   submitWorkspaceSetupWizard: [payload: { useCase: WorkspaceSetupUseCase; options: WorkspaceSetupOption[] }]
   cancelSettings: []
@@ -194,6 +199,13 @@ const emit = defineEmits<{
     @close="emit('closeIndexStatus')"
     @action="emit('indexPrimaryAction')"
     @update:log-filter="emit('updateIndexLogFilter', $event)"
+  />
+
+  <WorkspaceSpellcheckDictionaryModal
+    :visible="spellcheckDictionaryModalVisible"
+    :workspace-path="spellcheckDictionaryWorkspacePath"
+    :workspace-label="spellcheckDictionaryWorkspaceLabel"
+    @close="emit('closeSpellcheckDictionary')"
   />
 
   <QuickOpenModal

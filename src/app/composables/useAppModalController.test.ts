@@ -6,6 +6,7 @@ function createController() {
   const quickOpenVisible = ref(false)
   const themePickerVisible = ref(false)
   const newFileModalVisible = ref(false)
+  const spellcheckDictionaryModalVisible = ref(false)
   const focusEditor = vi.fn()
 
   const controller = useAppModalController({
@@ -17,6 +18,7 @@ function createController() {
     newFolderModalVisible: ref(false),
     openDateModalVisible: ref(false),
     settingsModalVisible: ref(false),
+    spellcheckDictionaryModalVisible,
     shortcutsModalVisible: ref(false),
     aboutModalVisible: ref(false),
     workspaceSetupWizardVisible: ref(false),
@@ -27,6 +29,7 @@ function createController() {
     quickOpenVisible,
     themePickerVisible,
     newFileModalVisible,
+    spellcheckDictionaryModalVisible,
     focusEditor,
     controller
   }

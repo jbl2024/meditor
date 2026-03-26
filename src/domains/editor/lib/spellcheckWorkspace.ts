@@ -86,3 +86,8 @@ export function removeWorkspaceSpellcheckIgnoredWord(workspacePath: string, word
   writeWorkspaceSpellcheckIgnoredWords(workspacePath, next)
   return next
 }
+
+export function clearWorkspaceSpellcheckIgnoredWords(workspacePath: string): string[] {
+  writeWorkspaceSpellcheckIgnoredWords(workspacePath, [])
+  return []
+}

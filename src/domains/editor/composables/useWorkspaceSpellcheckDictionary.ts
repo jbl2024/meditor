@@ -1,6 +1,7 @@
 import { computed, ref, watch, type Ref } from 'vue'
 import {
   addWorkspaceSpellcheckIgnoredWord,
+  clearWorkspaceSpellcheckIgnoredWords,
   normalizeWorkspaceSpellcheckWord,
   readWorkspaceSpellcheckIgnoredWords,
   removeWorkspaceSpellcheckIgnoredWord,
@@ -21,15 +22,35 @@ export type UseWorkspaceSpellcheckDictionaryOptions = {
   workspacePath: Ref<string>
 }
 
-export function useWorkspaceSpellcheckDictionary(options: UseWorkspaceSpellcheckDictionaryOptions) {
-  const ignoredWords = ref<string[]>([])
-  const revision = ref(0)
+type WorkspaceSpellcheckStore = {
+  ignoredWords: Ref<string[]>
+  revision: Ref<number>
+}
 
+const workspaceSpellcheckStores = new Map<string, WorkspaceSpellcheckStore>()
+
+function getWorkspaceSpellcheckStore(workspacePath: string): WorkspaceSpellcheckStore {
+  const storageKey = workspaceSpellcheckIgnoreStorageKey(workspacePath)
+  const existing = workspaceSpellcheckStores.get(storageKey)
+  if (existing) return existing
+  const store: WorkspaceSpellcheckStore = {
+    ignoredWords: ref(readWorkspaceSpellcheckIgnoredWords(workspacePath)),
+    revision: ref(0)
+  }
+  workspaceSpellcheckStores.set(storageKey, store)
+  return store
+}
+
+export function useWorkspaceSpellcheckDictionary(options: UseWorkspaceSpellcheckDictionaryOptions) {
+  const currentStore = computed(() => getWorkspaceSpellcheckStore(options.workspacePath.value))
   const storageKey = computed(() => workspaceSpellcheckIgnoreStorageKey(options.workspacePath.value))
+  const ignoredWords = computed(() => currentStore.value.ignoredWords.value)
+  const revision = computed(() => currentStore.value.revision.value)
 
   function syncIgnoredWords() {
-    ignoredWords.value = readWorkspaceSpellcheckIgnoredWords(options.workspacePath.value)
-    revision.value += 1
+    const store = currentStore.value
+    store.ignoredWords.value = readWorkspaceSpellcheckIgnoredWords(options.workspacePath.value)
+    store.revision.value += 1
   }
 
   watch(
@@ -48,15 +69,22 @@ export function useWorkspaceSpellcheckDictionary(options: UseWorkspaceSpellcheck
 
   function addIgnoredWord(word: string): string[] {
     const next = addWorkspaceSpellcheckIgnoredWord(options.workspacePath.value, word)
-    ignoredWords.value = next
-    revision.value += 1
+    currentStore.value.ignoredWords.value = next
+    currentStore.value.revision.value += 1
     return next
   }
 
   function removeIgnoredWord(word: string): string[] {
     const next = removeWorkspaceSpellcheckIgnoredWord(options.workspacePath.value, word)
-    ignoredWords.value = next
-    revision.value += 1
+    currentStore.value.ignoredWords.value = next
+    currentStore.value.revision.value += 1
+    return next
+  }
+
+  function clearIgnoredWords(): string[] {
+    const next = clearWorkspaceSpellcheckIgnoredWords(options.workspacePath.value)
+    currentStore.value.ignoredWords.value = next
+    currentStore.value.revision.value += 1
     return next
   }
 
@@ -67,6 +95,7 @@ export function useWorkspaceSpellcheckDictionary(options: UseWorkspaceSpellcheck
     isIgnoredWord,
     addIgnoredWord,
     removeIgnoredWord,
+    clearIgnoredWords,
     syncIgnoredWords
   }
 }

@@ -6,6 +6,7 @@ import type { AppThemeDefinition } from '../../shared/lib/themeRegistry'
 function createHarness(options: { isFavorite?: boolean } = {}) {
   const activeFilePath = ref('/vault/note.md')
   const quickOpenQuery = ref('query')
+  const hasWorkspace = ref(true)
   const spellcheckEnabled = ref(false)
   const availableThemes: readonly AppThemeDefinition[] = [
     { id: 'tomosona-light', label: 'Tomosona Light', colorScheme: 'light', group: 'official' },
@@ -31,6 +32,7 @@ function createHarness(options: { isFavorite?: boolean } = {}) {
     zoomOutFromPalette: vi.fn(() => false),
     resetZoomFromPalette: vi.fn(() => false),
     toggleSpellcheckFromPalette: vi.fn(() => false),
+    openSpellcheckDictionaryFromPalette: vi.fn(() => false),
     openThemePickerFromPalette: vi.fn(() => false),
     setThemeFromPalette: vi.fn(() => false),
     openTodayNote: vi.fn(async () => true),
@@ -62,6 +64,7 @@ function createHarness(options: { isFavorite?: boolean } = {}) {
     statePort: {
       activeFilePath,
       quickOpenQuery,
+      hasWorkspace,
       spellcheckEnabled
     },
     documentPort,
@@ -78,6 +81,7 @@ function createHarness(options: { isFavorite?: boolean } = {}) {
     scope,
     activeFilePath,
     quickOpenQuery,
+    hasWorkspace,
     spellcheckEnabled,
     availableThemes,
     documentPort,
@@ -103,6 +107,7 @@ describe('useAppShellPaletteActions', () => {
     expect(actionIds.indexOf('theme-system')).toBeLessThan(actionIds.indexOf('theme-tomosona-light'))
     expect(actionIds).toContain('convert-to-word')
     expect(actionIds).toContain('toggle-spellcheck')
+    expect(actionIds).toContain('manage-spellcheck-dictionary')
     expect(actionIds[actionIds.length - 2]).toBe('open-file')
     expect(actionIds[actionIds.length - 1]).toBe('reveal-in-explorer')
     expect(api.paletteActionPriority['open-file']).toBe(0)
@@ -144,12 +149,14 @@ describe('useAppShellPaletteActions', () => {
     const openFile = api.paletteActions.value.find((item) => item.id === 'open-file')
     const convertToWord = api.paletteActions.value.find((item) => item.id === 'convert-to-word')
     const toggleSpellcheck = api.paletteActions.value.find((item) => item.id === 'toggle-spellcheck')
+    const manageSpellcheckDictionary = api.paletteActions.value.find((item) => item.id === 'manage-spellcheck-dictionary')
     const themeSelect = api.paletteActions.value.find((item) => item.id === 'theme-select')
 
     expect(openHome).toBeTruthy()
     expect(openFile).toBeTruthy()
     expect(convertToWord).toBeTruthy()
     expect(toggleSpellcheck).toBeTruthy()
+    expect(manageSpellcheckDictionary).toBeTruthy()
     expect(themeSelect).toBeTruthy()
 
     await openHome?.run()
@@ -164,9 +171,20 @@ describe('useAppShellPaletteActions', () => {
     expect(toggleSpellcheck?.run()).toBe(false)
     expect(actionPort.toggleSpellcheckFromPalette).toHaveBeenCalledTimes(1)
 
+    expect(manageSpellcheckDictionary?.run()).toBe(false)
+    expect(actionPort.openSpellcheckDictionaryFromPalette).toHaveBeenCalledTimes(1)
+
     expect(themeSelect?.run()).toBe(false)
     expect(actionPort.openThemePickerFromPalette).toHaveBeenCalledTimes(1)
     scope.stop()
+  })
+
+  it('hides the spellcheck dictionary manager when no workspace is open', () => {
+    const harness = createHarness()
+    harness.hasWorkspace.value = false
+
+    expect(harness.api.paletteActions.value.map((item) => item.id)).not.toContain('manage-spellcheck-dictionary')
+    harness.scope.stop()
   })
 
   it('hides convert to Word when the active file is not markdown', () => {

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   addWorkspaceSpellcheckIgnoredWord,
+  clearWorkspaceSpellcheckIgnoredWords,
   normalizeWorkspaceSpellcheckWord,
   readWorkspaceSpellcheckIgnoredWords,
   removeWorkspaceSpellcheckIgnoredWord,
@@ -27,6 +28,15 @@ describe('workspace spellcheck ignore list', () => {
     expect(readWorkspaceSpellcheckIgnoredWords(workspacePath)).toEqual(['wrld'])
     expect(addWorkspaceSpellcheckIgnoredWord(workspacePath, 'WRLD')).toEqual(['wrld'])
     expect(removeWorkspaceSpellcheckIgnoredWord(workspacePath, 'wrld')).toEqual([])
+    expect(readWorkspaceSpellcheckIgnoredWords(workspacePath)).toEqual([])
+  })
+
+  it('clears ignored words for the workspace', () => {
+    const workspacePath = '/vault'
+    addWorkspaceSpellcheckIgnoredWord(workspacePath, 'alpha')
+    addWorkspaceSpellcheckIgnoredWord(workspacePath, 'beta')
+
+    expect(clearWorkspaceSpellcheckIgnoredWords(workspacePath)).toEqual([])
     expect(readWorkspaceSpellcheckIgnoredWords(workspacePath)).toEqual([])
   })
 })

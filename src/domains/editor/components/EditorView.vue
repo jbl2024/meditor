@@ -344,6 +344,15 @@ watch(
   }
 )
 
+watch(
+  () => workspaceSpellcheck.revision.value,
+  () => {
+    const path = currentPathSource.value
+    if (!path) return
+    interactionRuntime?.refreshSpellcheckForPath(path)
+  }
+)
+
 function onSpellcheckMenuEl(element: HTMLDivElement | null) {
   spellcheckFloatingEl.value = element
 }

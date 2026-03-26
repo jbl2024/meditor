@@ -263,6 +263,7 @@ const openDateModalVisible = ref(false)
 const openDateInput = ref('')
 const openDateModalError = ref('')
 const settingsModalVisible = ref(false)
+const spellcheckDictionaryModalVisible = ref(false)
 const designSystemDebugVisible = ref(false)
 const shortcutsModalVisible = ref(false)
 const aboutModalVisible = ref(false)
@@ -618,6 +619,7 @@ const modalController = useAppModalController({
   newFolderModalVisible,
   openDateModalVisible,
   settingsModalVisible,
+  spellcheckDictionaryModalVisible,
   shortcutsModalVisible,
   aboutModalVisible,
   workspaceSetupWizardVisible,
@@ -744,6 +746,7 @@ const { paletteActions } = useAppShellPaletteActions({
   statePort: {
     activeFilePath,
     quickOpenQuery,
+    hasWorkspace: filesystem.hasWorkspace,
     spellcheckEnabled
   },
   documentPort: {
@@ -946,6 +949,23 @@ function openIndexStatusModal() {
 
 function closeIndexStatusModal() {
   closeIndexStatusModalInternal()
+  void nextTick(() => {
+    restoreFocusAfterModalClose()
+  })
+}
+
+function openSpellcheckDictionaryModal() {
+  if (!filesystem.hasWorkspace.value) {
+    filesystem.notifyError('Open a workspace first.')
+    return false
+  }
+  rememberFocusBeforeModalOpen()
+  spellcheckDictionaryModalVisible.value = true
+  return true
+}
+
+function closeSpellcheckDictionaryModal() {
+  spellcheckDictionaryModalVisible.value = false
   void nextTick(() => {
     restoreFocusAfterModalClose()
   })
@@ -1536,6 +1556,10 @@ function toggleSpellcheckFromPalette() {
   return true
 }
 
+function openSpellcheckDictionaryFromPalette() {
+  return openSpellcheckDictionaryModal()
+}
+
 entryActions.bindLaunchpadActionPort({
   openQuickOpen: (initialQuery = '') => openQuickOpen(initialQuery),
   openCommandPalette: () => openCommandPalette(),
@@ -1554,6 +1578,7 @@ entryActions.bindShellPaletteActionPort({
   addActiveNoteToFavoritesFromPalette,
   removeActiveNoteFromFavoritesFromPalette,
   openSettingsFromPalette,
+  openSpellcheckDictionaryFromPalette,
   openNoteInCosmosFromPalette,
   openWorkspaceFromPalette,
   closeWorkspaceFromPalette,
@@ -2250,6 +2275,9 @@ onBeforeUnmount(() => {
       :open-date-modal-visible="openDateModalVisible"
       :open-date-input="openDateInput"
       :open-date-modal-error="openDateModalError"
+      :spellcheck-dictionary-modal-visible="spellcheckDictionaryModalVisible"
+      :spellcheck-dictionary-workspace-path="filesystem.workingFolderPath.value"
+      :spellcheck-dictionary-workspace-label="filesystem.workingFolderPath.value || 'none'"
       :workspace-setup-wizard-visible="workspaceSetupWizardVisible"
       :workspace-setup-wizard-busy="workspaceSetupWizardBusy"
       :settings-modal-visible="settingsModalVisible"
@@ -2287,6 +2315,7 @@ onBeforeUnmount(() => {
       @update-open-date="openDateInput = $event"
       @keydown-open-date="onOpenDateInputKeydown"
       @submit-open-date="submitOpenDateFromModal"
+      @close-spellcheck-dictionary="closeSpellcheckDictionaryModal"
       @cancel-workspace-setup-wizard="workspaceRouting.closeWorkspaceSetupWizard()"
       @submit-workspace-setup-wizard="void workspaceRouting.applyWorkspaceSetupWizard($event)"
       @cancel-settings="closeSettingsModal"

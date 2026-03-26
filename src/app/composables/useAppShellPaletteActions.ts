@@ -18,6 +18,7 @@ import type { ThemePreference } from './useAppTheme'
 export type AppShellPaletteStatePort = {
   activeFilePath: Readonly<Ref<string>>
   quickOpenQuery: Ref<string>
+  hasWorkspace: Readonly<Ref<boolean>>
   spellcheckEnabled: Readonly<Ref<boolean>>
 }
 
@@ -56,6 +57,7 @@ export type AppShellPaletteActionPort = {
   zoomOutFromPalette: () => boolean | Promise<boolean>
   resetZoomFromPalette: () => boolean | Promise<boolean>
   toggleSpellcheckFromPalette: () => boolean | Promise<boolean>
+  openSpellcheckDictionaryFromPalette: () => boolean | Promise<boolean>
   openThemePickerFromPalette: () => boolean | Promise<boolean>
   setThemeFromPalette: (next: ThemePreference) => boolean | Promise<boolean>
   openTodayNote: () => boolean | Promise<boolean>
@@ -112,6 +114,7 @@ export const PALETTE_ACTION_PRIORITY: Record<string, number> = {
   'convert-to-word': 15.5,
   'show-shortcuts': 16,
   'toggle-spellcheck': 16.5,
+  'manage-spellcheck-dictionary': 16.75,
   'create-new-file': 17,
   'close-other-tabs': 18,
   'close-all-tabs': 19,
@@ -225,6 +228,16 @@ export function useAppShellPaletteActions(options: UseAppShellPaletteActionsOpti
       label: options.statePort.spellcheckEnabled.value ? 'Disable Spellcheck' : 'Enable Spellcheck',
       run: () => options.actionPort.toggleSpellcheckFromPalette()
     }),
+    ...(
+      options.statePort.hasWorkspace.value
+        ? [createPaletteAction('utilities', {
+            id: 'manage-spellcheck-dictionary',
+            label: 'Manage Spellcheck Dictionary',
+            run: () => options.actionPort.openSpellcheckDictionaryFromPalette(),
+            closeBeforeRun: true
+          })]
+        : []
+    ),
     createPaletteAction('navigation', {
       id: 'open-note-in-cosmos',
       label: 'Open Note in Cosmos',
