@@ -227,7 +227,7 @@ describe('SecondBrainView', () => {
     alterTrigger?.click()
     await flushUi()
 
-    const filterInput = mounted.root.querySelector<HTMLInputElement>('.sb-alter-dropdown .ui-filterable-dropdown-filter-input')
+    const filterInput = document.body.querySelector<HTMLInputElement>('.ui-filterable-dropdown-filter-input')
     expect(filterInput).toBeTruthy()
     expect(filterInput?.getAttribute('placeholder')).toBe('Filter alters...')
 
@@ -730,7 +730,7 @@ describe('SecondBrainView', () => {
     alterTrigger.click()
     await flushUi()
 
-    const alterOption = Array.from(mounted.root.querySelectorAll<HTMLButtonElement>('.ui-filterable-dropdown-option'))
+    const alterOption = Array.from(document.body.querySelectorAll<HTMLButtonElement>('.ui-filterable-dropdown-option'))
       .find((button) => button.textContent?.includes('Strategist'))
     expect(alterOption).toBeTruthy()
     alterOption?.click()

@@ -201,7 +201,7 @@ void threadRef
             filter-placeholder="Filter alters..."
             :show-filter="true"
             :close-on-select="true"
-            :menu-mode="'overlay'"
+            :menu-mode="'portal'"
             :menu-class="'sb-alter-dropdown-menu'"
             :disabled="loading || creatingSession"
             @open-change="onAlterDropdownOpenChange"
@@ -462,17 +462,12 @@ void threadRef
 }
 
 .sb-alter-dropdown {
-  position: relative;
   display: inline-flex;
   align-items: center;
 }
 
 .sb-alter-dropdown :deep(.ui-filterable-dropdown-menu) {
-  position: absolute !important;
-  top: calc(100% + 6px);
-  left: 0;
-  width: min(280px, calc(100vw - 36px));
-  max-width: min(280px, calc(100vw - 36px));
+  z-index: 70;
 }
 
 .sb-session-create-btn {
