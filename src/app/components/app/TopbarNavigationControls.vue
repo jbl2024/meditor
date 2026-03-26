@@ -3,10 +3,7 @@ import {
   ArrowLeftIcon,
   ArrowRightIcon,
   CommandLineIcon,
-  HomeIcon,
-  UserGroupIcon,
-  ShareIcon,
-  SparklesIcon
+  HomeIcon
 } from '@heroicons/vue/24/outline'
 import { ref, type CSSProperties } from 'vue'
 import MultiPaneToolbarMenu from '../panes/MultiPaneToolbarMenu.vue'
@@ -14,6 +11,11 @@ import WorkspaceOverflowMenu from './WorkspaceOverflowMenu.vue'
 import UiIconButton from '../../../shared/components/ui/UiIconButton.vue'
 import UiMenu from '../../../shared/components/ui/UiMenu.vue'
 import UiMenuList from '../../../shared/components/ui/UiMenuList.vue'
+import {
+  COSMOS_SURFACE_ICON,
+  SECOND_BRAIN_SURFACE_ICON,
+  ALTER_EXPLORATION_SURFACE_ICON
+} from '../../lib/appShellSurfaceIcons'
 
 /**
  * Module: TopbarNavigationControls
@@ -245,7 +247,7 @@ defineExpose({
             aria-label="Cosmos view"
             @click="emit('openCosmos')"
           >
-            <ShareIcon />
+            <component :is="COSMOS_SURFACE_ICON" />
           </UiIconButton>
           <UiIconButton
             class-name="toolbar-icon-btn"
@@ -254,7 +256,7 @@ defineExpose({
             aria-label="Second Brain"
             @click="emit('openSecondBrain')"
           >
-            <SparklesIcon />
+            <component :is="SECOND_BRAIN_SURFACE_ICON" />
           </UiIconButton>
           <UiIconButton
             class-name="toolbar-icon-btn"
@@ -263,7 +265,7 @@ defineExpose({
             aria-label="Alter Exploration"
             @click="emit('openAlterExploration')"
           >
-            <UserGroupIcon />
+            <component :is="ALTER_EXPLORATION_SURFACE_ICON" />
           </UiIconButton>
         </div>
 

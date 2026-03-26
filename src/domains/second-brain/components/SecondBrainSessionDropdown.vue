@@ -6,8 +6,8 @@
  * filterable menu and emits user intent back to the parent shell.
  */
 import { computed, ref } from 'vue'
-import { Cog6ToothIcon } from '@heroicons/vue/24/outline'
 import UiFilterableDropdown, { type FilterableDropdownItem } from '../../../shared/components/ui/UiFilterableDropdown.vue'
+import { WORKSPACE_SESSION_ICON } from '../../../app/lib/appShellSurfaceIcons'
 import type { SecondBrainSessionSummary } from '../../../shared/api/apiTypes'
 
 type SessionDropdownItem = FilterableDropdownItem & {
@@ -104,7 +104,7 @@ function itemUpdatedAtLabel(item: unknown): string {
           :disabled="loading"
           @click="toggleMenu"
         >
-          <Cog6ToothIcon class="h-4 w-4" />
+          <component :is="WORKSPACE_SESSION_ICON" class="h-4 w-4" />
         </button>
       </template>
 

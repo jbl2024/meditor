@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { HomeIcon, ShareIcon, SparklesIcon, UserGroupIcon } from '@heroicons/vue/24/outline'
+import { HomeIcon } from '@heroicons/vue/24/outline'
 import type { PaneState, PaneTab } from '../../composables/useMultiPaneWorkspaceState'
+import {
+  ALTERS_SURFACE_ICON,
+  ALTER_EXPLORATION_SURFACE_ICON,
+  COSMOS_SURFACE_ICON,
+  SECOND_BRAIN_SURFACE_ICON
+} from '../../lib/appShellSurfaceIcons'
 
 export type FileEditorStatus = {
   dirty: boolean
@@ -52,11 +58,12 @@ function tabTitle(tab: PaneTab): string {
   return 'Second Brain'
 }
 
-function tabIcon(tab: PaneTab): string {
-  if (tab.type === 'cosmos') return ''
-  if (tab.type === 'second-brain-chat') return ''
-  if (tab.type === 'alters') return ''
-  return ''
+function tabIcon(tab: PaneTab) {
+  if (tab.type === 'cosmos') return COSMOS_SURFACE_ICON
+  if (tab.type === 'second-brain-chat') return SECOND_BRAIN_SURFACE_ICON
+  if (tab.type === 'alter-exploration') return ALTER_EXPLORATION_SURFACE_ICON
+  if (tab.type === 'alters') return ALTERS_SURFACE_ICON
+  return null
 }
 </script>
 
@@ -80,17 +87,8 @@ function tabIcon(tab: PaneTab): string {
         <span v-if="tab.type === 'home'" class="pane-tab-icon pane-tab-icon--hero">
           <HomeIcon />
         </span>
-        <span v-else-if="tab.type === 'cosmos'" class="pane-tab-icon pane-tab-icon--hero">
-          <ShareIcon />
-        </span>
-        <span v-else-if="tab.type === 'second-brain-chat'" class="pane-tab-icon pane-tab-icon--hero">
-          <SparklesIcon />
-        </span>
-        <span v-else-if="tab.type === 'alter-exploration'" class="pane-tab-icon pane-tab-icon--hero">
-          <UserGroupIcon />
-        </span>
-        <span v-else-if="tab.type === 'alters'" class="pane-tab-icon pane-tab-icon--hero">
-          <SparklesIcon />
+        <span v-else-if="tabIcon(tab)" class="pane-tab-icon pane-tab-icon--hero">
+          <component :is="tabIcon(tab)" />
         </span>
         <span v-else-if="tab.icon" class="pane-tab-icon">{{ tab.icon }}</span>
         <span class="pane-tab-name">{{ tab.title }}</span>

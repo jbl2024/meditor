@@ -7,10 +7,14 @@ import {
   DocumentPlusIcon,
   DocumentTextIcon,
   QuestionMarkCircleIcon,
-  AcademicCapIcon,
-  RocketLaunchIcon
+  RocketLaunchIcon,
 } from '@heroicons/vue/24/outline'
 import UiButton from '../../../shared/components/ui/UiButton.vue'
+import {
+  ALTERS_SURFACE_ICON,
+  COSMOS_SURFACE_ICON,
+  SECOND_BRAIN_SURFACE_ICON
+} from '../../lib/appShellSurfaceIcons'
 
 type RecentWorkspaceCard = {
   path: string
@@ -316,21 +320,21 @@ function shortUpdatedLabel(value: string): string {
             </span>
           </button>
           <button type="button" class="launchpad-action-row" @click="emit('quickStart', 'second-brain')">
-            <span class="launchpad-action-icon launchpad-action-icon-second-brain"><BoltIcon /></span>
+            <span class="launchpad-action-icon launchpad-action-icon-second-brain"><component :is="SECOND_BRAIN_SURFACE_ICON" /></span>
             <span class="launchpad-action-copy">
               <strong>Ask Second Brain</strong>
               <span>Query your entire workspace</span>
             </span>
           </button>
           <button type="button" class="launchpad-action-row" @click="emit('quickStart', 'cosmos')">
-            <span class="launchpad-action-icon launchpad-action-icon-project"><RocketLaunchIcon /></span>
+            <span class="launchpad-action-icon launchpad-action-icon-project"><component :is="COSMOS_SURFACE_ICON" /></span>
             <span class="launchpad-action-copy">
               <strong>Explore Cosmos</strong>
               <span>Open the knowledge graph</span>
             </span>
           </button>
           <button type="button" class="launchpad-action-row" @click="emit('quickStart', 'alters')">
-            <span class="launchpad-action-icon launchpad-action-icon-second-brain"><AcademicCapIcon /></span>
+            <span class="launchpad-action-icon launchpad-action-icon-second-brain"><component :is="ALTERS_SURFACE_ICON" /></span>
             <span class="launchpad-action-copy">
               <strong>Open Alters</strong>
               <span>Manage workspace Alter personas</span>

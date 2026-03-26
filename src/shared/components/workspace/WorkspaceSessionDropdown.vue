@@ -6,8 +6,8 @@
  * a compact filterable dropdown with an optional delete action.
  */
 import { computed, ref } from 'vue'
-import { Cog6ToothIcon } from '@heroicons/vue/24/outline'
 import UiFilterableDropdown, { type FilterableDropdownItem } from '../ui/UiFilterableDropdown.vue'
+import { WORKSPACE_SESSION_ICON } from '../../../app/lib/appShellSurfaceIcons'
 
 export type WorkspaceSessionDropdownItem = FilterableDropdownItem & {
   sessionId: string
@@ -26,8 +26,8 @@ const props = withDefaults(defineProps<{
   emptyLabel?: string
   showDelete?: boolean
 }>(), {
-  buttonTitle: 'Manage sessions',
-  buttonAriaLabel: 'Manage sessions',
+  buttonTitle: 'Session history',
+  buttonAriaLabel: 'Session history',
   filterPlaceholder: 'Search sessions...',
   emptyLabel: 'No session found',
   showDelete: false
@@ -106,7 +106,7 @@ function itemUpdatedAtLabel(item: unknown): string {
           :disabled="loading"
           @click="toggleMenu"
         >
-          <Cog6ToothIcon class="h-4 w-4" />
+          <component :is="WORKSPACE_SESSION_ICON" class="h-4 w-4" />
         </button>
       </template>
 
