@@ -447,6 +447,14 @@ export async function getSpellcheckSuggestions(language: SpellcheckLanguage, wor
   return Array.from(new Set(spellchecker.suggest(word))).slice(0, 8)
 }
 
+/**
+ * Warms both bundled dictionaries so the first editor open does not pay the
+ * nspell construction cost on the critical path.
+ */
+export async function warmupSpellcheckDictionaries(): Promise<void> {
+  await Promise.allSettled([ensureSpellchecker('en'), ensureSpellchecker('fr')])
+}
+
 function requestSpellcheckerRefresh(
   view: { dispatch: (transaction: Transaction) => void; state: EditorState; isDestroyed?: boolean },
   language: SpellcheckLanguage,

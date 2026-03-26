@@ -1,9 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+
+const warmupSpellcheckDictionaries = vi.hoisted(() => vi.fn(async () => {}))
+
+vi.mock('../../domains/editor/lib/tiptap/extensions/Spellcheck', () => ({
+  warmupSpellcheckDictionaries
+}))
+
 import { useAppShellRuntimeLifecycle } from './useAppShellRuntimeLifecycle'
 
 describe('useAppShellRuntimeLifecycle', () => {
   afterEach(() => {
     vi.restoreAllMocks()
+    warmupSpellcheckDictionaries.mockClear()
   })
 
   it('boots global runtime effects once and tears them down symmetrically', async () => {
@@ -63,6 +71,7 @@ describe('useAppShellRuntimeLifecycle', () => {
     await runtime.start()
 
     expect(initializeShellPersistence).toHaveBeenCalledTimes(1)
+    expect(warmupSpellcheckDictionaries).toHaveBeenCalledTimes(1)
     expect(installOpenDebugLongTaskObserver).toHaveBeenCalledTimes(1)
     expect(subscribeOpenTraceActivity).toHaveBeenCalledTimes(1)
     expect(syncAlterSettingsFromDisk).toHaveBeenCalledTimes(1)

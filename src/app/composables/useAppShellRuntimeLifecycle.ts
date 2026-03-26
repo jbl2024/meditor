@@ -6,6 +6,7 @@
  * - Keep the component focused on composing ports while this controller wires
  *   and unwires global side effects.
  */
+import { warmupSpellcheckDictionaries } from '../../domains/editor/lib/tiptap/extensions/Spellcheck'
 
 /** Groups the shell persistence bootstrap hooks used during runtime startup. */
 export type AppShellRuntimePersistencePort = {
@@ -91,6 +92,7 @@ export function useAppShellRuntimeLifecycle(options: UseAppShellRuntimeLifecycle
     started = true
     const currentGeneration = ++lifecycleGeneration
     startPromise = (async () => {
+      void warmupSpellcheckDictionaries()
       options.persistencePort.initializeShellPersistence()
       options.openTracePort.installOpenDebugLongTaskObserver()
       disposeOpenTraceActivitySubscription = options.openTracePort.subscribeOpenTraceActivity((active) => {
