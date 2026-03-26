@@ -214,4 +214,39 @@ describe('AlterExplorationPanel', () => {
     mounted.app.unmount()
   })
 
+  it('maps modes to default output formats without overriding manual format choices', async () => {
+    const mounted = mountPanel()
+    await nextTick()
+
+    const modeSelect = mounted.root.querySelector<HTMLSelectElement>('#alter-exploration-mode')
+    const formatSelect = mounted.root.querySelector<HTMLSelectElement>('#alter-exploration-format')
+    expect(modeSelect).toBeTruthy()
+    expect(formatSelect).toBeTruthy()
+    expect(formatSelect?.value).toBe('tension_map')
+
+    if (modeSelect) {
+      modeSelect.value = 'decide'
+      modeSelect.dispatchEvent(new Event('change'))
+    }
+    await nextTick()
+
+    expect(formatSelect?.value).toBe('decision_brief')
+
+    if (formatSelect) {
+      formatSelect.value = 'summary'
+      formatSelect.dispatchEvent(new Event('change'))
+    }
+    await nextTick()
+
+    if (modeSelect) {
+      modeSelect.value = 'refine'
+      modeSelect.dispatchEvent(new Event('change'))
+    }
+    await nextTick()
+
+    expect(formatSelect?.value).toBe('summary')
+
+    mounted.app.unmount()
+  })
+
 })

@@ -94,6 +94,42 @@ const selectedPromptCountLabel = computed(() => {
   if (!count) return 'No context notes selected'
   return `${count} context note${count > 1 ? 's' : ''}`
 })
+const modeLabelByValue: Record<(typeof modeOptions)[number]['value'], string> = {
+  challenge: 'Challenge',
+  explore: 'Explore',
+  decide: 'Decide',
+  refine: 'Refine'
+}
+const modeHelpByValue: Record<(typeof modeOptions)[number]['value'], string> = {
+  challenge: 'Expose weak spots and contradictions.',
+  explore: 'Widen the space of options and interpretations.',
+  decide: 'Compare trade-offs and converge on a recommendation.',
+  refine: 'Improve an existing draft or proposal.'
+}
+const formatLabelByValue: Record<(typeof formatOptions)[number]['value'], string> = {
+  summary: 'Summary',
+  tension_map: 'Tension map',
+  decision_brief: 'Decision brief',
+  refined_proposal: 'Refined proposal'
+}
+const formatHelpByValue: Record<(typeof formatOptions)[number]['value'], string> = {
+  summary: 'Short narrative synthesis.',
+  tension_map: 'Accords, disagreements, and friction points.',
+  decision_brief: 'Recommendation with risks and rationale.',
+  refined_proposal: 'Rewritten proposal after the roundtable.'
+}
+const defaultFormatByMode: Record<(typeof modeOptions)[number]['value'], (typeof formatOptions)[number]['value']> = {
+  challenge: 'tension_map',
+  explore: 'summary',
+  decide: 'decision_brief',
+  refine: 'refined_proposal'
+}
+const modeHelpText = computed(() => modeHelpByValue[mode.value])
+const outputFormatHelpText = computed(() => {
+  const recommended = defaultFormatByMode[mode.value]
+  return `Recommended for ${modeLabelByValue[mode.value]}: ${formatLabelByValue[recommended]}. ${formatHelpByValue[recommended]}`
+})
+const hasManuallySetOutputFormat = ref(false)
 const PROMPT_MIN_HEIGHT_PX = 34
 const PROMPT_MAX_HEIGHT_PX = 120
 const subjectTextareaRef = ref<HTMLTextAreaElement | null>(null)
@@ -180,6 +216,22 @@ function selectReaderSection(section: ExplorationSection) {
   activeSection.value = section
 }
 
+function syncOutputFormatWithMode(nextMode: (typeof modeOptions)[number]['value']) {
+  if (hasManuallySetOutputFormat.value) return
+  outputFormat.value = defaultFormatByMode[nextMode]
+}
+
+function onModeChange(nextMode: string) {
+  const normalizedMode = nextMode as (typeof modeOptions)[number]['value']
+  mode.value = normalizedMode
+  syncOutputFormatWithMode(normalizedMode)
+}
+
+function onOutputFormatChange(nextFormat: string) {
+  outputFormat.value = nextFormat as (typeof formatOptions)[number]['value']
+  hasManuallySetOutputFormat.value = true
+}
+
 function toggleSetupDetails() {
   setupExpanded.value = !setupExpanded.value
 }
@@ -233,6 +285,7 @@ watch(
     }
     activeSection.value = 'synthesis'
     setupExpanded.value = true
+    hasManuallySetOutputFormat.value = false
   },
   { immediate: true }
 )
@@ -309,7 +362,8 @@ function resetSetupAndSession() {
   subjectType.value = 'prompt'
   mode.value = 'challenge'
   rounds.value = 2
-  outputFormat.value = 'summary'
+  hasManuallySetOutputFormat.value = false
+  syncOutputFormatWithMode(mode.value)
   selectedAlterIds.value = []
   replacePromptContextPaths([])
   selectedPromptAnchorPath.value = ''
@@ -324,6 +378,8 @@ function rerunWithDifferentAlters() {
   resetSession()
   setupExpanded.value = true
   activeSection.value = 'synthesis'
+  hasManuallySetOutputFormat.value = false
+  syncOutputFormatWithMode(mode.value)
 }
 
 async function saveArtifactAndOpen(action: () => Promise<string | null>) {
@@ -346,6 +402,14 @@ const formatOptions = [
   { value: 'decision_brief', label: 'Decision brief' },
   { value: 'refined_proposal', label: 'Refined proposal' }
 ] as const
+
+watch(
+  mode,
+  (nextMode) => {
+    syncOutputFormatWithMode(nextMode)
+  },
+  { immediate: true }
+)
 </script>
 
 <template>
@@ -433,9 +497,9 @@ const formatOptions = [
               </UiField>
 
               <div class="alter-exploration__grid">
-                <UiField label="Mode" for-id="alter-exploration-mode">
+                <UiField label="Mode" for-id="alter-exploration-mode" :help="modeHelpText">
                   <template #default>
-                    <UiSelect id="alter-exploration-mode" v-model="mode">
+                    <UiSelect id="alter-exploration-mode" :model-value="mode" @update:modelValue="onModeChange">
                       <option v-for="option in modeOptions" :key="option.value" :value="option.value">
                         {{ option.label }}
                       </option>
@@ -456,9 +520,13 @@ const formatOptions = [
                   </template>
                 </UiField>
 
-                <UiField label="Output format" for-id="alter-exploration-format">
+                <UiField label="Output format" for-id="alter-exploration-format" :help="outputFormatHelpText">
                   <template #default>
-                    <UiSelect id="alter-exploration-format" v-model="outputFormat">
+                    <UiSelect
+                      id="alter-exploration-format"
+                      :model-value="outputFormat"
+                      @update:modelValue="onOutputFormatChange"
+                    >
                       <option v-for="option in formatOptions" :key="option.value" :value="option.value">
                         {{ option.label }}
                       </option>
