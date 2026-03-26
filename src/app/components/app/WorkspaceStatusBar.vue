@@ -121,9 +121,7 @@ const emit = defineEmits<{
 }
 
 .status-spellcheck-icon--on {
-  color: #7cff2b;
-  filter: drop-shadow(0 0 4px color-mix(in srgb, #7cff2b 55%, transparent));
-  animation: spellcheckPulse 1.4s ease-in-out infinite;
+  color: var(--success);
 }
 
 .status-item + .status-item {
@@ -143,16 +141,4 @@ const emit = defineEmits<{
   }
 }
 
-@keyframes spellcheckPulse {
-  0%,
-  100% {
-    opacity: 0.7;
-    transform: scale(0.95);
-  }
-
-  50% {
-    opacity: 1;
-    transform: scale(1.08);
-  }
-}
 </style>
