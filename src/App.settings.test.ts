@@ -326,4 +326,36 @@ describe('App settings modal', () => {
     expect(payload.llm.profiles[0]?.api_key).toBeUndefined()
     mounted.app.unmount()
   })
+
+  it('requires an explicit custom provider instead of silently saving as openai-compatible', async () => {
+    const mounted = mountApp()
+    await flushUi()
+    mounted.root.querySelector<HTMLButtonElement>('button[aria-label="View options"]')?.click()
+    await flushUi()
+    const settingsBtn = Array.from(mounted.root.querySelectorAll('button')).find((item) => item.textContent?.includes('Open Settings'))
+    settingsBtn?.click()
+    await flushUi()
+
+    const provider = mounted.root.querySelector<HTMLSelectElement>('#settings-llm-provider')
+    if (provider) {
+      provider.value = 'custom'
+      provider.dispatchEvent(new Event('change', { bubbles: true }))
+    }
+    await flushUi()
+
+    const model = mounted.root.querySelector<HTMLInputElement>('#settings-llm-model')
+    if (model) {
+      model.value = 'gpt-oss'
+      model.dispatchEvent(new Event('input', { bubbles: true }))
+    }
+    await flushUi()
+
+    const saveBtn = Array.from(mounted.root.querySelectorAll('button')).find((item) => item.textContent === 'Save')
+    saveBtn?.click()
+    await flushUi()
+
+    expect(hoisted.writeAppSettings).not.toHaveBeenCalled()
+    expect((mounted.root.textContent ?? '').toLowerCase()).toContain('custom llm provider is required')
+    mounted.app.unmount()
+  })
 })

@@ -32,7 +32,7 @@ const settingsLlmApiKey = ref('')
 const settingsLlmHasStoredApiKey = ref(false)
 const settingsLlmModel = ref('gpt-4.1')
 const settingsLlmBaseUrl = ref('')
-const settingsLlmCustomProvider = ref('openai')
+const settingsLlmCustomProvider = ref('')
 const settingsLlmLabel = ref('OpenAI Remote')
 const settingsLlmCodexModels = ref<CodexDiscoveredModel[]>([])
 const settingsLlmCodexModelsLoading = ref(false)
@@ -76,7 +76,7 @@ function applySettingsLlmPreset(provider: 'openai' | 'anthropic' | 'codex' | 'cu
     return
   }
   settingsLlmLabel.value = 'Custom LLM'
-  settingsLlmCustomProvider.value = 'openai_compatible'
+  settingsLlmCustomProvider.value = ''
   settingsLlmModel.value = ''
   settingsLlmBaseUrl.value = ''
 }
