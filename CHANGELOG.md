@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.25.1] - 2026-03-27
+
+### Fixed
+- fix(settings): require explicit custom llm provider (8d713ab)
+
 ## [0.25.0] - 2026-03-26
 
 ### Added
