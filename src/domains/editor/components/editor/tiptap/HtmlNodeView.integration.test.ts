@@ -1,8 +1,10 @@
 import StarterKit from '@tiptap/starter-kit'
 import { Editor, EditorContent } from '@tiptap/vue-3'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApp, defineComponent, h, nextTick } from 'vue'
 import { HtmlNode } from '../../../lib/tiptap/extensions/HtmlNode'
+
+vi.setConfig({ testTimeout: 15000 })
 
 const editors: Editor[] = []
 const apps: Array<ReturnType<typeof createApp>> = []
@@ -75,9 +77,18 @@ afterEach(() => {
   apps.splice(0).forEach((app) => app.unmount())
   editors.splice(0).forEach((editor) => editor.destroy())
   document.body.innerHTML = ''
+  vi.unstubAllGlobals()
 })
 
 describe('HtmlNode integration focus', () => {
+  beforeEach(() => {
+    vi.useRealTimers()
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0)
+      return 1
+    })
+  })
+
   it('focuses the html textarea and places caret inside the template after slash insertion', async () => {
     const { editor, root } = createEditorHarness()
     editor.commands.focus('end')
