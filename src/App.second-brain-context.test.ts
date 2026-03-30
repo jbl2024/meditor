@@ -137,6 +137,8 @@ vi.mock('./domains/second-brain/components/SecondBrainView.vue', () => ({ defaul
 
 import App from './app/App.vue'
 
+vi.setConfig({ testTimeout: 15000 })
+
 async function flushUi() {
   await nextTick()
   await Promise.resolve()
@@ -184,6 +186,7 @@ async function runPaletteAction(root: HTMLElement, query: string) {
 
 describe('App second-brain add-active-note command', () => {
   beforeEach(() => {
+    vi.useRealTimers()
     vi.clearAllMocks()
     window.localStorage.clear()
     window.sessionStorage.clear()

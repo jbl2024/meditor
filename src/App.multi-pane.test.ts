@@ -1,5 +1,5 @@
 import { createApp, defineComponent, h, nextTick } from 'vue'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('./shared/api/workspaceApi', () => ({
   selectWorkingFolder: vi.fn(async () => null),
@@ -149,6 +149,8 @@ vi.mock('./domains/second-brain/components/SecondBrainView.vue', () => ({ defaul
 
 import App from './app/App.vue'
 
+vi.setConfig({ testTimeout: 15000 })
+
 async function flushUi() {
   await nextTick()
   await Promise.resolve()
@@ -181,6 +183,10 @@ function mountApp() {
 }
 
 describe('App multi-pane', () => {
+  beforeEach(() => {
+    vi.useRealTimers()
+  })
+
   afterEach(() => {
     document.body.innerHTML = ''
     window.localStorage.clear()

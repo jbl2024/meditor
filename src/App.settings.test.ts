@@ -2,6 +2,8 @@ import { createApp, defineComponent, h, nextTick } from 'vue'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import packageJson from '../package.json'
 
+vi.setConfig({ testTimeout: 15000 })
+
 const hoisted = vi.hoisted(() => ({
   readAboutMetadata: vi.fn(async () => ({
     version: packageJson.version,

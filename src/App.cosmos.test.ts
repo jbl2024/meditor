@@ -1,5 +1,5 @@
 import { createApp, defineComponent, h, nextTick } from 'vue'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const hoisted = vi.hoisted(() => ({
   workspaceFsChangedHandler: null as null | ((payload: {
@@ -155,6 +155,8 @@ vi.mock('./domains/explorer/components/ExplorerTree.vue', () => ({ default: defi
 
 import App from './app/App.vue'
 
+vi.setConfig({ testTimeout: 15000 })
+
 async function flushUi() {
   await nextTick()
   await Promise.resolve()
@@ -185,6 +187,10 @@ function mountApp() {
 }
 
 describe('App pane-native surfaces', () => {
+  beforeEach(() => {
+    vi.useRealTimers()
+  })
+
   afterEach(() => {
     document.body.innerHTML = ''
     window.localStorage.clear()

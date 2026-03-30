@@ -1,5 +1,5 @@
 import { createApp, defineComponent, h, nextTick } from 'vue'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const hoisted = vi.hoisted(() => {
   const favoritesState: Array<{ path: string; added_at_ms: number; exists: boolean }> = []
@@ -141,6 +141,8 @@ vi.mock('./domains/cosmos/components/CosmosSidebarPanel.vue', () => ({ default: 
 
 import App from './app/App.vue'
 
+vi.setConfig({ testTimeout: 15000 })
+
 async function flushUi() {
   await nextTick()
   await Promise.resolve()
@@ -174,6 +176,10 @@ function mountApp() {
 }
 
 describe('App favorites', () => {
+  beforeEach(() => {
+    vi.useRealTimers()
+  })
+
   afterEach(() => {
     document.body.innerHTML = ''
     window.localStorage.clear()

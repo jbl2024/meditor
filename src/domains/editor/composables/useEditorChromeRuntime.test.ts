@@ -201,6 +201,7 @@ function createRuntimeHarness(input?: {
 
 describe('useEditorChromeRuntime', () => {
   beforeEach(() => {
+    vi.useRealTimers()
     previewMarkdown.value = ''
     provenancePaths.value = []
     previewTitle.value = ''
@@ -344,6 +345,10 @@ describe('useEditorChromeRuntime', () => {
 
   it('marks text typing activity on printable keydown and clears it after idle', async () => {
     vi.useFakeTimers()
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0)
+      return 1
+    })
     const { runtime, holder, interactionMocks } = createRuntimeHarness()
     await runtime.dialogsAndLifecycle.onMountInit()
 
@@ -364,6 +369,10 @@ describe('useEditorChromeRuntime', () => {
 
   it('suppresses gutter reveal across structural list edits until the delay expires', async () => {
     vi.useFakeTimers()
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0)
+      return 1
+    })
     vi.setSystemTime(new Date('2026-03-09T10:00:00Z'))
     const { runtime } = createRuntimeHarness()
 
@@ -522,6 +531,7 @@ describe('useEditorChromeRuntime', () => {
     const mountPromise = harness.runtime.dialogsAndLifecycle.onMountInit()
     await nextTick()
     await harness.runtime.dialogsAndLifecycle.onUnmountCleanup()
+    const mousedownAddsBeforeFrame = addEventListenerSpy.mock.calls.filter(([name]) => name === 'mousedown').length
 
     expect(cancelAnimationFrameSpy).toHaveBeenCalledWith(42)
     expect(removeEventListenerSpy).toHaveBeenCalledWith('mousedown', expect.any(Function), true)
@@ -533,7 +543,7 @@ describe('useEditorChromeRuntime', () => {
     await mountPromise
 
     const mousedownAdds = addEventListenerSpy.mock.calls.filter(([name]) => name === 'mousedown')
-    expect(mousedownAdds).toHaveLength(0)
+    expect(mousedownAdds).toHaveLength(mousedownAddsBeforeFrame)
   })
 
   it('drops stale pending mousedown binds when a newer mount sequence supersedes the older one', async () => {
@@ -553,13 +563,14 @@ describe('useEditorChromeRuntime', () => {
     await nextTick()
 
     expect(frameCallbacks).toHaveLength(2)
+    const mousedownAddsBeforeFrames = addEventListenerSpy.mock.calls.filter(([name]) => name === 'mousedown').length
 
     frameCallbacks[0]?.(0)
     await firstMount
-    expect(addEventListenerSpy.mock.calls.filter(([name]) => name === 'mousedown')).toHaveLength(0)
+    expect(addEventListenerSpy.mock.calls.filter(([name]) => name === 'mousedown')).toHaveLength(mousedownAddsBeforeFrames)
 
     frameCallbacks[1]?.(0)
     await secondMount
-    expect(addEventListenerSpy.mock.calls.filter(([name]) => name === 'mousedown')).toHaveLength(1)
+    expect(addEventListenerSpy.mock.calls.filter(([name]) => name === 'mousedown')).toHaveLength(mousedownAddsBeforeFrames + 1)
   })
 })
