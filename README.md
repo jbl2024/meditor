@@ -1,6 +1,18 @@
 # Tomosona
 
 <p align="center">
+  <a href="https://github.com/jbl2024/tomosona/actions/workflows/ci.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/jbl2024/tomosona/ci.yml?branch=main" alt="CI status" />
+  </a>
+  <a href="./LICENSE">
+    <img src="https://img.shields.io/github/license/jbl2024/tomosona" alt="License" />
+  </a>
+  <a href="https://github.com/jbl2024/tomosona/releases">
+    <img src="https://img.shields.io/github/v/release/jbl2024/tomosona" alt="Latest release" />
+  </a>
+</p>
+
+<p align="center">
   <img src="./public/meditor.svg" alt="Logo Tomosona" width="140" />
 </p>
 
