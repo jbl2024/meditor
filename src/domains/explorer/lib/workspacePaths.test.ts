@@ -45,6 +45,11 @@ describe('workspacePaths', () => {
     expect(toWorkspaceRelativePath('/vault', 'C:\\other\\note.md')).toBe('C:/other/note.md')
   })
 
+  it('matches workspace-relative paths case-insensitively for windows paths', () => {
+    expect(toWorkspaceRelativePath('d:/vault', 'D:/vault/notes/a.md')).toBe('notes/a.md')
+    expect(toWorkspaceRelativePath('D:/vault', 'd:/vault/notes/a.md')).toBe('notes/a.md')
+  })
+
   it('builds canonical path keys case-insensitively', () => {
     expect(toWorkspacePathKey(' Notes\\TODAY.md ')).toBe('notes/today.md')
   })

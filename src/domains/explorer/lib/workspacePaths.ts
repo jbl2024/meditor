@@ -56,8 +56,10 @@ export function toWorkspaceRelativePath(workspacePath: string, path: string): st
   const normalizedPath = normalizeWorkspacePath(path)
   const normalizedRoot = normalizeWorkspacePath(workspacePath).replace(/\/+$/, '')
   if (!normalizedRoot) return normalizedPath
-  if (normalizedPath === normalizedRoot) return '.'
-  if (normalizedPath.startsWith(`${normalizedRoot}/`)) {
+  const lowerPath = normalizedPath.toLowerCase()
+  const lowerRoot = normalizedRoot.toLowerCase()
+  if (lowerPath === lowerRoot) return '.'
+  if (lowerPath.startsWith(`${lowerRoot}/`)) {
     return normalizedPath.slice(normalizedRoot.length + 1)
   }
   return normalizedPath

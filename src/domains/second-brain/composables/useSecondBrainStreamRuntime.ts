@@ -12,6 +12,7 @@ import {
   subscribeSecondBrainStream
 } from '../lib/secondBrainApi'
 import { renderSecondBrainMarkdownPreview } from '../lib/secondBrainMarkdownPreview'
+import { toWorkspaceRelativePath } from '../../explorer/lib/workspacePaths'
 
 export type UseSecondBrainStreamRuntimeOptions = {
   workspacePath: Ref<string>
@@ -168,7 +169,9 @@ export function useSecondBrainStreamRuntime(options: UseSecondBrainStreamRuntime
           role: 'assistant',
           mode: 'freestyle',
           content_md: '',
-          citations_json: JSON.stringify(options.contextPaths.value.map((path) => path.replace(`${options.workspacePath.value}/`, ''))),
+          citations_json: JSON.stringify(
+            options.contextPaths.value.map((path) => toWorkspaceRelativePath(options.workspacePath.value, path))
+          ),
           attachments_json: '[]',
           created_at_ms: Date.now()
         }]
@@ -190,7 +193,9 @@ export function useSecondBrainStreamRuntime(options: UseSecondBrainStreamRuntime
           role: 'assistant',
           mode: 'freestyle',
           content_md: '',
-          citations_json: JSON.stringify(options.contextPaths.value.map((path) => path.replace(`${options.workspacePath.value}/`, ''))),
+          citations_json: JSON.stringify(
+            options.contextPaths.value.map((path) => toWorkspaceRelativePath(options.workspacePath.value, path))
+          ),
           attachments_json: '[]',
           created_at_ms: Date.now()
         }]

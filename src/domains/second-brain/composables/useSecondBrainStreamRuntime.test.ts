@@ -168,4 +168,29 @@ describe('useSecondBrainStreamRuntime', () => {
 
     mounted.app.unmount()
   })
+
+  it('stores workspace-relative citations when the workspace root casing differs', async () => {
+    const mounted = mountStreamRuntime({
+      contextPaths: ['D:/vault/notes/a.md']
+    })
+
+    mounted.workspacePath.value = 'd:/vault'
+
+    for (let i = 0; i < 3; i += 1) {
+      await flushUi()
+    }
+
+    handlers['second-brain://assistant-start']?.({
+      session_id: 's1',
+      message_id: 'assistant-3'
+    })
+    await flushUi()
+
+    expect(mounted.messages.value[0]).toMatchObject({
+      id: 'assistant-3',
+      citations_json: JSON.stringify(['notes/a.md'])
+    })
+
+    mounted.app.unmount()
+  })
 })

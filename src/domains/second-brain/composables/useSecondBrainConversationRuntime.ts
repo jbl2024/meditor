@@ -10,6 +10,7 @@ import type { FilterableDropdownItem } from '../../../shared/components/ui/UiFil
 import type { PulseActionId, SecondBrainMessage, SecondBrainSessionSummary } from '../../../shared/api/apiTypes'
 import { writeClipboardText } from '../../../shared/api/clipboardApi'
 import { readTextFile } from '../../../shared/api/workspaceApi'
+import { toWorkspaceRelativePath } from '../../explorer/lib/workspacePaths'
 import { PULSE_ACTIONS_BY_SOURCE, getPulseDropdownItems } from '../../pulse/lib/pulse'
 import { runDeliberation } from '../lib/secondBrainApi'
 import { useSecondBrainAtMentions, type SecondBrainAtMentionItem } from './useSecondBrainAtMentions'
@@ -458,7 +459,9 @@ export function useSecondBrainConversationRuntime(options: UseSecondBrainConvers
           role: 'assistant',
           mode: 'freestyle',
           content_md: '',
-          citations_json: JSON.stringify(options.contextPaths.value.map((path) => path.replace(`${options.workspacePath.value}/`, ''))),
+          citations_json: JSON.stringify(
+            options.contextPaths.value.map((path) => toWorkspaceRelativePath(options.workspacePath.value, path))
+          ),
           attachments_json: '[]',
           created_at_ms: Date.now()
         }]
