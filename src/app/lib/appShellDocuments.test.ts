@@ -38,4 +38,8 @@ describe('appShellDocuments', () => {
     expect(parentPrefixForModal('/vault/notes/projects', '/vault')).toBe('notes/projects/')
     expect(parentPrefixForModal('/vault', '/vault')).toBe('')
   })
+
+  it('normalizes Windows device-prefixed parent paths before deriving modal prefixes', () => {
+    expect(parentPrefixForModal('\\\\?\\D:\\vault\\notes\\projects', 'D:/vault')).toBe('notes/projects/')
+  })
 })

@@ -1,11 +1,14 @@
 import type { PathMove } from '../../shared/api/apiTypes'
+import { normalizeWorkspacePath } from '../../domains/explorer/lib/workspacePaths'
 
 function normalizePath(path: string): string {
-  return path.trim().replace(/\\/g, '/').replace(/\/+$/, '')
+  return normalizeWorkspacePath(path).replace(/\/+$/, '')
 }
 
 function isSameOrDescendant(path: string, root: string): boolean {
-  return path === root || path.startsWith(`${root}/`)
+  const lowerPath = path.toLowerCase()
+  const lowerRoot = root.toLowerCase()
+  return lowerPath === lowerRoot || lowerPath.startsWith(`${lowerRoot}/`)
 }
 
 /**

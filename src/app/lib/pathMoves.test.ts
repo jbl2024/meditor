@@ -16,6 +16,15 @@ describe('pathMoves', () => {
     expect(rewritePathWithMoves('/vault/notes/a.md', [{ from: '/vault/archive', to: '/vault/old' }])).toBe('/vault/notes/a.md')
   })
 
+  it('rewrites Windows paths that use device prefixes and drive-letter casing', () => {
+    const moves = sortPathMoves([
+      { from: '\\\\?\\D:\\vault\\notes', to: 'd:/vault/archive/notes' }
+    ])
+
+    expect(rewritePathWithMoves('D:/vault/notes/a.md', moves)).toBe('d:/vault/archive/notes/a.md')
+    expect(rewritePathWithMoves('\\\\?\\d:\\vault\\notes\\a.md', moves)).toBe('d:/vault/archive/notes/a.md')
+  })
+
   it('expands folder moves into exact candidate pairs', () => {
     expect(expandPathMoves(
       [{ from: '/vault/journal', to: '/vault/archive/journal' }],

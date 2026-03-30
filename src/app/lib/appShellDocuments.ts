@@ -1,3 +1,4 @@
+import { normalizeWorkspacePath } from '../../domains/explorer/lib/workspacePaths'
 import { fileName } from './appShellPaths'
 
 /**
@@ -111,8 +112,8 @@ export function resolveExistingWikilinkPath(normalizedTarget: string, markdownFi
 /** Derives a workspace-relative path prefix from a parent directory path. */
 export function parentPrefixForModal(parentPath: string, root: string): string {
   if (!root) return ''
-  const normalizedRoot = root.replace(/\\/g, '/').replace(/\/+$/, '')
-  const normalizedParent = parentPath.replace(/\\/g, '/').replace(/\/+$/, '')
+  const normalizedRoot = normalizeWorkspacePath(root).replace(/\/+$/, '')
+  const normalizedParent = normalizeWorkspacePath(parentPath).replace(/\/+$/, '')
   if (!normalizedParent || normalizedParent === normalizedRoot) return ''
   if (!normalizedParent.startsWith(`${normalizedRoot}/`)) return ''
   const relative = normalizedParent.slice(normalizedRoot.length + 1)
