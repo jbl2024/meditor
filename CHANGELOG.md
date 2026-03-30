@@ -18,6 +18,35 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.26.0] - 2026-03-30
+
+### Changed
+- docs(readme): add CI license and release badges (b6e1e21)
+- merge: close vite pr 58 (a30b229)
+- merge: close comrak pr 65 (1190016)
+- merge: close mermaid-rs-renderer pr 63 (587a2b7)
+- merge: close zip pr 59 (0a1f5dc)
+- Merge pull request #61 from jbl2024/dependabot/npm_and_yarn/tiptap/extension-code-block-3.21.0 (8c7df6f)
+- Merge pull request #60 from jbl2024/dependabot/npm_and_yarn/tiptap/extension-underline-3.21.0 (0985a35)
+- Merge pull request #64 from jbl2024/dependabot/npm_and_yarn/tiptap/extension-placeholder-3.21.0 (720b5ad)
+- chore(deps-dev): bump vite from 8.0.2 to 8.0.3 (9f0a6ef)
+- merge: close vitest pr 62 (573bfe3)
+- chore(deps): bump comrak from 0.50.0 to 0.51.0 in /src-tauri (a931a26)
+- chore(deps): bump @tiptap/extension-placeholder from 3.20.4 to 3.21.0 (26205f6)
+- chore(deps): bump mermaid-rs-renderer in /src-tauri (9718005)
+- chore(deps-dev): bump vitest from 2.1.9 to 4.1.2 (78c5bc1)
+- chore(deps): bump @tiptap/extension-code-block from 3.20.4 to 3.21.0 (e983e7a)
+- chore(deps): bump @tiptap/extension-underline from 3.20.1 to 3.21.0 (92f3fa5)
+- chore(deps): bump zip from 2.4.2 to 8.4.0 in /src-tauri (2446b20)
+
+### Fixed
+- fix(test): stabilize html node view integration (f477e69)
+- fix(test): satisfy vitest 4 mock typings (12d0f45)
+- fix(test): make vitest 4 upgrade pass (02554ef)
+- fix(second-brain): normalize citations on windows paths (2ff32f6)
+- fix(windows): normalize path helpers for device-prefixed paths (b0b9911)
+- fix(second-brain): normalize windows device paths in mentions (5fd140a)
+
 ## [0.25.1] - 2026-03-27
 
 ### Fixed
