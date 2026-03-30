@@ -1,5 +1,6 @@
 import { nextTick, ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { AppSecondBrainSessionPort } from './useAppSecondBrainBridge'
 import { useAppSecondBrainBridge } from './useAppSecondBrainBridge'
 
 type BridgeOptions = {
@@ -7,9 +8,9 @@ type BridgeOptions = {
   activeFilePath?: string
   toAbsoluteWorkspacePath?: (workspacePath: string, path: string) => string | null
   normalizeContextPathsForUpdate?: (workspacePath: string, paths: string[]) => string[]
-  createDeliberationSession?: ReturnType<typeof vi.fn>
-  loadDeliberationSession?: ReturnType<typeof vi.fn>
-  replaceSessionContext?: ReturnType<typeof vi.fn>
+  createDeliberationSession?: AppSecondBrainSessionPort['createDeliberationSession']
+  loadDeliberationSession?: AppSecondBrainSessionPort['loadDeliberationSession']
+  replaceSessionContext?: AppSecondBrainSessionPort['replaceSessionContext']
 }
 
 function createBridge(options: BridgeOptions = {}) {
@@ -17,12 +18,15 @@ function createBridge(options: BridgeOptions = {}) {
   const activeFilePath = ref(options.activeFilePath ?? '/vault/notes/a.md')
   const errorMessage = ref('')
   const notifySuccess = vi.fn()
-  const createDeliberationSession = options.createDeliberationSession ?? vi.fn(async () => ({ sessionId: 'session-new  ' }))
-  const loadDeliberationSession = options.loadDeliberationSession ?? vi.fn(async (sessionId: string) => ({
-    session_id: sessionId,
-    context_items: [{ path: '/vault/notes/a.md' }]
-  }))
-  const replaceSessionContext = options.replaceSessionContext ?? vi.fn(async () => {})
+  const createDeliberationSession = (options.createDeliberationSession ??
+    vi.fn(async () => ({ sessionId: 'session-new  ' }))) as AppSecondBrainSessionPort['createDeliberationSession']
+  const loadDeliberationSession = (options.loadDeliberationSession ??
+    vi.fn(async (sessionId: string) => ({
+      session_id: sessionId,
+      context_items: [{ path: '/vault/notes/a.md' }]
+    }))) as AppSecondBrainSessionPort['loadDeliberationSession']
+  const replaceSessionContext = (options.replaceSessionContext ??
+    vi.fn(async () => {})) as AppSecondBrainSessionPort['replaceSessionContext']
   const normalizeContextPathsForUpdate =
     options.normalizeContextPathsForUpdate ??
     vi.fn((_workspacePath: string, paths: string[]) => Array.from(new Set(paths.filter(Boolean))))
