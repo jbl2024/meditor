@@ -80,6 +80,15 @@ The app is not limited to a file tree. It combines an explorer, wikilinks, backl
 - heading overview and document navigation;
 - a right panel for backlinks, semantic links, properties, and Echoes.
 
+### Convert to Word
+
+- convert any Markdown file from the explorer context menu into a `.docx` file;
+- the export is written next to the source note, using the same stem name;
+- if a file with that name already exists, Tomosona adds a numeric suffix such as `note (1).docx`;
+- if the workspace contains a `_templates/` folder, the first `.docx` in that folder is used as the Word template;
+- files are picked by filename order, so `a.docx` is chosen before `b.docx`;
+- if no valid template is available, Tomosona falls back to its built-in Word styling.
+
 ### Properties and structure
 
 - frontmatter property editing;
