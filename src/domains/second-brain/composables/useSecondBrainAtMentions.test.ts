@@ -15,6 +15,13 @@ describe('useSecondBrainAtMentions', () => {
     })
   }
 
+  function buildWindowsPath() {
+    return useSecondBrainAtMentions({
+      workspacePath: ref('D:/vault'),
+      allWorkspaceFiles: ref(['\\\\?\\D:\\vault\\notes\\a.md'])
+    })
+  }
+
   it('detects mention trigger with and without query', () => {
     const api = build()
     api.updateTrigger('Bonjour @', 9)
@@ -70,5 +77,16 @@ describe('useSecondBrainAtMentions', () => {
 
     expect(result.resolvedPaths).toEqual(['/vault/alpha.md', '/vault/docs/nested.md'])
     expect(result.unresolved).toEqual([])
+  })
+
+  it('normalizes Windows extended-length paths in mention suggestions', () => {
+    const api = buildWindowsPath()
+    api.updateTrigger('@', 1)
+
+    expect(api.suggestions.value).toHaveLength(1)
+    expect(api.suggestions.value[0]).toMatchObject({
+      relativePath: 'notes/a.md',
+      absolutePath: 'D:/vault/notes/a.md'
+    })
   })
 })

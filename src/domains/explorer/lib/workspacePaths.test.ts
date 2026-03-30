@@ -14,6 +14,11 @@ describe('workspacePaths', () => {
     expect(normalizeWorkspacePath('notes//nested///entry.md')).toBe('notes/nested/entry.md')
   })
 
+  it('strips Windows extended-length prefixes from normalized paths', () => {
+    expect(normalizeWorkspacePath('\\\\?\\D:\\vault\\notes\\today.md')).toBe('D:/vault/notes/today.md')
+    expect(isAbsoluteWorkspacePath('\\\\?\\D:\\vault\\notes\\today.md')).toBe(true)
+  })
+
   it('normalizes Unicode-equivalent paths to NFC', () => {
     expect(normalizeWorkspacePath('Exe\u0301cution/note.md')).toBe('Exécution/note.md')
     expect(toWorkspacePathKey('Syste\u0300me/Plan.md')).toBe('système/plan.md')
@@ -31,6 +36,7 @@ describe('workspacePaths', () => {
     expect(toWorkspaceAbsolutePath('/vault/', './notes/a.md')).toBe('/vault/notes/a.md')
     expect(toWorkspaceAbsolutePath('/vault', '/vault/notes/a.md')).toBe('/vault/notes/a.md')
     expect(toWorkspaceAbsolutePath('/vault', 'C:\\vault\\notes\\a.md')).toBe('C:/vault/notes/a.md')
+    expect(toWorkspaceAbsolutePath('D:/vault', '\\\\?\\D:\\vault\\notes\\a.md')).toBe('D:/vault/notes/a.md')
   })
 
   it('returns relative workspace paths and keeps outside paths normalized', () => {

@@ -19,10 +19,16 @@
  * prefix, for example `./notes\\today.md` -> `notes/today.md`.
  */
 export function normalizeWorkspacePath(path: string): string {
-  return String(path ?? '')
+  const normalized = String(path ?? '')
     .normalize('NFC')
     .trim()
     .replace(/\\/g, '/')
+  const withoutWindowsDevicePrefix = normalized
+    .replace(/^\/\/\?\/UNC\//, '//')
+    .replace(/^\/\/\?\//, '')
+    .replace(/^\/\?\//, '')
+
+  return withoutWindowsDevicePrefix
     .replace(/\/+/g, '/')
     .replace(/^\.\//, '')
 }
