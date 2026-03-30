@@ -26,9 +26,9 @@ describe('useMermaidPreviewDialog', () => {
     revokeObjectURLMock = vi.fn()
     anchorClickMock = vi.fn()
 
-    URL.createObjectURL = createObjectURLMock
-    URL.revokeObjectURL = revokeObjectURLMock
-    HTMLAnchorElement.prototype.click = anchorClickMock
+    URL.createObjectURL = createObjectURLMock as unknown as typeof URL.createObjectURL
+    URL.revokeObjectURL = revokeObjectURLMock as unknown as typeof URL.revokeObjectURL
+    HTMLAnchorElement.prototype.click = anchorClickMock as unknown as typeof HTMLAnchorElement.prototype.click
     HTMLCanvasElement.prototype.getContext = vi.fn(() => ({
       clearRect: vi.fn(),
       drawImage: vi.fn()

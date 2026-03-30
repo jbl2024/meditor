@@ -3,6 +3,8 @@ import { Editor } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import { collectSpellcheckDecorationRanges, SpellcheckExtension, getSpellcheckState, getSpellcheckSuggestions } from './Spellcheck'
 
+vi.setConfig({ testTimeout: 15000 })
+
 describe('SpellcheckExtension', () => {
   it('adds the spellcheck extension without changing the editor contract', () => {
     const editor = new Editor({

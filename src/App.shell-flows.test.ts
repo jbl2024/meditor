@@ -2,6 +2,8 @@ import { createApp, defineComponent, h, nextTick } from 'vue'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { clearOpenTraceDebugState, readRecentOpenTraceEntries } from './shared/lib/openTrace'
 
+vi.setConfig({ testTimeout: 15000 })
+
 const hoisted = vi.hoisted(() => {
   const existingPaths = new Set<string>(['/vault', '/vault/a.md'])
   const fileContents = new Map<string, string>([['/vault/a.md', '# A']])

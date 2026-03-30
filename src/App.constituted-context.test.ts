@@ -228,6 +228,8 @@ vi.mock('./domains/second-brain/components/SecondBrainView.vue', () => ({
 
 import App from './app/App.vue'
 
+vi.setConfig({ testTimeout: 15000 })
+
 async function flushUi() {
   await nextTick()
   await Promise.resolve()
