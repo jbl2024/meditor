@@ -108,6 +108,7 @@ describe('FileInspectorPaneSurface', () => {
     expect(iframe?.getAttribute('srcdoc')).toContain('font-size: calc(var(--editor-font-size-base, 1rem) * var(--editor-zoom, 1) * var(--pandoc-scale, 1));')
     expect(iframe?.getAttribute('srcdoc')).toContain('width: 800px;')
     expect(iframe?.getAttribute('srcdoc')).toContain('box-sizing: border-box;')
+    expect(iframe?.getAttribute('srcdoc')).toContain('padding: 0 0 2rem;')
     expect(iframe?.getAttribute('srcdoc')).toContain('padding-left: 5rem;')
     expect(iframe?.getAttribute('srcdoc')).toContain('padding-right: 2rem;')
     expect(iframe?.getAttribute('srcdoc')).toContain('list-style: disc;')

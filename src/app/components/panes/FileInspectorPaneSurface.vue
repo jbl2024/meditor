@@ -109,7 +109,7 @@ body {
 }
 .pandoc-preview-shell {
   margin: 0;
-  padding: 1.5rem 0 2rem;
+  padding: 0 0 2rem;
 }
 .pandoc-preview {
   width: 800px;
@@ -302,7 +302,7 @@ body {
 }
 @media (max-width: 840px) {
   .pandoc-preview-shell {
-    padding: 1rem;
+    padding: 0 1rem 1rem;
   }
 
   .pandoc-preview {
