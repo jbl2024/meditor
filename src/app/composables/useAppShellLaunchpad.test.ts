@@ -90,6 +90,21 @@ describe('useAppShellLaunchpad', () => {
     scope.stop()
   })
 
+  it('records non-markdown files in recent viewed entries', async () => {
+    const { api, scope } = createLaunchpad({
+      allWorkspaceFiles: ref(['/vault/a.md', '/vault/photo.png'])
+    })
+
+    api.recordRecentNote('/vault/photo.png')
+    await Promise.resolve()
+
+    expect(api.recentViewedNotes.value[0]).toMatchObject({
+      path: '/vault/photo.png',
+      title: 'photo.png'
+    })
+    scope.stop()
+  })
+
   it('cleans removed recent notes once the workspace file list is known', async () => {
     const allWorkspaceFiles = ref(['/vault/a.md'])
     const { api, scope, recentNotesByKey } = createLaunchpad({ allWorkspaceFiles })
@@ -112,6 +127,23 @@ describe('useAppShellLaunchpad', () => {
     await api.refreshLaunchpadRecentNotes()
 
     expect(api.recentUpdatedNotes.value.map((item) => item.path)).toEqual(['/vault/a.md', '/vault/b.md'])
+    scope.stop()
+  })
+
+  it('includes non-markdown files in updated-note rows when metadata is available', async () => {
+    const readFileMetadata = vi.fn(async (path: string) => {
+      if (path === '/vault/photo.png') return { updated_at_ms: 300 }
+      if (path === '/vault/a.md') return { updated_at_ms: 200 }
+      return { updated_at_ms: null }
+    })
+    const { api, scope } = createLaunchpad({
+      allWorkspaceFiles: ref(['/vault/a.md', '/vault/photo.png']),
+      readFileMetadata
+    })
+
+    await api.refreshLaunchpadRecentNotes()
+
+    expect(api.recentUpdatedNotes.value.map((item) => item.path)).toEqual(['/vault/photo.png', '/vault/a.md'])
     scope.stop()
   })
 

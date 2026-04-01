@@ -9,7 +9,7 @@ export type LaunchpadRecentWorkspace = {
   recencyLabel: string
 }
 
-/** Launchpad row shown for a recently viewed or updated note. */
+/** Launchpad row shown for a recently viewed or updated file. */
 export type LaunchpadRecentNote = {
   path: string
   title: string

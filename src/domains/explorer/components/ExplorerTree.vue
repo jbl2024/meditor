@@ -4,7 +4,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { MagnifyingGlassIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import type { EntryKind, TreeNode } from '../../../shared/api/apiTypes'
 import type { PathMove } from '../../../shared/api/apiTypes'
-import { listenWorkspaceFsChanged } from '../../../shared/api/workspaceApi'
+import { listenWorkspaceFsChanged, openPathExternal } from '../../../shared/api/workspaceApi'
 import UiInput from '../../../shared/components/ui/UiInput.vue'
 import ExplorerConfirmDialog from './ExplorerConfirmDialog.vue'
 import ExplorerConflictDialog from './ExplorerConflictDialog.vue'
@@ -231,9 +231,13 @@ function handleRowClick(event: MouseEvent, node: TreeNode) {
     return
   }
 
-  if (!node.is_dir && node.is_markdown && !event.shiftKey && !isToggle) {
-    if (rowActionMode.value === 'context-toggle') {
-      emit('toggle-context', node.path)
+  if (!node.is_dir && !event.shiftKey && !isToggle) {
+    if (node.is_markdown) {
+      if (rowActionMode.value === 'context-toggle') {
+        emit('toggle-context', node.path)
+        return
+      }
+      emit('open', node.path)
       return
     }
     emit('open', node.path)
@@ -249,7 +253,7 @@ function handleDoubleClick(node: TreeNode) {
   if (node.is_markdown) {
     emit('open', node.path)
   } else {
-    emit('open', node.path)
+    void openPathExternal(node.path)
   }
 }
 

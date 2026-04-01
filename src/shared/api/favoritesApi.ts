@@ -10,7 +10,7 @@ export async function listFavorites(): Promise<FavoriteEntry[]> {
   return await invoke('list_favorites')
 }
 
-/** Adds a markdown note to workspace favorites. */
+/** Adds a workspace path to favorites. */
 export async function addFavorite(path: string): Promise<FavoriteEntry> {
   return await invoke('add_favorite', { path })
 }

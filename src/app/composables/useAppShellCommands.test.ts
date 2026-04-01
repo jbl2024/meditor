@@ -167,6 +167,21 @@ describe('useAppShellCommands', () => {
     scope.stop()
   })
 
+  it('adds and removes non-markdown active files through the favorites domain port', async () => {
+    const { api, scope, favoritesPort, workspacePort } = createCommands()
+    workspacePort.activeFilePath.value = '/vault/photo.png'
+
+    expect(await api.addActiveNoteToFavoritesFromPalette()).toBe(true)
+    expect(favoritesPort.addFavorite).toHaveBeenCalledWith('/vault/photo.png')
+    expect(workspacePort.notifySuccess).toHaveBeenCalledWith('Added photo.png to favorites.')
+
+    favoritesPort.isFavorite.mockReturnValue(true)
+    expect(await api.removeActiveNoteFromFavoritesFromPalette()).toBe(true)
+    expect(favoritesPort.removeFavorite).toHaveBeenCalledWith('/vault/photo.png')
+    expect(workspacePort.notifySuccess).toHaveBeenCalledWith('Removed photo.png from favorites.')
+    scope.stop()
+  })
+
   it('opens the active note in Cosmos and selects the matching node after refresh if needed', async () => {
     const { api, scope, cosmosPort, navigationPort, actionPort } = createCommands()
     cosmosPort.refreshGraph.mockImplementationOnce(async () => {

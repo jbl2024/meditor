@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { useAppShellPaletteActions } from './useAppShellPaletteActions'
 import type { AppThemeDefinition } from '../../shared/lib/themeRegistry'
 
-function createHarness(options: { isFavorite?: boolean } = {}) {
-  const activeFilePath = ref('/vault/note.md')
+function createHarness(options: { isFavorite?: boolean; activeFilePath?: string } = {}) {
+  const activeFilePath = ref(options.activeFilePath ?? '/vault/note.md')
   const quickOpenQuery = ref('query')
   const hasWorkspace = ref(true)
   const spellcheckEnabled = ref(false)
@@ -117,14 +117,14 @@ describe('useAppShellPaletteActions', () => {
     scope.stop()
   })
 
-  it('toggles favorite actions based on the active note state', () => {
-    const addHarness = createHarness({ isFavorite: false })
+  it('toggles favorite actions based on the active file state', () => {
+    const addHarness = createHarness({ activeFilePath: '/vault/photo.png', isFavorite: false })
     const addActionIds = addHarness.api.paletteActions.value.map((item) => item.id)
     expect(addActionIds).toContain('add-active-note-to-favorites')
     expect(addActionIds).not.toContain('remove-active-note-from-favorites')
     addHarness.scope.stop()
 
-    const removeHarness = createHarness({ isFavorite: true })
+    const removeHarness = createHarness({ activeFilePath: '/vault/photo.png', isFavorite: true })
     const removeActionIds = removeHarness.api.paletteActions.value.map((item) => item.id)
     expect(removeActionIds).toContain('remove-active-note-from-favorites')
     expect(removeActionIds).not.toContain('add-active-note-to-favorites')
@@ -191,8 +191,7 @@ describe('useAppShellPaletteActions', () => {
 
   it('hides convert to Word when the active file is not markdown', () => {
     const { api, scope } = createHarness()
-    const next = createHarness()
-    next.activeFilePath.value = '/vault/note.txt'
+    const next = createHarness({ activeFilePath: '/vault/note.txt' })
 
     expect(api.paletteActions.value.map((item) => item.id)).toContain('convert-to-word')
     expect(next.api.paletteActions.value.map((item) => item.id)).not.toContain('convert-to-word')

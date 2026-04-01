@@ -42,11 +42,15 @@ function createController() {
     if (path === '/vault') {
       return [
         { path: '/vault/notes', is_dir: true, is_markdown: false },
-        { path: '/vault/root.md', is_dir: false, is_markdown: true }
+        { path: '/vault/root.md', is_dir: false, is_markdown: true },
+        { path: '/vault/cover.png', is_dir: false, is_markdown: false }
       ]
     }
     if (path === '/vault/notes') {
-      return [{ path: '/vault/notes/a.md', is_dir: false, is_markdown: true }]
+      return [
+        { path: '/vault/notes/a.md', is_dir: false, is_markdown: true },
+        { path: '/vault/notes/photo.png', is_dir: false, is_markdown: false }
+      ]
     }
     return []
   })
@@ -135,12 +139,17 @@ describe('useAppWorkspaceController', () => {
     clearOpenTraceDebugState()
   })
 
-  it('loads markdown files from the workspace tree', async () => {
+  it('loads every file from the workspace tree', async () => {
     const { controller } = createController()
 
     await controller.loadAllFiles()
 
-    expect(controller.allWorkspaceFiles.value).toEqual(['/vault/notes/a.md', '/vault/root.md'])
+    expect(controller.allWorkspaceFiles.value).toEqual([
+      '/vault/cover.png',
+      '/vault/notes/a.md',
+      '/vault/notes/photo.png',
+      '/vault/root.md'
+    ])
   })
 
   it('skips internal application directories while scanning workspace files', async () => {
@@ -151,11 +160,15 @@ describe('useAppWorkspaceController', () => {
           { path: '/vault/.tomosona', is_dir: true, is_markdown: false },
           { path: '/vault/.tomosona-trash', is_dir: true, is_markdown: false },
           { path: '/vault/notes', is_dir: true, is_markdown: false },
-          { path: '/vault/root.md', is_dir: false, is_markdown: true }
+          { path: '/vault/root.md', is_dir: false, is_markdown: true },
+          { path: '/vault/cover.png', is_dir: false, is_markdown: false }
         ]
       }
       if (path === '/vault/notes') {
-        return [{ path: '/vault/notes/a.md', is_dir: false, is_markdown: true }]
+        return [
+          { path: '/vault/notes/a.md', is_dir: false, is_markdown: true },
+          { path: '/vault/notes/photo.png', is_dir: false, is_markdown: false }
+        ]
       }
       throw new Error(`unexpected path: ${path}`)
     })
@@ -166,7 +179,12 @@ describe('useAppWorkspaceController', () => {
     expect(listChildren).toHaveBeenCalledWith('/vault/notes')
     expect(listChildren).not.toHaveBeenCalledWith('/vault/.tomosona')
     expect(listChildren).not.toHaveBeenCalledWith('/vault/.tomosona-trash')
-    expect(controller.allWorkspaceFiles.value).toEqual(['/vault/notes/a.md', '/vault/root.md'])
+    expect(controller.allWorkspaceFiles.value).toEqual([
+      '/vault/cover.png',
+      '/vault/notes/a.md',
+      '/vault/notes/photo.png',
+      '/vault/root.md'
+    ])
   })
 
   it('creates and opens a missing daily note', async () => {
@@ -426,14 +444,14 @@ describe('useAppWorkspaceController', () => {
     expect(enqueueMarkdownReindex).toHaveBeenCalledWith('/vault/notes/b.md')
   })
 
-  it('ignores non-markdown files in workspace change caches', () => {
+  it('caches non-markdown files in workspace change caches without reindexing them', () => {
     const { controller, enqueueMarkdownReindex } = createController()
 
     controller.applyWorkspaceFsChanges([
       { kind: 'created', path: '/vault/notes/image.png', is_dir: false }
     ])
 
-    expect(controller.allWorkspaceFiles.value).toEqual([])
+    expect(controller.allWorkspaceFiles.value).toEqual(['/vault/notes/image.png'])
     expect(enqueueMarkdownReindex).not.toHaveBeenCalled()
   })
 

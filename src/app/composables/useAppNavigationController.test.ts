@@ -137,14 +137,14 @@ describe('useAppNavigationController', () => {
     expect(recordRecentNote).toHaveBeenCalledWith('/vault/b.md')
   })
 
-  it('opens non-markdown files in inspector tabs without recording recent notes', async () => {
+  it('opens non-markdown files in inspector tabs and records them as recent files', async () => {
     const { controller, opened, recordRecentNote } = createController()
 
     const openedInspector = await controller.openTabWithAutosave('/vault/image.png')
 
     expect(openedInspector).toBe(true)
     expect(opened).toEqual([{ path: '/vault/image.png', paneId: undefined, reveal: false }])
-    expect(recordRecentNote).not.toHaveBeenCalled()
+    expect(recordRecentNote).toHaveBeenCalledWith('/vault/image.png')
   })
 
   it('records a debounced cosmos history snapshot', () => {
@@ -205,6 +205,16 @@ describe('useAppNavigationController', () => {
     expect(opened).toBe(true)
     expect(activeFilePath.value).toBe('/vault/b.md')
     expect(recordRecentNote).toHaveBeenCalledWith('/vault/b.md')
+  })
+
+  it('records recent files when activating a non-markdown tab', async () => {
+    const { controller, activeFilePath, recordRecentNote } = createController()
+
+    const opened = await controller.setActiveTabWithAutosave('/vault/photo.png')
+
+    expect(opened).toBe(true)
+    expect(activeFilePath.value).toBe('/vault/photo.png')
+    expect(recordRecentNote).toHaveBeenCalledWith('/vault/photo.png')
   })
 
   it('focuses the editor after reopening a document from history', async () => {

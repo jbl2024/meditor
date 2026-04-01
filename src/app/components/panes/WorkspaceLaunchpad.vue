@@ -47,13 +47,13 @@ const activeRecentNotes = computed(() =>
 )
 const activeRecentEmptyTitle = computed(() =>
   activeRecentTab.value === 'viewed'
-    ? 'No recently viewed notes yet'
-    : 'No recently updated notes yet'
+    ? 'No recently viewed files yet'
+    : 'No recently updated files yet'
 )
 const activeRecentEmptyCopy = computed(() =>
   activeRecentTab.value === 'viewed'
-    ? 'Open a note to keep your working context handy.'
-    : 'Edit a note to populate recent activity.'
+    ? 'Open a file to keep your working context handy.'
+    : 'Edit a file to populate recent activity.'
 )
 
 const emit = defineEmits<{
@@ -243,14 +243,14 @@ function shortUpdatedLabel(value: string): string {
     <div v-else class="launchpad-grid">
       <article class="launchpad-card launchpad-card-wide">
         <div class="launchpad-section-head">
-          <h3>Recent notes</h3>
+          <h3>Recent files</h3>
           <span v-if="activeRecentNotes.length" class="launchpad-card-meta">{{ activeRecentNotes.length }}</span>
         </div>
         <div
           class="launchpad-segmented"
           :data-active-tab="activeRecentTab"
           role="tablist"
-          aria-label="Recent note lists"
+          aria-label="Recent file lists"
         >
           <span class="launchpad-segmented-indicator" aria-hidden="true"></span>
           <button

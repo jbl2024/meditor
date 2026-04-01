@@ -297,9 +297,7 @@ export function useAppNavigationController(options: UseAppNavigationControllerOp
     if (navigation.recordHistory !== false) {
       historyPort.documentHistory.record(target)
     }
-    if (options.editorPort.isMarkdownPath(target)) {
-      workspacePort.recordRecentNote(target)
-    }
+    workspacePort.recordRecentNote(target)
     return true
   }
 

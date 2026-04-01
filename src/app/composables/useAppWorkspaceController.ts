@@ -7,7 +7,7 @@ import { finishOpenTraceSpan, startOpenTraceSpan, traceOpenStep } from '../../sh
  * Module: useAppWorkspaceController
  *
  * Purpose:
- * - Own workspace-scoped shell state such as the markdown file list and active
+ * - Own workspace-scoped shell state such as the workspace file list and active
  *   file metadata.
  * - Centralize workspace lifecycle helpers that are independent from view-level
  *   navigation concerns.
@@ -112,9 +112,8 @@ export function useAppWorkspaceController(options: UseAppWorkspaceControllerOpti
     activeFileMetadata.value = null
   }
 
-  /** Adds a markdown path to the in-memory workspace file list if it is not already present. */
+  /** Adds a workspace path to the in-memory file list if it is not already present. */
   function upsertWorkspaceFilePath(path: string) {
-    if (!workspaceDocumentPort.isMarkdownPath(path)) return
     const normalized = workspaceDocumentPort.normalizePathKey(path)
     const exists = allWorkspaceFiles.value.some((item) => workspaceDocumentPort.normalizePathKey(item) === normalized)
     if (exists) return
@@ -214,7 +213,7 @@ export function useAppWorkspaceController(options: UseAppWorkspaceControllerOpti
     }
   }
 
-  /** Traverses the workspace tree and caches every markdown file path for shell features. */
+  /** Traverses the workspace tree and caches every file path for shell features. */
   async function loadAllFiles() {
     if (!workspaceShellPort.workingFolderPath.value || loadingAllFiles.value) return
     loadingAllFiles.value = true
@@ -244,9 +243,7 @@ export function useAppWorkspaceController(options: UseAppWorkspaceControllerOpti
             queue.push(child.path)
             continue
           }
-          if (child.is_markdown) {
-            files.push(child.path)
-          }
+          files.push(child.path)
         }
       }
 

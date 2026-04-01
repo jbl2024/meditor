@@ -223,7 +223,25 @@ describe('ExplorerTree', () => {
     mounted.app.unmount()
   })
 
-  it('opens non-markdown files in-app on double click', async () => {
+  it('opens non-markdown files in-app on single click', async () => {
+    listChildren.mockImplementation(async (dirPath: string) => {
+      if (dirPath === '/vault') {
+        return [binaryNode('/vault/photo.png')]
+      }
+      return []
+    })
+
+    const mounted = await mountHarness('/vault/photo.png')
+    const row = mounted.root.querySelector('[data-explorer-path="/vault/photo.png"]') as HTMLElement
+    row.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    await nextTick()
+
+    expect(mounted.events).toEqual(['open:/vault/photo.png'])
+
+    mounted.app.unmount()
+  })
+
+  it('opens non-markdown files natively on double click', async () => {
     listChildren.mockImplementation(async (dirPath: string) => {
       if (dirPath === '/vault') {
         return [binaryNode('/vault/photo.png')]
@@ -236,7 +254,8 @@ describe('ExplorerTree', () => {
     row.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }))
     await nextTick()
 
-    expect(mounted.events).toEqual(['open:/vault/photo.png'])
+    expect(openPathExternal).toHaveBeenCalledWith('/vault/photo.png')
+    expect(mounted.events).toEqual([])
 
     mounted.app.unmount()
   })

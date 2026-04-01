@@ -205,22 +205,20 @@ export function useAppShellPaletteActions(options: UseAppShellPaletteActionsOpti
     }),
     ...(
       options.statePort.activeFilePath.value &&
-      options.documentPort.isMarkdownPath(options.statePort.activeFilePath.value) &&
       !options.favoritesPort.isFavorite(options.statePort.activeFilePath.value)
         ? [createPaletteAction('notes', {
             id: 'add-active-note-to-favorites',
-            label: 'Add Active Note to Favorites',
+            label: 'Add Active File to Favorites',
             run: () => options.actionPort.addActiveNoteToFavoritesFromPalette()
           })]
         : []
     ),
     ...(
       options.statePort.activeFilePath.value &&
-      options.documentPort.isMarkdownPath(options.statePort.activeFilePath.value) &&
       options.favoritesPort.isFavorite(options.statePort.activeFilePath.value)
         ? [createPaletteAction('notes', {
             id: 'remove-active-note-from-favorites',
-            label: 'Remove Active Note from Favorites',
+            label: 'Remove Active File from Favorites',
             run: () => options.actionPort.removeActiveNoteFromFavoritesFromPalette()
           })]
         : []

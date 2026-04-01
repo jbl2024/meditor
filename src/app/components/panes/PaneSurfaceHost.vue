@@ -28,6 +28,9 @@ const props = defineProps<{
   getStatus: (path: string) => FileEditorStatus
   openFile?: (path: string) => Promise<string>
   readFileMetadata?: (path: string) => Promise<{ created_at_ms: number | null; updated_at_ms: number | null }>
+  isFavorite?: (path: string) => boolean
+  openExternally?: (path: string) => Promise<void> | void
+  toggleFavorite?: (path: string) => Promise<void> | void
   saveFile?: (path: string, text: string, options: { explicit: boolean }) => Promise<{ persisted: boolean }>
   readNoteSnapshot?: (path: string) => Promise<ReadNoteSnapshotResult>
   saveNoteBuffer?: (
@@ -116,6 +119,19 @@ const showCosmosSurface = computed(() => props.activeTab?.type === 'cosmos')
 const showSecondBrainSurface = computed(() => props.activeTab?.type === 'second-brain-chat')
 const showAlterExplorationSurface = computed(() => props.activeTab?.type === 'alter-exploration')
 const showAltersSurface = computed(() => props.activeTab?.type === 'alters')
+const activeInspectorTab = computed(() => props.activeTab?.type === 'file-inspector' ? props.activeTab : null)
+const activeInspectorPath = computed(() => activeInspectorTab.value?.path ?? '')
+const activeInspectorIsFavorite = computed(() =>
+  activeInspectorTab.value ? props.isFavorite?.(activeInspectorTab.value.path) : undefined
+)
+const openActiveInspectorExternally = () => {
+  if (!activeInspectorTab.value || !props.openExternally) return
+  void props.openExternally(activeInspectorTab.value.path)
+}
+const toggleActiveInspectorFavorite = () => {
+  if (!activeInspectorTab.value || !props.toggleFavorite) return
+  void props.toggleFavorite(activeInspectorTab.value.path)
+}
 const defaultAlterSettings: AppSettingsAlters = {
   default_mode: 'neutral',
   show_badge_in_chat: true,
@@ -190,9 +206,12 @@ defineExpose<EditorSurfaceExposed>({
   />
 
   <FileInspectorPaneSurface
-    v-else-if="activeTab?.type === 'file-inspector'"
-    :path="activeTab.path"
+    v-else-if="activeInspectorTab"
+    :path="activeInspectorPath"
     :read-file-metadata="readFileMetadata"
+    :is-favorite="activeInspectorIsFavorite"
+    :open-externally="openActiveInspectorExternally"
+    :toggle-favorite="toggleActiveInspectorFavorite"
   />
 
   <WorkspaceLaunchpad

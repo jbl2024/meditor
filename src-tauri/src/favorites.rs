@@ -44,13 +44,6 @@ fn favorites_file_path(root: &Path) -> Result<PathBuf> {
     Ok(favorites_dir(root)?.join(FAVORITES_FILE_NAME))
 }
 
-fn is_markdown_file(path: &Path) -> bool {
-    path.extension()
-        .and_then(|value| value.to_str())
-        .map(|ext| ext.eq_ignore_ascii_case("md") || ext.eq_ignore_ascii_case("markdown"))
-        .unwrap_or(false)
-}
-
 fn normalize_relative_components(path: &str) -> Option<String> {
     let mut normalized = path.trim().replace('\\', "/");
     while normalized.starts_with("./") {
@@ -142,15 +135,14 @@ fn write_stored_items(root: &Path, items: &[FavoriteStoredItem]) -> Result<()> {
 }
 
 fn favorite_exists(root: &Path, relative_path: &str) -> bool {
-    let absolute = root.join(relative_path);
-    absolute.is_file() && is_markdown_file(&absolute)
+    root.join(relative_path).exists()
 }
 
-fn validate_existing_markdown(root: &Path, raw_path: &str) -> Result<String> {
+fn validate_existing_path(root: &Path, raw_path: &str) -> Result<String> {
     let absolute = normalize_workspace_path(root, raw_path)?;
-    if !absolute.is_file() || !is_markdown_file(&absolute) {
+    if !absolute.exists() {
         return Err(AppError::InvalidOperation(
-            "Only existing markdown notes can be added to favorites.".to_string(),
+            "Only existing workspace paths can be added to favorites.".to_string(),
         ));
     }
     normalize_workspace_relative_path(root, &absolute)
@@ -184,7 +176,7 @@ pub fn list_favorites() -> Result<Vec<FavoriteEntry>> {
 #[tauri::command]
 pub fn add_favorite(path: String) -> Result<FavoriteEntry> {
     let root = active_workspace_root()?;
-    let normalized_path = validate_existing_markdown(&root, &path)?;
+    let normalized_path = validate_existing_path(&root, &path)?;
     let mut items = read_stored_items(&root)?;
 
     if let Some(existing) = items
@@ -231,7 +223,7 @@ pub fn rename_favorite(old_path: String, new_path: String) -> Result<()> {
         normalize_stored_path(&root, &old_path)
             .ok_or_else(|| AppError::InvalidOperation("Invalid favorite path.".to_string()))
     })?;
-    let new_relative = validate_existing_markdown(&root, &new_path)?;
+    let new_relative = validate_existing_path(&root, &new_path)?;
     let mut items = read_stored_items(&root)?;
 
     let Some(index) = items
@@ -317,15 +309,17 @@ mod tests {
     }
 
     #[test]
-    fn add_favorite_rejects_non_markdown_files() {
+    fn add_favorite_accepts_non_markdown_files() {
         let _guard = workspace_test_guard();
         let workspace = create_temp_workspace("tomosona-favorites-non-markdown");
         let note = workspace.join("notes.txt");
         fs::write(&note, "text").expect("write note");
         set_active_workspace(&workspace.to_string_lossy()).expect("set workspace");
 
-        let result = add_favorite(note.to_string_lossy().to_string());
-        assert!(result.is_err());
+        let added = add_favorite(note.to_string_lossy().to_string()).expect("add favorite");
+        assert_eq!(added.path, "notes.txt");
+        assert!(added.exists);
+        assert_eq!(list_favorites().expect("list favorites").len(), 1);
 
         clear_active_workspace().expect("clear workspace");
         fs::remove_dir_all(workspace).expect("cleanup workspace");

@@ -45,6 +45,9 @@ const props = defineProps<{
   getStatus: (path: string) => FileEditorStatus
   openFile?: (path: string) => Promise<string>
   readFileMetadata?: (path: string) => Promise<{ created_at_ms: number | null; updated_at_ms: number | null }>
+  isFavorite?: (path: string) => boolean
+  openExternally?: (path: string) => Promise<void> | void
+  toggleFavorite?: (path: string) => Promise<void> | void
   saveFile?: (path: string, text: string, options: { explicit: boolean }) => Promise<{ persisted: boolean }>
   readNoteSnapshot?: (path: string) => Promise<ReadNoteSnapshotResult>
   saveNoteBuffer?: (
@@ -334,6 +337,9 @@ onBeforeUnmount(() => {
         :open-document-paths="paneDocumentPaths(pane)"
         :active-document-path="activeDocumentPath"
         :read-file-metadata="readFileMetadata"
+        :is-favorite="isFavorite"
+        :open-externally="openExternally"
+        :toggle-favorite="toggleFavorite"
         :launchpad="{
           showExperience: pane.id === layout.activePaneId,
           mode: secondBrain.workspacePath ? 'workspace-launchpad' : 'no-workspace',

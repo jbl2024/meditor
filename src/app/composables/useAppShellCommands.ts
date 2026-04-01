@@ -188,7 +188,7 @@ export function useAppShellCommands(options: UseAppShellCommandsOptions) {
 
   async function addActiveNoteToFavoritesFromPalette() {
     const path = options.workspacePort.activeFilePath.value
-    if (!path || !options.documentPort.isMarkdownPath(path)) return false
+    if (!path) return false
     try {
       await options.favoritesPort.addFavorite(path)
       options.workspacePort.notifySuccess(`Added ${options.documentPort.toRelativePath(path)} to favorites.`)
@@ -223,7 +223,7 @@ export function useAppShellCommands(options: UseAppShellCommandsOptions) {
 
   async function toggleActiveNoteFavoriteFromRightPane() {
     const path = options.workspacePort.activeFilePath.value
-    if (!path || !options.documentPort.isMarkdownPath(path)) return
+    if (!path) return
     if (options.favoritesPort.isFavorite(path)) {
       await removeActiveNoteFromFavoritesFromPalette()
       return

@@ -53,4 +53,14 @@ describe('WorkspaceLaunchpad', () => {
 
     mounted.app.unmount()
   })
+
+  it('labels the recents surface as files', async () => {
+    const mounted = mountLaunchpad()
+    await nextTick()
+
+    expect(mounted.root.textContent).toContain('Recent files')
+    expect(mounted.root.querySelector('[role="tablist"]')?.getAttribute('aria-label')).toBe('Recent file lists')
+
+    mounted.app.unmount()
+  })
 })
