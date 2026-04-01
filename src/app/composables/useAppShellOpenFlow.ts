@@ -78,6 +78,7 @@ export type AppShellOpenFlowWorkspaceDataPort = {
     path: string | null,
     options?: { traceId?: string | null; parentSpanId?: string | null }
   ) => Promise<void>
+  isMarkdownPath: (path: string) => boolean
   loadWikilinkTargets: () => Promise<string[]>
   pathExists: (path: string) => Promise<boolean>
   readTextFile: (path: string) => Promise<string>
@@ -396,7 +397,7 @@ export function useAppShellOpenFlow(options: AppShellOpenFlowOptions) {
       request_token: requestToken
     })
 
-    if (!path) {
+    if (!path || !options.dataPort.isMarkdownPath(path)) {
       options.editorPort.editorState.setActiveOutline([])
       backlinks.value = []
       semanticLinks.value = []

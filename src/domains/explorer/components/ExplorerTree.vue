@@ -4,7 +4,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { MagnifyingGlassIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import type { EntryKind, TreeNode } from '../../../shared/api/apiTypes'
 import type { PathMove } from '../../../shared/api/apiTypes'
-import { listenWorkspaceFsChanged, openPathExternal } from '../../../shared/api/workspaceApi'
+import { listenWorkspaceFsChanged } from '../../../shared/api/workspaceApi'
 import UiInput from '../../../shared/components/ui/UiInput.vue'
 import ExplorerConfirmDialog from './ExplorerConfirmDialog.vue'
 import ExplorerConflictDialog from './ExplorerConflictDialog.vue'
@@ -249,7 +249,7 @@ function handleDoubleClick(node: TreeNode) {
   if (node.is_markdown) {
     emit('open', node.path)
   } else {
-    void openPathExternal(node.path)
+    emit('open', node.path)
   }
 }
 

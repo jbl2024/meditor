@@ -146,6 +146,7 @@ function createHarness() {
     },
     dataPort: {
       refreshActiveFileMetadata,
+      isMarkdownPath: (path: string) => path.endsWith('.md') || path.endsWith('.markdown'),
       loadWikilinkTargets,
       pathExists,
       readTextFile,

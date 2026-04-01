@@ -72,6 +72,7 @@ export type AppNavigationEditorPort = {
   saveActiveDocument: () => Promise<void>
   focusEditor: () => void
   getDocumentStatus: (path: string) => NavigationDocumentStatus
+  isMarkdownPath: (path: string) => boolean
 }
 
 /** Pane layout and surface routing used by shell navigation flows. */
@@ -82,6 +83,7 @@ export type AppNavigationPanePort = {
   getPaneOrder: () => string[]
   getDocumentPathsForPane: (paneId: string) => string[]
   openPathInPane: (path: string, paneId?: string) => void
+  openInspectorInPane: (path: string, paneId?: string) => void
   revealDocumentInPane: (path: string, paneId?: string) => void
   setActivePathInPane: (paneId: string, path: string) => void
   openSurfaceInPane: (type: 'home' | 'cosmos' | 'second-brain-chat' | 'alters', paneId?: string) => void
@@ -274,24 +276,30 @@ export function useAppNavigationController(options: UseAppNavigationControllerOp
     const paneDispatchSpanId = startOpenTraceSpan(traceId, 'open.pane_dispatch', {
       parentSpanId: requestSpanId
     })
-    if (navigation.revealInTargetPane) {
-      panePort.revealDocumentInPane(target, navigation.targetPaneId)
+    if (options.editorPort.isMarkdownPath(target)) {
+      if (navigation.revealInTargetPane) {
+        panePort.revealDocumentInPane(target, navigation.targetPaneId)
+      } else {
+        panePort.openPathInPane(target, navigation.targetPaneId)
+      }
     } else {
-      panePort.openPathInPane(target, navigation.targetPaneId)
+      panePort.openInspectorInPane(target, navigation.targetPaneId)
     }
     finishOpenTraceSpan(traceId, paneDispatchSpanId, 'done', {
       target_pane: navigation.targetPaneId ?? panePort.getActivePaneId(),
-      reveal_only: Boolean(navigation.revealInTargetPane)
+      reveal_only: Boolean(navigation.revealInTargetPane) && options.editorPort.isMarkdownPath(target)
     })
     traceOpenStep(traceId, 'pane open dispatched', {
       target_pane: navigation.targetPaneId ?? panePort.getActivePaneId(),
-      reveal_only: Boolean(navigation.revealInTargetPane)
+      reveal_only: Boolean(navigation.revealInTargetPane) && options.editorPort.isMarkdownPath(target)
     })
     finishOpenTraceSpan(traceId, requestSpanId, 'done')
     if (navigation.recordHistory !== false) {
       historyPort.documentHistory.record(target)
     }
-    workspacePort.recordRecentNote(target)
+    if (options.editorPort.isMarkdownPath(target)) {
+      workspacePort.recordRecentNote(target)
+    }
     return true
   }
 

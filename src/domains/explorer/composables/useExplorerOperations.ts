@@ -342,7 +342,7 @@ export function useExplorerOperations(options: UseExplorerOperationsOptions) {
     if (mode === 'context-toggle') {
       return
     }
-    await openPathExternal(path)
+    options.emitOpen(path)
   }
 
   async function openSelected(paths: string[]) {

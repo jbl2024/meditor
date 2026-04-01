@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { HomeIcon } from '@heroicons/vue/24/outline'
+import { DocumentIcon, HomeIcon } from '@heroicons/vue/24/outline'
 import type { PaneState, PaneTab } from '../../composables/useMultiPaneWorkspaceState'
 import {
   ALTERS_SURFACE_ICON,
@@ -51,6 +51,7 @@ function fileName(path: string): string {
 
 function tabTitle(tab: PaneTab): string {
   if (tab.type === 'document') return fileName(tab.path)
+  if (tab.type === 'file-inspector') return fileName(tab.path)
   if (tab.type === 'home') return 'Home'
   if (tab.type === 'cosmos') return 'Cosmos'
   if (tab.type === 'alter-exploration') return 'Alter Exploration'
@@ -59,6 +60,7 @@ function tabTitle(tab: PaneTab): string {
 }
 
 function tabIcon(tab: PaneTab) {
+  if (tab.type === 'file-inspector') return DocumentIcon
   if (tab.type === 'cosmos') return COSMOS_SURFACE_ICON
   if (tab.type === 'second-brain-chat') return SECOND_BRAIN_SURFACE_ICON
   if (tab.type === 'alter-exploration') return ALTER_EXPLORATION_SURFACE_ICON

@@ -5,6 +5,7 @@ import CosmosPaneSurface from '../../../domains/cosmos/components/CosmosPaneSurf
 import SecondBrainPaneSurface from '../../../domains/second-brain/components/SecondBrainPaneSurface.vue'
 import AlterExplorationPaneSurface from '../../../domains/alters/components/AlterExplorationPaneSurface.vue'
 import AlterManagerView from '../../../domains/alters/components/AlterManagerView.vue'
+import FileInspectorPaneSurface from './FileInspectorPaneSurface.vue'
 import WorkspaceLaunchpad from './WorkspaceLaunchpad.vue'
 import type { PaneTab } from '../../composables/useMultiPaneWorkspaceState'
 import type { FileEditorStatus } from './EditorPaneTabs.vue'
@@ -26,6 +27,7 @@ const props = defineProps<{
   openDocumentPaths: string[]
   getStatus: (path: string) => FileEditorStatus
   openFile?: (path: string) => Promise<string>
+  readFileMetadata?: (path: string) => Promise<{ created_at_ms: number | null; updated_at_ms: number | null }>
   saveFile?: (path: string, text: string, options: { explicit: boolean }) => Promise<{ persisted: boolean }>
   readNoteSnapshot?: (path: string) => Promise<ReadNoteSnapshotResult>
   saveNoteBuffer?: (
@@ -185,6 +187,12 @@ defineExpose<EditorSurfaceExposed>({
     @properties="emit('properties', $event)"
     @pulse-open-second-brain="emit('pulse-open-second-brain', $event)"
     @external-reload="emit('external-reload', $event)"
+  />
+
+  <FileInspectorPaneSurface
+    v-else-if="activeTab?.type === 'file-inspector'"
+    :path="activeTab.path"
+    :read-file-metadata="readFileMetadata"
   />
 
   <WorkspaceLaunchpad

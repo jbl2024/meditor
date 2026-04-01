@@ -6,6 +6,7 @@ export type SurfaceType = 'document' | 'home' | 'cosmos' | 'second-brain-chat' |
 
 export type PaneTab =
   | { id: string; type: 'document'; path: string; pinned: boolean }
+  | { id: string; type: 'file-inspector'; path: string; pinned: boolean }
   | { id: string; type: 'home'; pinned: boolean }
   | { id: string; type: 'cosmos'; pinned: boolean }
   | { id: string; type: 'second-brain-chat'; pinned: boolean }
@@ -41,6 +42,10 @@ const MAX_PANES = 4
 
 function documentTabId(path: string): string {
   return `doc:${path}`
+}
+
+function fileInspectorTabId(path: string): string {
+  return `file-inspector:${path}`
 }
 
 function surfaceTabId(type: Exclude<SurfaceType, 'document'>): string {
@@ -149,7 +154,11 @@ function makeNextPaneId(existing: Set<string>): string {
 
 function documentPathForTabId(openTabs: PaneTab[], tabId: string): string {
   const active = openTabs.find((tab) => tab.id === tabId)
-  return active && active.type === 'document' ? active.path : ''
+  return active && (active.type === 'document' || active.type === 'file-inspector') ? active.path : ''
+}
+
+function hasTabPath(tab: PaneTab): tab is Extract<PaneTab, { path: string }> {
+  return 'path' in tab
 }
 
 export function hydrateLayout(payload: unknown): MultiPaneLayout | null {
@@ -164,6 +173,7 @@ export function hydrateLayout(payload: unknown): MultiPaneLayout | null {
   if (!paneIds.size || paneIds.size > MAX_PANES) return null
 
   const seenDocumentPaths = new Set<string>()
+  const seenInspectorPaths = new Set<string>()
   const seenSpecialSurfaces = new Set<string>()
   const panesById: Record<PaneId, PaneState> = {}
 
@@ -182,6 +192,13 @@ export function hydrateLayout(payload: unknown): MultiPaneLayout | null {
         if (!path || seenDocumentPaths.has(path)) continue
         seenDocumentPaths.add(path)
         openTabs.push({ id: documentTabId(path), type: 'document', path, pinned: Boolean(tab.pinned) })
+        continue
+      }
+      if (tab.type === 'file-inspector') {
+        const path = typeof tab.path === 'string' ? tab.path.trim() : ''
+        if (!path || seenInspectorPaths.has(path)) continue
+        seenInspectorPaths.add(path)
+        openTabs.push({ id: fileInspectorTabId(path), type: 'file-inspector', path, pinned: Boolean(tab.pinned) })
         continue
       }
       // Backward compatibility: hydrate legacy "second-brain-sessions" tabs as chat tabs.
@@ -253,7 +270,7 @@ export function useMultiPaneWorkspaceState(initial: MultiPaneLayout = createInit
 
   function getActiveDocumentPath(paneId: PaneId = layout.value.activePaneId): string {
     const tab = getActiveTab(paneId)
-    if (!tab || tab.type !== 'document') return ''
+    if (!tab || (tab.type !== 'document' && tab.type !== 'file-inspector')) return ''
     return tab.path
   }
 
@@ -291,15 +308,23 @@ export function useMultiPaneWorkspaceState(initial: MultiPaneLayout = createInit
     }
   }
 
-  function findPaneContainingDocument(path: string): PaneId | null {
+  function findPaneContainingPath(path: string, type?: PaneTab['type']): PaneId | null {
     const target = path.trim()
     if (!target) return null
     for (const pane of Object.values(layout.value.panesById)) {
-      if (pane.openTabs.some((tab) => tab.type === 'document' && tab.path === target)) {
+      if (pane.openTabs.some((tab) => hasTabPath(tab) && tab.path === target && (!type || tab.type === type))) {
         return pane.id
       }
     }
     return null
+  }
+
+  function findPaneContainingDocument(path: string): PaneId | null {
+    return findPaneContainingPath(path, 'document')
+  }
+
+  function findPaneContainingInspector(path: string): PaneId | null {
+    return findPaneContainingPath(path, 'file-inspector')
   }
 
   function findPaneContainingSurface(type: Exclude<SurfaceType, 'document'>): PaneId | null {
@@ -318,7 +343,7 @@ export function useMultiPaneWorkspaceState(initial: MultiPaneLayout = createInit
     const existingPaneId = findPaneContainingDocument(target)
     if (existingPaneId) {
       const existingPane = layout.value.panesById[existingPaneId]
-      const tab = existingPane.openTabs.find((item) => item.type === 'document' && item.path === target)
+      const tab = existingPane.openTabs.find((item) => hasTabPath(item) && item.type === 'document' && item.path === target)
       if (!tab) return
       setActiveTabInPane(existingPaneId, tab.id)
       return
@@ -348,6 +373,43 @@ export function useMultiPaneWorkspaceState(initial: MultiPaneLayout = createInit
     }
   }
 
+  function openInspectorInPane(path: string, paneId: PaneId = layout.value.activePaneId) {
+    const target = path.trim()
+    if (!target) return
+
+    const existingPaneId = findPaneContainingInspector(target)
+    if (existingPaneId) {
+      const existingPane = layout.value.panesById[existingPaneId]
+      const tab = existingPane.openTabs.find((item) => hasTabPath(item) && item.type === 'file-inspector' && item.path === target)
+      if (!tab) return
+      setActiveTabInPane(existingPaneId, tab.id)
+      return
+    }
+
+    const pane = layout.value.panesById[paneId]
+    if (!pane) return
+    const tab: PaneTab = {
+      id: fileInspectorTabId(target),
+      type: 'file-inspector',
+      path: target,
+      pinned: false
+    }
+
+    layout.value = {
+      ...layout.value,
+      panesById: {
+        ...layout.value.panesById,
+        [paneId]: {
+          ...pane,
+          openTabs: [...pane.openTabs, tab],
+          activeTabId: tab.id,
+          activePath: target
+        }
+      },
+      activePaneId: paneId
+    }
+  }
+
   function revealDocumentInPane(path: string, paneId: PaneId = layout.value.activePaneId) {
     const targetPath = path.trim()
     if (!targetPath) return
@@ -355,7 +417,7 @@ export function useMultiPaneWorkspaceState(initial: MultiPaneLayout = createInit
     const targetPane = layout.value.panesById[paneId]
     if (!targetPane) return
 
-    const existingInTarget = targetPane.openTabs.find((tab) => tab.type === 'document' && tab.path === targetPath)
+    const existingInTarget = targetPane.openTabs.find((tab) => hasTabPath(tab) && tab.type === 'document' && tab.path === targetPath)
     if (existingInTarget) {
       setActiveTabInPane(paneId, existingInTarget.id)
       return
@@ -370,7 +432,7 @@ export function useMultiPaneWorkspaceState(initial: MultiPaneLayout = createInit
     const sourcePane = layout.value.panesById[existingPaneId]
     if (!sourcePane) return
 
-    const sourceTab = sourcePane.openTabs.find((tab) => tab.type === 'document' && tab.path === targetPath)
+    const sourceTab = sourcePane.openTabs.find((tab) => hasTabPath(tab) && tab.type === 'document' && tab.path === targetPath)
     if (!sourceTab) return
 
     const nextSourceTabs = sourcePane.openTabs.filter((tab) => tab.id !== sourceTab.id)
@@ -475,7 +537,7 @@ export function useMultiPaneWorkspaceState(initial: MultiPaneLayout = createInit
           ...pane,
           openTabs: [active],
           activeTabId: active.id,
-          activePath: active.type === 'document' ? active.path : ''
+          activePath: active.type === 'document' || active.type === 'file-inspector' ? active.path : ''
         }
       },
       activePaneId: paneId
@@ -613,7 +675,13 @@ export function useMultiPaneWorkspaceState(initial: MultiPaneLayout = createInit
       if (sourceTab.type === 'document' && tab.type === 'document') {
         return tab.path === sourceTab.path
       }
-      return isSpecialSurface(sourceTab.type) && tab.type === sourceTab.type
+      if (sourceTab.type === 'file-inspector' && tab.type === 'file-inspector') {
+        return tab.path === sourceTab.path
+      }
+      return sourceTab.type !== 'document' &&
+        sourceTab.type !== 'file-inspector' &&
+        isSpecialSurface(sourceTab.type) &&
+        tab.type === sourceTab.type
     })
 
     const sourceTabs = source.openTabs.filter((tab) => tab.id !== sourceTab.id)
@@ -633,7 +701,9 @@ export function useMultiPaneWorkspaceState(initial: MultiPaneLayout = createInit
           [targetId]: {
             ...target,
             activeTabId: duplicateInTarget.id,
-            activePath: duplicateInTarget.type === 'document' ? duplicateInTarget.path : ''
+            activePath: duplicateInTarget.type === 'document' || duplicateInTarget.type === 'file-inspector'
+              ? duplicateInTarget.path
+              : ''
           }
         },
         activePaneId: targetId
@@ -655,7 +725,7 @@ export function useMultiPaneWorkspaceState(initial: MultiPaneLayout = createInit
           ...target,
           openTabs: [...target.openTabs, { ...sourceTab }],
           activeTabId: sourceTab.id,
-          activePath: sourceTab.type === 'document' ? sourceTab.path : ''
+          activePath: sourceTab.type === 'document' || sourceTab.type === 'file-inspector' ? sourceTab.path : ''
         }
       },
       activePaneId: targetId
@@ -673,16 +743,17 @@ export function useMultiPaneWorkspaceState(initial: MultiPaneLayout = createInit
     const to = toPath.trim()
     if (!from || !to || from === to) return
 
-    const targetPaneWithTo = findPaneContainingDocument(to)
+    const targetPaneWithTo = findPaneContainingPath(to)
     const renamedTabId = documentTabId(to)
 
     const nextPanes: Record<PaneId, PaneState> = {}
     for (const [paneId, pane] of Object.entries(layout.value.panesById)) {
       const activeTab = pane.openTabs.find((tab) => tab.id === pane.activeTabId) ?? null
-      const shouldRemapActiveTab = activeTab?.type === 'document' && activeTab.path === from
+      const shouldRemapActiveTab =
+        (activeTab?.type === 'document' || activeTab?.type === 'file-inspector') && activeTab.path === from
       const nextTabs: PaneTab[] = []
       for (const tab of pane.openTabs) {
-        if (tab.type !== 'document') {
+        if (tab.type !== 'document' && tab.type !== 'file-inspector') {
           nextTabs.push(tab)
           continue
         }
@@ -690,14 +761,18 @@ export function useMultiPaneWorkspaceState(initial: MultiPaneLayout = createInit
           if (targetPaneWithTo && targetPaneWithTo !== paneId) {
             continue
           }
-          nextTabs.push({ ...tab, path: to, id: documentTabId(to) })
+          nextTabs.push({
+            ...tab,
+            path: to,
+            id: tab.type === 'document' ? documentTabId(to) : fileInspectorTabId(to)
+          })
           continue
         }
         nextTabs.push(tab)
       }
 
       const resolvedActiveTabId = shouldRemapActiveTab
-        ? renamedTabId
+        ? (activeTab?.type === 'document' ? renamedTabId : fileInspectorTabId(to))
         : (nextTabs.some((tab) => tab.id === pane.activeTabId) ? pane.activeTabId : (nextTabs[0]?.id ?? ''))
       nextPanes[paneId] = {
         ...pane,
@@ -722,7 +797,7 @@ export function useMultiPaneWorkspaceState(initial: MultiPaneLayout = createInit
         ...single.panesById[single.activePaneId],
         openTabs: [{ ...activeTab }],
         activeTabId: activeTab.id,
-        activePath: activeTab.type === 'document' ? activeTab.path : ''
+        activePath: activeTab.type === 'document' || activeTab.type === 'file-inspector' ? activeTab.path : ''
       }
     }
 
@@ -743,6 +818,12 @@ export function useMultiPaneWorkspaceState(initial: MultiPaneLayout = createInit
           if (seenDocs.has(tab.path)) continue
           seenDocs.add(tab.path)
           mergedTabs.push({ ...tab, id: documentTabId(tab.path) })
+          continue
+        }
+        if (tab.type === 'file-inspector') {
+          if (seenDocs.has(`inspector:${tab.path}`)) continue
+          seenDocs.add(`inspector:${tab.path}`)
+          mergedTabs.push({ ...tab, id: fileInspectorTabId(tab.path) })
           continue
         }
         if (seenSurfaces.has(tab.type)) continue
@@ -775,32 +856,32 @@ export function useMultiPaneWorkspaceState(initial: MultiPaneLayout = createInit
     if (!target) return
     const pane = layout.value.panesById[paneId]
     if (!pane) return
-    const tab = pane.openTabs.find((item) => item.type === 'document' && item.path === target)
+    const tab = pane.openTabs.find((item) => hasTabPath(item) && item.path === target && (item.type === 'document' || item.type === 'file-inspector'))
     if (!tab) {
       const existingPaneId = findPaneContainingDocument(target)
-      if (existingPaneId) {
-        const existingPane = layout.value.panesById[existingPaneId]
-        const existingTab = existingPane.openTabs.find((item) => item.type === 'document' && item.path === target)
-        if (existingTab) setActiveTabInPane(existingPaneId, existingTab.id)
+      const existingInspectorPaneId = findPaneContainingInspector(target)
+      const matchingPaneId = existingPaneId ?? existingInspectorPaneId
+      if (matchingPaneId) {
+        const existingPane = layout.value.panesById[matchingPaneId]
+        const existingTab = existingPane.openTabs.find((item) => hasTabPath(item) && item.path === target && (item.type === 'document' || item.type === 'file-inspector'))
+        if (existingTab) setActiveTabInPane(matchingPaneId, existingTab.id)
       }
       return
     }
     setActiveTabInPane(paneId, tab.id)
   }
 
-  function findPaneContainingPath(path: string) {
-    return findPaneContainingDocument(path)
-  }
-
   return {
     layout,
     paneOrder,
     openDocumentInPane,
+    openInspectorInPane,
     revealDocumentInPane,
     openSurfaceInPane,
     setActivePane,
     setActiveTabInPane,
     findPaneContainingDocument,
+    findPaneContainingInspector,
     findPaneContainingSurface,
     closeTabInPane,
     closeOtherTabsInPane,

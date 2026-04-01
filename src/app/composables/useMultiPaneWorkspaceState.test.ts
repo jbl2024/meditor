@@ -25,6 +25,18 @@ describe('useMultiPaneWorkspaceState', () => {
     expect(store.layout.value.panesById['pane-2'].openTabs).toEqual([])
   })
 
+  it('keeps inspector tabs unique across panes', () => {
+    const store = useMultiPaneWorkspaceState()
+    store.openInspectorInPane('/vault/photo.png')
+    const pane2 = store.splitPane('pane-1', 'row')
+    expect(pane2).toBe('pane-2')
+
+    store.openInspectorInPane('/vault/photo.png', pane2!)
+
+    expect(store.layout.value.activePaneId).toBe('pane-1')
+    expect(store.layout.value.panesById['pane-2'].openTabs).toEqual([])
+  })
+
   it('keeps special surfaces unique across panes', () => {
     const store = useMultiPaneWorkspaceState()
     store.openSurfaceInPane('cosmos')
@@ -177,6 +189,19 @@ describe('useMultiPaneWorkspaceState', () => {
     expect(store.layout.value.panesById['pane-1'].openTabs.map((tab) => tab.id)).toEqual([
       'doc:/vault/a.md',
       'doc:/vault/b-renamed.md'
+    ])
+  })
+
+  it('renames inspector tabs in place', () => {
+    const store = useMultiPaneWorkspaceState()
+    store.openInspectorInPane('/vault/photo.png')
+
+    store.replacePath('/vault/photo.png', '/vault/photo-renamed.png')
+
+    expect(store.getActiveDocumentPath()).toBe('/vault/photo-renamed.png')
+    expect(store.layout.value.panesById['pane-1'].activeTabId).toBe('file-inspector:/vault/photo-renamed.png')
+    expect(store.layout.value.panesById['pane-1'].openTabs.map((tab) => tab.id)).toEqual([
+      'file-inspector:/vault/photo-renamed.png'
     ])
   })
 

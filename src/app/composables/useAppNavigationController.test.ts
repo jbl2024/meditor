@@ -39,7 +39,8 @@ function createController(options: { saveClearsDirty?: boolean } = {}) {
       activeFilePath,
       saveActiveDocument,
       focusEditor,
-      getDocumentStatus: () => ({ dirty: dirty.value, saveError: '' })
+      getDocumentStatus: () => ({ dirty: dirty.value, saveError: '' }),
+      isMarkdownPath: (path: string) => path.endsWith('.md') || path.endsWith('.markdown')
     },
     panePort: {
       getActiveTab: () => ({ type: activeTabType }),
@@ -50,10 +51,17 @@ function createController(options: { saveClearsDirty?: boolean } = {}) {
       openPathInPane: (path, paneId) => {
         opened.push({ path, paneId, reveal: false })
         activeFilePath.value = path
+        activeTabType = 'document'
+      },
+      openInspectorInPane: (path, paneId) => {
+        opened.push({ path, paneId, reveal: false })
+        activeFilePath.value = path
+        activeTabType = 'file-inspector'
       },
       revealDocumentInPane: (path, paneId) => {
         opened.push({ path, paneId, reveal: true })
         activeFilePath.value = path
+        activeTabType = 'document'
       },
       setActivePathInPane: (_paneId, path) => {
         activeFilePath.value = path
@@ -127,6 +135,16 @@ describe('useAppNavigationController', () => {
     expect(activeFilePath.value).toBe('/vault/b.md')
     expect(documentHistory.currentPath.value).toBe('/vault/b.md')
     expect(recordRecentNote).toHaveBeenCalledWith('/vault/b.md')
+  })
+
+  it('opens non-markdown files in inspector tabs without recording recent notes', async () => {
+    const { controller, opened, recordRecentNote } = createController()
+
+    const openedInspector = await controller.openTabWithAutosave('/vault/image.png')
+
+    expect(openedInspector).toBe(true)
+    expect(opened).toEqual([{ path: '/vault/image.png', paneId: undefined, reveal: false }])
+    expect(recordRecentNote).not.toHaveBeenCalled()
   })
 
   it('records a debounced cosmos history snapshot', () => {

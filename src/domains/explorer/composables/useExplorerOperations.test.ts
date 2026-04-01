@@ -10,6 +10,7 @@ const openPathExternal = vi.fn<(path: string) => Promise<void>>()
 const renameEntry = vi.fn<(path: string, newName: string, strategy: string) => Promise<string>>()
 const revealInFileManager = vi.fn<(path: string) => Promise<void>>()
 const trashEntry = vi.fn<(path: string) => Promise<string>>()
+const emitOpen = vi.fn<(path: string) => void>()
 
 vi.mock('../../../shared/api/workspaceApi', () => ({
   copyEntry: (sourcePath: string, targetDirPath: string, strategy: string) =>
@@ -57,6 +58,13 @@ function createOperations() {
     focusedPath,
     nodeByPath: ref<Record<string, TreeNode>>({
       '/vault/a.md': fileNode('/vault/a.md'),
+      '/vault/raw.bin': {
+        name: 'raw.bin',
+        path: '/vault/raw.bin',
+        is_dir: false,
+        is_markdown: false,
+        has_children: false
+      },
       '/vault/folder': dirNode('/vault/folder')
     }),
     selectionPaths: computed(() => selected.value),
@@ -69,7 +77,7 @@ function createOperations() {
     },
     emitSelection: emittedSelection,
     emitError: vi.fn(),
-    emitOpen: vi.fn(),
+    emitOpen,
     emitPathRenamed: vi.fn(),
     emitPathsMoved: emittedMoves,
     emitPathsDeleted: vi.fn(),
@@ -90,6 +98,7 @@ describe('useExplorerOperations', () => {
     renameEntry.mockReset()
     revealInFileManager.mockReset()
     trashEntry.mockReset()
+    emitOpen.mockReset()
   })
 
   it('renames a selected markdown file and updates selection', async () => {
@@ -153,5 +162,14 @@ describe('useExplorerOperations', () => {
       targetDir: '/vault'
     })
     expect(moveEntry).not.toHaveBeenCalled()
+  })
+
+  it('opens non-markdown files in-app instead of externally', async () => {
+    const { ops } = createOperations()
+
+    await ops.openNode('/vault/raw.bin')
+
+    expect(emitOpen).toHaveBeenCalledWith('/vault/raw.bin')
+    expect(openPathExternal).not.toHaveBeenCalled()
   })
 })

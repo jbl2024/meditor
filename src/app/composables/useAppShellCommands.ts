@@ -31,7 +31,11 @@ export type AppShellCommandsPanePort = {
   activePaneId: Readonly<Ref<string>>
   panesById: Readonly<Ref<Record<string, {
     activeTabId: string
-    openTabs: Array<{ id: string; type: 'document'; path: string } | { id: string; type: SurfaceType; pinned: boolean }>
+    openTabs: Array<
+      { id: string; type: 'document'; path: string } |
+      { id: string; type: 'file-inspector'; path: string } |
+      { id: string; type: SurfaceType; pinned: boolean }
+    >
   }>>>
   openSurfaceInPane: (type: SurfaceType) => void
   splitPane: (paneId: string, axis: PaneAxis) => string | null

@@ -16,6 +16,7 @@ import { clearEditorStatusForPaths, documentPathsForPane } from '../lib/appShell
  */
 type PaneTab =
   | { id: string; type: 'document'; path: string }
+  | { id: string; type: 'file-inspector'; path: string }
   | { id: string; type: 'home' | 'cosmos' | 'second-brain-chat' | 'alter-exploration' | 'alters'; pinned?: boolean }
 
 type PaneState = {

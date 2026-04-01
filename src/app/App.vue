@@ -1044,7 +1044,7 @@ const navigationWorkspacePort = {
   recordRecentNote
 }
 
-const navigationEditorPort = {
+  const navigationEditorPort = {
   activeFilePath,
   saveActiveDocument: async () => {
     await editorRef.value?.saveNow()
@@ -1052,7 +1052,8 @@ const navigationEditorPort = {
   focusEditor: () => {
     editorRef.value?.focusEditor()
   },
-  getDocumentStatus: (path: string) => editorState.getStatus(path)
+  getDocumentStatus: (path: string) => editorState.getStatus(path),
+  isMarkdownPath
 }
 
 const navigationPanePort = {
@@ -1062,6 +1063,7 @@ const navigationPanePort = {
   getPaneOrder: () => multiPane.paneOrder.value,
   getDocumentPathsForPane: (paneId: string) => documentPathsForPane(multiPane.layout.value.panesById, paneId),
   openPathInPane: (path: string, paneId?: string) => multiPane.openPathInPane(path, paneId),
+  openInspectorInPane: (path: string, paneId?: string) => multiPane.openInspectorInPane(path, paneId),
   revealDocumentInPane: (path: string, paneId?: string) => multiPane.revealDocumentInPane(path, paneId),
   setActivePathInPane: (paneId: string, path: string) => multiPane.setActivePathInPane(paneId, path),
   openSurfaceInPane: (type: 'home' | 'cosmos' | 'second-brain-chat' | 'alter-exploration' | 'alters', paneId?: string) => multiPane.openSurfaceInPane(type, paneId),
@@ -1145,6 +1147,7 @@ shellOpenFlow = useAppShellOpenFlow({
   },
   dataPort: {
     refreshActiveFileMetadata,
+    isMarkdownPath,
     loadWikilinkTargets,
     pathExists,
     readTextFile,
@@ -2162,6 +2165,7 @@ onBeforeUnmount(() => {
           ref="editorRef"
           :layout="multiPane.layout.value"
           :active-document-path="activeFilePath"
+          :read-file-metadata="readFileMetadata"
           :spellcheck-enabled="spellcheckEnabled"
           :get-status="editorState.getStatus"
           :readNoteSnapshot="readNoteSnapshot"
