@@ -686,11 +686,12 @@ body {{
   padding-left: 5rem;
   padding-right: 2rem;
   min-height: 100vh;
+  --pandoc-scale: 0.9;
   outline: none;
   word-wrap: break-word;
   white-space: pre-wrap;
   white-space: break-spaces;
-  font-size: 1rem;
+  font-size: calc(1rem * var(--pandoc-scale, 1));
   color: #16202d;
   line-height: 1.5;
 }}
@@ -698,7 +699,7 @@ body {{
   position: relative;
 }}
 .pandoc-preview p {{
-  font-size: 1rem;
+  font-size: calc(1rem * var(--pandoc-scale, 1));
   margin: 0.42rem 0;
 }}
 .pandoc-preview strong,
@@ -706,40 +707,40 @@ body {{
   font-weight: 600;
 }}
 .pandoc-preview h1 {{
-  font-size: 1.9rem;
+  font-size: calc(1.9rem * var(--pandoc-scale, 1));
   font-weight: 580;
   line-height: 1.35;
   margin: 0.68rem 0 0.45rem;
   color: #16202d;
 }}
 .pandoc-preview h2 {{
-  font-size: 1.6rem;
+  font-size: calc(1.6rem * var(--pandoc-scale, 1));
   line-height: 1.35;
   margin: 0.95rem 0 0.8rem;
   color: #16202d;
 }}
 .pandoc-preview h3 {{
-  font-size: 1.35rem;
+  font-size: calc(1.35rem * var(--pandoc-scale, 1));
   line-height: 1.35;
   margin: 0.75rem 0 0.45rem;
   color: #16202d;
 }}
 .pandoc-preview h4 {{
-  font-size: 1.18rem;
+  font-size: calc(1.18rem * var(--pandoc-scale, 1));
   font-weight: 560;
   line-height: 1.35;
   margin: 0.62rem 0 0.35rem;
   color: #16202d;
 }}
 .pandoc-preview h5 {{
-  font-size: 1.04rem;
+  font-size: calc(1.04rem * var(--pandoc-scale, 1));
   font-weight: 540;
   line-height: 1.35;
   margin: 0.5rem 0 0.28rem;
   color: #44576b;
 }}
 .pandoc-preview h6 {{
-  font-size: 0.94rem;
+  font-size: calc(0.94rem * var(--pandoc-scale, 1));
   font-weight: 520;
   line-height: 1.35;
   margin: 0.45rem 0 0.22rem;
@@ -770,7 +771,7 @@ body {{
   border-radius: 0.52rem;
   overflow: hidden;
   background: #ffffff;
-  font-size: 0.82rem;
+  font-size: calc(0.82rem * var(--pandoc-scale, 1));
   line-height: 1.3;
   table-layout: fixed;
 }}
