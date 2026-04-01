@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import type {
+  CreateExtractedNoteResult,
   ConflictStrategy,
   EntryKind,
   FileMetadata,
@@ -66,6 +67,14 @@ export async function createEntry(
   conflictStrategy: ConflictStrategy
 ): Promise<string> {
   return await invoke('create_entry', { parentPath, name, kind, conflictStrategy })
+}
+
+/** Creates a new markdown note from extracted selection content. */
+export async function createExtractedNote(
+  sourcePath: string,
+  content: string
+): Promise<CreateExtractedNoteResult> {
+  return await invoke('create_extracted_note', { sourcePath, content })
 }
 
 /** Renames a workspace file or folder. */

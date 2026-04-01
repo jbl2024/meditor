@@ -46,6 +46,11 @@ export type FileMetadata = {
   updated_at_ms: number | null
 }
 
+export type CreateExtractedNoteResult = {
+  path: string
+  link_target: string
+}
+
 export type ReadNoteSnapshotResult = {
   path: string
   content: string

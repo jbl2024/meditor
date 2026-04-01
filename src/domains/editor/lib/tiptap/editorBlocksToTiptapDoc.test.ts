@@ -107,6 +107,31 @@ describe('toTiptapDoc html block', () => {
   })
 })
 
+describe('toTiptapDoc embed block', () => {
+  it('maps embedded note blocks to noteEmbedBlock nodes', () => {
+    const doc = toTiptapDoc([
+      {
+        type: 'embed',
+        data: {
+          target: 'notes/alpha'
+        }
+      }
+    ])
+
+    expect(doc).toEqual({
+      type: 'doc',
+      content: [
+        {
+          type: 'noteEmbedBlock',
+          attrs: {
+            target: 'notes/alpha'
+          }
+        }
+      ]
+    })
+  })
+})
+
 describe('toTiptapDoc table metadata', () => {
   it('maps table align and widths metadata to table cell attrs', () => {
     const doc = toTiptapDoc([

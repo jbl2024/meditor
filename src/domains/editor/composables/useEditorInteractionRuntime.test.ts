@@ -106,14 +106,63 @@ vi.mock('./useEditorInputHandlers', () => ({
 
 import { useEditorInteractionRuntime } from './useEditorInteractionRuntime'
 
-function createEditorStub() {
+function createEditorStub(options?: {
+  from?: number
+  to?: number
+  openStart?: number
+  openEnd?: number
+  blocks?: unknown[]
+}) {
+  const replaceWith = vi.fn((from: number, to: number, node: unknown) => ({
+    scrollIntoView: vi.fn(() => ({ from, to, node }))
+  }))
   return {
     state: {
-      selection: { from: 1, to: 2, empty: false },
+      selection: {
+        from: options?.from ?? 1,
+        to: options?.to ?? 2,
+        empty: false,
+        $from: {
+          parentOffset: 0
+        },
+        $to: {
+          parentOffset: 5,
+          parent: {
+            content: {
+              size: 5
+            }
+          }
+        },
+        content: vi.fn(() => ({
+          openStart: options?.openStart ?? 0,
+          openEnd: options?.openEnd ?? 0,
+          content: {
+            toJSON: vi.fn(() => options?.blocks ?? [
+              {
+                type: 'paragraph',
+                content: [{ type: 'text', text: 'Alpha' }]
+              }
+            ])
+          }
+        }))
+      },
+      schema: {
+        nodes: {
+          noteEmbedBlock: {
+            create: vi.fn((attrs: { target?: string }) => ({ type: 'noteEmbedBlock', attrs }))
+          }
+        }
+      },
+      tr: {
+        replaceWith
+      },
       doc: {
         textBetween: vi.fn(() => 'Alpha'),
         descendants: vi.fn()
       }
+    },
+    view: {
+      dispatch: vi.fn()
     },
     getText: vi.fn(() => 'Alpha'),
     chain: vi.fn(() => ({
@@ -142,6 +191,8 @@ function createRuntimeHarness(input?: {
   document.body.appendChild(holder.value)
   const saveCurrentFile = vi.fn(async () => {})
   const openLinkTarget = vi.fn(async () => true)
+  const createExtractedNote = vi.fn(async () => ({ path: 'notes/extracted.md', link_target: 'notes/extracted' }))
+  const loadEmbeddedNotePreview = vi.fn(async () => null)
   const spellcheckEnabled = ref(false)
   const runtime = useEditorInteractionRuntime({
     interactionDocumentPort: {
@@ -191,7 +242,9 @@ function createRuntimeHarness(input?: {
       loadLinkTargets: async () => ['a.md'],
       loadLinkHeadings: async () => ['H1'],
       openLinkTarget,
-      openExternalUrl: vi.fn(async () => {})
+      openExternalUrl: vi.fn(async () => {}),
+      createExtractedNote,
+      loadEmbeddedNotePreview
     }
   })
 
@@ -200,7 +253,9 @@ function createRuntimeHarness(input?: {
     holder,
     activeEditor,
     saveCurrentFile,
-    openLinkTarget
+    openLinkTarget,
+    createExtractedNote,
+    loadEmbeddedNotePreview
   }
 }
 
@@ -248,6 +303,32 @@ describe('useEditorInteractionRuntime', () => {
 
     expect(harness.saveCurrentFile).not.toHaveBeenCalled()
     expect(harness.openLinkTarget).toHaveBeenCalledWith('b.md')
+  })
+
+  it('creates an extracted note and replaces the selection with an embed block', async () => {
+    const editor = createEditorStub({
+      from: 4,
+      to: 12,
+      blocks: [
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: 'Alpha' }]
+        }
+      ]
+    })
+    const harness = createRuntimeHarness({
+      currentPath: '/vault/source.md',
+      activeEditor: ref(editor as unknown as Editor) as Ref<Editor | null>
+    })
+
+    const result = await harness.runtime.extractSelectionToEmbeddedNote()
+
+    expect(result).toBe(true)
+    expect(harness.createExtractedNote).toHaveBeenCalledWith('/vault/source.md', 'Alpha')
+    expect((editor.state.schema.nodes.noteEmbedBlock.create as any)).toHaveBeenCalledWith({ target: 'notes/extracted' })
+    expect(editor.state.tr.replaceWith).toHaveBeenCalledWith(4, 12, { type: 'noteEmbedBlock', attrs: { target: 'notes/extracted' } })
+    expect(editor.view.dispatch).toHaveBeenCalled()
+    expect(harness.saveCurrentFile).toHaveBeenCalledWith(false)
   })
 
   it('tracks recent interaction time for caret capture gating', () => {

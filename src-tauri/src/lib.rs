@@ -37,9 +37,9 @@ use thiserror::Error;
 use docx::convert_markdown_to_docx;
 use editor_sync::{read_note_snapshot, save_note_buffer};
 use fs_ops::{
-    clear_working_folder, copy_entry, create_entry, duplicate_entry, list_children,
-    list_markdown_files, move_entry, open_external_url, open_path_external, path_exists,
-    read_file_metadata, read_text_file, rename_entry, reveal_in_file_manager,
+    clear_working_folder, copy_entry, create_entry, create_extracted_note, duplicate_entry,
+    list_children, list_markdown_files, move_entry, open_external_url, open_path_external,
+    path_exists, read_file_metadata, read_text_file, rename_entry, reveal_in_file_manager,
     select_working_folder, set_working_folder, trash_entry, write_text_file,
 };
 pub(crate) use index_schema::refresh_semantic_edges_cache_now_sync;
@@ -395,6 +395,7 @@ pub fn run() {
             read_note_snapshot,
             save_note_buffer,
             create_entry,
+            create_extracted_note,
             rename_entry,
             duplicate_entry,
             copy_entry,

@@ -10,9 +10,11 @@ import { useEditorWikilinkOverlayState } from './useEditorWikilinkOverlayState'
 import { useSlashMenu } from './useSlashMenu'
 import type { DocumentSession } from './useDocumentEditorSessions'
 import { EDITOR_SLASH_COMMANDS } from '../lib/editorSlashCommands'
+import { extractSelectedMarkdownBlocks } from '../lib/selectionExtraction'
 import { buildWikilinkCandidates } from '../lib/tiptap/wikilinkCandidates'
 import { sanitizeExternalHref } from '../lib/markdownBlocks'
 import { normalizeBlockId, normalizeHeadingAnchor, slugifyHeading } from '../lib/wikilinks'
+import { TIPTAP_NODE_TYPES } from '../lib/tiptap/types'
 import type { WikilinkCandidate } from '../lib/tiptap/plugins/wikilinkState'
 import type { MermaidPreviewPayload } from './useMermaidPreviewDialog'
 
@@ -73,6 +75,8 @@ export type EditorInteractionRuntimeIoPort = {
   loadLinkHeadings: (target: string) => Promise<string[]>
   openLinkTarget: (target: string) => Promise<boolean>
   openExternalUrl: (value: string) => Promise<void>
+  createExtractedNote: (sourcePath: string, content: string) => Promise<{ path: string; link_target: string }>
+  loadEmbeddedNotePreview: (target: string) => Promise<{ path: string; html: string } | null>
 }
 
 /** Editor-specific callbacks that interaction owns but does not persist itself. */
@@ -206,6 +210,43 @@ export function useEditorInteractionRuntime(options: UseEditorInteractionRuntime
   }
 
   /**
+   * Extracts the current selection into a new note and replaces it with an
+   * embedded note block in the active editor.
+   */
+  async function extractSelectionToEmbeddedNote() {
+    const editor = documentPort.activeEditor.value
+    const path = documentPort.currentPath.value
+    if (!editor || !path) {
+      console.warn('[editor] extract-note skipped: missing editor or path')
+      return false
+    }
+
+    const extracted = extractSelectedMarkdownBlocks(editor)
+    if (!extracted) {
+      console.warn('[editor] extract-note skipped: selection must cover full blocks')
+      return false
+    }
+
+    const { from, to } = editor.state.selection
+    try {
+      const created = await ioPort.createExtractedNote(path, extracted.markdown.trimEnd())
+      const nodeType = editor.state.schema.nodes[TIPTAP_NODE_TYPES.noteEmbed]
+      if (!nodeType) {
+        console.warn('[editor] extract-note skipped: note embed node is not registered')
+        return false
+      }
+
+      const embed = nodeType.create({ target: created.link_target })
+      editor.view.dispatch(editor.state.tr.replaceWith(from, to, embed).scrollIntoView())
+      await documentPort.saveCurrentFile(false)
+      return true
+    } catch (error) {
+      console.error('[editor] extract-note failed', error)
+      return false
+    }
+  }
+
+  /**
    * Refreshes spellcheck decorations for one mounted session editor.
    */
   function refreshSpellcheckForPath(path: string) {
@@ -229,6 +270,7 @@ export function useEditorInteractionRuntime(options: UseEditorInteractionRuntime
     openMermaidPreview: editorPort.openMermaidPreview,
     getWikilinkCandidates,
     openLinkTargetWithAutosave,
+    loadEmbeddedNotePreview: ioPort.loadEmbeddedNotePreview,
     revealAnchor: navigation.revealAnchor,
     resolveWikilinkTarget: wikilinkDataSource.resolveWikilinkTarget,
     sanitizeExternalHref,
@@ -353,6 +395,7 @@ export function useEditorInteractionRuntime(options: UseEditorInteractionRuntime
     onEditorContextMenu: editorInputAndNavigation.onEditorContextMenu,
     onEditorPaste: editorInputAndNavigation.onEditorPaste,
     openLinkTargetWithAutosave: editorInputAndNavigation.openLinkTargetWithAutosave,
+    extractSelectionToEmbeddedNote,
     getWikilinkCandidates: wikilinkFlow.getWikilinkCandidates,
     markEditorInteraction: slashAndInsertion.markEditorInteraction,
     resetWikilinkDataCache: wikilinkFlow.resetWikilinkDataCache,

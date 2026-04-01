@@ -20,6 +20,7 @@ function mountHarness(options?: {
   const onToggleMark = vi.fn<(mark: string) => void>()
   const onOpenLink = vi.fn()
   const onWrapWikilink = vi.fn()
+  const onExtractNote = vi.fn()
   const onCopyAs = vi.fn<(format: string) => void>()
   const onApplyLink = vi.fn()
   const onUnlink = vi.fn()
@@ -48,6 +49,7 @@ function mountHarness(options?: {
         onToggleMark,
         onOpenLink,
         onWrapWikilink,
+        onExtractNote,
         onCopyAs,
         onApplyLink,
         onUnlink,
@@ -66,6 +68,7 @@ function mountHarness(options?: {
     onToggleMark,
     onOpenLink,
     onWrapWikilink,
+    onExtractNote,
     onCopyAs,
     onApplyLink,
     onUnlink,
@@ -98,10 +101,12 @@ describe('EditorInlineFormatToolbar', () => {
 
     ;(harness.root.querySelector('[data-action="bold"]') as HTMLButtonElement).click()
     ;(harness.root.querySelector('[data-action="wikilink"]') as HTMLButtonElement).click()
+    ;(harness.root.querySelector('[data-action="extract-note"]') as HTMLButtonElement).click()
     ;(harness.root.querySelector('[data-action="link"]') as HTMLButtonElement).click()
 
     expect(harness.onToggleMark).toHaveBeenCalledWith('bold')
     expect(harness.onWrapWikilink).toHaveBeenCalledTimes(1)
+    expect(harness.onExtractNote).toHaveBeenCalledTimes(1)
     expect(harness.onOpenLink).toHaveBeenCalledTimes(1)
 
     harness.app.unmount()

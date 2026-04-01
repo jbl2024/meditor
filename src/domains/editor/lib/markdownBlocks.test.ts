@@ -99,6 +99,35 @@ describe('inline internal markdown links', () => {
   })
 })
 
+describe('embed markdown blocks', () => {
+  it('parses embedded note syntax as a dedicated block', () => {
+    const parsed = markdownToEditorData('![[notes/alpha]]')
+    expect(parsed.blocks).toEqual([
+      {
+        type: 'embed',
+        data: {
+          target: 'notes/alpha'
+        }
+      }
+    ])
+  })
+
+  it('serializes embedded note blocks back to markdown', () => {
+    expect(
+      editorDataToMarkdown({
+        blocks: [
+          {
+            type: 'embed',
+            data: {
+              target: 'notes/alpha'
+            }
+          }
+        ]
+      })
+    ).toBe('![[notes/alpha]]\n')
+  })
+})
+
 describe('markdownToEditorData tables', () => {
   it('parses column alignment markers from separator row', () => {
     const markdown = `

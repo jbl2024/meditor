@@ -237,6 +237,15 @@ function blockToNode(block: EditorBlock): TiptapNode | null {
       }
     }
 
+    case 'embed': {
+      return {
+        type: TIPTAP_NODE_TYPES.noteEmbed,
+        attrs: {
+          target: String(data.target ?? '')
+        }
+      }
+    }
+
     case 'code': {
       return {
         type: 'codeBlock',

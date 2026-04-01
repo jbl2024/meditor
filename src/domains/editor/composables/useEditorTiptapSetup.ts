@@ -12,6 +12,7 @@ import { MermaidNode } from '../lib/tiptap/extensions/MermaidNode'
 import { QuoteNode } from '../lib/tiptap/extensions/QuoteNode'
 import { HtmlNode } from '../lib/tiptap/extensions/HtmlNode'
 import { WikilinkNode } from '../lib/tiptap/extensions/WikilinkNode'
+import { NoteEmbedNode } from '../lib/tiptap/extensions/NoteEmbedNode'
 import { CodeBlockNode } from '../lib/tiptap/extensions/CodeBlockNode'
 import { TableCellAlign } from '../lib/tiptap/extensions/TableCellAlign'
 import { EditorFindExtension } from '../lib/tiptap/extensions/EditorFind'
@@ -52,6 +53,7 @@ export type UseEditorTiptapSetupOptions = {
   openMermaidPreview: (payload: MermaidPreviewPayload) => void
   getWikilinkCandidates: (query: string) => Promise<WikilinkCandidate[]>
   openLinkTargetWithAutosave: (target: string) => Promise<void>
+  loadEmbeddedNotePreview: (target: string) => Promise<{ path: string; html: string } | null>
   revealAnchor: (anchor: RevealAnchorRequest) => Promise<boolean>
   resolveWikilinkTarget: (target: string) => Promise<boolean>
   sanitizeExternalHref: (value: string) => string | null
@@ -262,6 +264,9 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
         }),
         QuoteNode,
         HtmlNode,
+        NoteEmbedNode.configure({
+          loadEmbeddedNotePreview: options.loadEmbeddedNotePreview
+        }),
         CodeBlockNode,
         SpellcheckExtension.configure({
           getLanguage: () => options.getSpellcheckLanguage(path),

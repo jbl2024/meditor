@@ -28,6 +28,7 @@ Non-goal:
 - save/autosave flow
 - frontmatter properties
 - interaction features (slash menu, wikilinks, shortcuts)
+- selection extraction into linked notes with inline embed preview
 - UI overlays/dialogs
 
 Keeping all of this directly in one component would be hard to read and hard to test. The architecture therefore separates:
@@ -110,6 +111,24 @@ External boundaries:
    -> refresh outline (debounced)
 ```
 
+### 5.4 Extract-and-Embed Flow
+
+```text
+[inline toolbar action]
+   -> runtime validates the selection spans whole blocks
+   -> backend creates a new markdown note in the same folder
+   -> source selection is replaced with ![[target]]
+   -> embedded note node renders a sanitized preview inline
+   -> source note is saved through the normal editor persistence path
+```
+
+V1 keeps this flow deliberately narrow:
+
+- block-complete selections only
+- same-folder note creation
+- no automatic backlink insertion
+- no separate command palette entry
+
 ### 5.3 Save Flow
 
 ```text
@@ -160,6 +179,8 @@ External boundaries:
 - Why: interaction rules are dense and hard to maintain inline.
 - How: pure handler composition with injected editor and feature callbacks.
 
+Selection extraction now also belongs here because it combines the current editor selection, the filesystem note-creation command, and the follow-up replacement transaction into one user-facing operation.
+
 ### `useWikilinkBehavior`
 
 - What: wikilink menu state and link-open behavior.
@@ -177,6 +198,8 @@ External boundaries:
 - What: node-level operations around current selection/caret.
 - Why: node mutations should be reusable by multiple interactions.
 - How: provides replacement/insertion/focus utilities over current Tiptap/ProseMirror state.
+
+The note-embed block is registered through Tiptap setup so the body can display `![[...]]` previews inline without special casing in the shell.
 
 ### `useEditorOutlineNavigation`
 

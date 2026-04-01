@@ -26,6 +26,7 @@ const TASK_LIST_RE = /^\s*[-*+]\s+\[([ xX])\]\s*(.*)$/
 const HR_RE = /^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/
 const FENCE_START_RE = /^```\s*([^`]*)$/
 const CALLOUT_MARKER_RE = /^\[!([A-Za-z0-9_-]+)\]\s*(.*)$/
+const EMBED_BLOCK_RE = /^!\[\[([^\]\n]+)\]\]$/
 const HTML_OPEN_TAG_START_RE = /^\s*<([A-Za-z][\w:-]*)(?:\s[^>]*)?>/
 const HTML_CLOSE_TAG_START_RE = /^\s*<\/([A-Za-z][\w:-]*)\s*>/
 const HTML_COMMENT_RE = /^\s*<!--[\s\S]*?-->\s*$/
@@ -1142,6 +1143,16 @@ export function markdownToEditorData(markdown: string): EditorDocument {
       }
     }
 
+    const embedMatch = line.match(EMBED_BLOCK_RE)
+    if (embedMatch) {
+      const target = (embedMatch[1] ?? '').trim()
+      if (target) {
+        blocks.push({ type: 'embed', data: { target } })
+        i += 1
+        continue
+      }
+    }
+
     if (isRawFallbackStart(line)) {
       const rawLines: string[] = []
       while (i < lines.length && lines[i].trim()) {
@@ -1332,6 +1343,11 @@ function blockToMarkdown(block: EditorBlock): string {
 
     case 'html':
       return normalizeMultiline(String(block.data?.html ?? ''))
+
+    case 'embed': {
+      const target = normalizeMultiline(String(block.data?.target ?? ''))
+      return target ? `![[${target}]]` : ''
+    }
 
     case 'raw':
       return normalizeMultiline(String(block.data?.markdown ?? ''))

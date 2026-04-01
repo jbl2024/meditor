@@ -249,6 +249,14 @@ function nodeToBlock(node: JSONContent): EditorBlock | null {
         }
       }
 
+    case TIPTAP_NODE_TYPES.noteEmbed:
+      return {
+        type: 'embed',
+        data: {
+          target: String(node.attrs?.target ?? '')
+        }
+      }
+
     default:
       return null
   }

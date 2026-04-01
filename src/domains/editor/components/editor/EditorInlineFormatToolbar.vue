@@ -32,6 +32,7 @@ const emit = defineEmits<{
   'toggle-mark': [mark: InlineFormatMark]
   'open-link': []
   'wrap-wikilink': []
+  'extract-note': []
   'copy-as': [format: 'markdown' | 'html' | 'plain']
   'open-pulse': []
   'apply-link': []
@@ -150,6 +151,17 @@ function onCopyAs(format: 'markdown' | 'html' | 'plain') {
       @click="emit('wrap-wikilink')"
     >
       [[ ]]
+    </button>
+    <button
+      type="button"
+      class="inline-format-toolbar-btn inline-flex items-center justify-center rounded-md px-2 py-1 text-xs transition-all duration-150 active:translate-y-px active:scale-[0.98]"
+      data-action="extract-note"
+      aria-label="Extract selection into note"
+      title="Extract selection into note"
+      @mousedown.prevent
+      @click="emit('extract-note')"
+    >
+      Note
     </button>
     <button
       type="button"

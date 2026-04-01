@@ -25,6 +25,7 @@ function createSetup(overrides: Partial<Parameters<typeof useEditorTiptapSetup>[
     openMermaidPreview: vi.fn(),
     getWikilinkCandidates: vi.fn(async () => [{ target: 'a.md', exists: true }]),
     openLinkTargetWithAutosave: vi.fn(async () => {}),
+    loadEmbeddedNotePreview: vi.fn(async () => null),
     revealAnchor: vi.fn(async () => true),
     resolveWikilinkTarget: vi.fn(async () => true),
     sanitizeExternalHref: (v) => v,

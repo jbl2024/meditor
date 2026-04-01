@@ -12,8 +12,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::editor_sync::record_workspace_mutation_write_from_disk;
 use crate::{
-    active_workspace_root, clear_active_workspace, set_active_workspace, workspace_watch, AppError,
-    Result,
+    active_workspace_root, clear_active_workspace, note_link_target, set_active_workspace,
+    workspace_watch, AppError, Result,
 };
 
 const TRASH_DIR_NAME: &str = ".tomosona-trash";
@@ -52,6 +52,12 @@ pub enum ConflictStrategy {
 pub enum EntryKind {
     File,
     Folder,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ExtractedNoteResult {
+    pub path: String,
+    pub link_target: String,
 }
 
 fn is_markdown_file(path: &Path) -> bool {
@@ -282,6 +288,80 @@ fn validate_name(name: &str) -> Result<String> {
     }
 
     Ok(trimmed.to_string())
+}
+
+fn sanitize_extracted_note_stem(value: &str) -> String {
+    let cleaned: String = value
+        .chars()
+        .map(|ch| {
+            if matches!(
+                ch,
+                '/' | '\\' | ':' | '"' | '|' | '?' | '*' | '<' | '>' | '#' | '[' | ']' | '!'
+            ) || ch.is_control()
+            {
+                ' '
+            } else {
+                ch
+            }
+        })
+        .collect();
+    let compact = cleaned.split_whitespace().collect::<Vec<_>>().join(" ");
+    let trimmed = compact.trim().trim_matches('.');
+    if trimmed.is_empty() {
+        "Extrait".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn strip_known_block_prefix(line: &str) -> &str {
+    let trimmed = line.trim();
+    if let Some(rest) = trimmed.strip_prefix('#') {
+        let heading = rest.trim_start_matches('#').trim();
+        if !heading.is_empty() {
+            return heading;
+        }
+    }
+
+    if let Some(rest) = trimmed.strip_prefix("> ") {
+        let quote = rest.trim();
+        if !quote.is_empty() {
+            return quote;
+        }
+    }
+
+    for prefix in ["- [ ] ", "- [x] ", "- [X] ", "- ", "* ", "+ "] {
+        if let Some(rest) = trimmed.strip_prefix(prefix) {
+            let item = rest.trim();
+            if !item.is_empty() {
+                return item;
+            }
+        }
+    }
+
+    if let Some((leading, rest)) = trimmed.split_once(". ") {
+        if !leading.is_empty() && leading.chars().all(|ch| ch.is_ascii_digit()) {
+            let item = rest.trim();
+            if !item.is_empty() {
+                return item;
+            }
+        }
+    }
+
+    trimmed
+}
+
+fn derive_extracted_note_stem(content: &str) -> String {
+    for line in content.replace("\r\n", "\n").lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let candidate = strip_known_block_prefix(trimmed);
+        return sanitize_extracted_note_stem(candidate);
+    }
+
+    "Extrait".to_string()
 }
 
 fn split_name_and_extension(file_name: &str, is_dir: bool) -> (String, String) {
@@ -604,6 +684,52 @@ pub fn create_entry(
 }
 
 #[tauri::command]
+pub fn create_extracted_note(source_path: String, content: String) -> Result<ExtractedNoteResult> {
+    let root = active_workspace_root()?;
+    let source = normalize_existing_path(&source_path)?;
+    ensure_within_root(&root, &source)?;
+
+    if !is_markdown_file(&source) {
+        return Err(AppError::InvalidOperation(
+            "Only markdown notes can be extracted into a linked note.".to_string(),
+        ));
+    }
+
+    let note_content = content.replace("\r\n", "\n");
+    if note_content.trim().is_empty() {
+        return Err(AppError::InvalidOperation(
+            "Selection is empty.".to_string(),
+        ));
+    }
+
+    let Some(parent) = source.parent() else {
+        return Err(AppError::InvalidPath);
+    };
+
+    let base_name = format!("{}.md", derive_extracted_note_stem(&note_content));
+    let created_path = create_entry(
+        parent.to_string_lossy().to_string(),
+        base_name,
+        EntryKind::File,
+        ConflictStrategy::Rename,
+    )?;
+    let created = PathBuf::from(&created_path);
+
+    if let Err(error) = fs::write(&created, &note_content) {
+        let _ = fs::remove_file(&created);
+        return Err(AppError::Io(error));
+    }
+
+    let created = fs::canonicalize(&created)?;
+    record_workspace_mutation_write_from_disk(&created);
+    let link_target = note_link_target(&root, &created)?;
+    Ok(ExtractedNoteResult {
+        path: created.to_string_lossy().to_string(),
+        link_target,
+    })
+}
+
+#[tauri::command]
 pub fn rename_entry(
     path: String,
     new_name: String,
@@ -869,9 +995,10 @@ mod tests {
     use crate::editor_sync::recent_internal_write_for;
 
     use super::{
-        copy_entry, create_entry, duplicate_entry, list_children, list_markdown_files, move_entry,
-        open_external_url, open_path_external, read_text_file, rename_entry,
-        reveal_in_file_manager, sanitize_external_url, trash_entry, ConflictStrategy, EntryKind,
+        copy_entry, create_entry, create_extracted_note, duplicate_entry, list_children,
+        list_markdown_files, move_entry, open_external_url, open_path_external, read_text_file,
+        rename_entry, reveal_in_file_manager, sanitize_external_url, trash_entry, ConflictStrategy,
+        EntryKind,
     };
 
     fn make_temp_dir() -> PathBuf {
@@ -1127,6 +1254,61 @@ mod tests {
             EntryKind::File,
             ConflictStrategy::Fail,
         );
+
+        assert!(result.is_err());
+        fs::remove_dir_all(dir).expect("cleanup");
+    }
+
+    #[test]
+    fn create_extracted_note_writes_content_next_to_source() {
+        let dir = make_temp_dir();
+        let _guard = activate_workspace(&dir);
+        let source = dir.join("source.md");
+        fs::write(&source, "source").expect("write source");
+
+        let created = create_extracted_note(
+            source.to_string_lossy().to_string(),
+            "## Heading\n\nAlpha".to_string(),
+        )
+        .expect("create extracted note");
+
+        assert_eq!(created.link_target, "Heading");
+        let created_path = PathBuf::from(created.path);
+        let created_path_string = created_path.to_string_lossy().to_string();
+        let canonical_dir = fs::canonicalize(&dir).expect("canonicalize dir");
+        assert_eq!(created_path.parent(), Some(canonical_dir.as_path()));
+        assert_eq!(
+            read_text_file(created_path_string.clone()).expect("read created"),
+            "## Heading\n\nAlpha"
+        );
+        assert!(recent_internal_write_for(&created_path_string).is_some());
+        fs::remove_dir_all(dir).expect("cleanup");
+    }
+
+    #[test]
+    fn create_extracted_note_renames_on_conflict() {
+        let dir = make_temp_dir();
+        let _guard = activate_workspace(&dir);
+        let source = dir.join("source.md");
+        fs::write(&source, "source").expect("write source");
+        fs::write(dir.join("Alpha.md"), "existing").expect("write existing");
+
+        let created = create_extracted_note(source.to_string_lossy().to_string(), "Alpha".to_string())
+            .expect("create extracted note");
+
+        assert!(created.path.ends_with("Alpha (1).md"));
+        assert_eq!(created.link_target, "Alpha (1)");
+        fs::remove_dir_all(dir).expect("cleanup");
+    }
+
+    #[test]
+    fn create_extracted_note_rejects_non_markdown_sources() {
+        let dir = make_temp_dir();
+        let _guard = activate_workspace(&dir);
+        let source = dir.join("source.txt");
+        fs::write(&source, "source").expect("write source");
+
+        let result = create_extracted_note(source.to_string_lossy().to_string(), "Alpha".to_string());
 
         assert!(result.is_err());
         fs::remove_dir_all(dir).expect("cleanup");
