@@ -471,7 +471,7 @@ fn render_block<'a>(
             );
         }
         NodeValue::List(list) => {
-            render_list(node, doc, template, ctx, list.list_type, list.start);
+            render_list(node, doc, template, ctx, list.list_type);
         }
         NodeValue::Table(table) => {
             render_table(node, table, doc, template);
@@ -621,9 +621,7 @@ fn render_list<'a>(
     template: &TemplateStyle,
     ctx: RenderContext,
     list_type: ListType,
-    start: usize,
 ) {
-    let mut ordinal = start;
     for item in node.children() {
         let item_value = item.data.borrow().value.clone();
         let (is_task_item, task_prefix) = match item_value {
@@ -641,7 +639,6 @@ fn render_list<'a>(
             list_depth: ctx.list_depth + 1,
             callout: ctx.callout,
         };
-        let item_prefix = template.list_prefix(list_type, item_ctx.list_depth, ordinal);
         let base_style = if ctx.callout.is_some() {
             let mut style = template.body().run.clone();
             style.color = Some(CALLOUT_BODY_TEXT.to_string());
@@ -651,11 +648,6 @@ fn render_list<'a>(
         } else {
             template.list().run.clone()
         };
-        let item_prefix = if let Some(task_prefix) = task_prefix {
-            format!("{item_prefix}{task_prefix}")
-        } else {
-            item_prefix
-        };
         let mut rendered_primary_paragraph = false;
 
         for child in item.children() {
@@ -664,18 +656,19 @@ fn render_list<'a>(
                     let mut segments =
                         build_inline_segments(child, base_style.clone(), template, item_ctx);
                     if !rendered_primary_paragraph {
-                        if let Some(first) = segments.first_mut() {
-                            first.text = format!("{item_prefix}{}", first.text);
-                        } else {
-                            segments.push(RunSegment {
-                                text: item_prefix.clone(),
-                                style: base_style.clone(),
-                            });
+                        if let Some(task_prefix) = task_prefix {
+                            segments.insert(
+                                0,
+                                RunSegment {
+                                    text: task_prefix.to_string(),
+                                    style: base_style.clone(),
+                                },
+                            );
                         }
-                        append_list_paragraph(doc, segments, template);
+                        append_list_paragraph(doc, segments, template, list_type, item_ctx.list_depth);
                         rendered_primary_paragraph = true;
                     } else {
-                        append_list_paragraph(doc, segments, template);
+                        append_list_paragraph(doc, segments, template, list_type, item_ctx.list_depth);
                     }
                 }
                 NodeValue::Item(_) | NodeValue::TaskItem(_) | NodeValue::List(_) => {
@@ -688,18 +681,14 @@ fn render_list<'a>(
         }
 
         if !rendered_primary_paragraph {
-            append_list_paragraph(
-                doc,
-                vec![RunSegment {
-                    text: item_prefix,
+            let mut segments = Vec::new();
+            if let Some(task_prefix) = task_prefix {
+                segments.push(RunSegment {
+                    text: task_prefix.to_string(),
                     style: base_style,
-                }],
-                template,
-            );
-        }
-
-        if matches!(list_type, ListType::Ordered) {
-            ordinal += 1;
+                });
+            }
+            append_list_paragraph(doc, segments, template, list_type, item_ctx.list_depth);
         }
     }
 }
@@ -1433,8 +1422,17 @@ fn append_paragraph(
     append_segments_to_paragraph(&mut paragraph, segments, template, false, true);
 }
 
-fn append_list_paragraph(doc: &mut Document, segments: Vec<RunSegment>, template: &TemplateStyle) {
-    let mut paragraph = doc.add_paragraph("");
+fn append_list_paragraph(
+    doc: &mut Document,
+    segments: Vec<RunSegment>,
+    template: &TemplateStyle,
+    list_type: ListType,
+    level: usize,
+) {
+    let mut paragraph = match list_type {
+        ListType::Bullet => doc.add_bullet_list_item("", level.saturating_sub(1) as u32),
+        ListType::Ordered => doc.add_numbered_list_item("", level.saturating_sub(1) as u32),
+    };
     if let Some(style_id) = template.list().style_id.as_deref() {
         paragraph = paragraph.style(style_id);
     }
@@ -1838,6 +1836,10 @@ mod tests {
         xml
     }
 
+    fn count_occurrences(text: &str, needle: &str) -> usize {
+        text.match_indices(needle).count()
+    }
+
     fn extract_row_widths(row_xml: &str) -> Vec<Option<i32>> {
         let mut widths = Vec::new();
         let mut remainder = row_xml;
@@ -1979,9 +1981,18 @@ mod tests {
         assert!(joined.contains("italic"));
         assert!(joined.contains("code"));
         assert!(joined.contains("Quote"));
-        assert!(joined.contains("• One") || joined.contains("•  One"));
-        assert!(joined.contains("1. First"));
+        assert!(joined.contains("One"));
+        assert!(joined.contains("Two"));
+        assert!(joined.contains("First"));
+        assert!(joined.contains("Second"));
+        assert!(!joined.contains("• One"));
+        assert!(!joined.contains("1. First"));
         assert!(!joined.contains("| A | B |"));
+
+        let document_xml = read_docx_entry_text(Path::new(&output), "word/document.xml");
+        assert!(document_xml.contains("<w:numPr>"));
+        assert!(document_xml.contains(r#"<w:numId w:val=""#));
+        assert!(count_occurrences(&document_xml, "<w:numPr>") >= 4);
 
         let (row_count, column_count, cells, headers, shadings, alignments) =
             read_docx_table(Path::new(&output));
@@ -2464,6 +2475,10 @@ mod tests {
         assert!(joined.contains("[ ] Draft plan"));
         assert!(joined.contains("[x] Review plan"));
         assert!(joined.contains("[ ] Ship it"));
+
+        let document_xml = read_docx_entry_text(Path::new(&output), "word/document.xml");
+        assert!(document_xml.contains("<w:numPr>"));
+        assert!(count_occurrences(&document_xml, "<w:numPr>") >= 3);
     }
 
     #[test]
@@ -2484,6 +2499,10 @@ mod tests {
         assert!(joined.contains("[ ] Parent"));
         assert!(joined.contains("[x] Child"));
         assert!(joined.contains("[ ] Child two"));
+
+        let document_xml = read_docx_entry_text(Path::new(&output), "word/document.xml");
+        assert!(document_xml.contains("<w:numPr>"));
+        assert!(count_occurrences(&document_xml, "<w:numPr>") >= 3);
     }
 
     #[test]

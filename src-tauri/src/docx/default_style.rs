@@ -290,38 +290,11 @@ impl TemplateStyle {
     pub(crate) fn list(&self) -> &BlockStyle {
         &self.list
     }
-
-    pub(crate) fn list_prefix(
-        &self,
-        list_type: comrak::nodes::ListType,
-        depth: usize,
-        ordinal: usize,
-    ) -> String {
-        let indent = "  ".repeat(depth.saturating_sub(1));
-        match list_type {
-            comrak::nodes::ListType::Bullet => {
-                let bullet = match depth {
-                    0 | 1 => '•',
-                    _ => '◦',
-                };
-                format!("{indent}{bullet} ")
-            }
-            comrak::nodes::ListType::Ordered => {
-                let marker = if ordinal == 0 {
-                    "1.".to_string()
-                } else {
-                    format!("{ordinal}.")
-                };
-                format!("{indent}{marker} ")
-            }
-        }
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use comrak::nodes::ListType;
 
     #[test]
     fn default_template_style_matches_current_fallbacks() {
@@ -369,9 +342,6 @@ mod tests {
         assert_eq!(style.list.paragraph.space_after, Some(4.0));
         assert_eq!(style.list.style_id.as_deref(), Some("ListParagraph"));
 
-        assert_eq!(style.list_prefix(ListType::Bullet, 1, 0), "• ");
-        assert_eq!(style.list_prefix(ListType::Bullet, 2, 0), "  ◦ ");
-        assert_eq!(style.list_prefix(ListType::Ordered, 1, 3), "3. ");
     }
 
     #[test]
