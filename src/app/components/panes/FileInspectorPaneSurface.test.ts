@@ -107,7 +107,7 @@ describe('FileInspectorPaneSurface', () => {
     expect(iframe?.getAttribute('srcdoc')).toContain('font-size: calc(var(--editor-font-size-base, 1rem) * 0.92);')
     expect(iframe?.getAttribute('srcdoc')).toContain('padding-left: 5.5rem;')
     expect(iframe?.getAttribute('srcdoc')).toContain('#title-block-header')
-    expect(iframe?.getAttribute('srcdoc')).toContain('margin: 0 0 0.6rem;')
+    expect(iframe?.getAttribute('srcdoc')).toContain('display: none;')
     expect(iframe?.getAttribute('srcdoc')).toContain('event.metaKey || event.ctrlKey')
     expect(iframe?.getAttribute('sandbox')).toBe('allow-scripts')
     expect(hoisted.renderPandocPreviewHtml).toHaveBeenCalledWith('/vault/assets/report.docx')

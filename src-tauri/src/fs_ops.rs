@@ -940,13 +940,6 @@ fn render_pandoc_preview_html_sync(path: String) -> Result<String> {
         .arg("--self-contained")
         .arg("--wrap")
         .arg("none")
-        .arg("--metadata")
-        .arg(format!(
-            "title={}",
-            pb.file_name()
-                .and_then(|value| value.to_str())
-                .unwrap_or("Preview")
-        ))
         .arg(&pb)
         .output()
         .map_err(|err| {
@@ -970,12 +963,7 @@ fn render_pandoc_preview_html_sync(path: String) -> Result<String> {
     }
 
     let html = String::from_utf8(output.stdout).map_err(|_| AppError::OperationFailed)?;
-    let decorated = decorate_pandoc_html(
-        html,
-        pb.file_name()
-            .and_then(|value| value.to_str())
-            .unwrap_or("Preview"),
-    );
+    let decorated = decorate_pandoc_html(html, "Preview");
     log_fs_perf(
         "render_pandoc_preview_html",
         &pb,

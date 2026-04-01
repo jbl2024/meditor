@@ -161,15 +161,9 @@ body {
 .pandoc-preview > :first-child {
   margin-top: 0 !important;
 }
-.pandoc-preview #title-block-header {
-  margin: 0 0 0.6rem;
-  padding: 0;
-}
-.pandoc-preview .title {
-  margin: 0;
-}
-.pandoc-preview #title-block-header > :last-child {
-  margin-bottom: 0;
+.pandoc-preview #title-block-header,
+.pandoc-preview h1.title {
+  display: none;
 }
 .pandoc-preview p {
   font-size: calc(var(--editor-font-size-base, 1rem) * 0.92);
