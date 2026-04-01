@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowTopRightOnSquareIcon } from '@heroicons/vue/24/outline'
+import { ArrowTopRightOnSquareIcon, DocumentIcon } from '@heroicons/vue/24/outline'
 import { computed, ref, watch } from 'vue'
 import { readPdfDataUrl } from '../../../shared/api/workspaceApi'
 import UiButton from '../../../shared/components/ui/UiButton.vue'
@@ -21,6 +21,7 @@ const fileExtension = computed(() => {
 })
 
 const isPdfPreview = computed(() => fileExtension.value === 'pdf')
+const placeholderExtension = computed(() => (fileExtension.value || 'file').toUpperCase())
 const pdfPreviewSrc = ref('')
 const pdfPreviewLoading = ref(false)
 const pdfPreviewError = ref('')
@@ -86,7 +87,17 @@ watch(
         :title="`Preview for ${fileName}`"
       />
       <div v-else class="file-inspector-preview-stage">
-        <div class="file-inspector-preview-emblem">{{ fileExtension || 'file' }}</div>
+        <div class="file-inspector-preview-stage-bg" aria-hidden="true"></div>
+        <div class="file-inspector-preview-empty-state">
+          <div class="file-inspector-preview-empty-mark" aria-hidden="true">
+            <DocumentIcon class="file-inspector-preview-empty-icon" />
+            <span>{{ placeholderExtension }}</span>
+          </div>
+          <div class="file-inspector-preview-empty-copy">
+            <h2>Preview unavailable</h2>
+            <p>This file opens natively for now. Use the toolbar action to inspect it in the system app.</p>
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -151,6 +162,84 @@ watch(
   border: 0;
   border-radius: 0;
   background: var(--surface-bg);
+}
+
+.file-inspector-preview-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 100%;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top left, color-mix(in srgb, var(--accent) 16%, transparent), transparent 42%),
+    radial-gradient(circle at bottom right, color-mix(in srgb, var(--text-soft) 8%, transparent), transparent 38%),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-bg) 98%, white), var(--surface-bg));
+}
+
+.file-inspector-preview-stage-bg {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(135deg, transparent 0%, color-mix(in srgb, var(--border-subtle) 18%, transparent) 50%, transparent 100%),
+    linear-gradient(180deg, transparent, color-mix(in srgb, var(--surface-muted) 18%, transparent));
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.file-inspector-preview-empty-state {
+  position: relative;
+  z-index: 1;
+  width: min(34rem, 100%);
+  display: grid;
+  gap: 1rem;
+  justify-items: center;
+  text-align: center;
+  padding: clamp(1.5rem, 4vw, 3.25rem);
+}
+
+.file-inspector-preview-empty-mark {
+  width: 5.5rem;
+  height: 5.5rem;
+  display: grid;
+  place-items: center;
+  gap: 0.2rem;
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 16%, var(--surface-subtle)), color-mix(in srgb, var(--accent) 6%, var(--surface-subtle))),
+    color-mix(in srgb, var(--surface-bg) 50%, transparent);
+  box-shadow:
+    0 12px 40px color-mix(in srgb, var(--accent) 8%, transparent),
+    inset 0 1px 0 color-mix(in srgb, white 42%, transparent);
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.file-inspector-preview-empty-icon {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.file-inspector-preview-empty-copy {
+  display: grid;
+  gap: 0.35rem;
+  max-width: 24rem;
+}
+
+.file-inspector-preview-empty-copy h2 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.file-inspector-preview-empty-copy p {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 0.92rem;
+  line-height: 1.5;
 }
 
 @media (max-width: 900px) {

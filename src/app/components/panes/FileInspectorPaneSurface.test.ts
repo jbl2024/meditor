@@ -47,6 +47,8 @@ describe('FileInspectorPaneSurface', () => {
     await flushUi()
 
     expect(mounted.root.textContent).toContain('Open natively')
+    expect(mounted.root.textContent).toContain('Preview unavailable')
+    expect(mounted.root.textContent).toContain('XLSX')
     expect(mounted.root.textContent).not.toContain('report.xlsx')
     expect(mounted.root.textContent).not.toContain('Favorite')
     expect(mounted.root.textContent).not.toContain('Document')
