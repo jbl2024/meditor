@@ -87,6 +87,9 @@ const htmlPreviewLoading = ref(false)
 const htmlPreviewError = ref('')
 const previewThemeSnapshot = ref<PreviewThemeSnapshot>(readPreviewThemeSnapshot())
 let themeObserver: MutationObserver | null = null
+const headCloseTag = '</' + 'head>'
+const bodyCloseTag = '</' + 'body>'
+const scriptCloseTag = '<' + '/script>'
 
 function openNative() {
   void props.openExternally?.()
@@ -287,13 +290,36 @@ body {
 `
 }
 
-function decoratePandocPreviewHtml(html: string, theme: PreviewThemeSnapshot): string {
-  const style = buildPreviewThemeStyle(theme)
-  if (html.includes('</head>')) {
-    return html.replace('</head>', `${style}\n</head>`)
+function buildPreviewKeyboardGuardScript(): string {
+  return `
+<script>
+(function () {
+  function isModW(event) {
+    return (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && (event.key || '').toLowerCase() === 'w';
   }
 
-  return `${style}\n${html}`
+  window.addEventListener('keydown', function (event) {
+    if (!isModW(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+  }, true);
+})();
+${scriptCloseTag}
+`
+}
+
+function decoratePandocPreviewHtml(html: string, theme: PreviewThemeSnapshot): string {
+  const style = buildPreviewThemeStyle(theme)
+  const guard = buildPreviewKeyboardGuardScript()
+  if (html.includes(headCloseTag)) {
+    const withStyle = html.replace(headCloseTag, `${style}\n${headCloseTag}`)
+    if (withStyle.includes(bodyCloseTag)) {
+      return withStyle.replace(bodyCloseTag, `${guard}\n${bodyCloseTag}`)
+    }
+    return `${withStyle}\n${guard}`
+  }
+
+  return `${style}\n${html}\n${guard}`
 }
 
 function syncPandocPreviewTheme() {
@@ -401,7 +427,7 @@ watch(
         class="file-inspector-preview-frame file-inspector-preview-frame--html"
         :srcdoc="htmlPreviewSrc"
         :title="`Preview for ${fileName}`"
-        sandbox=""
+        sandbox="allow-scripts"
       />
       <div v-else class="file-inspector-preview-stage">
         <div class="file-inspector-preview-stage-bg" aria-hidden="true"></div>

@@ -104,6 +104,8 @@ describe('FileInspectorPaneSurface', () => {
     expect(iframe?.getAttribute('srcdoc')).toContain('--editor-body-text: rgb(208, 215, 222);')
     expect(iframe?.getAttribute('srcdoc')).toContain('--editor-link: rgb(125, 207, 255);')
     expect(iframe?.getAttribute('srcdoc')).toContain('--editor-code-bg: rgb(34, 37, 56);')
+    expect(iframe?.getAttribute('srcdoc')).toContain('event.metaKey || event.ctrlKey')
+    expect(iframe?.getAttribute('sandbox')).toBe('allow-scripts')
     expect(hoisted.renderPandocPreviewHtml).toHaveBeenCalledWith('/vault/assets/report.docx')
 
     mounted.app.unmount()
