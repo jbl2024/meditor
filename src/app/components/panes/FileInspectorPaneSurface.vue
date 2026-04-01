@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ArrowTopRightOnSquareIcon, DocumentIcon } from '@heroicons/vue/24/outline'
 import { computed, ref, watch } from 'vue'
-import { readPdfDataUrl } from '../../../shared/api/workspaceApi'
+import { readPdfDataUrl, renderPandocPreviewHtml } from '../../../shared/api/workspaceApi'
 import UiButton from '../../../shared/components/ui/UiButton.vue'
 
 const props = defineProps<{
@@ -22,9 +22,33 @@ const fileExtension = computed(() => {
 
 const isPdfPreview = computed(() => fileExtension.value === 'pdf')
 const placeholderExtension = computed(() => (fileExtension.value || 'file').toUpperCase())
+const pandocPreviewFormat = computed(() => {
+  const supportedFormats: Record<string, string> = {
+    docx: 'docx',
+    odt: 'odt',
+    xlsx: 'xlsx',
+    csv: 'csv',
+    tsv: 'tsv',
+    html: 'html',
+    htm: 'html',
+    rst: 'rst',
+    tex: 'latex',
+    latex: 'latex',
+    epub: 'epub',
+    org: 'org',
+    asciidoc: 'asciidoc',
+    adoc: 'asciidoc'
+  }
+
+  return supportedFormats[fileExtension.value] ?? ''
+})
+const isPandocPreview = computed(() => Boolean(pandocPreviewFormat.value))
 const pdfPreviewSrc = ref('')
 const pdfPreviewLoading = ref(false)
 const pdfPreviewError = ref('')
+const htmlPreviewSrc = ref('')
+const htmlPreviewLoading = ref(false)
+const htmlPreviewError = ref('')
 
 function openNative() {
   void props.openExternally?.()
@@ -50,10 +74,31 @@ async function loadPdfPreview(path: string) {
   }
 }
 
+async function loadHtmlPreview(path: string) {
+  if (!path || !isPandocPreview.value) {
+    htmlPreviewSrc.value = ''
+    htmlPreviewError.value = ''
+    htmlPreviewLoading.value = false
+    return
+  }
+
+  htmlPreviewLoading.value = true
+  htmlPreviewError.value = ''
+  try {
+    htmlPreviewSrc.value = await renderPandocPreviewHtml(path)
+  } catch (error) {
+    htmlPreviewSrc.value = ''
+    htmlPreviewError.value = error instanceof Error ? error.message : 'Could not load preview.'
+  } finally {
+    htmlPreviewLoading.value = false
+  }
+}
+
 watch(
   () => props.path,
   (path) => {
     void loadPdfPreview(path)
+    void loadHtmlPreview(path)
   },
   { immediate: true }
 )
@@ -77,18 +122,36 @@ watch(
 
     <div class="file-inspector-preview-panel">
       <div v-if="pdfPreviewLoading" class="file-inspector-preview-status">Loading PDF preview...</div>
-      <div v-else-if="pdfPreviewError" class="file-inspector-preview-status file-inspector-preview-status--error">
-        {{ pdfPreviewError }}
-      </div>
+      <div v-else-if="htmlPreviewLoading" class="file-inspector-preview-status">Rendering preview...</div>
       <iframe
         v-else-if="isPdfPreview && pdfPreviewSrc"
         class="file-inspector-preview-frame"
         :src="pdfPreviewSrc"
         :title="`Preview for ${fileName}`"
       />
+      <iframe
+        v-else-if="isPandocPreview && htmlPreviewSrc"
+        class="file-inspector-preview-frame file-inspector-preview-frame--html"
+        :srcdoc="htmlPreviewSrc"
+        :title="`Preview for ${fileName}`"
+        sandbox=""
+      />
       <div v-else class="file-inspector-preview-stage">
         <div class="file-inspector-preview-stage-bg" aria-hidden="true"></div>
-        <div class="file-inspector-preview-empty-state">
+        <div
+          v-if="pdfPreviewError || htmlPreviewError"
+          class="file-inspector-preview-empty-state file-inspector-preview-empty-state--error"
+        >
+          <div class="file-inspector-preview-empty-mark" aria-hidden="true">
+            <DocumentIcon class="file-inspector-preview-empty-icon" />
+            <span>ERROR</span>
+          </div>
+          <div class="file-inspector-preview-empty-copy">
+            <h2>Preview unavailable</h2>
+            <p>{{ pdfPreviewError || htmlPreviewError }}</p>
+          </div>
+        </div>
+        <div v-else class="file-inspector-preview-empty-state">
           <div class="file-inspector-preview-empty-mark" aria-hidden="true">
             <DocumentIcon class="file-inspector-preview-empty-icon" />
             <span>{{ placeholderExtension }}</span>
@@ -195,6 +258,21 @@ watch(
   justify-items: center;
   text-align: center;
   padding: clamp(1.5rem, 4vw, 3.25rem);
+}
+
+.file-inspector-preview-empty-state--error .file-inspector-preview-empty-mark {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--danger, #b54747) 16%, var(--surface-subtle)), color-mix(in srgb, var(--danger, #b54747) 6%, var(--surface-subtle))),
+    color-mix(in srgb, var(--surface-bg) 50%, transparent);
+  color: var(--danger, #b54747);
+}
+
+.file-inspector-preview-empty-state--error .file-inspector-preview-empty-copy h2 {
+  color: var(--text-strong);
+}
+
+.file-inspector-preview-empty-state--error .file-inspector-preview-empty-copy p {
+  color: var(--text-soft);
 }
 
 .file-inspector-preview-empty-mark {

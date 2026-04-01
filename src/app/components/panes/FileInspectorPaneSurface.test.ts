@@ -2,16 +2,18 @@ import { createApp, defineComponent, h, nextTick } from 'vue'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const hoisted = vi.hoisted(() => ({
-  readPdfDataUrl: vi.fn(async (path: string) => `data:application/pdf;base64,${Buffer.from(path).toString('base64')}`)
+  readPdfDataUrl: vi.fn(async (path: string) => `data:application/pdf;base64,${Buffer.from(path).toString('base64')}`),
+  renderPandocPreviewHtml: vi.fn(async (path: string) => `<html><body><main>${path}</main></body></html>`)
 }))
 
 vi.mock('../../../shared/api/workspaceApi', () => ({
-  readPdfDataUrl: hoisted.readPdfDataUrl
+  readPdfDataUrl: hoisted.readPdfDataUrl,
+  renderPandocPreviewHtml: hoisted.renderPandocPreviewHtml
 }))
 
 import FileInspectorPaneSurface from './FileInspectorPaneSurface.vue'
 
-function mountInspector(path = '/vault/assets/report.xlsx') {
+function mountInspector(path = '/vault/assets/report.bin') {
   const root = document.createElement('div')
   document.body.appendChild(root)
 
@@ -48,8 +50,8 @@ describe('FileInspectorPaneSurface', () => {
 
     expect(mounted.root.textContent).toContain('Open natively')
     expect(mounted.root.textContent).toContain('Preview unavailable')
-    expect(mounted.root.textContent).toContain('XLSX')
-    expect(mounted.root.textContent).not.toContain('report.xlsx')
+    expect(mounted.root.textContent).toContain('BIN')
+    expect(mounted.root.textContent).not.toContain('report.bin')
     expect(mounted.root.textContent).not.toContain('Favorite')
     expect(mounted.root.textContent).not.toContain('Document')
     expect(mounted.root.textContent).not.toContain('Behavior')
@@ -73,6 +75,18 @@ describe('FileInspectorPaneSurface', () => {
       `data:application/pdf;base64,${Buffer.from('/vault/assets/report.pdf').toString('base64')}`
     )
     expect(hoisted.readPdfDataUrl).toHaveBeenCalledWith('/vault/assets/report.pdf')
+
+    mounted.app.unmount()
+  })
+
+  it('renders pandoc-supported files as html previews', async () => {
+    const mounted = mountInspector('/vault/assets/report.docx')
+    await flushUi()
+
+    const iframe = mounted.root.querySelector<HTMLIFrameElement>('iframe')
+    expect(iframe).toBeTruthy()
+    expect(iframe?.getAttribute('srcdoc')).toContain('<main>/vault/assets/report.docx</main>')
+    expect(hoisted.renderPandocPreviewHtml).toHaveBeenCalledWith('/vault/assets/report.docx')
 
     mounted.app.unmount()
   })

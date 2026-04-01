@@ -3,6 +3,7 @@ use std::os::windows::fs::MetadataExt;
 use std::{
     env, fs,
     path::{Path, PathBuf},
+    process::Command,
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
 use base64::{engine::general_purpose::STANDARD, Engine};
@@ -639,6 +640,163 @@ pub fn read_pdf_data_url(path: String) -> Result<String> {
     Ok(format!("data:application/pdf;base64,{encoded}"))
 }
 
+fn pandoc_input_format_for_path(path: &Path) -> Option<&'static str> {
+    let ext = path.extension()?.to_str()?.to_ascii_lowercase();
+    match ext.as_str() {
+        "docx" => Some("docx"),
+        "odt" => Some("odt"),
+        "xlsx" => Some("xlsx"),
+        "csv" => Some("csv"),
+        "tsv" => Some("tsv"),
+        "html" | "htm" => Some("html"),
+        "rst" => Some("rst"),
+        "tex" | "latex" => Some("latex"),
+        "epub" => Some("epub"),
+        "org" => Some("org"),
+        "asciidoc" | "adoc" => Some("asciidoc"),
+        _ => None,
+    }
+}
+
+fn decorate_pandoc_html(html: String, title: &str) -> String {
+    let injection = format!(
+        r#"<style>
+html, body {{
+  margin: 0;
+  padding: 0;
+  background: var(--surface-bg, #fff);
+  color: var(--text-strong, #1f2937);
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}}
+body {{
+  box-sizing: border-box;
+  min-height: 100vh;
+  padding: clamp(1.25rem, 3vw, 2.5rem);
+}}
+img, video, svg, canvas {{
+  max-width: 100%;
+}}
+table {{
+  border-collapse: collapse;
+}}
+table, pre, blockquote, figure {{
+  max-width: 100%;
+}}
+blockquote {{
+  margin-inline: 0;
+  padding-inline-start: 1rem;
+  border-inline-start: 3px solid color-mix(in srgb, currentColor 22%, transparent);
+}}
+</style>
+<meta name="color-scheme" content="light dark">
+<title>{}</title>"#,
+        title
+    );
+
+    if let Some(head_end) = html.find("</head>") {
+        let mut decorated = String::with_capacity(html.len() + injection.len());
+        decorated.push_str(&html[..head_end]);
+        decorated.push_str(&injection);
+        decorated.push_str(&html[head_end..]);
+        decorated
+    } else {
+        html
+    }
+}
+
+fn pandoc_binary_candidates() -> Vec<PathBuf> {
+    let mut candidates = vec![
+        PathBuf::from("/opt/homebrew/bin/pandoc"),
+        PathBuf::from("/usr/local/bin/pandoc"),
+        PathBuf::from("/usr/bin/pandoc"),
+    ];
+
+    if let Some(path) = env::var_os("PATH") {
+        for dir in env::split_paths(&path) {
+            candidates.push(dir.join("pandoc"));
+        }
+    }
+
+    candidates
+}
+
+fn resolve_pandoc_binary() -> Option<PathBuf> {
+    pandoc_binary_candidates().into_iter().find(|candidate| candidate.is_file())
+}
+
+fn render_pandoc_preview_html_sync(path: String) -> Result<String> {
+    let started_at = Instant::now();
+    let root = active_workspace_root()?;
+    let pb = normalize_existing_path(&path)?;
+    ensure_within_root(&root, &pb)?;
+    let input_format = pandoc_input_format_for_path(&pb)
+        .ok_or_else(|| AppError::InvalidOperation("Preview unavailable for this file format.".to_string()))?;
+
+    let pandoc_binary = resolve_pandoc_binary().unwrap_or_else(|| PathBuf::from("pandoc"));
+    let output = Command::new(pandoc_binary)
+        .arg("--from")
+        .arg(input_format)
+        .arg("--to")
+        .arg("html5")
+        .arg("--standalone")
+        .arg("--self-contained")
+        .arg("--wrap")
+        .arg("none")
+        .arg("--metadata")
+        .arg(format!(
+            "title={}",
+            pb.file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or("Preview")
+        ))
+        .arg(&pb)
+        .output()
+        .map_err(|err| {
+            if err.kind() == std::io::ErrorKind::NotFound {
+                AppError::InvalidOperation(
+                    "Pandoc is not available. Install it to preview this file type.".to_string(),
+                )
+            } else {
+                AppError::OperationFailed
+            }
+        })?;
+
+    if !output.status.success() {
+        return Err(AppError::InvalidOperation(
+            String::from_utf8(output.stderr)
+                .ok()
+                .and_then(|stderr| stderr.lines().next().map(str::to_owned))
+                .filter(|line| !line.trim().is_empty())
+                .unwrap_or_else(|| "Pandoc preview conversion failed.".to_string()),
+        ));
+    }
+
+    let html = String::from_utf8(output.stdout).map_err(|_| AppError::OperationFailed)?;
+    let decorated = decorate_pandoc_html(
+        html,
+        pb.file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("Preview"),
+    );
+    log_fs_perf(
+        "render_pandoc_preview_html",
+        &pb,
+        started_at,
+        &[
+            ("format", input_format.to_string()),
+            ("chars", decorated.chars().count().to_string()),
+        ],
+    );
+    Ok(decorated)
+}
+
+#[tauri::command]
+pub async fn render_pandoc_preview_html(path: String) -> Result<String> {
+    tauri::async_runtime::spawn_blocking(move || render_pandoc_preview_html_sync(path))
+        .await
+        .map_err(|_| AppError::OperationFailed)?
+}
+
 fn system_time_to_unix_ms(value: SystemTime) -> Option<i64> {
     value
         .duration_since(UNIX_EPOCH)
@@ -1015,8 +1173,8 @@ mod tests {
     use super::{
         copy_entry, create_entry, create_extracted_note, duplicate_entry, list_children,
         list_markdown_files, move_entry, open_external_url, open_path_external,
-        read_pdf_data_url, read_text_file, rename_entry, reveal_in_file_manager,
-        sanitize_external_url, trash_entry, ConflictStrategy, EntryKind,
+        pandoc_input_format_for_path, read_pdf_data_url, read_text_file, rename_entry,
+        reveal_in_file_manager, sanitize_external_url, trash_entry, ConflictStrategy, EntryKind,
     };
 
     fn make_temp_dir() -> PathBuf {
@@ -1060,6 +1218,23 @@ mod tests {
         assert!(first.ends_with("note.md"));
         assert!(second.ends_with("note (1).md"));
         fs::remove_dir_all(dir).expect("cleanup");
+    }
+
+    #[test]
+    fn pandoc_input_format_maps_supported_extensions() {
+        assert_eq!(
+            pandoc_input_format_for_path(Path::new("report.docx")),
+            Some("docx")
+        );
+        assert_eq!(
+            pandoc_input_format_for_path(Path::new("sheet.xlsx")),
+            Some("xlsx")
+        );
+        assert_eq!(
+            pandoc_input_format_for_path(Path::new("notes.odt")),
+            Some("odt")
+        );
+        assert_eq!(pandoc_input_format_for_path(Path::new("image.png")), None);
     }
 
     #[test]

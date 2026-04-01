@@ -59,6 +59,11 @@ export async function readPdfDataUrl(path: string): Promise<string> {
   return await invoke('read_pdf_data_url', { path })
 }
 
+/** Renders a file preview as standalone HTML via Pandoc when the format supports it. */
+export async function renderPandocPreviewHtml(path: string): Promise<string> {
+  return await invoke('render_pandoc_preview_html', { path })
+}
+
 /** Writes UTF-8 text content to a workspace file. */
 export async function writeTextFile(path: string, content: string): Promise<void> {
   await invoke('write_text_file', { path, content })
