@@ -140,10 +140,10 @@ body {
 .pandoc-preview-shell {
   max-width: 800px;
   margin: 0 auto;
-  padding-left: 3.5rem;
-  padding-right: 2rem;
-  padding-top: 0.25rem;
-  padding-bottom: 2rem;
+  padding-left: 4.5rem;
+  padding-right: 3.5rem;
+  padding-top: 0.5rem;
+  padding-bottom: 2.5rem;
 }
 .pandoc-preview {
   min-height: 100vh;
@@ -152,14 +152,14 @@ body {
   white-space: pre-wrap;
   white-space: break-spaces;
   color: var(--editor-body-text, var(--text-main, #1a1a18));
-  font-size: calc(var(--editor-font-size-base, 1rem) * 1);
+  font-size: calc(var(--editor-font-size-base, 1rem) * 0.92);
   line-height: var(--line-height-normal, 1.5);
 }
 .pandoc-preview > * {
   position: relative;
 }
 .pandoc-preview p {
-  font-size: calc(var(--editor-font-size-base, 1rem) * 1);
+  font-size: calc(var(--editor-font-size-base, 1rem) * 0.92);
   margin: 0.42rem 0;
 }
 .pandoc-preview strong,
@@ -167,40 +167,40 @@ body {
   font-weight: 600;
 }
 .pandoc-preview h1 {
-  font-size: calc(var(--editor-heading-1-size, 1.9rem) * 1);
+  font-size: calc(var(--editor-heading-1-size, 1.9rem) * 0.92);
   font-weight: 580;
   line-height: 1.35;
   margin: 0.68rem 0 0.45rem;
   color: var(--text-main, #1a1a18);
 }
 .pandoc-preview h2 {
-  font-size: calc(var(--editor-heading-2-size, 1.6rem) * 1);
+  font-size: calc(var(--editor-heading-2-size, 1.6rem) * 0.92);
   line-height: 1.35;
   margin: 0.95rem 0 0.8rem;
   color: var(--text-main, #1a1a18);
 }
 .pandoc-preview h3 {
-  font-size: calc(var(--editor-heading-3-size, 1.35rem) * 1);
+  font-size: calc(var(--editor-heading-3-size, 1.35rem) * 0.92);
   line-height: 1.35;
   margin: 0.75rem 0 0.45rem;
   color: var(--text-main, #1a1a18);
 }
 .pandoc-preview h4 {
-  font-size: calc(var(--editor-heading-4-size, 1.18rem) * 1);
+  font-size: calc(var(--editor-heading-4-size, 1.18rem) * 0.92);
   font-weight: 560;
   line-height: 1.35;
   margin: 0.62rem 0 0.35rem;
   color: var(--editor-heading-4, var(--text-main, #1a1a18));
 }
 .pandoc-preview h5 {
-  font-size: calc(var(--editor-heading-5-size, 1.04rem) * 1);
+  font-size: calc(var(--editor-heading-5-size, 1.04rem) * 0.92);
   font-weight: 540;
   line-height: 1.35;
   margin: 0.5rem 0 0.28rem;
   color: var(--editor-heading-5, var(--text-soft, #5c5c56));
 }
 .pandoc-preview h6 {
-  font-size: calc(var(--editor-heading-6-size, 0.94rem) * 1);
+  font-size: calc(var(--editor-heading-6-size, 0.94rem) * 0.92);
   font-weight: 520;
   line-height: 1.35;
   margin: 0.45rem 0 0.22rem;
@@ -215,7 +215,7 @@ body {
 }
 .pandoc-preview ul,
 .pandoc-preview ol {
-  margin: 0.32rem 0 0.45rem 1.35rem;
+  margin: 0.32rem 0 0.45rem 1.5rem;
   padding: 0;
 }
 .pandoc-preview li {
@@ -266,9 +266,9 @@ body {
   font-family: var(--font-code, ui-monospace, SFMono-Regular, monospace);
 }
 .pandoc-preview blockquote {
-  margin-inline: 0;
-  padding-inline-start: 0.7rem;
-  border-inline-start: 3px solid color-mix(in srgb, var(--accent, #1f5f9b) 28%, transparent);
+  margin: 0.4rem 0;
+  padding-inline-start: 0;
+  border-inline-start: 0;
 }
 .pandoc-preview img,
 .pandoc-preview video,
