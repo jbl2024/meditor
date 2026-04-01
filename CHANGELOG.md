@@ -18,6 +18,17 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.27.0] - 2026-04-01
+
+### Added
+- feat(editor): add edit button to embedded note preview (5cad82a)
+- feat(editor): extract selection into embedded note (5c3a971)
+
+### Changed
+- style(editor): show embed actions on hover (0ba9cf5)
+- refactor(editor): extract embedded note actions (4179d43)
+- docs(readme): document word export template behavior (a7f48c4)
+
 ## [0.26.0] - 2026-03-30
 
 ### Changed
