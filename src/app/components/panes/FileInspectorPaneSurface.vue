@@ -140,10 +140,10 @@ body {
 .pandoc-preview-shell {
   max-width: 800px;
   margin: 0 auto;
-  padding-left: 4.5rem;
-  padding-right: 3.5rem;
-  padding-top: 0.5rem;
-  padding-bottom: 2.5rem;
+  padding-left: 5.5rem;
+  padding-right: 4.5rem;
+  padding-top: 0.35rem;
+  padding-bottom: 2rem;
 }
 .pandoc-preview {
   min-height: 100vh;
@@ -158,9 +158,22 @@ body {
 .pandoc-preview > * {
   position: relative;
 }
+.pandoc-preview > :first-child {
+  margin-top: 0 !important;
+}
+.pandoc-preview #title-block-header {
+  margin: 0 0 0.6rem;
+  padding: 0;
+}
+.pandoc-preview .title {
+  margin: 0;
+}
+.pandoc-preview #title-block-header > :last-child {
+  margin-bottom: 0;
+}
 .pandoc-preview p {
   font-size: calc(var(--editor-font-size-base, 1rem) * 0.92);
-  margin: 0.42rem 0;
+  margin: 0.34rem 0;
 }
 .pandoc-preview strong,
 .pandoc-preview b {
@@ -170,40 +183,40 @@ body {
   font-size: calc(var(--editor-heading-1-size, 1.9rem) * 0.92);
   font-weight: 580;
   line-height: 1.35;
-  margin: 0.68rem 0 0.45rem;
+  margin: 0.35rem 0 0.24rem;
   color: var(--text-main, #1a1a18);
 }
 .pandoc-preview h2 {
   font-size: calc(var(--editor-heading-2-size, 1.6rem) * 0.92);
   line-height: 1.35;
-  margin: 0.95rem 0 0.8rem;
+  margin: 0.55rem 0 0.45rem;
   color: var(--text-main, #1a1a18);
 }
 .pandoc-preview h3 {
   font-size: calc(var(--editor-heading-3-size, 1.35rem) * 0.92);
   line-height: 1.35;
-  margin: 0.75rem 0 0.45rem;
+  margin: 0.45rem 0 0.3rem;
   color: var(--text-main, #1a1a18);
 }
 .pandoc-preview h4 {
   font-size: calc(var(--editor-heading-4-size, 1.18rem) * 0.92);
   font-weight: 560;
   line-height: 1.35;
-  margin: 0.62rem 0 0.35rem;
+  margin: 0.4rem 0 0.25rem;
   color: var(--editor-heading-4, var(--text-main, #1a1a18));
 }
 .pandoc-preview h5 {
   font-size: calc(var(--editor-heading-5-size, 1.04rem) * 0.92);
   font-weight: 540;
   line-height: 1.35;
-  margin: 0.5rem 0 0.28rem;
+  margin: 0.34rem 0 0.2rem;
   color: var(--editor-heading-5, var(--text-soft, #5c5c56));
 }
 .pandoc-preview h6 {
   font-size: calc(var(--editor-heading-6-size, 0.94rem) * 0.92);
   font-weight: 520;
   line-height: 1.35;
-  margin: 0.45rem 0 0.22rem;
+  margin: 0.3rem 0 0.18rem;
   color: var(--editor-heading-6, var(--text-dim, #7b7b73));
 }
 .pandoc-preview :not(pre) > code {
@@ -215,18 +228,18 @@ body {
 }
 .pandoc-preview ul,
 .pandoc-preview ol {
-  margin: 0.32rem 0 0.45rem 1.5rem;
+  margin: 0.25rem 0 0.35rem 1.5rem;
   padding: 0;
 }
 .pandoc-preview li {
-  margin: 0.2rem 0;
+  margin: 0.14rem 0;
 }
 .pandoc-preview table {
   width: 100%;
   max-width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  margin: 0.36rem 0;
+  margin: 0.28rem 0;
   border: 1px solid var(--border-subtle, #d5dde8);
   border-radius: 0.52rem;
   overflow: hidden;
