@@ -100,7 +100,7 @@ html {
 body {
   margin: 0;
   background: var(--app-bg, var(--surface-bg, #f9f9f8));
-  color: var(--editor-body-text, var(--text-main, #1a1a18));
+  color: var(--text-main, #1a1a18);
   font-family: var(--font-editor, var(--font-sans, ui-sans-serif, system-ui, sans-serif));
   line-height: var(--line-height-normal, 1.5);
   -webkit-font-variant-ligatures: none;
@@ -127,7 +127,7 @@ body {
   -webkit-font-variant-ligatures: none;
   font-variant-ligatures: none;
   font-feature-settings: "liga" 0;
-  color: var(--editor-body-text, var(--text-main, #1a1a18));
+  color: var(--text-main, #1a1a18);
   font-family: var(--font-editor, var(--font-sans, ui-sans-serif, system-ui, sans-serif));
   line-height: var(--line-height-normal, 1.5);
 }

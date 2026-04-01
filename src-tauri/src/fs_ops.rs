@@ -668,7 +668,7 @@ body {{
   margin: 0;
   padding: 0;
   background: #f4f7fb;
-  color: #16202d;
+  color: #1a1a18;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   line-height: 1.5;
   -webkit-font-variant-ligatures: none;
@@ -692,7 +692,7 @@ body {{
   white-space: pre-wrap;
   white-space: break-spaces;
   font-size: calc(1rem * var(--pandoc-scale, 1));
-  color: #16202d;
+  color: #1a1a18;
   line-height: 1.5;
 }}
 .pandoc-preview > * {{
@@ -711,26 +711,26 @@ body {{
   font-weight: 580;
   line-height: 1.35;
   margin: 0.68rem 0 0.45rem;
-  color: #16202d;
+  color: #1a1a18;
 }}
 .pandoc-preview h2 {{
   font-size: calc(1.6rem * var(--pandoc-scale, 1));
   line-height: 1.35;
   margin: 0.95rem 0 0.8rem;
-  color: #16202d;
+  color: #1a1a18;
 }}
 .pandoc-preview h3 {{
   font-size: calc(1.35rem * var(--pandoc-scale, 1));
   line-height: 1.35;
   margin: 0.75rem 0 0.45rem;
-  color: #16202d;
+  color: #1a1a18;
 }}
 .pandoc-preview h4 {{
   font-size: calc(1.18rem * var(--pandoc-scale, 1));
   font-weight: 560;
   line-height: 1.35;
   margin: 0.62rem 0 0.35rem;
-  color: #16202d;
+  color: #1a1a18;
 }}
 .pandoc-preview h5 {{
   font-size: calc(1.04rem * var(--pandoc-scale, 1));

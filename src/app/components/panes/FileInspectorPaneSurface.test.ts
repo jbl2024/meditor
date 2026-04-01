@@ -102,7 +102,7 @@ describe('FileInspectorPaneSurface', () => {
     expect(iframe?.getAttribute('srcdoc')).toContain('<main>/vault/assets/report.docx</main>')
     expect(iframe?.getAttribute('srcdoc')).toContain('color-scheme: dark')
     expect(iframe?.getAttribute('srcdoc')).toContain('--pandoc-scale: 0.88;')
-    expect(iframe?.getAttribute('srcdoc')).toContain('--editor-body-text: rgb(208, 215, 222);')
+    expect(iframe?.getAttribute('srcdoc')).toContain('color: var(--text-main, #1a1a18);')
     expect(iframe?.getAttribute('srcdoc')).toContain('--editor-link: rgb(125, 207, 255);')
     expect(iframe?.getAttribute('srcdoc')).toContain('--editor-code-bg: rgb(34, 37, 56);')
     expect(iframe?.getAttribute('srcdoc')).toContain('font-size: calc(var(--editor-font-size-base, 1rem) * var(--editor-zoom, 1) * var(--pandoc-scale, 1));')
