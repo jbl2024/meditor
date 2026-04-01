@@ -1890,23 +1890,6 @@ async function openPathNatively(path: string): Promise<void> {
   }
 }
 
-async function toggleFavoriteForPath(path: string): Promise<void> {
-  const target = path.trim()
-  if (!target) return
-
-  try {
-    if (favorites.isFavorite(target)) {
-      await favorites.removeFavorite(target)
-      filesystem.notifySuccess(`Removed ${basenameLabel(target)} from favorites.`)
-    } else {
-      await favorites.addFavorite(target)
-      filesystem.notifySuccess(`Added ${basenameLabel(target)} to favorites.`)
-    }
-  } catch (err) {
-    filesystem.notifyError(err instanceof Error ? err.message : 'Could not update favorite.')
-  }
-}
-
 function onEditorPathRenamed(payload: { from: string; to: string; manual: boolean }) {
   void workspaceMutationEffects.handlePathRenamed(payload).catch((err) => {
     filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not update wikilinks.'
@@ -2192,12 +2175,9 @@ onBeforeUnmount(() => {
         <EditorPaneGrid
           ref="editorRef"
           :layout="multiPane.layout.value"
-        :active-document-path="activeFilePath"
-        :read-file-metadata="readFileMetadata"
-        :is-favorite="(path) => favorites.isFavorite(path)"
-        :open-externally="openPathNatively"
-        :toggle-favorite="toggleFavoriteForPath"
-        :spellcheck-enabled="spellcheckEnabled"
+          :active-document-path="activeFilePath"
+          :open-externally="openPathNatively"
+          :spellcheck-enabled="spellcheckEnabled"
           :get-status="editorState.getStatus"
           :readNoteSnapshot="readNoteSnapshot"
           :saveNoteBuffer="saveNoteBuffer"

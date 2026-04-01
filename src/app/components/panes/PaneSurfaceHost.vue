@@ -27,9 +27,7 @@ const props = defineProps<{
   openDocumentPaths: string[]
   getStatus: (path: string) => FileEditorStatus
   openFile?: (path: string) => Promise<string>
-  isFavorite?: (path: string) => boolean
   openExternally?: (path: string) => Promise<void> | void
-  toggleFavorite?: (path: string) => Promise<void> | void
   saveFile?: (path: string, text: string, options: { explicit: boolean }) => Promise<{ persisted: boolean }>
   readNoteSnapshot?: (path: string) => Promise<ReadNoteSnapshotResult>
   saveNoteBuffer?: (
@@ -120,16 +118,9 @@ const showAlterExplorationSurface = computed(() => props.activeTab?.type === 'al
 const showAltersSurface = computed(() => props.activeTab?.type === 'alters')
 const activeInspectorTab = computed(() => props.activeTab?.type === 'file-inspector' ? props.activeTab : null)
 const activeInspectorPath = computed(() => activeInspectorTab.value?.path ?? '')
-const activeInspectorIsFavorite = computed(() =>
-  activeInspectorTab.value ? props.isFavorite?.(activeInspectorTab.value.path) : undefined
-)
 const openActiveInspectorExternally = () => {
   if (!activeInspectorTab.value || !props.openExternally) return
   void props.openExternally(activeInspectorTab.value.path)
-}
-const toggleActiveInspectorFavorite = () => {
-  if (!activeInspectorTab.value || !props.toggleFavorite) return
-  void props.toggleFavorite(activeInspectorTab.value.path)
 }
 const defaultAlterSettings: AppSettingsAlters = {
   default_mode: 'neutral',
@@ -207,9 +198,7 @@ defineExpose<EditorSurfaceExposed>({
   <FileInspectorPaneSurface
     v-else-if="activeInspectorTab"
     :path="activeInspectorPath"
-    :is-favorite="activeInspectorIsFavorite"
     :open-externally="openActiveInspectorExternally"
-    :toggle-favorite="toggleActiveInspectorFavorite"
   />
 
   <WorkspaceLaunchpad

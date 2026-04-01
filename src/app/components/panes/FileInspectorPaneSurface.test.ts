@@ -16,21 +16,18 @@ function mountInspector(path = '/vault/assets/report.xlsx') {
   document.body.appendChild(root)
 
   const openExternally = vi.fn(async () => {})
-  const toggleFavorite = vi.fn(async () => {})
 
   const app = createApp(defineComponent({
     setup() {
       return () => h(FileInspectorPaneSurface, {
         path,
-        isFavorite: true,
-        openExternally,
-        toggleFavorite
+        openExternally
       })
     }
   }))
 
   app.mount(root)
-  return { app, root, openExternally, toggleFavorite }
+  return { app, root, openExternally }
 }
 
 async function flushUi() {
@@ -49,18 +46,16 @@ describe('FileInspectorPaneSurface', () => {
     const mounted = mountInspector()
     await flushUi()
 
-    expect(mounted.root.textContent).toContain('report.xlsx')
     expect(mounted.root.textContent).toContain('Open natively')
-    expect(mounted.root.textContent).toContain('Preview')
-    expect(mounted.root.textContent).not.toContain('Created')
-    expect(mounted.root.textContent).not.toContain('Updated')
+    expect(mounted.root.textContent).not.toContain('report.xlsx')
+    expect(mounted.root.textContent).not.toContain('Favorite')
+    expect(mounted.root.textContent).not.toContain('Document')
+    expect(mounted.root.textContent).not.toContain('Behavior')
 
-    mounted.root.querySelector<HTMLButtonElement>('.file-inspector-action--primary')?.click()
-    mounted.root.querySelector<HTMLButtonElement>('.file-inspector-action:not(.file-inspector-action--primary)')?.click()
+    mounted.root.querySelector<HTMLButtonElement>('button')?.click()
     await nextTick()
 
     expect(mounted.openExternally).toHaveBeenCalledOnce()
-    expect(mounted.toggleFavorite).toHaveBeenCalledOnce()
     expect(mounted.root.querySelector('iframe')).toBeNull()
 
     mounted.app.unmount()
