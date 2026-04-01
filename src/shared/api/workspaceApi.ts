@@ -54,6 +54,11 @@ export async function readFileMetadata(path: string): Promise<FileMetadata> {
   return await invoke('read_file_metadata', { path })
 }
 
+/** Builds a browser-safe data URL for a PDF preview. */
+export async function readPdfDataUrl(path: string): Promise<string> {
+  return await invoke('read_pdf_data_url', { path })
+}
+
 /** Writes UTF-8 text content to a workspace file. */
 export async function writeTextFile(path: string, content: string): Promise<void> {
   await invoke('write_text_file', { path, content })

@@ -206,7 +206,7 @@ describe('App favorites', () => {
     await flushUi()
     const paletteInput = mounted.root.querySelector<HTMLInputElement>('[data-quick-open-input="true"]')
     if (!paletteInput) throw new Error('Expected command palette input')
-    paletteInput.value = '>add active note to favorites'
+    paletteInput.value = '>add active file to favorites'
     paletteInput.dispatchEvent(new Event('input', { bubbles: true }))
     await flushUi()
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))

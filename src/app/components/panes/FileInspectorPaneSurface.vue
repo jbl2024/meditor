@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ArrowTopRightOnSquareIcon, DocumentIcon, StarIcon } from '@heroicons/vue/24/outline'
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { readPdfDataUrl } from '../../../shared/api/workspaceApi'
 
 const props = defineProps<{
   path: string
@@ -30,6 +31,11 @@ const fileKindLabel = computed(() => {
   return `${fileExtension.value.toUpperCase()} file`
 })
 
+const isPdfPreview = computed(() => fileExtension.value === 'pdf')
+const pdfPreviewSrc = ref('')
+const pdfPreviewLoading = ref(false)
+const pdfPreviewError = ref('')
+
 function openNative() {
   void props.openExternally?.()
 }
@@ -37,6 +43,34 @@ function openNative() {
 function toggleFavorite() {
   void props.toggleFavorite?.()
 }
+
+async function loadPdfPreview(path: string) {
+  if (!path || !isPdfPreview.value) {
+    pdfPreviewSrc.value = ''
+    pdfPreviewError.value = ''
+    pdfPreviewLoading.value = false
+    return
+  }
+
+  pdfPreviewLoading.value = true
+  pdfPreviewError.value = ''
+  try {
+    pdfPreviewSrc.value = await readPdfDataUrl(path)
+  } catch {
+    pdfPreviewSrc.value = ''
+    pdfPreviewError.value = 'Could not load PDF preview.'
+  } finally {
+    pdfPreviewLoading.value = false
+  }
+}
+
+watch(
+  () => props.path,
+  (path) => {
+    void loadPdfPreview(path)
+  },
+  { immediate: true }
+)
 </script>
 
 <template>
@@ -84,10 +118,22 @@ function toggleFavorite() {
     <div class="file-inspector-preview-panel">
       <div class="file-inspector-preview-head">
         <p class="file-inspector-preview-label">Preview</p>
-        <p class="file-inspector-preview-subtitle">Reserved for a richer native preview later. For now, the surface stays lean.</p>
+        <p class="file-inspector-preview-subtitle">
+          {{ isPdfPreview ? 'Rendered with the browser PDF viewer.' : 'Reserved for a richer native preview later. For now, the surface stays lean.' }}
+        </p>
       </div>
 
-      <div class="file-inspector-preview-stage">
+      <div v-if="pdfPreviewLoading" class="file-inspector-preview-status">Loading PDF preview...</div>
+      <div v-else-if="pdfPreviewError" class="file-inspector-preview-status file-inspector-preview-status--error">
+        {{ pdfPreviewError }}
+      </div>
+      <iframe
+        v-else-if="isPdfPreview && pdfPreviewSrc"
+        class="file-inspector-preview-frame"
+        :src="pdfPreviewSrc"
+        :title="`Preview for ${fileName}`"
+      />
+      <div v-else class="file-inspector-preview-stage">
         <div class="file-inspector-preview-emblem">{{ fileExtension || 'file' }}</div>
         <div class="file-inspector-preview-text">
           <p class="file-inspector-preview-title">{{ fileKindLabel }}</p>
@@ -298,6 +344,27 @@ function toggleFavorite() {
     linear-gradient(180deg, color-mix(in srgb, var(--surface-bg) 94%, transparent), transparent);
 }
 
+.file-inspector-preview-status {
+  padding: 0.8rem 0.95rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 68%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-bg) 90%, transparent);
+  color: var(--text-soft);
+  font-size: 0.88rem;
+}
+
+.file-inspector-preview-status--error {
+  color: var(--danger, #b54747);
+}
+
+.file-inspector-preview-frame {
+  width: 100%;
+  min-height: 34rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 68%, transparent);
+  border-radius: 16px;
+  background: var(--surface-bg);
+}
+
 .file-inspector-preview-emblem {
   width: 4.25rem;
   height: 4.25rem;
@@ -376,6 +443,10 @@ function toggleFavorite() {
   .file-inspector-preview-stage {
     grid-template-columns: 1fr;
     justify-items: start;
+  }
+
+  .file-inspector-preview-frame {
+    min-height: 24rem;
   }
 
   .file-inspector-preview-emblem {

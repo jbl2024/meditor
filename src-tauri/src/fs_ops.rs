@@ -5,6 +5,7 @@ use std::{
     path::{Path, PathBuf},
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
+use base64::{engine::general_purpose::STANDARD, Engine};
 
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use rfd::FileDialog;
@@ -621,6 +622,23 @@ pub fn read_text_file(path: String) -> Result<String> {
     Ok(content)
 }
 
+#[tauri::command]
+pub fn read_pdf_data_url(path: String) -> Result<String> {
+    let started_at = Instant::now();
+    let root = active_workspace_root()?;
+    let pb = normalize_existing_path(&path)?;
+    ensure_within_root(&root, &pb)?;
+    let bytes = fs::read(&pb)?;
+    let encoded = STANDARD.encode(bytes);
+    log_fs_perf(
+        "read_pdf_data_url",
+        &pb,
+        started_at,
+        &[("bytes", encoded.len().to_string())],
+    );
+    Ok(format!("data:application/pdf;base64,{encoded}"))
+}
+
 fn system_time_to_unix_ms(value: SystemTime) -> Option<i64> {
     value
         .duration_since(UNIX_EPOCH)
@@ -996,9 +1014,9 @@ mod tests {
 
     use super::{
         copy_entry, create_entry, create_extracted_note, duplicate_entry, list_children,
-        list_markdown_files, move_entry, open_external_url, open_path_external, read_text_file,
-        rename_entry, reveal_in_file_manager, sanitize_external_url, trash_entry, ConflictStrategy,
-        EntryKind,
+        list_markdown_files, move_entry, open_external_url, open_path_external,
+        read_pdf_data_url, read_text_file, rename_entry, reveal_in_file_manager,
+        sanitize_external_url, trash_entry, ConflictStrategy, EntryKind,
     };
 
     fn make_temp_dir() -> PathBuf {
@@ -1333,6 +1351,37 @@ mod tests {
         let text = read_text_file(copied).expect("read copied");
         assert_eq!(text, "content");
         fs::remove_dir_all(dir).expect("cleanup");
+    }
+
+    #[test]
+    fn read_pdf_data_url_returns_a_browser_safe_data_uri() {
+        let dir = make_temp_dir();
+        let _guard = activate_workspace(&dir);
+        let source = dir.join("report.pdf");
+        fs::write(&source, b"%PDF-1.4 test").expect("write pdf");
+
+        let data_url = read_pdf_data_url(source.to_string_lossy().to_string()).expect("read pdf data url");
+
+        assert!(data_url.starts_with("data:application/pdf;base64,"));
+        assert!(data_url.contains("JVBERi0xLjQgdGVzdA"));
+        fs::remove_dir_all(dir).expect("cleanup");
+    }
+
+    #[test]
+    fn read_pdf_data_url_rejects_path_outside_workspace() {
+        let workspace = make_temp_dir();
+        let _guard = activate_workspace(&workspace);
+
+        let outside_dir = make_temp_dir();
+        let outside = outside_dir.join("outside.pdf");
+        fs::write(&outside, b"%PDF-1.4 test").expect("write outside");
+
+        let result = read_pdf_data_url(outside.to_string_lossy().to_string());
+        assert!(result.is_err());
+
+        fs::remove_file(outside).expect("cleanup outside file");
+        fs::remove_dir_all(outside_dir).expect("cleanup outside dir");
+        fs::remove_dir_all(workspace).expect("cleanup workspace");
     }
 
     #[test]

@@ -1,8 +1,17 @@
 import { createApp, defineComponent, h, nextTick } from 'vue'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+
+const hoisted = vi.hoisted(() => ({
+  readPdfDataUrl: vi.fn(async (path: string) => `data:application/pdf;base64,${Buffer.from(path).toString('base64')}`)
+}))
+
+vi.mock('../../../shared/api/workspaceApi', () => ({
+  readPdfDataUrl: hoisted.readPdfDataUrl
+}))
+
 import FileInspectorPaneSurface from './FileInspectorPaneSurface.vue'
 
-function mountInspector() {
+function mountInspector(path = '/vault/assets/report.xlsx') {
   const root = document.createElement('div')
   document.body.appendChild(root)
 
@@ -12,7 +21,7 @@ function mountInspector() {
   const app = createApp(defineComponent({
     setup() {
       return () => h(FileInspectorPaneSurface, {
-        path: '/vault/assets/report.xlsx',
+        path,
         isFavorite: true,
         openExternally,
         toggleFavorite
@@ -24,14 +33,21 @@ function mountInspector() {
   return { app, root, openExternally, toggleFavorite }
 }
 
+async function flushUi() {
+  await nextTick()
+  await Promise.resolve()
+  await nextTick()
+}
+
 describe('FileInspectorPaneSurface', () => {
   afterEach(() => {
     document.body.innerHTML = ''
+    hoisted.readPdfDataUrl.mockClear()
   })
 
   it('keeps file details out of the inspector surface and focuses on actions plus preview', async () => {
     const mounted = mountInspector()
-    await nextTick()
+    await flushUi()
 
     expect(mounted.root.textContent).toContain('report.xlsx')
     expect(mounted.root.textContent).toContain('Open natively')
@@ -45,6 +61,21 @@ describe('FileInspectorPaneSurface', () => {
 
     expect(mounted.openExternally).toHaveBeenCalledOnce()
     expect(mounted.toggleFavorite).toHaveBeenCalledOnce()
+    expect(mounted.root.querySelector('iframe')).toBeNull()
+
+    mounted.app.unmount()
+  })
+
+  it('renders pdf files in the native browser viewer', async () => {
+    const mounted = mountInspector('/vault/assets/report.pdf')
+    await flushUi()
+
+    const iframe = mounted.root.querySelector<HTMLIFrameElement>('iframe')
+    expect(iframe).toBeTruthy()
+    expect(iframe?.getAttribute('src')).toBe(
+      `data:application/pdf;base64,${Buffer.from('/vault/assets/report.pdf').toString('base64')}`
+    )
+    expect(hoisted.readPdfDataUrl).toHaveBeenCalledWith('/vault/assets/report.pdf')
 
     mounted.app.unmount()
   })
