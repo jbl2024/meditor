@@ -216,8 +216,11 @@ describe('App favorites', () => {
     await flushUi()
     expect(mounted.root.textContent).toContain('a.md')
 
+    const favorite = hoisted.favoritesState[0]
+    if (!favorite) throw new Error('Expected the favorite to be created')
+
     mounted.app.unmount()
-    hoisted.favoritesState[0].exists = false
+    favorite.exists = false
     mounted = mountApp()
     await flushUi()
     expect(mounted.root.textContent).toContain('Missing')
