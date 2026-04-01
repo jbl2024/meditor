@@ -1,19 +1,13 @@
 <script setup lang="ts">
 import { ArrowTopRightOnSquareIcon, DocumentIcon, StarIcon } from '@heroicons/vue/24/outline'
-import { computed, ref, watch } from 'vue'
-import type { FileMetadata } from '../../../shared/api/apiTypes'
+import { computed } from 'vue'
 
 const props = defineProps<{
   path: string
-  readFileMetadata?: (path: string) => Promise<FileMetadata>
   isFavorite?: boolean
   openExternally?: () => Promise<void> | void
   toggleFavorite?: () => Promise<void> | void
 }>()
-
-const metadata = ref<FileMetadata | null>(null)
-const loading = ref(false)
-const errorMessage = ref('')
 
 const fileName = computed(() => {
   const normalized = props.path.replace(/\\/g, '/').replace(/\/+$/, '')
@@ -36,42 +30,6 @@ const fileKindLabel = computed(() => {
   return `${fileExtension.value.toUpperCase()} file`
 })
 
-const createdAt = computed(() => formatTimestamp(metadata.value?.created_at_ms ?? null))
-const updatedAt = computed(() => formatTimestamp(metadata.value?.updated_at_ms ?? null))
-
-function formatTimestamp(value: number | null): string {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return 'Unknown'
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short'
-  }).format(new Date(value))
-}
-
-async function loadMetadata(path: string) {
-  if (!path) {
-    metadata.value = null
-    errorMessage.value = ''
-    return
-  }
-
-  if (!props.readFileMetadata) {
-    metadata.value = null
-    errorMessage.value = 'Metadata loader unavailable.'
-    return
-  }
-
-  loading.value = true
-  errorMessage.value = ''
-  try {
-    metadata.value = await props.readFileMetadata(path)
-  } catch {
-    metadata.value = null
-    errorMessage.value = 'Could not load file metadata.'
-  } finally {
-    loading.value = false
-  }
-}
-
 function openNative() {
   void props.openExternally?.()
 }
@@ -79,14 +37,6 @@ function openNative() {
 function toggleFavorite() {
   void props.toggleFavorite?.()
 }
-
-watch(
-  () => props.path,
-  (path) => {
-    void loadMetadata(path)
-  },
-  { immediate: true }
-)
 </script>
 
 <template>
@@ -127,49 +77,24 @@ watch(
         <span>{{ fileKindLabel }}</span>
       </div>
       <div class="file-inspector-summary-copy">
-        First-class workspace file. Markdown opens in the editor; this surface keeps everything else in context.
+        First-class workspace file. Markdown stays in the editor; this tab stays focused on native actions and preview.
       </div>
     </div>
 
-    <div class="file-inspector-layout">
-      <div class="file-inspector-panel file-inspector-panel--meta">
-        <div class="file-inspector-panel-head">
-          <p class="file-inspector-panel-title">Metadata</p>
-          <p class="file-inspector-panel-subtitle">Compact view of file state and timestamps.</p>
-        </div>
-        <div v-if="loading" class="file-inspector-state">Loading metadata...</div>
-        <div v-else-if="errorMessage" class="file-inspector-state file-inspector-state--error">{{ errorMessage }}</div>
-        <dl v-else class="file-inspector-grid">
-          <div class="file-inspector-row">
-            <dt class="file-inspector-label">Path</dt>
-            <dd class="file-inspector-value">{{ path }}</dd>
-          </div>
-          <div class="file-inspector-row">
-            <dt class="file-inspector-label">Created</dt>
-            <dd class="file-inspector-value">{{ createdAt }}</dd>
-          </div>
-          <div class="file-inspector-row">
-            <dt class="file-inspector-label">Updated</dt>
-            <dd class="file-inspector-value">{{ updatedAt }}</dd>
-          </div>
-          <div class="file-inspector-row">
-            <dt class="file-inspector-label">Type</dt>
-            <dd class="file-inspector-value">{{ fileKindLabel }}</dd>
-          </div>
-        </dl>
+    <div class="file-inspector-preview-panel">
+      <div class="file-inspector-preview-head">
+        <p class="file-inspector-preview-label">Preview</p>
+        <p class="file-inspector-preview-subtitle">Reserved for a richer native preview later. For now, the surface stays lean.</p>
       </div>
 
-      <div class="file-inspector-panel file-inspector-panel--preview">
-        <p class="file-inspector-preview-label">Preview</p>
-        <div class="file-inspector-preview-stage">
-          <div class="file-inspector-preview-emblem">{{ fileExtension || 'file' }}</div>
-          <div class="file-inspector-preview-text">
-            <p class="file-inspector-preview-title">Preview coming next</p>
-            <p class="file-inspector-preview-copy">
-              The surface is ready for text, image, or table preview. For now it stays lightweight and keeps the file
-              in context.
-            </p>
-          </div>
+      <div class="file-inspector-preview-stage">
+        <div class="file-inspector-preview-emblem">{{ fileExtension || 'file' }}</div>
+        <div class="file-inspector-preview-text">
+          <p class="file-inspector-preview-title">{{ fileKindLabel }}</p>
+          <p class="file-inspector-preview-copy">
+            This tab is for opening, favoriting, and eventually previewing non-Markdown files. File details already
+            live in the right pane.
+          </p>
         </div>
       </div>
     </div>
@@ -327,94 +252,21 @@ watch(
   line-height: 1.45;
 }
 
-.file-inspector-layout {
+.file-inspector-preview-panel {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0.8rem;
-}
-
-.file-inspector-panel {
+  gap: 0.7rem;
+  padding: 1rem;
   border: 1px solid color-mix(in srgb, var(--border-subtle) 80%, transparent);
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--surface-subtle) 88%, transparent);
-  padding: 0.9rem;
-  min-height: 0;
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-subtle) 90%, transparent), var(--surface-subtle)),
+    color-mix(in srgb, var(--surface-bg) 92%, transparent);
   box-shadow: var(--shadow-panel);
 }
 
-.file-inspector-panel-head {
+.file-inspector-preview-head {
   display: grid;
   gap: 0.15rem;
-  margin-bottom: 0.7rem;
-}
-
-.file-inspector-panel-title {
-  margin: 0;
-  color: var(--text-main);
-  font-size: 0.92rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-
-.file-inspector-panel-subtitle {
-  margin: 0;
-  color: var(--text-dim);
-  font-size: 0.78rem;
-  line-height: 1.35;
-}
-
-.file-inspector-grid {
-  display: grid;
-  gap: 0;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--surface-bg) 84%, transparent);
-}
-
-.file-inspector-row {
-  display: grid;
-  grid-template-columns: 7.5rem minmax(0, 1fr);
-  gap: 0.7rem;
-  align-items: start;
-  padding: 0.62rem 0.78rem;
-  border-top: 1px solid color-mix(in srgb, var(--border-subtle) 60%, transparent);
-  animation: file-inspector-fade-up 220ms ease both;
-}
-
-.file-inspector-row:first-child {
-  border-top: 0;
-}
-
-.file-inspector-label {
-  color: var(--text-dim);
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  line-height: 1.35;
-  padding-top: 0.08rem;
-}
-
-.file-inspector-value {
-  margin: 0;
-  color: var(--text-main);
-  font-size: 0.85rem;
-  line-height: 1.35;
-  word-break: break-word;
-}
-
-.file-inspector-state {
-  color: var(--text-soft);
-  font-size: 0.88rem;
-}
-
-.file-inspector-state--error {
-  color: var(--danger, #b54747);
-}
-
-.file-inspector-panel--preview {
-  display: grid;
-  gap: 0.7rem;
 }
 
 .file-inspector-preview-label {
@@ -425,28 +277,37 @@ watch(
   letter-spacing: 0.13em;
 }
 
+.file-inspector-preview-subtitle {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
 .file-inspector-preview-stage {
   display: grid;
-  gap: 0.75rem;
-  min-height: 10rem;
-  padding: 0.9rem;
-  border: 1px dashed color-mix(in srgb, var(--border-strong) 46%, transparent);
-  border-radius: 14px;
+  grid-template-columns: 4.25rem minmax(0, 1fr);
+  gap: 0.95rem;
+  align-items: center;
+  min-height: 12rem;
+  padding: 1rem 1.05rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 68%, transparent);
+  border-radius: 16px;
   background:
-    linear-gradient(135deg, color-mix(in srgb, var(--accent) 8%, transparent), transparent 60%),
-    linear-gradient(180deg, color-mix(in srgb, var(--surface-bg) 92%, transparent), transparent);
+    radial-gradient(circle at top left, color-mix(in srgb, var(--accent) 12%, transparent), transparent 48%),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-bg) 94%, transparent), transparent);
 }
 
 .file-inspector-preview-emblem {
-  width: 100%;
-  min-height: 2.6rem;
+  width: 4.25rem;
+  height: 4.25rem;
   display: grid;
   place-items: center;
-  border-radius: 12px;
+  border-radius: 16px;
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--accent) 16%, var(--surface-subtle)),
-    color-mix(in srgb, var(--accent) 6%, var(--surface-subtle))
+    color-mix(in srgb, var(--accent) 18%, var(--surface-subtle)),
+    color-mix(in srgb, var(--accent) 8%, var(--surface-subtle))
   );
   color: var(--accent);
   font-size: 0.8rem;
@@ -498,17 +359,6 @@ watch(
   line-height: 1.4;
 }
 
-@keyframes file-inspector-fade-up {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 @media (max-width: 900px) {
   .file-inspector-hero {
     flex-direction: column;
@@ -519,13 +369,18 @@ watch(
     justify-content: flex-start;
   }
 
-  .file-inspector-layout {
+  .file-inspector-summary {
     grid-template-columns: 1fr;
   }
 
-  .file-inspector-row {
+  .file-inspector-preview-stage {
     grid-template-columns: 1fr;
-    gap: 0.25rem;
+    justify-items: start;
+  }
+
+  .file-inspector-preview-emblem {
+    width: 3.5rem;
+    height: 3.5rem;
   }
 
   .file-inspector-footnote {

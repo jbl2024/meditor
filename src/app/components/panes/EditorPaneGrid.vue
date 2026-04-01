@@ -336,7 +336,6 @@ onBeforeUnmount(() => {
         :open-tabs="pane.openTabs"
         :open-document-paths="paneDocumentPaths(pane)"
         :active-document-path="activeDocumentPath"
-        :read-file-metadata="readFileMetadata"
         :is-favorite="isFavorite"
         :open-externally="openExternally"
         :toggle-favorite="toggleFavorite"

@@ -27,7 +27,6 @@ const props = defineProps<{
   openDocumentPaths: string[]
   getStatus: (path: string) => FileEditorStatus
   openFile?: (path: string) => Promise<string>
-  readFileMetadata?: (path: string) => Promise<{ created_at_ms: number | null; updated_at_ms: number | null }>
   isFavorite?: (path: string) => boolean
   openExternally?: (path: string) => Promise<void> | void
   toggleFavorite?: (path: string) => Promise<void> | void
@@ -208,7 +207,6 @@ defineExpose<EditorSurfaceExposed>({
   <FileInspectorPaneSurface
     v-else-if="activeInspectorTab"
     :path="activeInspectorPath"
-    :read-file-metadata="readFileMetadata"
     :is-favorite="activeInspectorIsFavorite"
     :open-externally="openActiveInspectorExternally"
     :toggle-favorite="toggleActiveInspectorFavorite"
