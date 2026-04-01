@@ -41,7 +41,14 @@ async function flushUi() {
 describe('FileInspectorPaneSurface', () => {
   afterEach(() => {
     document.body.innerHTML = ''
+    document.documentElement.classList.remove('dark')
+    delete document.documentElement.dataset.theme
+    delete document.documentElement.dataset.colorScheme
+    document.documentElement.style.removeProperty('--editor-body-text')
+    document.documentElement.style.removeProperty('--editor-link')
+    document.documentElement.style.removeProperty('--editor-code-bg')
     hoisted.readPdfDataUrl.mockClear()
+    hoisted.renderPandocPreviewHtml.mockClear()
   })
 
   it('keeps file details out of the inspector surface and focuses on actions plus preview', async () => {
@@ -80,12 +87,23 @@ describe('FileInspectorPaneSurface', () => {
   })
 
   it('renders pandoc-supported files as html previews', async () => {
+    document.documentElement.classList.add('dark')
+    document.documentElement.dataset.theme = 'tokyo-night'
+    document.documentElement.dataset.colorScheme = 'dark'
+    document.documentElement.style.setProperty('--editor-body-text', 'rgb(208, 215, 222)')
+    document.documentElement.style.setProperty('--editor-link', 'rgb(125, 207, 255)')
+    document.documentElement.style.setProperty('--editor-code-bg', 'rgb(34, 37, 56)')
+
     const mounted = mountInspector('/vault/assets/report.docx')
     await flushUi()
 
     const iframe = mounted.root.querySelector<HTMLIFrameElement>('iframe')
     expect(iframe).toBeTruthy()
     expect(iframe?.getAttribute('srcdoc')).toContain('<main>/vault/assets/report.docx</main>')
+    expect(iframe?.getAttribute('srcdoc')).toContain('color-scheme: dark')
+    expect(iframe?.getAttribute('srcdoc')).toContain('--editor-body-text: rgb(208, 215, 222);')
+    expect(iframe?.getAttribute('srcdoc')).toContain('--editor-link: rgb(125, 207, 255);')
+    expect(iframe?.getAttribute('srcdoc')).toContain('--editor-code-bg: rgb(34, 37, 56);')
     expect(hoisted.renderPandocPreviewHtml).toHaveBeenCalledWith('/vault/assets/report.docx')
 
     mounted.app.unmount()

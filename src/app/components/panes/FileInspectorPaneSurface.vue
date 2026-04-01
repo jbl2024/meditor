@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ArrowTopRightOnSquareIcon, DocumentIcon } from '@heroicons/vue/24/outline'
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { readPdfDataUrl, renderPandocPreviewHtml } from '../../../shared/api/workspaceApi'
 import UiButton from '../../../shared/components/ui/UiButton.vue'
 
@@ -43,16 +43,275 @@ const pandocPreviewFormat = computed(() => {
   return supportedFormats[fileExtension.value] ?? ''
 })
 const isPandocPreview = computed(() => Boolean(pandocPreviewFormat.value))
+type PreviewThemeSnapshot = {
+  colorScheme: 'light' | 'dark'
+  vars: Record<string, string>
+}
+
+const previewThemeVars = [
+  '--app-bg',
+  '--surface-bg',
+  '--surface-muted',
+  '--surface-raised',
+  '--surface-subtle',
+  '--text-main',
+  '--text-soft',
+  '--text-dim',
+  '--border-subtle',
+  '--border-strong',
+  '--accent',
+  '--accent-hover',
+  '--font-editor',
+  '--font-code',
+  '--editor-font-size-base',
+  '--editor-heading-1-size',
+  '--editor-heading-2-size',
+  '--editor-heading-3-size',
+  '--editor-heading-4-size',
+  '--editor-heading-5-size',
+  '--editor-heading-6-size',
+  '--line-height-normal',
+  '--editor-body-text',
+  '--editor-link',
+  '--editor-code-bg',
+  '--editor-heading-4',
+  '--editor-heading-5',
+  '--editor-heading-6'
+] as const
+
 const pdfPreviewSrc = ref('')
 const pdfPreviewLoading = ref(false)
 const pdfPreviewError = ref('')
-const htmlPreviewSrc = ref('')
+const htmlPreviewRaw = ref('')
 const htmlPreviewLoading = ref(false)
 const htmlPreviewError = ref('')
+const previewThemeSnapshot = ref<PreviewThemeSnapshot>(readPreviewThemeSnapshot())
+let themeObserver: MutationObserver | null = null
 
 function openNative() {
   void props.openExternally?.()
 }
+
+function readPreviewThemeSnapshot(): PreviewThemeSnapshot {
+  const root = document.documentElement
+  const styles = getComputedStyle(root)
+  const vars: Record<string, string> = {}
+
+  for (const name of previewThemeVars) {
+    const value = styles.getPropertyValue(name).trim()
+    if (value) {
+      vars[name] = value
+    }
+  }
+
+  const colorScheme =
+    root.dataset.colorScheme === 'dark' || root.classList.contains('dark') ? 'dark' : 'light'
+
+  return { colorScheme, vars }
+}
+
+function buildPreviewThemeStyle(theme: PreviewThemeSnapshot): string {
+  const rootVars = Object.entries(theme.vars)
+    .map(([name, value]) => `  ${name}: ${value};`)
+    .join('\n')
+
+  return `
+<style id="tomosona-pandoc-theme">
+:root {
+${rootVars}
+}
+html {
+  color-scheme: ${theme.colorScheme};
+  background: var(--app-bg, var(--surface-bg, #f9f9f8));
+}
+body {
+  margin: 0;
+  background: var(--app-bg, var(--surface-bg, #f9f9f8));
+  color: var(--editor-body-text, var(--text-main, #1a1a18));
+  font-family: var(--font-editor, var(--font-sans, ui-sans-serif, system-ui, sans-serif));
+  line-height: var(--line-height-normal, 1.5);
+  -webkit-font-variant-ligatures: none;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0;
+}
+.pandoc-preview-shell {
+  max-width: 800px;
+  margin: 0 auto;
+  padding-left: 3.5rem;
+  padding-right: 2rem;
+  padding-top: 0.25rem;
+  padding-bottom: 2rem;
+}
+.pandoc-preview {
+  min-height: 100vh;
+  outline: none;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+  white-space: break-spaces;
+  color: var(--editor-body-text, var(--text-main, #1a1a18));
+  font-size: calc(var(--editor-font-size-base, 1rem) * 1);
+  line-height: var(--line-height-normal, 1.5);
+}
+.pandoc-preview > * {
+  position: relative;
+}
+.pandoc-preview p {
+  font-size: calc(var(--editor-font-size-base, 1rem) * 1);
+  margin: 0.42rem 0;
+}
+.pandoc-preview strong,
+.pandoc-preview b {
+  font-weight: 600;
+}
+.pandoc-preview h1 {
+  font-size: calc(var(--editor-heading-1-size, 1.9rem) * 1);
+  font-weight: 580;
+  line-height: 1.35;
+  margin: 0.68rem 0 0.45rem;
+  color: var(--text-main, #1a1a18);
+}
+.pandoc-preview h2 {
+  font-size: calc(var(--editor-heading-2-size, 1.6rem) * 1);
+  line-height: 1.35;
+  margin: 0.95rem 0 0.8rem;
+  color: var(--text-main, #1a1a18);
+}
+.pandoc-preview h3 {
+  font-size: calc(var(--editor-heading-3-size, 1.35rem) * 1);
+  line-height: 1.35;
+  margin: 0.75rem 0 0.45rem;
+  color: var(--text-main, #1a1a18);
+}
+.pandoc-preview h4 {
+  font-size: calc(var(--editor-heading-4-size, 1.18rem) * 1);
+  font-weight: 560;
+  line-height: 1.35;
+  margin: 0.62rem 0 0.35rem;
+  color: var(--editor-heading-4, var(--text-main, #1a1a18));
+}
+.pandoc-preview h5 {
+  font-size: calc(var(--editor-heading-5-size, 1.04rem) * 1);
+  font-weight: 540;
+  line-height: 1.35;
+  margin: 0.5rem 0 0.28rem;
+  color: var(--editor-heading-5, var(--text-soft, #5c5c56));
+}
+.pandoc-preview h6 {
+  font-size: calc(var(--editor-heading-6-size, 0.94rem) * 1);
+  font-weight: 520;
+  line-height: 1.35;
+  margin: 0.45rem 0 0.22rem;
+  color: var(--editor-heading-6, var(--text-dim, #7b7b73));
+}
+.pandoc-preview :not(pre) > code {
+  border-radius: 0.34rem;
+  padding: 0.06rem 0.38rem;
+  font-size: 0.92em;
+  font-family: var(--font-code, ui-monospace, SFMono-Regular, monospace);
+  background: var(--editor-code-bg, var(--surface-subtle, #edf2f8));
+}
+.pandoc-preview ul,
+.pandoc-preview ol {
+  margin: 0.32rem 0 0.45rem 1.35rem;
+  padding: 0;
+}
+.pandoc-preview li {
+  margin: 0.2rem 0;
+}
+.pandoc-preview table {
+  width: 100%;
+  max-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 0.36rem 0;
+  border: 1px solid var(--border-subtle, #d5dde8);
+  border-radius: 0.52rem;
+  overflow: hidden;
+  background: var(--surface-bg, #ffffff);
+  font-size: 0.82rem;
+  line-height: 1.3;
+  table-layout: fixed;
+}
+.pandoc-preview th,
+.pandoc-preview td {
+  border-right: 1px solid var(--border-subtle, #d5dde8);
+  border-bottom: 1px solid var(--border-subtle, #d5dde8);
+  padding: 0.24rem 0.34rem;
+  vertical-align: top;
+  text-align: left;
+  min-width: 2.6rem;
+}
+.pandoc-preview tr:last-child > th,
+.pandoc-preview tr:last-child > td {
+  border-bottom: none;
+}
+.pandoc-preview tr > th:last-child,
+.pandoc-preview tr > td:last-child {
+  border-right: none;
+}
+.pandoc-preview th {
+  font-weight: 640;
+  background: color-mix(in srgb, var(--surface-muted, #edf2f8) 70%, var(--surface-bg, #ffffff));
+  color: var(--text-main, #1a1a18);
+}
+.pandoc-preview pre {
+  border: 1px solid var(--border-subtle, #d5dde8);
+  border-radius: 0.6rem;
+  padding: 0.8rem;
+  overflow: auto;
+  background: var(--surface-bg, #ffffff);
+  font-family: var(--font-code, ui-monospace, SFMono-Regular, monospace);
+}
+.pandoc-preview blockquote {
+  margin-inline: 0;
+  padding-inline-start: 0.7rem;
+  border-inline-start: 3px solid color-mix(in srgb, var(--accent, #1f5f9b) 28%, transparent);
+}
+.pandoc-preview img,
+.pandoc-preview video,
+.pandoc-preview svg,
+.pandoc-preview canvas {
+  max-width: 100%;
+}
+.pandoc-preview a {
+  color: var(--editor-link, var(--accent, #1f5f9b));
+}
+@media (max-width: 840px) {
+  .pandoc-preview-shell {
+    max-width: 100%;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+</style>
+`
+}
+
+function decoratePandocPreviewHtml(html: string, theme: PreviewThemeSnapshot): string {
+  const style = buildPreviewThemeStyle(theme)
+  if (html.includes('</head>')) {
+    return html.replace('</head>', `${style}\n</head>`)
+  }
+
+  return `${style}\n${html}`
+}
+
+function syncPandocPreviewTheme() {
+  previewThemeSnapshot.value = readPreviewThemeSnapshot()
+}
+
+onMounted(() => {
+  themeObserver = new MutationObserver(syncPandocPreviewTheme)
+  themeObserver.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['class', 'data-theme', 'data-color-scheme']
+  })
+})
+
+onBeforeUnmount(() => {
+  themeObserver?.disconnect()
+  themeObserver = null
+})
 
 async function loadPdfPreview(path: string) {
   if (!path || !isPdfPreview.value) {
@@ -76,7 +335,7 @@ async function loadPdfPreview(path: string) {
 
 async function loadHtmlPreview(path: string) {
   if (!path || !isPandocPreview.value) {
-    htmlPreviewSrc.value = ''
+    htmlPreviewRaw.value = ''
     htmlPreviewError.value = ''
     htmlPreviewLoading.value = false
     return
@@ -85,14 +344,22 @@ async function loadHtmlPreview(path: string) {
   htmlPreviewLoading.value = true
   htmlPreviewError.value = ''
   try {
-    htmlPreviewSrc.value = await renderPandocPreviewHtml(path)
+    htmlPreviewRaw.value = await renderPandocPreviewHtml(path)
   } catch (error) {
-    htmlPreviewSrc.value = ''
+    htmlPreviewRaw.value = ''
     htmlPreviewError.value = error instanceof Error ? error.message : 'Could not load preview.'
   } finally {
     htmlPreviewLoading.value = false
   }
 }
+
+const htmlPreviewSrc = computed(() => {
+  if (!htmlPreviewRaw.value) {
+    return ''
+  }
+
+  return decoratePandocPreviewHtml(htmlPreviewRaw.value, previewThemeSnapshot.value)
+})
 
 watch(
   () => props.path,
