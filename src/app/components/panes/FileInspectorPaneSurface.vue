@@ -119,7 +119,7 @@ body {
   padding-right: 2rem;
   position: relative;
   min-height: 100%;
-  --pandoc-scale: 0.9;
+  --pandoc-scale: 0.88;
   outline: none;
   word-wrap: break-word;
   white-space: pre-wrap;
@@ -216,14 +216,6 @@ body {
 }
 .pandoc-preview ol ol ol {
   list-style: lower-roman;
-}
-.pandoc-preview ul ul > li::marker,
-.pandoc-preview ol ol > li::marker {
-  color: var(--editor-marker-muted, var(--text-soft, #5c5c56));
-}
-.pandoc-preview ul ul ul > li::marker,
-.pandoc-preview ol ol ol > li::marker {
-  color: var(--editor-marker-faint, var(--text-dim, #7b7b73));
 }
 .pandoc-preview li {
   margin: 0.2rem 0;

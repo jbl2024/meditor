@@ -686,7 +686,7 @@ body {{
   padding-left: 5rem;
   padding-right: 2rem;
   min-height: 100vh;
-  --pandoc-scale: 0.9;
+  --pandoc-scale: 0.88;
   outline: none;
   word-wrap: break-word;
   white-space: pre-wrap;
