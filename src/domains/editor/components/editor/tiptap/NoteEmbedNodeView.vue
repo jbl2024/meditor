@@ -111,30 +111,30 @@ onBeforeUnmount(() => {
       <header class="tomosona-note-embed-header">
         <span class="tomosona-note-embed-title-row">
           <span class="tomosona-note-embed-label">{{ label }}</span>
-          <span class="tomosona-note-embed-actions">
-            <button
-              type="button"
-              class="tomosona-note-embed-action-btn"
-              aria-label="Edit note"
-              title="Edit note"
-              @mousedown.prevent
-              @click.stop="void openTargetInTab()"
-            >
-              <PencilSquareIcon class="h-3.5 w-3.5" />
-            </button>
-            <button
-              v-if="editor.isEditable"
-              type="button"
-              class="tomosona-note-embed-action-btn"
-              aria-label="Restore inline"
-              title="Restore inline"
-              :disabled="restoring"
-              @mousedown.prevent
-              @click.stop="void restoreTargetInline()"
-            >
-              <ArrowUturnLeftIcon class="h-3.5 w-3.5" />
-            </button>
-          </span>
+        </span>
+        <span class="tomosona-note-embed-actions">
+          <button
+            type="button"
+            class="tomosona-note-embed-action-btn"
+            aria-label="Edit note"
+            title="Edit note"
+            @mousedown.prevent
+            @click.stop="void openTargetInTab()"
+          >
+            <PencilSquareIcon class="h-3.5 w-3.5" />
+          </button>
+          <button
+            v-if="editor.isEditable"
+            type="button"
+            class="tomosona-note-embed-action-btn"
+            aria-label="Restore inline"
+            title="Restore inline"
+            :disabled="restoring"
+            @mousedown.prevent
+            @click.stop="void restoreTargetInline()"
+          >
+            <ArrowUturnLeftIcon class="h-3.5 w-3.5" />
+          </button>
         </span>
         <span v-if="loading" class="tomosona-note-embed-state">Loading</span>
       </header>
@@ -192,6 +192,11 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 0.2rem;
   flex-shrink: 0;
+  margin-left: auto;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(0.15rem);
+  transition: opacity 0.16s ease, transform 0.16s ease;
 }
 
 .tomosona-note-embed-action-btn {
@@ -216,6 +221,13 @@ onBeforeUnmount(() => {
 .tomosona-note-embed-action-btn:disabled {
   cursor: default;
   opacity: 0.45;
+}
+
+.tomosona-note-embed-surface:hover .tomosona-note-embed-actions,
+.tomosona-note-embed-surface:focus-within .tomosona-note-embed-actions {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
 }
 
 .tomosona-note-embed-state {
