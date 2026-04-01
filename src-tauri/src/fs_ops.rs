@@ -676,14 +676,15 @@ body {{
   font-feature-settings: "liga" 0;
 }}
 .pandoc-preview-shell {{
-  max-width: 800px;
-  margin: 0 auto;
-  padding-left: 3.5rem;
-  padding-right: 2rem;
-  padding-top: 0.75rem;
-  padding-bottom: 2.5rem;
+  margin: 0;
+  padding: 1.5rem 0 2rem;
 }}
 .pandoc-preview {{
+  width: 800px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  padding-left: 5rem;
+  padding-right: 2rem;
   min-height: 100vh;
   outline: none;
   word-wrap: break-word;
@@ -804,8 +805,8 @@ body {{
 }}
 .pandoc-preview blockquote {{
   margin-inline: 0;
-  padding-inline-start: 0.7rem;
-  border-inline-start: 3px solid rgba(31, 95, 155, 0.24);
+  padding-inline-start: 0;
+  border-inline-start: 0;
 }}
 .pandoc-preview img,
 .pandoc-preview video,
@@ -818,7 +819,10 @@ body {{
 }}
 @media (max-width: 840px) {{
 .pandoc-preview-shell {{
-  max-width: 100%;
+  padding: 1rem;
+}}
+.pandoc-preview {{
+  width: 100%;
   padding-left: 1rem;
   padding-right: 1rem;
 }}
@@ -867,7 +871,7 @@ body {{
   background: #2a303a;
 }}
 .pandoc-preview blockquote {{
-  border-inline-start-color: rgba(139, 195, 255, 0.28);
+  border-inline-start-color: transparent;
 }}
 .pandoc-preview a {{
   color: #8bc3ff;

@@ -48,37 +48,6 @@ type PreviewThemeSnapshot = {
   vars: Record<string, string>
 }
 
-const previewThemeVars = [
-  '--app-bg',
-  '--surface-bg',
-  '--surface-muted',
-  '--surface-raised',
-  '--surface-subtle',
-  '--text-main',
-  '--text-soft',
-  '--text-dim',
-  '--border-subtle',
-  '--border-strong',
-  '--accent',
-  '--accent-hover',
-  '--font-editor',
-  '--font-code',
-  '--editor-font-size-base',
-  '--editor-heading-1-size',
-  '--editor-heading-2-size',
-  '--editor-heading-3-size',
-  '--editor-heading-4-size',
-  '--editor-heading-5-size',
-  '--editor-heading-6-size',
-  '--line-height-normal',
-  '--editor-body-text',
-  '--editor-link',
-  '--editor-code-bg',
-  '--editor-heading-4',
-  '--editor-heading-5',
-  '--editor-heading-6'
-] as const
-
 const pdfPreviewSrc = ref('')
 const pdfPreviewLoading = ref(false)
 const pdfPreviewError = ref('')
@@ -100,11 +69,11 @@ function readPreviewThemeSnapshot(): PreviewThemeSnapshot {
   const styles = getComputedStyle(root)
   const vars: Record<string, string> = {}
 
-  for (const name of previewThemeVars) {
+  for (let index = 0; index < styles.length; index += 1) {
+    const name = styles.item(index)
+    if (!name || !name.startsWith('--')) continue
     const value = styles.getPropertyValue(name).trim()
-    if (value) {
-      vars[name] = value
-    }
+    if (value) vars[name] = value
   }
 
   const colorScheme =
@@ -115,6 +84,7 @@ function readPreviewThemeSnapshot(): PreviewThemeSnapshot {
 
 function buildPreviewThemeStyle(theme: PreviewThemeSnapshot): string {
   const rootVars = Object.entries(theme.vars)
+    .sort(([left], [right]) => left.localeCompare(right))
     .map(([name, value]) => `  ${name}: ${value};`)
     .join('\n')
 
@@ -138,79 +108,74 @@ body {
   font-feature-settings: "liga" 0;
 }
 .pandoc-preview-shell {
-  max-width: 800px;
-  margin: 0 auto;
-  padding-left: 5.5rem;
-  padding-right: 4.5rem;
-  padding-top: 0.35rem;
-  padding-bottom: 2rem;
+  margin: 0;
+  padding: 1.5rem 0 2rem;
 }
 .pandoc-preview {
-  min-height: 100vh;
+  width: 800px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  padding-left: 5rem;
+  padding-right: 2rem;
+  position: relative;
+  min-height: 100%;
   outline: none;
   word-wrap: break-word;
   white-space: pre-wrap;
   white-space: break-spaces;
+  -webkit-font-variant-ligatures: none;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0;
   color: var(--editor-body-text, var(--text-main, #1a1a18));
-  font-size: calc(var(--editor-font-size-base, 1rem) * 0.92);
+  font-family: var(--font-editor, var(--font-sans, ui-sans-serif, system-ui, sans-serif));
   line-height: var(--line-height-normal, 1.5);
 }
-.pandoc-preview > * {
-  position: relative;
-}
-.pandoc-preview > :first-child {
-  margin-top: 0 !important;
-}
-.pandoc-preview #title-block-header,
-.pandoc-preview h1.title {
-  display: none;
-}
 .pandoc-preview p {
-  font-size: calc(var(--editor-font-size-base, 1rem) * 0.92);
-  margin: 0.34rem 0;
+  font-size: calc(var(--editor-font-size-base, 1rem) * var(--editor-zoom, 1));
+  margin: 0.42rem 0;
 }
 .pandoc-preview strong,
 .pandoc-preview b {
   font-weight: 600;
 }
 .pandoc-preview h1 {
-  font-size: calc(var(--editor-heading-1-size, 1.9rem) * 0.92);
+  font-size: calc(var(--editor-heading-1-size, 1.9rem) * var(--editor-zoom, 1));
   font-weight: 580;
   line-height: 1.35;
-  margin: 0.35rem 0 0.24rem;
+  margin: 0.68rem 0 0.45rem;
   color: var(--text-main, #1a1a18);
 }
 .pandoc-preview h2 {
-  font-size: calc(var(--editor-heading-2-size, 1.6rem) * 0.92);
+  font-size: calc(var(--editor-heading-2-size, 1.6rem) * var(--editor-zoom, 1));
   line-height: 1.35;
-  margin: 0.55rem 0 0.45rem;
+  margin: 0.95rem 0 0.8rem;
   color: var(--text-main, #1a1a18);
 }
 .pandoc-preview h3 {
-  font-size: calc(var(--editor-heading-3-size, 1.35rem) * 0.92);
+  font-size: calc(var(--editor-heading-3-size, 1.35rem) * var(--editor-zoom, 1));
   line-height: 1.35;
-  margin: 0.45rem 0 0.3rem;
+  margin: 0.75rem 0 0.45rem;
   color: var(--text-main, #1a1a18);
 }
 .pandoc-preview h4 {
-  font-size: calc(var(--editor-heading-4-size, 1.18rem) * 0.92);
+  font-size: calc(var(--editor-heading-4-size, 1.18rem) * var(--editor-zoom, 1));
   font-weight: 560;
   line-height: 1.35;
-  margin: 0.4rem 0 0.25rem;
+  margin: 0.62rem 0 0.35rem;
   color: var(--editor-heading-4, var(--text-main, #1a1a18));
 }
 .pandoc-preview h5 {
-  font-size: calc(var(--editor-heading-5-size, 1.04rem) * 0.92);
+  font-size: calc(var(--editor-heading-5-size, 1.04rem) * var(--editor-zoom, 1));
   font-weight: 540;
   line-height: 1.35;
-  margin: 0.34rem 0 0.2rem;
+  margin: 0.5rem 0 0.28rem;
   color: var(--editor-heading-5, var(--text-soft, #5c5c56));
 }
 .pandoc-preview h6 {
-  font-size: calc(var(--editor-heading-6-size, 0.94rem) * 0.92);
+  font-size: calc(var(--editor-heading-6-size, 0.94rem) * var(--editor-zoom, 1));
   font-weight: 520;
   line-height: 1.35;
-  margin: 0.3rem 0 0.18rem;
+  margin: 0.45rem 0 0.22rem;
   color: var(--editor-heading-6, var(--text-dim, #7b7b73));
 }
 .pandoc-preview :not(pre) > code {
@@ -222,34 +187,76 @@ body {
 }
 .pandoc-preview ul,
 .pandoc-preview ol {
-  margin: 0.25rem 0 0.35rem 1.5rem;
+  margin: 0.32rem 0 0.45rem 1.35rem;
   padding: 0;
 }
+.pandoc-preview p + ul,
+.pandoc-preview p + ol {
+  margin-top: 0.18rem;
+}
+.pandoc-preview ul {
+  list-style: disc;
+}
+.pandoc-preview ol {
+  list-style: decimal;
+}
+.pandoc-preview ul ul {
+  list-style: circle;
+  margin-top: 0.24rem;
+  margin-bottom: 0.24rem;
+}
+.pandoc-preview ul ul ul {
+  list-style: square;
+}
+.pandoc-preview ol ol {
+  list-style: lower-alpha;
+  margin-top: 0.24rem;
+  margin-bottom: 0.24rem;
+}
+.pandoc-preview ol ol ol {
+  list-style: lower-roman;
+}
+.pandoc-preview ul ul > li::marker,
+.pandoc-preview ol ol > li::marker {
+  color: var(--editor-marker-muted, var(--text-soft, #5c5c56));
+}
+.pandoc-preview ul ul ul > li::marker,
+.pandoc-preview ol ol ol > li::marker {
+  color: var(--editor-marker-faint, var(--text-dim, #7b7b73));
+}
 .pandoc-preview li {
-  margin: 0.14rem 0;
+  margin: 0.2rem 0;
 }
 .pandoc-preview table {
   width: 100%;
   max-width: 100%;
+  min-width: 100% !important;
+  width: 100% !important;
   border-collapse: separate;
   border-spacing: 0;
-  margin: 0.28rem 0;
-  border: 1px solid var(--border-subtle, #d5dde8);
+  margin: 0.36rem 0;
+  border: 1px solid var(--editor-table-border, var(--border-subtle, #d5dde8));
   border-radius: 0.52rem;
   overflow: hidden;
-  background: var(--surface-bg, #ffffff);
-  font-size: 0.82rem;
+  background: var(--editor-table-bg, var(--surface-bg, #ffffff));
+  font-size: calc(0.82rem * var(--editor-zoom, 1));
   line-height: 1.3;
   table-layout: fixed;
 }
 .pandoc-preview th,
 .pandoc-preview td {
-  border-right: 1px solid var(--border-subtle, #d5dde8);
-  border-bottom: 1px solid var(--border-subtle, #d5dde8);
+  border-right: 1px solid var(--editor-table-cell-border, var(--border-subtle, #d5dde8));
+  border-bottom: 1px solid var(--editor-table-cell-border, var(--border-subtle, #d5dde8));
   padding: 0.24rem 0.34rem;
   vertical-align: top;
   text-align: left;
+  position: relative;
   min-width: 2.6rem;
+}
+.pandoc-preview table p {
+  font-size: inherit;
+  line-height: inherit;
+  margin: 0;
 }
 .pandoc-preview tr:last-child > th,
 .pandoc-preview tr:last-child > td {
@@ -261,11 +268,21 @@ body {
 }
 .pandoc-preview th {
   font-weight: 640;
-  background: color-mix(in srgb, var(--surface-muted, #edf2f8) 70%, var(--surface-bg, #ffffff));
-  color: var(--text-main, #1a1a18);
+  background: var(
+    --editor-table-header-bg,
+    color-mix(in srgb, var(--surface-muted, #edf2f8) 70%, var(--surface-bg, #ffffff))
+  );
+  color: var(--editor-table-header-text, var(--text-main, #1a1a18));
+}
+.pandoc-preview tbody tr:hover td {
+  background: var(--editor-table-hover, transparent);
+}
+.pandoc-preview td.selectedCell,
+.pandoc-preview th.selectedCell {
+  background: var(--editor-table-selection, transparent);
 }
 .pandoc-preview pre {
-  border: 1px solid var(--border-subtle, #d5dde8);
+  border: 1px solid var(--editor-table-cell-border, var(--border-subtle, #d5dde8));
   border-radius: 0.6rem;
   padding: 0.8rem;
   overflow: auto;
@@ -273,9 +290,13 @@ body {
   font-family: var(--font-code, ui-monospace, SFMono-Regular, monospace);
 }
 .pandoc-preview blockquote {
-  margin: 0.4rem 0;
-  padding-inline-start: 0;
-  border-inline-start: 0;
+  margin: 0.24rem 0;
+  padding-left: 0;
+  border-left: 0;
+}
+.pandoc-preview blockquote p {
+  font-size: calc(0.95rem * var(--editor-zoom, 1));
+  line-height: 1.48;
 }
 .pandoc-preview img,
 .pandoc-preview video,
@@ -288,7 +309,11 @@ body {
 }
 @media (max-width: 840px) {
   .pandoc-preview-shell {
-    max-width: 100%;
+    padding: 1rem;
+  }
+
+  .pandoc-preview {
+    width: 100%;
     padding-left: 1rem;
     padding-right: 1rem;
   }
