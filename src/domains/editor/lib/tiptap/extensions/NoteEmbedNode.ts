@@ -10,6 +10,7 @@ export type EmbeddedNotePreview = {
 
 export type NoteEmbedExtensionOptions = {
   loadEmbeddedNotePreview?: (target: string) => Promise<EmbeddedNotePreview | null>
+  openEmbeddedNote?: (target: string) => Promise<void>
 }
 
 export const NoteEmbedNode = Node.create<NoteEmbedExtensionOptions>({

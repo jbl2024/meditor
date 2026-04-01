@@ -77,6 +77,7 @@ export type EditorInteractionRuntimeIoPort = {
   openExternalUrl: (value: string) => Promise<void>
   createExtractedNote: (sourcePath: string, content: string) => Promise<{ path: string; link_target: string }>
   loadEmbeddedNotePreview: (target: string) => Promise<{ path: string; html: string } | null>
+  openEmbeddedNote: (target: string) => Promise<void>
 }
 
 /** Editor-specific callbacks that interaction owns but does not persist itself. */
@@ -271,6 +272,7 @@ export function useEditorInteractionRuntime(options: UseEditorInteractionRuntime
     getWikilinkCandidates,
     openLinkTargetWithAutosave,
     loadEmbeddedNotePreview: ioPort.loadEmbeddedNotePreview,
+    openEmbeddedNote: ioPort.openEmbeddedNote,
     revealAnchor: navigation.revealAnchor,
     resolveWikilinkTarget: wikilinkDataSource.resolveWikilinkTarget,
     sanitizeExternalHref,

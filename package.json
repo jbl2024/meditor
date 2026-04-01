@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
     "preflight": "npm run build",
-    "preflight:full": "npm run build && npm run tauri:build -- --bundles appimage,deb",
+    "preflight:full": "npm run build && npm run tauri:build -- --bundles appimaaxionse,deb",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "preview": "vite preview",

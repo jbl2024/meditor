@@ -149,6 +149,12 @@ async function loadEmbeddedNotePreview(target: string) {
   }
 }
 
+async function openEmbeddedNote(target: string) {
+  const noteTarget = parseWikilinkTarget(target).notePath.trim()
+  if (!noteTarget) return
+  await interactionRuntime.openLinkTargetWithAutosave(noteTarget)
+}
+
 let chromeRuntime!: ReturnType<typeof useEditorChromeRuntime>
 let interactionRuntime!: ReturnType<typeof useEditorInteractionRuntime>
 let documentRuntime!: ReturnType<typeof useEditorDocumentRuntime>
@@ -246,7 +252,8 @@ interactionRuntime = useEditorInteractionRuntime({
     openLinkTarget: props.openLinkTarget,
     openExternalUrl,
     createExtractedNote,
-    loadEmbeddedNotePreview
+    loadEmbeddedNotePreview,
+    openEmbeddedNote
   }
 })
 

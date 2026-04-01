@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { PencilSquareIcon } from '@heroicons/vue/24/outline'
 import { NodeViewWrapper } from '@tiptap/vue-3'
 import { parseWikilinkTarget } from '../../../lib/wikilinks'
 
@@ -14,6 +15,7 @@ const props = defineProps<{
   extension: {
     options?: {
       loadEmbeddedNotePreview?: (target: string) => Promise<EmbeddedNotePreview | null>
+      openEmbeddedNote?: (target: string) => Promise<void>
     }
   }
 }>()
@@ -64,6 +66,17 @@ async function refreshPreview() {
   }
 }
 
+async function openTargetInTab() {
+  const opener = props.extension.options?.openEmbeddedNote
+  const noteTarget = target.value
+  if (!opener || !noteTarget) return
+  try {
+    await opener(noteTarget)
+  } catch {
+    // Keep the preview read-only; opening the note is a best-effort action.
+  }
+}
+
 watch(target, () => {
   void refreshPreview()
 }, { immediate: true })
@@ -77,7 +90,19 @@ onBeforeUnmount(() => {
   <NodeViewWrapper class="tomosona-note-embed" data-note-embed-node="true">
     <div class="tomosona-note-embed-surface" :class="{ 'is-editable': editor.isEditable }">
       <header class="tomosona-note-embed-header">
-        <span class="tomosona-note-embed-label">{{ label }}</span>
+        <span class="tomosona-note-embed-title-row">
+          <span class="tomosona-note-embed-label">{{ label }}</span>
+          <button
+            type="button"
+            class="tomosona-note-embed-open-btn"
+            aria-label="Edit note"
+            title="Edit note"
+            @mousedown.prevent
+            @click.stop="void openTargetInTab()"
+          >
+            <PencilSquareIcon class="h-3.5 w-3.5" />
+          </button>
+        </span>
         <span v-if="loading" class="tomosona-note-embed-state">Loading</span>
       </header>
       <div
@@ -114,11 +139,38 @@ onBeforeUnmount(() => {
   color: var(--editor-source-text);
 }
 
+.tomosona-note-embed-title-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
 .tomosona-note-embed-label {
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.tomosona-note-embed-open-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 1.45rem;
+  height: 1.45rem;
+  border-radius: 999px;
+  color: var(--editor-source-text);
+  opacity: 0.7;
+  transition: opacity 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+
+.tomosona-note-embed-open-btn:hover {
+  background: color-mix(in srgb, var(--editor-overlay-panel) 30%, transparent);
+  color: var(--text-main);
+  opacity: 1;
 }
 
 .tomosona-note-embed-state {

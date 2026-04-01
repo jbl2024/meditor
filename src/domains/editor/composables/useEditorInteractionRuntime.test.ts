@@ -193,6 +193,7 @@ function createRuntimeHarness(input?: {
   const openLinkTarget = vi.fn(async () => true)
   const createExtractedNote = vi.fn(async () => ({ path: 'notes/extracted.md', link_target: 'notes/extracted' }))
   const loadEmbeddedNotePreview = vi.fn(async () => null)
+  const openEmbeddedNote = vi.fn(async () => {})
   const spellcheckEnabled = ref(false)
   const runtime = useEditorInteractionRuntime({
     interactionDocumentPort: {
@@ -244,7 +245,8 @@ function createRuntimeHarness(input?: {
       openLinkTarget,
       openExternalUrl: vi.fn(async () => {}),
       createExtractedNote,
-      loadEmbeddedNotePreview
+      loadEmbeddedNotePreview,
+      openEmbeddedNote
     }
   })
 
@@ -255,7 +257,8 @@ function createRuntimeHarness(input?: {
     saveCurrentFile,
     openLinkTarget,
     createExtractedNote,
-    loadEmbeddedNotePreview
+    loadEmbeddedNotePreview,
+    openEmbeddedNote
   }
 }
 

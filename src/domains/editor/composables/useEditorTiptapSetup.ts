@@ -54,6 +54,7 @@ export type UseEditorTiptapSetupOptions = {
   getWikilinkCandidates: (query: string) => Promise<WikilinkCandidate[]>
   openLinkTargetWithAutosave: (target: string) => Promise<void>
   loadEmbeddedNotePreview: (target: string) => Promise<{ path: string; html: string } | null>
+  openEmbeddedNote?: (target: string) => Promise<void>
   revealAnchor: (anchor: RevealAnchorRequest) => Promise<boolean>
   resolveWikilinkTarget: (target: string) => Promise<boolean>
   sanitizeExternalHref: (value: string) => string | null
@@ -265,7 +266,8 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
         QuoteNode,
         HtmlNode,
         NoteEmbedNode.configure({
-          loadEmbeddedNotePreview: options.loadEmbeddedNotePreview
+          loadEmbeddedNotePreview: options.loadEmbeddedNotePreview,
+          openEmbeddedNote: options.openEmbeddedNote
         }),
         CodeBlockNode,
         SpellcheckExtension.configure({
