@@ -658,6 +658,11 @@ fn pandoc_input_format_for_path(path: &Path) -> Option<&'static str> {
     }
 }
 
+fn unwrap_pandoc_list_blockquotes(html: String) -> String {
+    html.replace("<li><blockquote><p>", "<li><p>")
+        .replace("</p></blockquote></li>", "</p></li>")
+}
+
 fn decorate_pandoc_html(html: String, title: &str) -> String {
     let injection = format!(
         r#"<style>
@@ -968,6 +973,7 @@ fn render_pandoc_preview_html_sync(path: String) -> Result<String> {
     }
 
     let html = String::from_utf8(output.stdout).map_err(|_| AppError::OperationFailed)?;
+    let html = unwrap_pandoc_list_blockquotes(html);
     let decorated = decorate_pandoc_html(html, "Preview");
     log_fs_perf(
         "render_pandoc_preview_html",
@@ -1366,6 +1372,7 @@ mod tests {
         list_markdown_files, move_entry, open_external_url, open_path_external,
         pandoc_input_format_for_path, read_pdf_data_url, read_text_file, rename_entry,
         reveal_in_file_manager, sanitize_external_url, trash_entry, ConflictStrategy, EntryKind,
+        unwrap_pandoc_list_blockquotes,
     };
 
     fn make_temp_dir() -> PathBuf {
@@ -1426,6 +1433,19 @@ mod tests {
             Some("odt")
         );
         assert_eq!(pandoc_input_format_for_path(Path::new("image.png")), None);
+    }
+
+    #[test]
+    fn unwrap_pandoc_list_blockquotes_removes_list_quote_wrappers() {
+        let html = "<ul><li><blockquote><p>Mode: challenge</p></blockquote></li><li><blockquote><p><strong>Rounds</strong>: 2</p></blockquote></li></ul>";
+
+        let normalized = unwrap_pandoc_list_blockquotes(html.to_string());
+
+        assert_eq!(
+            normalized,
+            "<ul><li><p>Mode: challenge</p></li><li><p><strong>Rounds</strong>: 2</p></li></ul>"
+        );
+        assert!(!normalized.contains("<blockquote>"));
     }
 
     #[test]
