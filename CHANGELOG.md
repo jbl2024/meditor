@@ -18,6 +18,35 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.28.0] - 2026-04-01
+
+### Added
+- feat(file-inspector): preview supported files with pandoc (038f5d1)
+- feat(file-inspector): load pdf previews via data url (0f70929)
+- feat(shell): make non-markdown files first-class tabs (9a4c3b6)
+- feat(explorer): open non markdown files in tab (8ea9a71)
+
+### Changed
+- style(file-inspector): strengthen pandoc preview text color (7a603aa)
+- style(file-inspector): remove top padding from pandoc preview (9480c9e)
+- style(file-inspector): fine-tune pandoc text scale (4ec195e)
+- style(file-inspector): reduce pandoc preview typography (cf6222a)
+- style(file-inspector): increase pandoc left inset and remove quote bars (d0f4119)
+- style(file-inspector): tighten pandoc title spacing (bc5ff30)
+- style(file-inspector): tighten pandoc preview typography and spacing (7b1f99d)
+- style(file-inspector): inherit app theme in pandoc previews (58b748a)
+- style(file-inspector): match pandoc preview to markdown editor typography (6691a17)
+- style(file-inspector): add a polished unsupported-format placeholder (f57c389)
+- style(file-inspector): flatten inspector chrome (cbf8712)
+- test(app): fix favorites preflight regression (4fab07f)
+- style(file-inspector): remove redundant metadata panel (358dae3)
+
+### Fixed
+- fix(pandoc): unwrap spurious blockquotes in list items (9df8c58)
+- fix(file-inspector): remove filename title from pandoc preview (3e113fe)
+- fix(file-inspector): block mod-w inside pandoc preview (3624e84)
+- fix(docx): emit real Word lists for markdown items (186717e)
+
 ## [0.27.0] - 2026-04-01
 
 ### Added
