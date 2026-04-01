@@ -881,6 +881,95 @@ describe('EditorView interactions contract', () => {
     document.body.innerHTML = ''
   })
 
+  it('restores an embedded note inline and removes the embed block from the current note', async () => {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+
+    const editorRef = ref<any>(null)
+    const readNoteSnapshot = vi.fn(async (path: string) => {
+      if (path === 'main.md') {
+        return {
+          path,
+          content: '# Main\n\n![[notes/alpha]]\n\nAfter',
+          version: { mtimeMs: 1, size: 31 }
+        }
+      }
+      if (path === '/vault/notes/alpha.md') {
+        return {
+          path,
+          content: '---\ntitle: Alpha\n---\n# Alpha\n\nRestored body',
+          version: { mtimeMs: 2, size: 44 }
+        }
+      }
+      return {
+        path,
+        content: '',
+        version: { mtimeMs: 0, size: 0 }
+      }
+    })
+    const saveFile = vi.fn(async () => ({ persisted: true }))
+
+    const app = createApp(defineComponent({
+      setup() {
+        return () =>
+          h(EditorView, {
+            ref: editorRef,
+            path: 'main.md',
+            workspacePath: '/vault',
+            openPaths: ['main.md'],
+            readNoteSnapshot,
+            saveFile,
+            renameFileFromTitle: async (valuePath: string, title: string) => ({ path: valuePath, title }),
+            loadLinkTargets: async () => ['main.md', 'notes/alpha'],
+            loadLinkHeadings: async () => ['H1'],
+            loadPropertyTypeSchema: async () => ({}),
+            savePropertyTypeSchema: async () => {},
+            openLinkTarget: async () => true,
+            onStatus: () => {},
+            onOutline: () => {},
+            onProperties: () => {},
+            onPathRenamed: () => {}
+          })
+      }
+    }))
+
+    app.mount(root)
+    await flushUi()
+
+    const setupState = (editorRef.value as { $?: { setupState?: Record<string, any> } })?.$?.setupState
+    if (!setupState) throw new Error('Expected EditorView setup state')
+    const editor = setupState.renderedEditorsByPath?.['main.md']
+    if (!editor) throw new Error('Expected mounted main editor')
+
+    const restoreButton = Array.from(document.body.querySelectorAll('button')).find((button) =>
+      button.getAttribute('aria-label') === 'Restore inline'
+    ) as HTMLButtonElement | undefined
+    if (!restoreButton) throw new Error('Expected restore inline button')
+
+    restoreButton.click()
+    await flushUi()
+    await flushUi()
+
+    const serialized = editor.state.doc.textBetween(0, editor.state.doc.content.size, '\n', '\0')
+    expect(serialized).toContain('Alpha')
+    expect(serialized).toContain('Restored body')
+    expect(serialized).not.toContain('notes/alpha')
+
+    let hasEmbedNode = false
+    editor.state.doc.descendants((node: any) => {
+      if (node.type?.name === 'noteEmbedBlock') {
+        hasEmbedNode = true
+        return false
+      }
+      return true
+    })
+    expect(hasEmbedNode).toBe(false)
+    expect(saveFile).toHaveBeenCalled()
+
+    app.unmount()
+    document.body.innerHTML = ''
+  })
+
   it('replaces the misspelled word in the mounted editor when the spellcheck suggestion handler runs', async () => {
     const root = document.createElement('div')
     document.body.appendChild(root)

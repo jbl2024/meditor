@@ -10,8 +10,8 @@ import { captureHeavyRenderEpoch, hasPendingHeavyRender, waitForHeavyRenderIdle 
 import { useEditorChromeRuntime } from '../composables/useEditorChromeRuntime'
 import { useEditorDocumentRuntime } from '../composables/useEditorDocumentRuntime'
 import { useEditorInteractionRuntime } from '../composables/useEditorInteractionRuntime'
+import { useEmbeddedNoteActions } from '../composables/useEmbeddedNoteActions'
 import { getBlockStructureLabel } from '../lib/tiptap/blockMenu/guards'
-import { renderSecondBrainMarkdownPreview } from '../../second-brain/lib/secondBrainMarkdownPreview'
 import { parseWikilinkTarget } from '../lib/wikilinks'
 import EditorContextOverlays from './editor/EditorContextOverlays.vue'
 import EditorFindToolbar from './editor/EditorFindToolbar.vue'
@@ -111,53 +111,15 @@ const currentPathSource = computed(() => props.path?.trim() || '')
 const spellcheckEnabledRef = computed(() => Boolean(props.spellcheckEnabled))
 const workspaceSpellcheck = useWorkspaceSpellcheckDictionary({ workspacePath: workspacePathRef })
 
-function resolveWorkspaceNotePath(target: string) {
-  const workspacePath = workspacePathRef.value.trim().replace(/[\\/]+$/, '')
-  const noteTarget = parseWikilinkTarget(target)
-    .notePath
-    .trim()
-    .replace(/^[\\/]+/, '')
-    .replace(/\\/g, '/')
-    .replace(/^\.\//, '')
-  if (!workspacePath || !noteTarget) return ''
-  const normalizedTarget = noteTarget.replace(/\.(md|markdown)$/i, '')
-  return `${workspacePath}/${normalizedTarget}.md`
-}
-
-async function loadEmbeddedNotePreview(target: string) {
-  const path = resolveWorkspaceNotePath(target)
-  if (!path) return null
-
-  try {
-    const snapshot = props.readNoteSnapshot
-      ? await props.readNoteSnapshot(path)
-      : props.openFile
-        ? {
-            path,
-            content: await props.openFile(path),
-            version: null
-          } satisfies ReadNoteSnapshotResult
-        : null
-
-    if (!snapshot?.content) return null
-    return {
-      path: snapshot.path,
-      html: renderSecondBrainMarkdownPreview(snapshot.content)
-    }
-  } catch {
-    return null
-  }
-}
-
-async function openEmbeddedNote(target: string) {
-  const noteTarget = parseWikilinkTarget(target).notePath.trim()
-  if (!noteTarget) return
-  await interactionRuntime.openLinkTargetWithAutosave(noteTarget)
-}
-
 let chromeRuntime!: ReturnType<typeof useEditorChromeRuntime>
 let interactionRuntime!: ReturnType<typeof useEditorInteractionRuntime>
 let documentRuntime!: ReturnType<typeof useEditorDocumentRuntime>
+const embeddedNoteActions = useEmbeddedNoteActions({
+  workspacePath: workspacePathRef,
+  readNoteSnapshot: props.readNoteSnapshot,
+  openFile: props.openFile,
+  saveCurrentFile: (manual?: boolean) => documentRuntime?.saveCurrentFile(manual)
+})
 
 chromeRuntime = useEditorChromeRuntime({
   chromeHostPort: {
@@ -252,8 +214,13 @@ interactionRuntime = useEditorInteractionRuntime({
     openLinkTarget: props.openLinkTarget,
     openExternalUrl,
     createExtractedNote,
-    loadEmbeddedNotePreview,
-    openEmbeddedNote
+    loadEmbeddedNotePreview: embeddedNoteActions.loadEmbeddedNotePreview,
+    openEmbeddedNote: async (target: string) => {
+      const noteTarget = parseWikilinkTarget(target).notePath.trim()
+      if (!noteTarget) return
+      await interactionRuntime.openLinkTargetWithAutosave(noteTarget)
+    },
+    restoreEmbeddedNoteInline: embeddedNoteActions.restoreEmbeddedNoteInline
   }
 })
 

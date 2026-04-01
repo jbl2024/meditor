@@ -2,6 +2,7 @@ import { Node, mergeAttributes } from '@tiptap/core'
 import { VueNodeViewRenderer } from '@tiptap/vue-3'
 import { TIPTAP_NODE_TYPES } from '../types'
 import NoteEmbedNodeView from '../../../components/editor/tiptap/NoteEmbedNodeView.vue'
+import type { Editor } from '@tiptap/vue-3'
 
 export type EmbeddedNotePreview = {
   path: string
@@ -11,6 +12,7 @@ export type EmbeddedNotePreview = {
 export type NoteEmbedExtensionOptions = {
   loadEmbeddedNotePreview?: (target: string) => Promise<EmbeddedNotePreview | null>
   openEmbeddedNote?: (target: string) => Promise<void>
+  restoreEmbeddedNoteInline?: (target: string, editor: Editor, getPos: () => number) => Promise<void>
 }
 
 export const NoteEmbedNode = Node.create<NoteEmbedExtensionOptions>({
@@ -22,7 +24,9 @@ export const NoteEmbedNode = Node.create<NoteEmbedExtensionOptions>({
 
   addOptions() {
     return {
-      loadEmbeddedNotePreview: async () => null
+      loadEmbeddedNotePreview: async () => null,
+      openEmbeddedNote: async () => {},
+      restoreEmbeddedNoteInline: async () => {}
     }
   },
 
