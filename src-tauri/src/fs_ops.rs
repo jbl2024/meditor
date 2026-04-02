@@ -742,7 +742,7 @@ fn render_spreadsheet_sheet_html(
 
 fn decorate_spreadsheet_preview_html(html: String, title: &str) -> String {
     let injection = format!(
-        r#"<style>
+        r#"{}<style>
 html {{
   background: var(--app-bg, var(--surface-bg, #f4f7fb));
 }}
@@ -957,6 +957,7 @@ body {{
 }}
 </style>
 <title>{}</title>"#,
+        preview_srcdoc_csp_meta(),
         title
     );
 
@@ -1120,9 +1121,13 @@ fn unwrap_pandoc_list_blockquotes(html: String) -> String {
         .replace("</p></blockquote></li>", "</p></li>")
 }
 
+fn preview_srcdoc_csp_meta() -> &'static str {
+    r#"<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; font-src 'self' data:; media-src data:">"#
+}
+
 fn decorate_pandoc_html(html: String, title: &str) -> String {
     let injection = format!(
-        r#"<style>
+        r#"{}<style>
 html {{
   background: #f4f7fb;
 }}
@@ -1343,6 +1348,7 @@ body {{
 </style>
 <meta name="color-scheme" content="light dark">
 <title>{}</title>"#,
+        preview_srcdoc_csp_meta(),
         title
     );
 
@@ -1833,9 +1839,9 @@ mod tests {
         copy_entry, create_entry, create_extracted_note, duplicate_entry, list_children,
         list_markdown_files, move_entry, open_external_url, open_path_external,
         pandoc_input_format_for_path, read_pdf_data_url, read_text_file, rename_entry,
-        render_spreadsheet_sheet_html, reveal_in_file_manager, sanitize_external_url,
-        spreadsheet_column_label, trash_entry, ConflictStrategy, EntryKind,
-        unwrap_pandoc_list_blockquotes,
+        preview_srcdoc_csp_meta, render_spreadsheet_sheet_html, reveal_in_file_manager,
+        sanitize_external_url, spreadsheet_column_label, trash_entry, ConflictStrategy, EntryKind,
+        decorate_pandoc_html, decorate_spreadsheet_preview_html, unwrap_pandoc_list_blockquotes,
     };
 
     fn make_temp_dir() -> PathBuf {
@@ -1924,6 +1930,41 @@ mod tests {
         assert!(html.contains("R2C2"));
         assert!(html.contains("<th scope=\"row\" class=\"spreadsheet-row-header\">2</th>"));
         assert!(html.contains("<th scope=\"row\" class=\"spreadsheet-row-header\">3</th>"));
+    }
+
+    #[test]
+    fn preview_srcdoc_csp_meta_allows_inline_preview_assets() {
+        let csp = preview_srcdoc_csp_meta();
+
+        assert!(csp.contains("style-src 'unsafe-inline'"));
+        assert!(csp.contains("script-src 'unsafe-inline'"));
+        assert!(csp.contains("img-src 'self' data:"));
+        assert!(csp.contains("media-src data:"));
+    }
+
+    #[test]
+    fn decorate_pandoc_html_injects_preview_csp_meta() {
+        let html = "<!DOCTYPE html><html><head><meta charset=\"utf-8\"></head><body><main>Preview</main></body></html>".to_string();
+
+        let decorated = decorate_pandoc_html(html, "Preview");
+
+        assert!(decorated.contains("http-equiv=\"Content-Security-Policy\""));
+        assert!(decorated.contains("style-src 'unsafe-inline'"));
+        assert!(decorated.contains("script-src 'unsafe-inline'"));
+        assert!(decorated.contains("<meta name=\"color-scheme\" content=\"light dark\">"));
+        assert!(decorated.contains("<title>Preview</title>"));
+    }
+
+    #[test]
+    fn decorate_spreadsheet_preview_html_injects_preview_csp_meta() {
+        let html = "<!DOCTYPE html><html><head><meta charset=\"utf-8\"></head><body><main data-spreadsheet-preview>Preview</main></body></html>".to_string();
+
+        let decorated = decorate_spreadsheet_preview_html(html, "Spreadsheet preview");
+
+        assert!(decorated.contains("http-equiv=\"Content-Security-Policy\""));
+        assert!(decorated.contains("style-src 'unsafe-inline'"));
+        assert!(decorated.contains("script-src 'unsafe-inline'"));
+        assert!(decorated.contains("<title>Spreadsheet preview</title>"));
     }
 
     #[test]
