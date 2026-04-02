@@ -117,7 +117,7 @@ function submitCustomKey() {
   display: inline-flex;
 }
 
-.property-add-dropdown :deep(.ui-filterable-dropdown) {
+.property-add-dropdown .ui-filterable-dropdown {
   display: flex;
   flex-direction: column;
   align-items: flex-start;

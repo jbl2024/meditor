@@ -130,6 +130,7 @@ watch(
         :disabled="running"
         :close-on-select="true"
         :menu-mode="'portal'"
+        :menu-class="'pulse-compact-dropdown-menu'"
         filter-placeholder="Filter Pulse actions..."
         @open-change="compactMenuOpen = $event"
         @query-change="compactQuery = $event"
@@ -449,7 +450,7 @@ watch(
   background: var(--pulse-muted-btn-hover);
 }
 
-.pulse-compact-dropdown :deep(.ui-filterable-dropdown-menu) {
+.pulse-compact-dropdown-menu {
   --ui-dropdown-bg: var(--pulse-bg);
   --ui-dropdown-border: var(--pulse-panel-border);
   --ui-dropdown-hover: var(--pulse-chip-active-bg);

@@ -344,6 +344,7 @@ void threadRef
               :show-filter="true"
               :close-on-select="true"
               :menu-mode="'portal'"
+              :menu-class="'sb-pulse-dropdown-menu'"
               :disabled="!contextPaths.length || requestInFlight"
               filter-placeholder="Filter Pulse actions..."
               @open-change="pulseDropdownOpen = $event"
@@ -482,7 +483,7 @@ void threadRef
   align-items: center;
 }
 
-.sb-alter-dropdown :deep(.ui-filterable-dropdown-menu) {
+.sb-alter-dropdown-menu {
   z-index: 70;
 }
 
@@ -550,7 +551,7 @@ void threadRef
   color: var(--sb-text-dim);
 }
 
-.sb-alter-dropdown :deep(.ui-filterable-dropdown-option[data-active='true']) {
+.sb-alter-dropdown-menu .ui-filterable-dropdown-option[data-active='true'] {
   color: var(--sb-active-text);
 }
 
@@ -815,7 +816,7 @@ void threadRef
   min-width: 0;
 }
 
-.sb-pulse-dropdown :deep(.ui-filterable-dropdown-menu) {
+.sb-pulse-dropdown-menu {
   --ui-dropdown-bg: var(--sb-input-bg);
   --ui-dropdown-border: var(--sb-border);
   --ui-dropdown-text: var(--sb-text);

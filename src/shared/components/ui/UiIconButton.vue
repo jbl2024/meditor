@@ -67,7 +67,7 @@ defineExpose({
   min-width: 2rem;
 }
 
-.ui-icon-button:deep(svg) {
+.ui-icon-button svg {
   width: 1rem;
   height: 1rem;
   flex: 0 0 auto;
