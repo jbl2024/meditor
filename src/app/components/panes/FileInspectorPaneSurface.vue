@@ -69,6 +69,8 @@ const htmlPreviewLoading = ref(false)
 const htmlPreviewError = ref('')
 const previewThemeSnapshot = ref<PreviewThemeSnapshot>(readPreviewThemeSnapshot())
 let themeObserver: MutationObserver | null = null
+const previewIframeCsp =
+  "default-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; font-src 'self' data:; media-src data:"
 const headCloseTag = '</' + 'head>'
 const bodyCloseTag = '</' + 'body>'
 const scriptCloseTag = '<' + '/script>'
@@ -467,6 +469,7 @@ watch(
         class="file-inspector-preview-frame file-inspector-preview-frame--html"
         :srcdoc="htmlPreviewSrc"
         :title="`Preview for ${fileName}`"
+        :csp="previewIframeCsp"
         sandbox="allow-scripts"
       />
       <div v-else class="file-inspector-preview-stage">

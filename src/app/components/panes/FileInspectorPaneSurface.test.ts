@@ -7,6 +7,9 @@ const hoisted = vi.hoisted(() => ({
   renderSpreadsheetPreviewHtml: vi.fn(async (path: string) => `<html><body><section>${path}</section></body></html>`)
 }))
 
+const previewIframeCsp =
+  "default-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; font-src 'self' data:; media-src data:"
+
 vi.mock('../../../shared/api/workspaceApi', () => ({
   readPdfDataUrl: hoisted.readPdfDataUrl,
   renderPandocPreviewHtml: hoisted.renderPandocPreviewHtml,
@@ -118,6 +121,7 @@ describe('FileInspectorPaneSurface', () => {
     expect(iframe?.getAttribute('srcdoc')).toContain('list-style: disc;')
     expect(iframe?.getAttribute('srcdoc')).toContain('border-left: 0;')
     expect(iframe?.getAttribute('srcdoc')).toContain('event.metaKey || event.ctrlKey')
+    expect(iframe?.getAttribute('csp')).toBe(previewIframeCsp)
     expect(iframe?.getAttribute('sandbox')).toBe('allow-scripts')
     expect(hoisted.renderPandocPreviewHtml).toHaveBeenCalledWith('/vault/assets/report.docx')
     expect(hoisted.renderSpreadsheetPreviewHtml).not.toHaveBeenCalled()
@@ -133,6 +137,7 @@ describe('FileInspectorPaneSurface', () => {
     expect(iframe).toBeTruthy()
     expect(iframe?.getAttribute('src')).toBeNull()
     expect(iframe?.getAttribute('srcdoc')).toContain('<section>/vault/assets/report.xlsx</section>')
+    expect(iframe?.getAttribute('csp')).toBe(previewIframeCsp)
     expect(hoisted.renderSpreadsheetPreviewHtml).toHaveBeenCalledWith('/vault/assets/report.xlsx')
     expect(hoisted.renderPandocPreviewHtml).not.toHaveBeenCalled()
 
@@ -147,6 +152,7 @@ describe('FileInspectorPaneSurface', () => {
     expect(iframe).toBeTruthy()
     expect(iframe?.getAttribute('src')).toBeNull()
     expect(iframe?.getAttribute('srcdoc')).toContain('<section>/vault/assets/report.ods</section>')
+    expect(iframe?.getAttribute('csp')).toBe(previewIframeCsp)
     expect(hoisted.renderSpreadsheetPreviewHtml).toHaveBeenCalledWith('/vault/assets/report.ods')
     expect(hoisted.renderPandocPreviewHtml).not.toHaveBeenCalled()
 
