@@ -18,6 +18,14 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.29.0] - 2026-04-02
+
+### Added
+- feat(preview): add spreadsheet preview for xlsx and ods (60f9bfc)
+
+### Fixed
+- fix(build): remove invalid deep selectors from vue css (fdd3b0f)
+
 ## [0.28.0] - 2026-04-01
 
 ### Added
