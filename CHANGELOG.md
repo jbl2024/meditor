@@ -18,6 +18,13 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.32.2] - 2026-04-02
+
+### Fixed
+- fix(csp): preserve inline preview policy in tauri build (3332bc3)
+- fix(preview): add csp to html preview iframe (2b618af)
+- fix(preview): add csp for srcdoc previews (12d2bba)
+
 ## [0.32.1] - 2026-04-02
 
 ### Fixed
