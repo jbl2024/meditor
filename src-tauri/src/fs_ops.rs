@@ -7,6 +7,7 @@ use std::{
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
 use base64::{engine::general_purpose::STANDARD, Engine};
+use calamine::{open_workbook_auto, Data, DataType, Reader};
 
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use rfd::FileDialog;
@@ -640,12 +641,469 @@ pub fn read_pdf_data_url(path: String) -> Result<String> {
     Ok(format!("data:application/pdf;base64,{encoded}"))
 }
 
+fn spreadsheet_input_format_for_path(path: &Path) -> Option<&'static str> {
+    let ext = path.extension()?.to_str()?.to_ascii_lowercase();
+    match ext.as_str() {
+        "xlsx" => Some("xlsx"),
+        "ods" => Some("ods"),
+        _ => None,
+    }
+}
+
+fn escape_html(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for ch in value.chars() {
+        match ch {
+            '&' => escaped.push_str("&amp;"),
+            '<' => escaped.push_str("&lt;"),
+            '>' => escaped.push_str("&gt;"),
+            '"' => escaped.push_str("&quot;"),
+            '\'' => escaped.push_str("&#39;"),
+            _ => escaped.push(ch),
+        }
+    }
+    escaped
+}
+
+fn spreadsheet_column_label(mut column_index: usize) -> String {
+    let mut label = String::new();
+    loop {
+        let remainder = column_index % 26;
+        label.push((b'A' + remainder as u8) as char);
+        if column_index < 26 {
+            break;
+        }
+        column_index = (column_index / 26) - 1;
+    }
+    label.chars().rev().collect()
+}
+
+fn spreadsheet_cell_text(cell: Option<&Data>) -> String {
+    cell.and_then(|value| value.as_string()).unwrap_or_default()
+}
+
+fn render_spreadsheet_sheet_html(
+    sheet_index: usize,
+    sheet_name: &str,
+    range: &calamine::Range<Data>,
+) -> String {
+    let (row_start, col_start) = range.start().unwrap_or((0, 0));
+    let (row_count, col_count) = range.get_size();
+    let used_cells = range.used_cells().count();
+    let sheet_id = format!("sheet-{sheet_index}");
+    let sheet_title = escape_html(sheet_name);
+    let mut html = String::new();
+
+    html.push_str(&format!(
+        "<section class=\"spreadsheet-sheet\" data-spreadsheet-sheet data-sheet-id=\"{sheet_id}\" data-active=\"{}\"{}>",
+        if sheet_index == 0 { "true" } else { "false" },
+        if sheet_index == 0 { "" } else { " hidden" }
+    ));
+    html.push_str(&format!(
+        "<header class=\"spreadsheet-sheet-head\"><div><h2>{sheet_title}</h2><p>{row_count} rows · {col_count} columns · {used_cells} filled cells</p></div><span class=\"spreadsheet-sheet-range\">R{}C{}</span></header>",
+        row_start + 1,
+        col_start + 1
+    ));
+
+    if row_count == 0 || col_count == 0 {
+        html.push_str("<div class=\"spreadsheet-empty\">This sheet is empty.</div></section>");
+        return html;
+    }
+
+    html.push_str("<div class=\"spreadsheet-table-shell\"><table class=\"spreadsheet-table\">");
+    html.push_str("<thead><tr><th class=\"spreadsheet-corner\"></th>");
+    for col_offset in 0..col_count {
+        let label = spreadsheet_column_label((col_start as usize) + col_offset);
+        html.push_str(&format!("<th scope=\"col\">{}</th>", escape_html(&label)));
+    }
+    html.push_str("</tr></thead><tbody>");
+
+    for row_offset in 0..row_count {
+        let row_number = row_start as usize + row_offset + 1;
+        html.push_str("<tr>");
+        html.push_str(&format!(
+            "<th scope=\"row\" class=\"spreadsheet-row-header\">{row_number}</th>"
+        ));
+
+        for col_offset in 0..col_count {
+            let value = spreadsheet_cell_text(range.get_value((
+                row_start + row_offset as u32,
+                col_start + col_offset as u32,
+            )));
+            html.push_str(&format!("<td>{}</td>", escape_html(&value)));
+        }
+
+        html.push_str("</tr>");
+    }
+
+    html.push_str("</tbody></table></div></section>");
+    html
+}
+
+fn decorate_spreadsheet_preview_html(html: String, title: &str) -> String {
+    let injection = format!(
+        r#"<style>
+html {{
+  background: var(--app-bg, var(--surface-bg, #f4f7fb));
+}}
+body {{
+  margin: 0;
+  background: var(--app-bg, var(--surface-bg, #f4f7fb));
+  color: var(--text-main, #1a1a18);
+  font-family: var(--font-editor, var(--font-sans, ui-sans-serif, system-ui, sans-serif));
+  line-height: 1.45;
+  -webkit-font-variant-ligatures: none;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0;
+}}
+.spreadsheet-preview-shell {{
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}}
+.spreadsheet-preview {{
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.9rem 0.9rem 1.1rem;
+  box-sizing: border-box;
+}}
+.spreadsheet-tab-input {{
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+  overflow: hidden;
+  clip-path: inset(50%);
+}}
+.spreadsheet-preview-head {{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.5rem;
+}}
+.spreadsheet-preview-head h1 {{
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}}
+.spreadsheet-preview-head p {{
+  margin: 0.18rem 0 0;
+  font-size: 0.8rem;
+  color: var(--text-soft, #5c5c56);
+}}
+.spreadsheet-preview-tabs {{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  padding: 0.2rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-subtle, #edf2f8) 72%, transparent);
+  border: 1px solid var(--border-subtle, #d5dde8);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  backdrop-filter: blur(8px);
+}}
+.spreadsheet-tab-btn {{
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-soft, #5c5c56);
+  border-radius: 999px;
+  padding: 0.3rem 0.62rem;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.1;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+}}
+.spreadsheet-tab-btn:hover {{
+  background: color-mix(in srgb, var(--surface-bg, #ffffff) 72%, transparent);
+  color: var(--text-main, #1a1a18);
+}}
+.spreadsheet-tab-btn[data-active="true"] {{
+  background: var(--surface-bg, #ffffff);
+  color: var(--text-main, #1a1a18);
+  border-color: var(--border-subtle, #d5dde8);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--border-subtle, #d5dde8) 45%, transparent);
+}}
+.spreadsheet-tab-btn:focus-visible {{
+  outline: 2px solid var(--accent, #1f5f9b);
+  outline-offset: 2px;
+}}
+.spreadsheet-sheet {{
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  gap: 0.55rem;
+  scroll-margin-top: 5rem;
+}}
+.spreadsheet-sheet[hidden] {{
+  display: none;
+}}
+.spreadsheet-sheet[data-active="true"] {{
+  display: flex;
+}}
+.spreadsheet-sheet-head {{
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}}
+.spreadsheet-sheet-head h2 {{
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 650;
+}}
+.spreadsheet-sheet-head p,
+.spreadsheet-sheet-range {{
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--text-soft, #5c5c56);
+}}
+.spreadsheet-table-shell {{
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--border-subtle, #d5dde8);
+  border-radius: 0.8rem;
+  background: var(--surface-bg, #ffffff);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--border-subtle, #d5dde8) 38%, transparent);
+}}
+.spreadsheet-table {{
+  width: max(100%, max-content);
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+  font-size: 0.76rem;
+}}
+.spreadsheet-table thead th,
+.spreadsheet-table tbody th,
+.spreadsheet-table td {{
+  border-right: 1px solid var(--border-subtle, #d5dde8);
+  border-bottom: 1px solid var(--border-subtle, #d5dde8);
+  padding: 0.28rem 0.4rem;
+  min-width: 4.5rem;
+  max-width: 18rem;
+  vertical-align: top;
+  white-space: pre-wrap;
+  word-break: break-word;
+}}
+.spreadsheet-table thead th {{
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: color-mix(in srgb, var(--surface-muted, #edf2f8) 78%, var(--surface-bg, #ffffff));
+  font-weight: 650;
+  text-align: center;
+  color: var(--text-main, #1a1a18);
+}}
+.spreadsheet-table tbody th {{
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: color-mix(in srgb, var(--surface-muted, #edf2f8) 78%, var(--surface-bg, #ffffff));
+  font-weight: 650;
+  text-align: right;
+  color: var(--text-main, #1a1a18);
+  min-width: 2.85rem;
+  width: 2.85rem;
+}}
+.spreadsheet-table .spreadsheet-corner {{
+  left: 0;
+  z-index: 2;
+  min-width: 2.85rem;
+  width: 2.85rem;
+}}
+.spreadsheet-table td {{
+  background: var(--surface-bg, #ffffff);
+}}
+.spreadsheet-table tr:last-child > th,
+.spreadsheet-table tr:last-child > td {{
+  border-bottom: none;
+}}
+.spreadsheet-table tr > th:last-child,
+.spreadsheet-table tr > td:last-child {{
+  border-right: none;
+}}
+.spreadsheet-empty {{
+  padding: 1rem 1.1rem;
+  border: 1px dashed var(--border-subtle, #d5dde8);
+  border-radius: 0.75rem;
+  color: var(--text-soft, #5c5c56);
+  background: color-mix(in srgb, var(--surface-subtle, #edf2f8) 40%, transparent);
+}}
+@media (max-width: 840px) {{
+  .spreadsheet-preview {{
+    padding: 0.75rem;
+  }}
+
+  .spreadsheet-sheet-head {{
+    flex-direction: column;
+    align-items: flex-start;
+  }}
+}}
+</style>
+<title>{}</title>"#,
+        title
+    );
+
+    if let Some(head_end) = html.find("</head>") {
+        let mut decorated = String::with_capacity(html.len() + injection.len());
+        decorated.push_str(&html[..head_end]);
+        decorated.push_str(&injection);
+        decorated.push_str(&html[head_end..]);
+        return decorated;
+    }
+
+    format!("{injection}{html}")
+}
+
+fn build_spreadsheet_preview_script(sheet_count: usize) -> String {
+    let mut script = String::from(
+        r#"<script>
+(function () {
+  function setActive(root, sheetId) {
+    var tabs = Array.from(root.querySelectorAll('[data-spreadsheet-tab]'));
+    var sheets = Array.from(root.querySelectorAll('[data-spreadsheet-sheet]'));
+
+    tabs.forEach(function (tab) {
+      var isActive = tab.dataset.sheetId === sheetId;
+      tab.dataset.active = isActive ? 'true' : 'false';
+      tab.setAttribute('aria-current', isActive ? 'true' : 'false');
+    });
+
+    sheets.forEach(function (sheet) {
+      var isActive = sheet.dataset.sheetId === sheetId;
+      sheet.dataset.active = isActive ? 'true' : 'false';
+      sheet.hidden = !isActive;
+    });
+  }
+
+  var root = document.querySelector('[data-spreadsheet-preview]');
+  if (!root) return;
+
+  root.addEventListener('click', function (event) {
+    var tab = event.target.closest('[data-spreadsheet-tab]');
+    if (!tab || !root.contains(tab)) return;
+    event.preventDefault();
+    setActive(root, tab.dataset.sheetId);
+  });
+
+  var initial = root.querySelector('[data-spreadsheet-tab][data-active="true"]') || root.querySelector('[data-spreadsheet-tab]');
+  if (initial) {
+    setActive(root, initial.dataset.sheetId);
+  }
+})();
+</script>"#,
+    );
+    if sheet_count == 0 {
+        script.clear();
+    }
+    script
+}
+
+fn render_spreadsheet_preview_html_sync(path: String) -> Result<String> {
+    let started_at = Instant::now();
+    let root = active_workspace_root()?;
+    let pb = normalize_existing_path(&path)?;
+    ensure_within_root(&root, &pb)?;
+    let input_format = spreadsheet_input_format_for_path(&pb)
+        .ok_or_else(|| AppError::InvalidOperation("Preview unavailable for this file format.".to_string()))?;
+
+    let mut workbook =
+        open_workbook_auto(&pb).map_err(|err| AppError::InvalidOperation(format!("Spreadsheet preview failed: {err}")))?;
+
+    let sheet_names = workbook.sheet_names().to_owned();
+    if sheet_names.is_empty() {
+        return Err(AppError::InvalidOperation(
+            "Spreadsheet preview failed: no sheets were found.".to_string(),
+        ));
+    }
+
+    let mut html = String::new();
+    html.push_str("<!DOCTYPE html><html><head><meta charset=\"utf-8\"></head><body>");
+    html.push_str(
+        "<div class=\"spreadsheet-preview-shell\"><main class=\"spreadsheet-preview\" data-spreadsheet-preview>",
+    );
+    html.push_str(&format!(
+        "<header class=\"spreadsheet-preview-head\"><div><h1>{}</h1><p>{} sheet{}</p></div></header>",
+        escape_html(
+            pb.file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("Spreadsheet preview")
+        ),
+        sheet_names.len(),
+        if sheet_names.len() == 1 { "" } else { "s" }
+    ));
+    html.push_str("<nav class=\"spreadsheet-preview-tabs\" aria-label=\"Spreadsheet sheets\">");
+
+    let mut rendered_sheets = Vec::new();
+    for (index, sheet_name) in sheet_names.iter().enumerate() {
+        let sheet_label = escape_html(sheet_name);
+        html.push_str(&format!(
+            "<button type=\"button\" class=\"spreadsheet-tab-btn\" data-spreadsheet-tab data-sheet-id=\"sheet-{index}\"{}>{sheet_label}</button>",
+            if index == 0 { " data-active=\"true\" aria-current=\"true\"" } else { "" }
+        ));
+
+        match workbook.worksheet_range(sheet_name) {
+            Ok(range) => rendered_sheets.push(render_spreadsheet_sheet_html(index, sheet_name, &range)),
+            Err(err) => rendered_sheets.push(format!(
+                "<section class=\"spreadsheet-sheet\" data-spreadsheet-sheet data-sheet-id=\"sheet-{index}\" data-active=\"{}\"{}><div class=\"spreadsheet-empty\">Could not load this sheet: {}</div></section>",
+                if index == 0 { "true" } else { "false" },
+                if index == 0 { "" } else { " hidden" },
+                escape_html(&err.to_string())
+            )),
+        }
+    }
+
+    html.push_str("</nav>");
+    html.push_str("<div class=\"spreadsheet-sheets\">");
+    for sheet_html in rendered_sheets {
+        html.push_str(&sheet_html);
+    }
+    html.push_str("</div></main></div>");
+    html.push_str(&build_spreadsheet_preview_script(sheet_names.len()));
+    html.push_str("</body></html>");
+
+    let decorated = decorate_spreadsheet_preview_html(html, "Spreadsheet preview");
+    log_fs_perf(
+        "render_spreadsheet_preview_html",
+        &pb,
+        started_at,
+        &[
+            ("format", input_format.to_string()),
+            ("sheets", sheet_names.len().to_string()),
+            ("chars", decorated.chars().count().to_string()),
+        ],
+    );
+    Ok(decorated)
+}
+
+#[tauri::command]
+pub async fn render_spreadsheet_preview_html(path: String) -> Result<String> {
+    tauri::async_runtime::spawn_blocking(move || render_spreadsheet_preview_html_sync(path))
+        .await
+        .map_err(|_| AppError::OperationFailed)?
+}
+
 fn pandoc_input_format_for_path(path: &Path) -> Option<&'static str> {
     let ext = path.extension()?.to_str()?.to_ascii_lowercase();
     match ext.as_str() {
         "docx" => Some("docx"),
         "odt" => Some("odt"),
-        "xlsx" => Some("xlsx"),
         "csv" => Some("csv"),
         "tsv" => Some("tsv"),
         "html" | "htm" => Some("html"),
@@ -1365,13 +1823,15 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
+    use calamine::Data;
     use crate::editor_sync::recent_internal_write_for;
 
     use super::{
         copy_entry, create_entry, create_extracted_note, duplicate_entry, list_children,
         list_markdown_files, move_entry, open_external_url, open_path_external,
         pandoc_input_format_for_path, read_pdf_data_url, read_text_file, rename_entry,
-        reveal_in_file_manager, sanitize_external_url, trash_entry, ConflictStrategy, EntryKind,
+        render_spreadsheet_sheet_html, reveal_in_file_manager, sanitize_external_url,
+        spreadsheet_column_label, trash_entry, ConflictStrategy, EntryKind,
         unwrap_pandoc_list_blockquotes,
     };
 
@@ -1426,13 +1886,41 @@ mod tests {
         );
         assert_eq!(
             pandoc_input_format_for_path(Path::new("sheet.xlsx")),
-            Some("xlsx")
+            None
         );
         assert_eq!(
             pandoc_input_format_for_path(Path::new("notes.odt")),
             Some("odt")
         );
         assert_eq!(pandoc_input_format_for_path(Path::new("image.png")), None);
+    }
+
+    #[test]
+    fn spreadsheet_column_labels_follow_excel_conventions() {
+        assert_eq!(spreadsheet_column_label(0), "A");
+        assert_eq!(spreadsheet_column_label(25), "Z");
+        assert_eq!(spreadsheet_column_label(26), "AA");
+    }
+
+    #[test]
+    fn spreadsheet_sheet_preview_renders_tabs_and_absolute_coordinates() {
+        let mut range = calamine::Range::new((1, 1), (2, 2));
+        range.set_value((1, 1), Data::String("Alpha & Beta".to_string()));
+        range.set_value((2, 2), Data::String("Gamma".to_string()));
+
+        let html = render_spreadsheet_sheet_html(0, "Summary & More", &range);
+
+        assert!(html.contains("data-spreadsheet-sheet"));
+        assert!(html.contains("data-sheet-id=\"sheet-0\""));
+        assert!(html.contains("Summary &amp; More"));
+        assert!(html.contains("<th scope=\"col\">B</th>"));
+        assert!(html.contains("<th scope=\"col\">C</th>"));
+        assert!(!html.contains("This sheet is empty."));
+        assert!(html.contains("Alpha &amp; Beta"));
+        assert!(html.contains("Gamma"));
+        assert!(html.contains("R2C2"));
+        assert!(html.contains("<th scope=\"row\" class=\"spreadsheet-row-header\">2</th>"));
+        assert!(html.contains("<th scope=\"row\" class=\"spreadsheet-row-header\">3</th>"));
     }
 
     #[test]

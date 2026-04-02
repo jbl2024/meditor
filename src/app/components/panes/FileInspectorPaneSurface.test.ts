@@ -3,12 +3,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const hoisted = vi.hoisted(() => ({
   readPdfDataUrl: vi.fn(async (path: string) => `data:application/pdf;base64,${Buffer.from(path).toString('base64')}`),
-  renderPandocPreviewHtml: vi.fn(async (path: string) => `<html><body><main>${path}</main></body></html>`)
+  renderPandocPreviewHtml: vi.fn(async (path: string) => `<html><body><main>${path}</main></body></html>`),
+  renderSpreadsheetPreviewHtml: vi.fn(async (path: string) => `<html><body><section>${path}</section></body></html>`)
 }))
 
 vi.mock('../../../shared/api/workspaceApi', () => ({
   readPdfDataUrl: hoisted.readPdfDataUrl,
-  renderPandocPreviewHtml: hoisted.renderPandocPreviewHtml
+  renderPandocPreviewHtml: hoisted.renderPandocPreviewHtml,
+  renderSpreadsheetPreviewHtml: hoisted.renderSpreadsheetPreviewHtml
 }))
 
 import FileInspectorPaneSurface from './FileInspectorPaneSurface.vue'
@@ -49,6 +51,7 @@ describe('FileInspectorPaneSurface', () => {
     document.documentElement.style.removeProperty('--editor-code-bg')
     hoisted.readPdfDataUrl.mockClear()
     hoisted.renderPandocPreviewHtml.mockClear()
+    hoisted.renderSpreadsheetPreviewHtml.mockClear()
   })
 
   it('keeps file details out of the inspector surface and focuses on actions plus preview', async () => {
@@ -116,6 +119,33 @@ describe('FileInspectorPaneSurface', () => {
     expect(iframe?.getAttribute('srcdoc')).toContain('event.metaKey || event.ctrlKey')
     expect(iframe?.getAttribute('sandbox')).toBe('allow-scripts')
     expect(hoisted.renderPandocPreviewHtml).toHaveBeenCalledWith('/vault/assets/report.docx')
+    expect(hoisted.renderSpreadsheetPreviewHtml).not.toHaveBeenCalled()
+
+    mounted.app.unmount()
+  })
+
+  it('renders spreadsheet files with automatic sheet tabs', async () => {
+    const mounted = mountInspector('/vault/assets/report.xlsx')
+    await flushUi()
+
+    const iframe = mounted.root.querySelector<HTMLIFrameElement>('iframe')
+    expect(iframe).toBeTruthy()
+    expect(iframe?.getAttribute('srcdoc')).toContain('<section>/vault/assets/report.xlsx</section>')
+    expect(hoisted.renderSpreadsheetPreviewHtml).toHaveBeenCalledWith('/vault/assets/report.xlsx')
+    expect(hoisted.renderPandocPreviewHtml).not.toHaveBeenCalled()
+
+    mounted.app.unmount()
+  })
+
+  it('renders ods files with the spreadsheet preview pipeline', async () => {
+    const mounted = mountInspector('/vault/assets/report.ods')
+    await flushUi()
+
+    const iframe = mounted.root.querySelector<HTMLIFrameElement>('iframe')
+    expect(iframe).toBeTruthy()
+    expect(iframe?.getAttribute('srcdoc')).toContain('<section>/vault/assets/report.ods</section>')
+    expect(hoisted.renderSpreadsheetPreviewHtml).toHaveBeenCalledWith('/vault/assets/report.ods')
+    expect(hoisted.renderPandocPreviewHtml).not.toHaveBeenCalled()
 
     mounted.app.unmount()
   })

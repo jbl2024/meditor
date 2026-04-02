@@ -64,6 +64,11 @@ export async function renderPandocPreviewHtml(path: string): Promise<string> {
   return await invoke('render_pandoc_preview_html', { path })
 }
 
+/** Renders a spreadsheet preview as standalone HTML for `.xlsx` and `.ods` files. */
+export async function renderSpreadsheetPreviewHtml(path: string): Promise<string> {
+  return await invoke('render_spreadsheet_preview_html', { path })
+}
+
 /** Writes UTF-8 text content to a workspace file. */
 export async function writeTextFile(path: string, content: string): Promise<void> {
   await invoke('write_text_file', { path, content })

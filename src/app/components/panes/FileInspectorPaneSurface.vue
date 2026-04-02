@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import { ArrowTopRightOnSquareIcon, DocumentIcon } from '@heroicons/vue/24/outline'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { readPdfDataUrl, renderPandocPreviewHtml } from '../../../shared/api/workspaceApi'
+import {
+  readPdfDataUrl,
+  renderPandocPreviewHtml,
+  renderSpreadsheetPreviewHtml
+} from '../../../shared/api/workspaceApi'
 import UiButton from '../../../shared/components/ui/UiButton.vue'
 
 const props = defineProps<{
@@ -26,7 +30,6 @@ const pandocPreviewFormat = computed(() => {
   const supportedFormats: Record<string, string> = {
     docx: 'docx',
     odt: 'odt',
-    xlsx: 'xlsx',
     csv: 'csv',
     tsv: 'tsv',
     html: 'html',
@@ -42,7 +45,17 @@ const pandocPreviewFormat = computed(() => {
 
   return supportedFormats[fileExtension.value] ?? ''
 })
+const spreadsheetPreviewFormat = computed(() => {
+  const supportedFormats: Record<string, string> = {
+    xlsx: 'xlsx',
+    ods: 'ods'
+  }
+
+  return supportedFormats[fileExtension.value] ?? ''
+})
 const isPandocPreview = computed(() => Boolean(pandocPreviewFormat.value))
+const isSpreadsheetPreview = computed(() => Boolean(spreadsheetPreviewFormat.value))
+const isHtmlPreview = computed(() => isPandocPreview.value || isSpreadsheetPreview.value)
 type PreviewThemeSnapshot = {
   colorScheme: 'light' | 'dark'
   vars: Record<string, string>
@@ -385,7 +398,7 @@ async function loadPdfPreview(path: string) {
 }
 
 async function loadHtmlPreview(path: string) {
-  if (!path || !isPandocPreview.value) {
+  if (!path || (!isPandocPreview.value && !isSpreadsheetPreview.value)) {
     htmlPreviewRaw.value = ''
     htmlPreviewError.value = ''
     htmlPreviewLoading.value = false
@@ -395,7 +408,9 @@ async function loadHtmlPreview(path: string) {
   htmlPreviewLoading.value = true
   htmlPreviewError.value = ''
   try {
-    htmlPreviewRaw.value = await renderPandocPreviewHtml(path)
+    htmlPreviewRaw.value = isSpreadsheetPreview.value
+      ? await renderSpreadsheetPreviewHtml(path)
+      : await renderPandocPreviewHtml(path)
   } catch (error) {
     htmlPreviewRaw.value = ''
     htmlPreviewError.value = error instanceof Error ? error.message : 'Could not load preview.'
@@ -448,7 +463,7 @@ watch(
         :title="`Preview for ${fileName}`"
       />
       <iframe
-        v-else-if="isPandocPreview && htmlPreviewSrc"
+        v-else-if="isHtmlPreview && htmlPreviewSrc"
         class="file-inspector-preview-frame file-inspector-preview-frame--html"
         :srcdoc="htmlPreviewSrc"
         :title="`Preview for ${fileName}`"
