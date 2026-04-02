@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.32.0] - 2026-04-02
+
+### Fixed
+- fix(file-inspector): externalize preview assets to satisfy csp (3e223a6)
+
 ## [0.31.0] - 2026-04-02
 
 ### Fixed
