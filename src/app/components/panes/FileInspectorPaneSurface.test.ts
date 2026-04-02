@@ -2,7 +2,7 @@ import { createApp, defineComponent, h, nextTick } from 'vue'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const hoisted = vi.hoisted(() => ({
-  readPdfDataUrl: vi.fn(async (path: string) => `data:application/pdf;base64,${Buffer.from(path).toString('base64')}`),
+  readPdfDataUrl: vi.fn(async (path: string) => `data:application/pdf;base64,${btoa(path)}`),
   renderPandocPreviewHtml: vi.fn(async (path: string) => `<html><body><main>${path}</main></body></html>`),
   renderSpreadsheetPreviewHtml: vi.fn(async (path: string) => `<html><body><section>${path}</section></body></html>`)
 }))
@@ -38,6 +38,13 @@ async function flushUi() {
   await nextTick()
   await Promise.resolve()
   await nextTick()
+}
+
+function decodePreviewSrc(iframe: HTMLIFrameElement | null): string {
+  const src = iframe?.getAttribute('src') ?? ''
+  const commaIndex = src.indexOf(',')
+  if (commaIndex < 0) return src
+  return decodeURIComponent(src.slice(commaIndex + 1))
 }
 
 describe('FileInspectorPaneSurface', () => {
@@ -82,7 +89,7 @@ describe('FileInspectorPaneSurface', () => {
     const iframe = mounted.root.querySelector<HTMLIFrameElement>('iframe')
     expect(iframe).toBeTruthy()
     expect(iframe?.getAttribute('src')).toBe(
-      `data:application/pdf;base64,${Buffer.from('/vault/assets/report.pdf').toString('base64')}`
+      `data:application/pdf;base64,${btoa('/vault/assets/report.pdf')}`
     )
     expect(hoisted.readPdfDataUrl).toHaveBeenCalledWith('/vault/assets/report.pdf')
 
@@ -102,21 +109,24 @@ describe('FileInspectorPaneSurface', () => {
 
     const iframe = mounted.root.querySelector<HTMLIFrameElement>('iframe')
     expect(iframe).toBeTruthy()
-    expect(iframe?.getAttribute('srcdoc')).toContain('<main>/vault/assets/report.docx</main>')
-    expect(iframe?.getAttribute('srcdoc')).toContain('color-scheme: dark')
-    expect(iframe?.getAttribute('srcdoc')).toContain('--pandoc-scale: 0.88;')
-    expect(iframe?.getAttribute('srcdoc')).toContain('color: var(--text-main, #1a1a18);')
-    expect(iframe?.getAttribute('srcdoc')).toContain('--editor-link: rgb(125, 207, 255);')
-    expect(iframe?.getAttribute('srcdoc')).toContain('--editor-code-bg: rgb(34, 37, 56);')
-    expect(iframe?.getAttribute('srcdoc')).toContain('font-size: calc(var(--editor-font-size-base, 1rem) * var(--editor-zoom, 1) * var(--pandoc-scale, 1));')
-    expect(iframe?.getAttribute('srcdoc')).toContain('width: 800px;')
-    expect(iframe?.getAttribute('srcdoc')).toContain('box-sizing: border-box;')
-    expect(iframe?.getAttribute('srcdoc')).toContain('padding: 0 0 2rem;')
-    expect(iframe?.getAttribute('srcdoc')).toContain('padding-left: 5rem;')
-    expect(iframe?.getAttribute('srcdoc')).toContain('padding-right: 2rem;')
-    expect(iframe?.getAttribute('srcdoc')).toContain('list-style: disc;')
-    expect(iframe?.getAttribute('srcdoc')).toContain('border-left: 0;')
-    expect(iframe?.getAttribute('srcdoc')).toContain('event.metaKey || event.ctrlKey')
+    expect(iframe?.getAttribute('srcdoc')).toBeNull()
+    expect(iframe?.getAttribute('src')).toContain('data:text/html;charset=utf-8,')
+    const decodedSrc = decodePreviewSrc(iframe)
+    expect(decodedSrc).toContain('<main>/vault/assets/report.docx</main>')
+    expect(decodedSrc).toContain('color-scheme: dark')
+    expect(decodedSrc).toContain('--pandoc-scale: 0.88;')
+    expect(decodedSrc).toContain('color: var(--text-main, #1a1a18);')
+    expect(decodedSrc).toContain('--editor-link: rgb(125, 207, 255);')
+    expect(decodedSrc).toContain('--editor-code-bg: rgb(34, 37, 56);')
+    expect(decodedSrc).toContain('font-size: calc(var(--editor-font-size-base, 1rem) * var(--editor-zoom, 1) * var(--pandoc-scale, 1));')
+    expect(decodedSrc).toContain('width: 800px;')
+    expect(decodedSrc).toContain('box-sizing: border-box;')
+    expect(decodedSrc).toContain('padding: 0 0 2rem;')
+    expect(decodedSrc).toContain('padding-left: 5rem;')
+    expect(decodedSrc).toContain('padding-right: 2rem;')
+    expect(decodedSrc).toContain('list-style: disc;')
+    expect(decodedSrc).toContain('border-left: 0;')
+    expect(decodedSrc).toContain('event.metaKey || event.ctrlKey')
     expect(iframe?.getAttribute('sandbox')).toBe('allow-scripts')
     expect(hoisted.renderPandocPreviewHtml).toHaveBeenCalledWith('/vault/assets/report.docx')
     expect(hoisted.renderSpreadsheetPreviewHtml).not.toHaveBeenCalled()
@@ -130,7 +140,8 @@ describe('FileInspectorPaneSurface', () => {
 
     const iframe = mounted.root.querySelector<HTMLIFrameElement>('iframe')
     expect(iframe).toBeTruthy()
-    expect(iframe?.getAttribute('srcdoc')).toContain('<section>/vault/assets/report.xlsx</section>')
+    expect(iframe?.getAttribute('srcdoc')).toBeNull()
+    expect(decodePreviewSrc(iframe)).toContain('<section>/vault/assets/report.xlsx</section>')
     expect(hoisted.renderSpreadsheetPreviewHtml).toHaveBeenCalledWith('/vault/assets/report.xlsx')
     expect(hoisted.renderPandocPreviewHtml).not.toHaveBeenCalled()
 
@@ -143,7 +154,8 @@ describe('FileInspectorPaneSurface', () => {
 
     const iframe = mounted.root.querySelector<HTMLIFrameElement>('iframe')
     expect(iframe).toBeTruthy()
-    expect(iframe?.getAttribute('srcdoc')).toContain('<section>/vault/assets/report.ods</section>')
+    expect(iframe?.getAttribute('srcdoc')).toBeNull()
+    expect(decodePreviewSrc(iframe)).toContain('<section>/vault/assets/report.ods</section>')
     expect(hoisted.renderSpreadsheetPreviewHtml).toHaveBeenCalledWith('/vault/assets/report.ods')
     expect(hoisted.renderPandocPreviewHtml).not.toHaveBeenCalled()
 

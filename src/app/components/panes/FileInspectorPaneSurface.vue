@@ -360,6 +360,10 @@ function decoratePandocPreviewHtml(html: string, theme: PreviewThemeSnapshot): s
   return `${style}\n${html}\n${guard}`
 }
 
+function buildPreviewDataUrl(html: string): string {
+  return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`
+}
+
 function syncPandocPreviewTheme() {
   previewThemeSnapshot.value = readPreviewThemeSnapshot()
 }
@@ -424,7 +428,7 @@ const htmlPreviewSrc = computed(() => {
     return ''
   }
 
-  return decoratePandocPreviewHtml(htmlPreviewRaw.value, previewThemeSnapshot.value)
+  return buildPreviewDataUrl(decoratePandocPreviewHtml(htmlPreviewRaw.value, previewThemeSnapshot.value))
 })
 
 watch(
@@ -465,7 +469,7 @@ watch(
       <iframe
         v-else-if="isHtmlPreview && htmlPreviewSrc"
         class="file-inspector-preview-frame file-inspector-preview-frame--html"
-        :srcdoc="htmlPreviewSrc"
+        :src="htmlPreviewSrc"
         :title="`Preview for ${fileName}`"
         sandbox="allow-scripts"
       />
