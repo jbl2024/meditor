@@ -7,12 +7,6 @@ import {
   renderSpreadsheetPreviewHtml
 } from '../../../shared/api/workspaceApi'
 import UiButton from '../../../shared/components/ui/UiButton.vue'
-import fileInspectorPreviewScriptUrl from './fileInspectorPreview.js?url'
-import fileInspectorPreviewStylesheetUrl from './fileInspectorPreview.css?url'
-import {
-  buildPreviewDocumentHtml,
-  type PreviewThemeSnapshot
-} from './fileInspectorPreviewHtml'
 
 const props = defineProps<{
   path: string
@@ -62,6 +56,10 @@ const spreadsheetPreviewFormat = computed(() => {
 const isPandocPreview = computed(() => Boolean(pandocPreviewFormat.value))
 const isSpreadsheetPreview = computed(() => Boolean(spreadsheetPreviewFormat.value))
 const isHtmlPreview = computed(() => isPandocPreview.value || isSpreadsheetPreview.value)
+type PreviewThemeSnapshot = {
+  colorScheme: 'light' | 'dark'
+  vars: Record<string, string>
+}
 
 const pdfPreviewSrc = ref('')
 const pdfPreviewLoading = ref(false)
@@ -71,6 +69,9 @@ const htmlPreviewLoading = ref(false)
 const htmlPreviewError = ref('')
 const previewThemeSnapshot = ref<PreviewThemeSnapshot>(readPreviewThemeSnapshot())
 let themeObserver: MutationObserver | null = null
+const headCloseTag = '</' + 'head>'
+const bodyCloseTag = '</' + 'body>'
+const scriptCloseTag = '<' + '/script>'
 
 function openNative() {
   void props.openExternally?.()
@@ -94,8 +95,269 @@ function readPreviewThemeSnapshot(): PreviewThemeSnapshot {
   return { colorScheme, vars }
 }
 
-function buildPreviewDataUrl(html: string): string {
-  return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`
+function buildPreviewThemeStyle(theme: PreviewThemeSnapshot): string {
+  const rootVars = Object.entries(theme.vars)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([name, value]) => `  ${name}: ${value};`)
+    .join('\n')
+
+  return `
+<style id="tomosona-pandoc-theme">
+:root {
+${rootVars}
+}
+html {
+  color-scheme: ${theme.colorScheme};
+  background: var(--app-bg, var(--surface-bg, #f9f9f8));
+}
+body {
+  margin: 0;
+  background: var(--app-bg, var(--surface-bg, #f9f9f8));
+  color: var(--text-main, #1a1a18);
+  font-family: var(--font-editor, var(--font-sans, ui-sans-serif, system-ui, sans-serif));
+  line-height: var(--line-height-normal, 1.5);
+  -webkit-font-variant-ligatures: none;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0;
+}
+.pandoc-preview-shell {
+  margin: 0;
+  padding: 0 0 2rem;
+}
+.pandoc-preview {
+  width: 800px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  padding-left: 5rem;
+  padding-right: 2rem;
+  position: relative;
+  min-height: 100%;
+  --pandoc-scale: 0.88;
+  outline: none;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+  white-space: break-spaces;
+  -webkit-font-variant-ligatures: none;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0;
+  color: var(--text-main, #1a1a18);
+  font-family: var(--font-editor, var(--font-sans, ui-sans-serif, system-ui, sans-serif));
+  line-height: var(--line-height-normal, 1.5);
+}
+.pandoc-preview p {
+  font-size: calc(var(--editor-font-size-base, 1rem) * var(--editor-zoom, 1) * var(--pandoc-scale, 1));
+  margin: 0.42rem 0;
+}
+.pandoc-preview strong,
+.pandoc-preview b {
+  font-weight: 600;
+}
+.pandoc-preview h1 {
+  font-size: calc(var(--editor-heading-1-size, 1.9rem) * var(--editor-zoom, 1) * var(--pandoc-scale, 1));
+  font-weight: 580;
+  line-height: 1.35;
+  margin: 0.68rem 0 0.45rem;
+  color: var(--text-main, #1a1a18);
+}
+.pandoc-preview h2 {
+  font-size: calc(var(--editor-heading-2-size, 1.6rem) * var(--editor-zoom, 1) * var(--pandoc-scale, 1));
+  line-height: 1.35;
+  margin: 0.95rem 0 0.8rem;
+  color: var(--text-main, #1a1a18);
+}
+.pandoc-preview h3 {
+  font-size: calc(var(--editor-heading-3-size, 1.35rem) * var(--editor-zoom, 1) * var(--pandoc-scale, 1));
+  line-height: 1.35;
+  margin: 0.75rem 0 0.45rem;
+  color: var(--text-main, #1a1a18);
+}
+.pandoc-preview h4 {
+  font-size: calc(var(--editor-heading-4-size, 1.18rem) * var(--editor-zoom, 1) * var(--pandoc-scale, 1));
+  font-weight: 560;
+  line-height: 1.35;
+  margin: 0.62rem 0 0.35rem;
+  color: var(--editor-heading-4, var(--text-main, #1a1a18));
+}
+.pandoc-preview h5 {
+  font-size: calc(var(--editor-heading-5-size, 1.04rem) * var(--editor-zoom, 1) * var(--pandoc-scale, 1));
+  font-weight: 540;
+  line-height: 1.35;
+  margin: 0.5rem 0 0.28rem;
+  color: var(--editor-heading-5, var(--text-soft, #5c5c56));
+}
+.pandoc-preview h6 {
+  font-size: calc(var(--editor-heading-6-size, 0.94rem) * var(--editor-zoom, 1) * var(--pandoc-scale, 1));
+  font-weight: 520;
+  line-height: 1.35;
+  margin: 0.45rem 0 0.22rem;
+  color: var(--editor-heading-6, var(--text-dim, #7b7b73));
+}
+.pandoc-preview :not(pre) > code {
+  border-radius: 0.34rem;
+  padding: 0.06rem 0.38rem;
+  font-size: 0.92em;
+  font-family: var(--font-code, ui-monospace, SFMono-Regular, monospace);
+  background: var(--editor-code-bg, var(--surface-subtle, #edf2f8));
+}
+.pandoc-preview ul,
+.pandoc-preview ol {
+  margin: 0.32rem 0 0.45rem 1.35rem;
+  padding: 0;
+}
+.pandoc-preview p + ul,
+.pandoc-preview p + ol {
+  margin-top: 0.18rem;
+}
+.pandoc-preview ul {
+  list-style: disc;
+}
+.pandoc-preview ol {
+  list-style: decimal;
+}
+.pandoc-preview ul ul {
+  list-style: circle;
+  margin-top: 0.24rem;
+  margin-bottom: 0.24rem;
+}
+.pandoc-preview ul ul ul {
+  list-style: square;
+}
+.pandoc-preview ol ol {
+  list-style: lower-alpha;
+  margin-top: 0.24rem;
+  margin-bottom: 0.24rem;
+}
+.pandoc-preview ol ol ol {
+  list-style: lower-roman;
+}
+.pandoc-preview li {
+  margin: 0.2rem 0;
+}
+.pandoc-preview table {
+  width: 100%;
+  max-width: 100%;
+  min-width: 100% !important;
+  width: 100% !important;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 0.36rem 0;
+  border: 1px solid var(--editor-table-border, var(--border-subtle, #d5dde8));
+  border-radius: 0.52rem;
+  overflow: hidden;
+  background: var(--editor-table-bg, var(--surface-bg, #ffffff));
+  font-size: calc(0.82rem * var(--editor-zoom, 1) * var(--pandoc-scale, 1));
+  line-height: 1.3;
+  table-layout: fixed;
+}
+.pandoc-preview th,
+.pandoc-preview td {
+  border-right: 1px solid var(--editor-table-cell-border, var(--border-subtle, #d5dde8));
+  border-bottom: 1px solid var(--editor-table-cell-border, var(--border-subtle, #d5dde8));
+  padding: 0.24rem 0.34rem;
+  vertical-align: top;
+  text-align: left;
+  position: relative;
+  min-width: 2.6rem;
+}
+.pandoc-preview table p {
+  font-size: inherit;
+  line-height: inherit;
+  margin: 0;
+}
+.pandoc-preview tr:last-child > th,
+.pandoc-preview tr:last-child > td {
+  border-bottom: none;
+}
+.pandoc-preview tr > th:last-child,
+.pandoc-preview tr > td:last-child {
+  border-right: none;
+}
+.pandoc-preview th {
+  font-weight: 640;
+  background: var(
+    --editor-table-header-bg,
+    color-mix(in srgb, var(--surface-muted, #edf2f8) 70%, var(--surface-bg, #ffffff))
+  );
+  color: var(--editor-table-header-text, var(--text-main, #1a1a18));
+}
+.pandoc-preview tbody tr:hover td {
+  background: var(--editor-table-hover, transparent);
+}
+.pandoc-preview td.selectedCell,
+.pandoc-preview th.selectedCell {
+  background: var(--editor-table-selection, transparent);
+}
+.pandoc-preview pre {
+  border: 1px solid var(--editor-table-cell-border, var(--border-subtle, #d5dde8));
+  border-radius: 0.6rem;
+  padding: 0.8rem;
+  overflow: auto;
+  background: var(--surface-bg, #ffffff);
+  font-family: var(--font-code, ui-monospace, SFMono-Regular, monospace);
+}
+.pandoc-preview blockquote {
+  margin: 0.24rem 0;
+  padding-left: 0;
+  border-left: 0;
+}
+.pandoc-preview blockquote p {
+  font-size: calc(0.95rem * var(--editor-zoom, 1) * var(--pandoc-scale, 1));
+  line-height: 1.48;
+}
+.pandoc-preview img,
+.pandoc-preview video,
+.pandoc-preview svg,
+.pandoc-preview canvas {
+  max-width: 100%;
+}
+.pandoc-preview a {
+  color: var(--editor-link, var(--accent, #1f5f9b));
+}
+@media (max-width: 840px) {
+  .pandoc-preview-shell {
+    padding: 0 1rem 1rem;
+  }
+
+  .pandoc-preview {
+    width: 100%;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+</style>
+`
+}
+
+function buildPreviewKeyboardGuardScript(): string {
+  return `
+<script>
+(function () {
+  function isModW(event) {
+    return (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && (event.key || '').toLowerCase() === 'w';
+  }
+
+  window.addEventListener('keydown', function (event) {
+    if (!isModW(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+  }, true);
+})();
+${scriptCloseTag}
+`
+}
+
+function decoratePandocPreviewHtml(html: string, theme: PreviewThemeSnapshot): string {
+  const style = buildPreviewThemeStyle(theme)
+  const guard = buildPreviewKeyboardGuardScript()
+  if (html.includes(headCloseTag)) {
+    const withStyle = html.replace(headCloseTag, `${style}\n${headCloseTag}`)
+    if (withStyle.includes(bodyCloseTag)) {
+      return withStyle.replace(bodyCloseTag, `${guard}\n${bodyCloseTag}`)
+    }
+    return `${withStyle}\n${guard}`
+  }
+
+  return `${style}\n${html}\n${guard}`
 }
 
 function syncPandocPreviewTheme() {
@@ -162,17 +424,7 @@ const htmlPreviewSrc = computed(() => {
     return ''
   }
 
-  return buildPreviewDataUrl(
-    buildPreviewDocumentHtml(
-      htmlPreviewRaw.value,
-      previewThemeSnapshot.value,
-      {
-        stylesheetUrl: fileInspectorPreviewStylesheetUrl,
-        scriptUrl: fileInspectorPreviewScriptUrl
-      },
-      'Preview'
-    )
-  )
+  return decoratePandocPreviewHtml(htmlPreviewRaw.value, previewThemeSnapshot.value)
 })
 
 watch(
@@ -213,7 +465,7 @@ watch(
       <iframe
         v-else-if="isHtmlPreview && htmlPreviewSrc"
         class="file-inspector-preview-frame file-inspector-preview-frame--html"
-        :src="htmlPreviewSrc"
+        :srcdoc="htmlPreviewSrc"
         :title="`Preview for ${fileName}`"
         sandbox="allow-scripts"
       />

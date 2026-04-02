@@ -40,13 +40,6 @@ async function flushUi() {
   await nextTick()
 }
 
-function decodePreviewSrc(iframe: HTMLIFrameElement | null): string {
-  const src = iframe?.getAttribute('src') ?? ''
-  const commaIndex = src.indexOf(',')
-  if (commaIndex < 0) return src
-  return decodeURIComponent(src.slice(commaIndex + 1))
-}
-
 describe('FileInspectorPaneSurface', () => {
   afterEach(() => {
     document.body.innerHTML = ''
@@ -109,15 +102,22 @@ describe('FileInspectorPaneSurface', () => {
 
     const iframe = mounted.root.querySelector<HTMLIFrameElement>('iframe')
     expect(iframe).toBeTruthy()
-    expect(iframe?.getAttribute('srcdoc')).toBeNull()
-    expect(iframe?.getAttribute('src')).toContain('data:text/html;charset=utf-8,')
-    const decodedSrc = decodePreviewSrc(iframe)
-    expect(decodedSrc).toContain('<main>/vault/assets/report.docx</main>')
-    expect(decodedSrc).toContain('tomosona-preview-theme')
-    expect(decodedSrc).toContain('rel="stylesheet"')
-    expect(decodedSrc).toContain('script src=')
-    expect(decodedSrc).not.toContain('<style>')
-    expect(decodedSrc).not.toContain('event.metaKey || event.ctrlKey')
+    expect(iframe?.getAttribute('src')).toBeNull()
+    expect(iframe?.getAttribute('srcdoc')).toContain('<main>/vault/assets/report.docx</main>')
+    expect(iframe?.getAttribute('srcdoc')).toContain('color-scheme: dark')
+    expect(iframe?.getAttribute('srcdoc')).toContain('--pandoc-scale: 0.88;')
+    expect(iframe?.getAttribute('srcdoc')).toContain('color: var(--text-main, #1a1a18);')
+    expect(iframe?.getAttribute('srcdoc')).toContain('--editor-link: rgb(125, 207, 255);')
+    expect(iframe?.getAttribute('srcdoc')).toContain('--editor-code-bg: rgb(34, 37, 56);')
+    expect(iframe?.getAttribute('srcdoc')).toContain('font-size: calc(var(--editor-font-size-base, 1rem) * var(--editor-zoom, 1) * var(--pandoc-scale, 1));')
+    expect(iframe?.getAttribute('srcdoc')).toContain('width: 800px;')
+    expect(iframe?.getAttribute('srcdoc')).toContain('box-sizing: border-box;')
+    expect(iframe?.getAttribute('srcdoc')).toContain('padding: 0 0 2rem;')
+    expect(iframe?.getAttribute('srcdoc')).toContain('padding-left: 5rem;')
+    expect(iframe?.getAttribute('srcdoc')).toContain('padding-right: 2rem;')
+    expect(iframe?.getAttribute('srcdoc')).toContain('list-style: disc;')
+    expect(iframe?.getAttribute('srcdoc')).toContain('border-left: 0;')
+    expect(iframe?.getAttribute('srcdoc')).toContain('event.metaKey || event.ctrlKey')
     expect(iframe?.getAttribute('sandbox')).toBe('allow-scripts')
     expect(hoisted.renderPandocPreviewHtml).toHaveBeenCalledWith('/vault/assets/report.docx')
     expect(hoisted.renderSpreadsheetPreviewHtml).not.toHaveBeenCalled()
@@ -131,8 +131,8 @@ describe('FileInspectorPaneSurface', () => {
 
     const iframe = mounted.root.querySelector<HTMLIFrameElement>('iframe')
     expect(iframe).toBeTruthy()
-    expect(iframe?.getAttribute('srcdoc')).toBeNull()
-    expect(decodePreviewSrc(iframe)).toContain('<section>/vault/assets/report.xlsx</section>')
+    expect(iframe?.getAttribute('src')).toBeNull()
+    expect(iframe?.getAttribute('srcdoc')).toContain('<section>/vault/assets/report.xlsx</section>')
     expect(hoisted.renderSpreadsheetPreviewHtml).toHaveBeenCalledWith('/vault/assets/report.xlsx')
     expect(hoisted.renderPandocPreviewHtml).not.toHaveBeenCalled()
 
@@ -145,8 +145,8 @@ describe('FileInspectorPaneSurface', () => {
 
     const iframe = mounted.root.querySelector<HTMLIFrameElement>('iframe')
     expect(iframe).toBeTruthy()
-    expect(iframe?.getAttribute('srcdoc')).toBeNull()
-    expect(decodePreviewSrc(iframe)).toContain('<section>/vault/assets/report.ods</section>')
+    expect(iframe?.getAttribute('src')).toBeNull()
+    expect(iframe?.getAttribute('srcdoc')).toContain('<section>/vault/assets/report.ods</section>')
     expect(hoisted.renderSpreadsheetPreviewHtml).toHaveBeenCalledWith('/vault/assets/report.ods')
     expect(hoisted.renderPandocPreviewHtml).not.toHaveBeenCalled()
 

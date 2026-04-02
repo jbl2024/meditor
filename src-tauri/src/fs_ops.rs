@@ -1074,7 +1074,10 @@ fn render_spreadsheet_preview_html_sync(path: String) -> Result<String> {
     for sheet_html in rendered_sheets {
         html.push_str(&sheet_html);
     }
-    html.push_str("</div></main></div></body></html>");
+    html.push_str("</div></main></div>");
+    html.push_str(&build_spreadsheet_preview_script(sheet_names.len()));
+    html.push_str("</body></html>");
+    let decorated = decorate_spreadsheet_preview_html(html, "Spreadsheet preview");
     log_fs_perf(
         "render_spreadsheet_preview_html",
         &pb,
@@ -1082,10 +1085,10 @@ fn render_spreadsheet_preview_html_sync(path: String) -> Result<String> {
         &[
             ("format", input_format.to_string()),
             ("sheets", sheet_names.len().to_string()),
-            ("chars", html.chars().count().to_string()),
+            ("chars", decorated.chars().count().to_string()),
         ],
     );
-    Ok(html)
+    Ok(decorated)
 }
 
 #[tauri::command]
@@ -1117,14 +1120,257 @@ fn unwrap_pandoc_list_blockquotes(html: String) -> String {
         .replace("</p></blockquote></li>", "</p></li>")
 }
 
-fn extract_html_body_fragment(html: &str) -> Option<&str> {
-    let body_start = html.find("<body")?;
-    let body_open_end = html[body_start..].find('>')? + body_start + 1;
-    let body_close = html.rfind("</body>")?;
-    if body_close <= body_open_end {
-        return None;
+fn decorate_pandoc_html(html: String, title: &str) -> String {
+    let injection = format!(
+        r#"<style>
+html {{
+  background: #f4f7fb;
+}}
+body {{
+  margin: 0;
+  padding: 0;
+  background: #f4f7fb;
+  color: #1a1a18;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  line-height: 1.5;
+  -webkit-font-variant-ligatures: none;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0;
+}}
+.pandoc-preview-shell {{
+  margin: 0;
+  padding: 0 0 2rem;
+}}
+.pandoc-preview {{
+  width: 800px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  padding-left: 5rem;
+  padding-right: 2rem;
+  min-height: 100vh;
+  --pandoc-scale: 0.88;
+  outline: none;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+  white-space: break-spaces;
+  font-size: calc(1rem * var(--pandoc-scale, 1));
+  color: #1a1a18;
+  line-height: 1.5;
+}}
+.pandoc-preview > * {{
+  position: relative;
+}}
+.pandoc-preview p {{
+  font-size: calc(1rem * var(--pandoc-scale, 1));
+  margin: 0.42rem 0;
+}}
+.pandoc-preview strong,
+.pandoc-preview b {{
+  font-weight: 600;
+}}
+.pandoc-preview h1 {{
+  font-size: calc(1.9rem * var(--pandoc-scale, 1));
+  font-weight: 580;
+  line-height: 1.35;
+  margin: 0.68rem 0 0.45rem;
+  color: #1a1a18;
+}}
+.pandoc-preview h2 {{
+  font-size: calc(1.6rem * var(--pandoc-scale, 1));
+  line-height: 1.35;
+  margin: 0.95rem 0 0.8rem;
+  color: #1a1a18;
+}}
+.pandoc-preview h3 {{
+  font-size: calc(1.35rem * var(--pandoc-scale, 1));
+  line-height: 1.35;
+  margin: 0.75rem 0 0.45rem;
+  color: #1a1a18;
+}}
+.pandoc-preview h4 {{
+  font-size: calc(1.18rem * var(--pandoc-scale, 1));
+  font-weight: 560;
+  line-height: 1.35;
+  margin: 0.62rem 0 0.35rem;
+  color: #1a1a18;
+}}
+.pandoc-preview h5 {{
+  font-size: calc(1.04rem * var(--pandoc-scale, 1));
+  font-weight: 540;
+  line-height: 1.35;
+  margin: 0.5rem 0 0.28rem;
+  color: #44576b;
+}}
+.pandoc-preview h6 {{
+  font-size: calc(0.94rem * var(--pandoc-scale, 1));
+  font-weight: 520;
+  line-height: 1.35;
+  margin: 0.45rem 0 0.22rem;
+  color: #66788b;
+}}
+.pandoc-preview :not(pre) > code {{
+  border-radius: 0.34rem;
+  padding: 0.06rem 0.38rem;
+  font-size: 0.92em;
+  font-family: "SFMono-Regular", ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, Consolas, monospace;
+  background: #edf2f8;
+}}
+.pandoc-preview ul,
+.pandoc-preview ol {{
+  margin: 0.32rem 0 0.45rem 1.35rem;
+  padding: 0;
+}}
+.pandoc-preview li {{
+  margin: 0.2rem 0;
+}}
+.pandoc-preview table {{
+  width: 100%;
+  max-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 0.36rem 0;
+  border: 1px solid #d5dde8;
+  border-radius: 0.52rem;
+  overflow: hidden;
+  background: #ffffff;
+  font-size: calc(0.82rem * var(--pandoc-scale, 1));
+  line-height: 1.3;
+  table-layout: fixed;
+}}
+.pandoc-preview th,
+.pandoc-preview td {{
+  border-right: 1px solid #d5dde8;
+  border-bottom: 1px solid #d5dde8;
+  padding: 0.24rem 0.34rem;
+  vertical-align: top;
+  text-align: left;
+  min-width: 2.6rem;
+}}
+.pandoc-preview tr:last-child > th,
+.pandoc-preview tr:last-child > td {{
+  border-bottom: none;
+}}
+.pandoc-preview tr > th:last-child,
+.pandoc-preview tr > td:last-child {{
+  border-right: none;
+}}
+.pandoc-preview th {{
+  font-weight: 640;
+  background: #edf2f8;
+  color: #16202d;
+}}
+.pandoc-preview pre {{
+  border: 1px solid #d5dde8;
+  border-radius: 0.6rem;
+  padding: 0.8rem;
+  overflow: auto;
+  background: #ffffff;
+}}
+.pandoc-preview blockquote {{
+  margin-inline: 0;
+  padding-inline-start: 0;
+  border-inline-start: 0;
+}}
+.pandoc-preview img,
+.pandoc-preview video,
+.pandoc-preview svg,
+.pandoc-preview canvas {{
+  max-width: 100%;
+}}
+.pandoc-preview a {{
+  color: #1f5f9b;
+}}
+@media (max-width: 840px) {{
+.pandoc-preview-shell {{
+  padding: 0 1rem 1rem;
+}}
+.pandoc-preview {{
+  width: 100%;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}}
+}}
+@media (max-width: 840px) {{
+body {{
+  padding-top: 0.5rem;
+}}
+}}
+@media (prefers-color-scheme: dark) {{
+html {{
+  background: #1b1f28;
+}}
+body {{
+  background: #1b1f28;
+  color: #dbe3ec;
+}}
+.pandoc-preview {{
+  color: #dbe3ec;
+}}
+.pandoc-preview h1,
+.pandoc-preview h2,
+.pandoc-preview h3,
+.pandoc-preview h4 {{
+  color: #f5f8fc;
+}}
+.pandoc-preview h5 {{
+  color: #cbd5e1;
+}}
+.pandoc-preview h6 {{
+  color: #94a3b8;
+}}
+.pandoc-preview :not(pre) > code {{
+  background: #20252d;
+}}
+.pandoc-preview table,
+.pandoc-preview pre {{
+  background: #20252d;
+  border-color: #39424d;
+}}
+.pandoc-preview th,
+.pandoc-preview td {{
+  border-color: #39424d;
+}}
+.pandoc-preview th {{
+  background: #2a303a;
+}}
+.pandoc-preview blockquote {{
+  border-inline-start-color: transparent;
+}}
+.pandoc-preview a {{
+  color: #8bc3ff;
+}}
+}}
+</style>
+<meta name="color-scheme" content="light dark">
+<title>{}</title>"#,
+        title
+    );
+
+    if let Some(head_end) = html.find("</head>") {
+        let mut decorated = String::with_capacity(html.len() + injection.len());
+        decorated.push_str(&html[..head_end]);
+        decorated.push_str(&injection);
+        decorated.push_str(&html[head_end..]);
+        if let Some(body_start) = decorated.find("<body>") {
+            let insert_at = body_start + "<body>".len();
+            let body_end = decorated.rfind("</body>").unwrap_or(decorated.len());
+            let mut wrapped = String::with_capacity(decorated.len() + 72);
+            wrapped.push_str(&decorated[..insert_at]);
+            wrapped.push_str("<div class=\"pandoc-preview-shell\"><article class=\"pandoc-preview\">");
+            wrapped.push_str(&decorated[insert_at..body_end]);
+            wrapped.push_str("</article></div>");
+            wrapped.push_str(&decorated[body_end..]);
+            wrapped
+        } else {
+            decorated
+        }
+    } else {
+        html
     }
-    Some(&html[body_open_end..body_close])
+}
+
+fn decorate_pandoc_preview_html(html: String, title: &str) -> String {
+    decorate_pandoc_html(html, title)
 }
 
 fn pandoc_binary_candidates() -> Vec<PathBuf> {
@@ -1189,11 +1435,7 @@ fn render_pandoc_preview_html_sync(path: String) -> Result<String> {
 
     let html = String::from_utf8(output.stdout).map_err(|_| AppError::OperationFailed)?;
     let html = unwrap_pandoc_list_blockquotes(html);
-    let body_fragment = extract_html_body_fragment(&html).unwrap_or(html.as_str());
-    let decorated = format!(
-        "<div class=\"pandoc-preview-shell\"><article class=\"pandoc-preview\">{}</article></div>",
-        body_fragment
-    );
+    let decorated = decorate_pandoc_preview_html(html, "Preview");
     log_fs_perf(
         "render_pandoc_preview_html",
         &pb,
