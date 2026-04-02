@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.32.1] - 2026-04-02
+
+### Fixed
+- fix(file-inspector): relax csp and restore inline previews (adaa6cf)
+
 ## [0.32.0] - 2026-04-02
 
 ### Fixed
