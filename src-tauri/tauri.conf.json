@@ -27,6 +27,7 @@
       }
     ],
     "security": {
+      "dangerousDisableAssetCspModification": ["style-src", "script-src"],
       "csp": "default-src 'self'; base-uri 'self'; form-action 'self'; object-src 'none'; frame-src 'self' data:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' ipc://localhost"
     }
   },
