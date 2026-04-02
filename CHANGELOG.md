@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.31.0] - 2026-04-02
+
+### Fixed
+- fix(file-inspector): allow data iframe previews in production csp (5fdcef4)
+
 ## [0.30.0] - 2026-04-02
 
 ### Fixed
