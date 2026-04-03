@@ -482,11 +482,7 @@ watch(
 }
 
 .favorite-toggle-btn {
-  flex: 0 0 auto;
   color: var(--right-pane-text-soft);
-  min-width: 2rem;
-  width: 2rem;
-  padding: 0;
 }
 
 .favorite-toggle-btn--active {
@@ -494,8 +490,8 @@ watch(
 }
 
 .favorite-toggle-btn :deep(svg) {
-  width: 1.2rem;
-  height: 1.2rem;
+  width: 0.8rem;
+  height: 0.8rem;
 }
 
 .history-toggle-btn {
