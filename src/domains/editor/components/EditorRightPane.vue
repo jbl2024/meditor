@@ -16,7 +16,6 @@ import { BookmarkIcon, ChevronRightIcon, ClockIcon, StarIcon as StarOutlineIcon,
 import { StarIcon as StarSolidIcon } from '@heroicons/vue/24/solid'
 import EditorEchoesPanel from './editor/EditorEchoesPanel.vue'
 import UiButton from '../../../shared/components/ui/UiButton.vue'
-import UiIconButton from '../../../shared/components/ui/UiIconButton.vue'
 import type { ConstitutedContextItem } from '../composables/useConstitutedContext'
 import type { EchoesItem } from '../../echoes/lib/echoes'
 
@@ -115,7 +114,7 @@ watch(
           </p>
         </div>
         <div class="pane-toolbar-actions">
-          <UiIconButton
+          <UiButton
             variant="ghost"
             size="sm"
             :class-name="[
@@ -129,7 +128,7 @@ watch(
           >
             <StarSolidIcon v-if="props.isFavorite" />
             <StarOutlineIcon v-else />
-          </UiIconButton>
+          </UiButton>
           <UiButton
             variant="ghost"
             size="sm"
@@ -485,6 +484,9 @@ watch(
 .favorite-toggle-btn {
   flex: 0 0 auto;
   color: var(--right-pane-text-soft);
+  min-width: 2rem;
+  width: 2rem;
+  padding: 0;
 }
 
 .favorite-toggle-btn--active {
@@ -492,8 +494,8 @@ watch(
 }
 
 .favorite-toggle-btn :deep(svg) {
-  width: 14px;
-  height: 14px;
+  width: 1.2rem;
+  height: 1.2rem;
 }
 
 .history-toggle-btn {
