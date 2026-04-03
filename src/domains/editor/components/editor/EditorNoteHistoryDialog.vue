@@ -179,11 +179,25 @@ const snapshotLines = computed(() => renderLines(comparison.value.snapshotLines)
 </template>
 
 <style scoped>
+:deep(.ui-modal-shell__panel.editor-note-history-modal) {
+  width: min(96vw, 96rem);
+  max-width: none;
+  margin-top: -2rem;
+  max-height: calc(100vh - 3rem);
+}
+
+:deep(.ui-modal-shell__panel.editor-note-history-modal .ui-modal-shell__body) {
+  min-height: 0;
+  padding-block: 0.875rem 0.875rem;
+}
+
 .note-history-layout {
   display: grid;
-  grid-template-columns: 18rem minmax(0, 1fr);
+  grid-template-columns: 20rem minmax(0, 1fr);
   gap: 1rem;
   min-height: 0;
+  align-items: stretch;
+  min-height: min(72vh, 44rem);
 }
 
 .note-history-sidebar,
@@ -196,6 +210,7 @@ const snapshotLines = computed(() => renderLines(comparison.value.snapshotLines)
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  max-height: min(68vh, 42rem);
 }
 
 .note-history-sidebar-head,
@@ -277,10 +292,12 @@ const snapshotLines = computed(() => renderLines(comparison.value.snapshotLines)
 }
 
 .note-history-main {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 0.75rem;
   min-height: 0;
+  align-self: stretch;
+  height: 100%;
 }
 
 .note-history-summary {
@@ -306,6 +323,8 @@ const snapshotLines = computed(() => renderLines(comparison.value.snapshotLines)
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 0.75rem;
   min-height: 0;
+  align-items: stretch;
+  flex: 1 1 auto;
 }
 
 .note-history-compare-panel {
@@ -313,11 +332,13 @@ const snapshotLines = computed(() => renderLines(comparison.value.snapshotLines)
   flex-direction: column;
   gap: 0.5rem;
   min-height: 0;
+  height: 100%;
 }
 
 .note-history-compare-body {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
-  max-height: 46vh;
   border: 1px solid var(--border-subtle);
   border-radius: 0.7rem;
   background: var(--surface-bg);
