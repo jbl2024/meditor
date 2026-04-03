@@ -18,6 +18,17 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.33.0] - 2026-04-03
+
+### Added
+- feat(history): move note history entry to the right pane (e506a41)
+- feat(history): add local note versioning and restore flow (2988d68)
+
+### Fixed
+- fix(editor): restore ui button sizing for favorite control (f4337bb)
+- fix(editor): enlarge favorite button icon in right pane (93185c0)
+- fix(history): refine note history modal sizing and layout (9771ca5)
+
 ## [0.32.2] - 2026-04-02
 
 ### Fixed
