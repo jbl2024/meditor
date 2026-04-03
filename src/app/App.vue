@@ -28,6 +28,7 @@ import {
   removeFavorite,
   renameFavorite,
 } from '../shared/api/favoritesApi'
+import { moveNoteHistoryEntries } from '../shared/api/noteHistoryApi'
 import {
   ftsSearch,
   getWikilinkGraph,
@@ -606,6 +607,7 @@ const workspaceMutationEffects = useWorkspaceMutationEffects({
   renameFavorite: (fromPath, toPath) => favorites.renameFavorite(fromPath, toPath),
   updateWikilinksForRename,
   updateWikilinksForPathMoves,
+  moveNoteHistoryEntries,
   runWorkspaceMutation,
   bumpEchoesRefreshToken: () => {
     workspaceMutationEchoesToken.value += 1

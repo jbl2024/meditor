@@ -35,6 +35,7 @@
 - Wikilink overlay rendering: `EditorWikilinkOverlay.vue`
 - Embedded note preview rendering: `NoteEmbedNodeView.vue`
 - Block + table overlays rendering: `EditorContextOverlays.vue`
+- Note history restore modal: `EditorNoteHistoryDialog.vue`
 
 ## Invariants
 - `EditorView.vue` stays a shell; it wires runtimes and template, but does not own editor workflows directly.

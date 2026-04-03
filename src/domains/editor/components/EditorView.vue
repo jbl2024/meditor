@@ -3,7 +3,18 @@ import { computed, onBeforeUnmount, ref, watch, type Ref } from 'vue'
 import { Editor, EditorContent } from '@tiptap/vue-3'
 import { DragHandle as DragHandleVue3 } from '@tiptap/extension-drag-handle-vue-3'
 import { createExtractedNote, openExternalUrl } from '../../../shared/api/workspaceApi'
-import type { PulseActionId, ReadNoteSnapshotResult, SaveNoteResult, WorkspaceFsChange } from '../../../shared/api/apiTypes'
+import type {
+  NoteHistoryEntry,
+  PulseActionId,
+  ReadNoteSnapshotResult,
+  SaveNoteResult,
+  WorkspaceFsChange
+} from '../../../shared/api/apiTypes'
+import {
+  listNoteHistory,
+  readNoteHistorySnapshot,
+  restoreNoteHistorySnapshot
+} from '../../../shared/api/noteHistoryApi'
 import { PULSE_ACTIONS_BY_SOURCE, type PulseApplyMode } from '../../pulse/lib/pulse'
 import type { DocumentSession } from '../composables/useDocumentEditorSessions'
 import { captureHeavyRenderEpoch, hasPendingHeavyRender, waitForHeavyRenderIdle } from '../lib/tiptap/renderStabilizer'
@@ -20,6 +31,7 @@ import EditorLargeDocOverlay from './editor/EditorLargeDocOverlay.vue'
 import EditorMermaidPreviewDialog from './editor/EditorMermaidPreviewDialog.vue'
 import EditorMermaidReplaceDialog from './editor/EditorMermaidReplaceDialog.vue'
 import EditorPropertiesPanel from './editor/EditorPropertiesPanel.vue'
+import EditorNoteHistoryDialog from './editor/EditorNoteHistoryDialog.vue'
 import EditorSpellcheckMenu from './editor/EditorSpellcheckMenu.vue'
 import EditorSlashOverlay from './editor/EditorSlashOverlay.vue'
 import EditorTableEdgeControls from './editor/EditorTableEdgeControls.vue'
@@ -619,6 +631,172 @@ function focusFirstContentBlock() {
 
 const activeSession = computed(() => currentPath.value ? getSession(currentPath.value) : null)
 const activeConflict = computed(() => activeSession.value?.conflict ?? null)
+const noteHistoryRestoreDisabledReason = computed(() =>
+  activeSession.value?.dirty ? 'Save or discard current edits before restoring a snapshot.' : ''
+)
+
+const noteHistoryOpen = ref(false)
+const noteHistoryLoading = ref(false)
+const noteHistorySnapshotLoading = ref(false)
+const noteHistoryRestorePending = ref(false)
+const noteHistoryError = ref('')
+const noteHistoryCurrentUnavailableMessage = ref('')
+const noteHistoryEntries = ref<NoteHistoryEntry[]>([])
+const noteHistorySelectedSnapshotId = ref('')
+const noteHistoryCurrentContent = ref('')
+const noteHistorySnapshotContent = ref('')
+let noteHistoryRequestToken = 0
+
+function resetNoteHistoryState() {
+  noteHistoryLoading.value = false
+  noteHistorySnapshotLoading.value = false
+  noteHistoryRestorePending.value = false
+  noteHistoryError.value = ''
+  noteHistoryCurrentUnavailableMessage.value = ''
+  noteHistoryEntries.value = []
+  noteHistorySelectedSnapshotId.value = ''
+  noteHistoryCurrentContent.value = ''
+  noteHistorySnapshotContent.value = ''
+}
+
+function beginNoteHistoryRequest(): number {
+  noteHistoryRequestToken += 1
+  return noteHistoryRequestToken
+}
+
+function isCurrentNoteHistoryRequest(token: number): boolean {
+  return token === noteHistoryRequestToken
+}
+
+async function loadNoteHistoryCurrentContent(path: string, requestToken: number): Promise<void> {
+  if (!isCurrentNoteHistoryRequest(requestToken)) return
+  noteHistoryCurrentUnavailableMessage.value = ''
+  if (props.readNoteSnapshot) {
+    try {
+      const snapshot = await props.readNoteSnapshot(path)
+      if (!isCurrentNoteHistoryRequest(requestToken)) return
+      noteHistoryCurrentContent.value = snapshot.content
+      return
+    } catch {
+      if (!isCurrentNoteHistoryRequest(requestToken)) return
+      noteHistoryCurrentUnavailableMessage.value = 'Current disk content is unavailable.'
+      noteHistoryCurrentContent.value = ''
+      return
+    }
+  }
+
+  if (props.openFile) {
+    try {
+      if (!isCurrentNoteHistoryRequest(requestToken)) return
+      noteHistoryCurrentContent.value = await props.openFile(path)
+      return
+    } catch {
+      if (!isCurrentNoteHistoryRequest(requestToken)) return
+      noteHistoryCurrentUnavailableMessage.value = 'Current disk content is unavailable.'
+      noteHistoryCurrentContent.value = ''
+      return
+    }
+  }
+
+  if (!isCurrentNoteHistoryRequest(requestToken)) return
+  noteHistoryCurrentUnavailableMessage.value = 'Current disk content is unavailable.'
+  noteHistoryCurrentContent.value = ''
+}
+
+async function loadNoteHistorySnapshot(path: string, snapshotId: string, requestToken: number): Promise<void> {
+  if (!isCurrentNoteHistoryRequest(requestToken)) return
+  noteHistorySnapshotLoading.value = true
+  noteHistorySnapshotContent.value = ''
+  try {
+    const snapshot = await readNoteHistorySnapshot(path, snapshotId)
+    if (!isCurrentNoteHistoryRequest(requestToken)) return
+    noteHistorySnapshotContent.value = snapshot.content
+  } catch (error) {
+    if (!isCurrentNoteHistoryRequest(requestToken)) return
+    noteHistoryError.value = error instanceof Error ? error.message : 'Could not load the selected snapshot.'
+    noteHistorySnapshotContent.value = ''
+  } finally {
+    if (!isCurrentNoteHistoryRequest(requestToken)) return
+    noteHistorySnapshotLoading.value = false
+  }
+}
+
+async function openNoteHistory() {
+  const path = currentPath.value
+  if (!path) return
+
+  const requestToken = beginNoteHistoryRequest()
+  resetNoteHistoryState()
+  noteHistoryOpen.value = true
+  noteHistoryLoading.value = true
+  noteHistoryError.value = ''
+
+  try {
+    const [entries] = await Promise.all([
+      listNoteHistory(path),
+      loadNoteHistoryCurrentContent(path, requestToken)
+    ])
+    if (!isCurrentNoteHistoryRequest(requestToken)) return
+    noteHistoryEntries.value = entries
+    const selected = entries[0]?.snapshotId ?? ''
+    noteHistorySelectedSnapshotId.value = selected
+    if (selected) {
+      await loadNoteHistorySnapshot(path, selected, requestToken)
+    }
+  } catch (error) {
+    if (!isCurrentNoteHistoryRequest(requestToken)) return
+    noteHistoryError.value = error instanceof Error ? error.message : 'Could not load note history.'
+  } finally {
+    if (!isCurrentNoteHistoryRequest(requestToken)) return
+    noteHistoryLoading.value = false
+  }
+}
+
+async function selectNoteHistorySnapshot(snapshotId: string) {
+  const path = currentPath.value
+  if (!path) return
+  const requestToken = noteHistoryRequestToken
+  noteHistorySelectedSnapshotId.value = snapshotId
+  noteHistoryError.value = ''
+  await loadNoteHistorySnapshot(path, snapshotId, requestToken)
+}
+
+async function restoreSelectedNoteHistorySnapshot() {
+  const path = currentPath.value
+  const snapshotId = noteHistorySelectedSnapshotId.value
+  if (!path || !snapshotId || noteHistoryRestoreDisabledReason.value) return
+
+  noteHistoryRestorePending.value = true
+  noteHistoryError.value = ''
+  try {
+    const result = await restoreNoteHistorySnapshot(path, snapshotId)
+    if (!result.ok) {
+      noteHistoryError.value = result.reason === 'NOT_FOUND'
+        ? 'The selected snapshot is no longer available.'
+        : 'The note could not be restored.'
+      return
+    }
+
+    beginNoteHistoryRequest()
+    noteHistoryOpen.value = false
+    resetNoteHistoryState()
+    await onLoadDiskVersion()
+  } catch (error) {
+    noteHistoryError.value = error instanceof Error ? error.message : 'The note could not be restored.'
+  } finally {
+    noteHistoryRestorePending.value = false
+  }
+}
+
+function closeNoteHistory() {
+  beginNoteHistoryRequest()
+  noteHistoryOpen.value = false
+  resetNoteHistoryState()
+}
+
+watch(currentPath, () => {
+  closeNoteHistory()
+})
 
 async function onLoadDiskVersion() {
   if (!currentPath.value) return
@@ -737,6 +915,16 @@ defineExpose({
                 @blur="titleEditorFocused = false"
                 @focus-body-request="void focusFirstContentBlock()"
               />
+              <div class="editor-header-actions">
+                <button
+                  type="button"
+                  class="editor-history-trigger"
+                  :disabled="!currentPath"
+                  @click="void openNoteHistory()"
+                >
+                  Note history
+                </button>
+              </div>
               <EditorPropertiesPanel
                 :expanded="propertiesExpanded(path)"
                 :has-properties="structuredPropertyKeys.length > 0 || activeParseErrors.length > 0"
@@ -995,6 +1183,25 @@ defineExpose({
       </div>
     </div>
 
+    <EditorNoteHistoryDialog
+      :open="noteHistoryOpen"
+      :path-label="currentPath"
+      :loading="noteHistoryLoading"
+      :error="noteHistoryError"
+      :entries="noteHistoryEntries"
+      :selected-snapshot-id="noteHistorySelectedSnapshotId"
+      :current-content="noteHistoryCurrentContent"
+      :snapshot-content="noteHistorySnapshotContent"
+      :current-unavailable-message="noteHistoryCurrentUnavailableMessage"
+      :snapshot-loading="noteHistorySnapshotLoading"
+      :restore-pending="noteHistoryRestorePending"
+      :restore-disabled-reason="noteHistoryRestoreDisabledReason"
+      :current-is-dirty="Boolean(activeSession?.dirty)"
+      @close="closeNoteHistory()"
+      @select-snapshot="void selectNoteHistorySnapshot($event)"
+      @restore-selected="void restoreSelectedNoteHistorySnapshot()"
+    />
+
     <EditorMermaidReplaceDialog
       :visible="mermaidReplaceDialog.visible"
       :template-label="mermaidReplaceDialog.templateLabel"
@@ -1029,6 +1236,34 @@ defineExpose({
 
 .editor-header-shell {
   margin: 0;
+}
+
+.editor-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: -0.15rem 0 0.55rem;
+}
+
+.editor-history-trigger {
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-muted) 68%, transparent);
+  color: var(--text-main);
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 650;
+  padding: 0.3rem 0.65rem;
+  cursor: pointer;
+}
+
+.editor-history-trigger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--surface-muted) 82%, transparent);
+}
+
+.editor-history-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .editor-pulse-panel-wrap {

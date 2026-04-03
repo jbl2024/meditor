@@ -12,6 +12,7 @@ mod favorites;
 mod fs_ops;
 mod index_schema;
 mod markdown_index;
+pub(crate) mod note_history;
 mod search_index;
 mod second_brain;
 mod semantic;
@@ -43,6 +44,10 @@ use fs_ops::{
     render_pandoc_preview_html, render_spreadsheet_preview_html, reveal_in_file_manager,
     select_working_folder, set_working_folder, trash_entry,
     write_text_file,
+};
+use note_history::{
+    list_note_history, move_note_history_entries, read_note_history_snapshot,
+    restore_note_history_snapshot,
 };
 pub(crate) use index_schema::refresh_semantic_edges_cache_now_sync;
 use index_schema::{
@@ -399,6 +404,10 @@ pub fn run() {
             convert_markdown_to_docx,
             read_note_snapshot,
             save_note_buffer,
+            list_note_history,
+            read_note_history_snapshot,
+            restore_note_history_snapshot,
+            move_note_history_entries,
             create_entry,
             create_extracted_note,
             rename_entry,

@@ -77,6 +77,25 @@ export type SaveNoteError = {
 
 export type SaveNoteResult = SaveNoteSuccess | SaveNoteConflict | SaveNoteError
 
+export type NoteHistoryEntry = {
+  snapshotId: string
+  notePath: string
+  createdAtMs: number
+  reason: string
+  contentSize: number
+  contentHash: string
+}
+
+export type NoteHistorySnapshot = {
+  entry: NoteHistoryEntry
+  content: string
+}
+
+export type MoveHistoryPath = {
+  from: string
+  to: string
+}
+
 export type AboutMetadata = {
   version: string
   build_commit: string | null

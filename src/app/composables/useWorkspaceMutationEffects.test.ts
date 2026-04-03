@@ -51,8 +51,9 @@ function createEffects() {
         from: '/vault/journal/2026-03-07.md',
         to: '/vault/archive/journal/2026-03-07.md'
       }
-    ]
-  }))
+      ]
+    }))
+  const moveNoteHistoryEntries = vi.fn(async () => {})
   const runWorkspaceMutation = vi.fn(async (task: () => Promise<unknown>) => {
     await task()
   })
@@ -69,6 +70,7 @@ function createEffects() {
     renameFavorite,
     updateWikilinksForRename,
     updateWikilinksForPathMoves,
+    moveNoteHistoryEntries,
     runWorkspaceMutation,
     bumpEchoesRefreshToken,
     effects: useWorkspaceMutationEffects({
@@ -82,6 +84,7 @@ function createEffects() {
       renameFavorite,
       updateWikilinksForRename,
       updateWikilinksForPathMoves,
+      moveNoteHistoryEntries,
       runWorkspaceMutation,
       bumpEchoesRefreshToken
     })
@@ -105,6 +108,16 @@ describe('useWorkspaceMutationEffects', () => {
 
     expect(order[0]).toBe('immediate')
     expect(order).toContain('mutation')
+  })
+
+  it('moves note history entries after a rename completes', async () => {
+    const ctx = createEffects()
+
+    await ctx.effects.handlePathRenamed({ from: '/vault/notes/a.md', to: '/vault/notes/b.md' })
+
+    expect(ctx.moveNoteHistoryEntries).toHaveBeenCalledWith([
+      { from: '/vault/notes/a.md', to: '/vault/notes/b.md' }
+    ])
   })
 
   it('uses only immediate path candidates for the hot-path move expansion', async () => {
@@ -136,6 +149,16 @@ describe('useWorkspaceMutationEffects', () => {
         }
       ]
     )
+    expect(ctx.moveNoteHistoryEntries).toHaveBeenCalledWith([
+      {
+        from: '/vault/journal/2026-03-06.md',
+        to: '/vault/archive/journal/2026-03-06.md'
+      },
+      {
+        from: '/vault/journal/2026-03-07.md',
+        to: '/vault/archive/journal/2026-03-07.md'
+      }
+    ])
   })
 
   it('does nothing for an empty move batch', async () => {
@@ -222,6 +245,17 @@ describe('useWorkspaceMutationEffects', () => {
     await ctx.effects.handlePathsMoved([{ from: '/vault/journal', to: '/vault/archive/journal' }])
 
     expect(ctx.filesystemErrorMessage.value).toBe('favorite failed')
+    expect(ctx.updateWikilinksForPathMoves).toHaveBeenCalledOnce()
+    expect(ctx.applyDeferredLocalPathMoves).toHaveBeenCalledOnce()
+  })
+
+  it('keeps the mutation pipeline running when note history migration fails', async () => {
+    const ctx = createEffects()
+    ctx.moveNoteHistoryEntries.mockRejectedValueOnce(new Error('history failed'))
+
+    await ctx.effects.handlePathsMoved([{ from: '/vault/journal', to: '/vault/archive/journal' }])
+
+    expect(ctx.filesystemErrorMessage.value).toBe('history failed')
     expect(ctx.updateWikilinksForPathMoves).toHaveBeenCalledOnce()
     expect(ctx.applyDeferredLocalPathMoves).toHaveBeenCalledOnce()
   })

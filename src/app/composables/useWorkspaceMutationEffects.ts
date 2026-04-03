@@ -27,6 +27,7 @@ export type UseWorkspaceMutationEffectsOptions = {
   renameFavorite: (fromPath: string, toPath: string) => Promise<void>
   updateWikilinksForRename: (fromPath: string, toPath: string) => Promise<{ updated_files: number }>
   updateWikilinksForPathMoves: (moves: PathMove[]) => Promise<PathMoveRewriteResult>
+  moveNoteHistoryEntries: (moves: PathMove[]) => Promise<void>
   runWorkspaceMutation: (task: () => Promise<WorkspaceMutationResult>) => Promise<void>
   bumpEchoesRefreshToken: () => void
 }
@@ -93,6 +94,11 @@ export function useWorkspaceMutationEffects(options: UseWorkspaceMutationEffects
     await options.runWorkspaceMutation(async () => {
       const result = await options.updateWikilinksForRename(payload.from, payload.to)
       await scheduleDeferredLocalSync(normalizedMoves, normalizedMoves)
+      try {
+        await options.moveNoteHistoryEntries(normalizedMoves)
+      } catch (err) {
+        options.filesystemErrorMessage.value = err instanceof Error ? err.message : 'Could not update note history.'
+      }
       return {
         updatedFiles: result.updated_files,
         reindexedFiles: result.updated_files
@@ -114,6 +120,11 @@ export function useWorkspaceMutationEffects(options: UseWorkspaceMutationEffects
     await options.runWorkspaceMutation(async () => {
       const result = await options.updateWikilinksForPathMoves(normalizedMoves)
       await scheduleDeferredLocalSync(normalizedMoves, result.expanded_markdown_moves)
+      try {
+        await options.moveNoteHistoryEntries(result.expanded_markdown_moves)
+      } catch (err) {
+        options.filesystemErrorMessage.value = err instanceof Error ? err.message : 'Could not update note history.'
+      }
       return {
         updatedFiles: result.updated_files,
         reindexedFiles: result.reindexed_files

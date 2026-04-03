@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     active_workspace_root,
+    note_history::record_note_history_snapshot,
     fs_ops::{ensure_parent_within_root, ensure_within_root, normalize_path},
     AppError, Result,
 };
@@ -390,6 +391,7 @@ pub fn save_note_buffer(request: SaveNoteBufferRequest) -> Result<SaveNoteResult
 
     let version = version_from_path(&path).ok_or(AppError::OperationFailed)?;
     record_internal_write(&path, request.request_id, version.clone(), &request.content);
+    record_note_history_snapshot(&path, &request.content, "save");
     log_editor_sync(&format!(
         "save_note_buffer:success path={normalized_path} version={:?}",
         version

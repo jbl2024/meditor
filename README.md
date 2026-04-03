@@ -77,6 +77,7 @@ The app is not limited to a file tree. It combines an explorer, wikilinks, backl
 - create, rename, duplicate, move, delete, and reveal entries in the system file manager;
 - daily notes with fast access;
 - guided wikilink rewrite flows on rename;
+- local per-note history with snapshot restore;
 - heading overview and document navigation;
 - a right panel for backlinks, semantic links, properties, and Echoes.
 
