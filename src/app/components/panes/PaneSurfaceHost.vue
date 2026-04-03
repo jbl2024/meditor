@@ -95,6 +95,7 @@ type EditorSurfaceExposed = {
   applyWorkspaceFsChanges: (changes: WorkspaceFsChange[]) => Promise<void>
   focusEditor: () => void
   focusFirstContentBlock: () => void
+  openNoteHistory: () => Promise<void>
   revealSnippet: (snippet: string) => Promise<void>
   revealOutlineHeading: (index: number) => Promise<void>
   revealAnchor: (anchor: WikilinkAnchor) => Promise<boolean>
@@ -157,6 +158,7 @@ defineExpose<EditorSurfaceExposed>({
   applyWorkspaceFsChanges: async (changes: WorkspaceFsChange[]) => await withEditor((editor) => editor.applyWorkspaceFsChanges(changes), Promise.resolve()),
   focusEditor: () => withEditor((editor) => editor.focusEditor(), undefined),
   focusFirstContentBlock: () => withEditor((editor) => editor.focusFirstContentBlock(), undefined),
+  openNoteHistory: async () => await withEditor((editor) => editor.openNoteHistory(), Promise.resolve()),
   revealSnippet: async (snippet: string) => await withEditor((editor) => editor.revealSnippet(snippet), Promise.resolve()),
   revealOutlineHeading: async (index: number) => await withEditor((editor) => editor.revealOutlineHeading(index), Promise.resolve()),
   revealAnchor: async (anchor: WikilinkAnchor) => await withEditor((editor) => editor.revealAnchor(anchor), Promise.resolve(false)),

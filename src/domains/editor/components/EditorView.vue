@@ -826,6 +826,7 @@ defineExpose({
   },
   focusEditor: layout.focusEditor,
   focusFirstContentBlock,
+  openNoteHistory: () => openNoteHistory(),
   revealSnippet,
   revealOutlineHeading,
   revealAnchor,
@@ -915,16 +916,6 @@ defineExpose({
                 @blur="titleEditorFocused = false"
                 @focus-body-request="void focusFirstContentBlock()"
               />
-              <div class="editor-header-actions">
-                <button
-                  type="button"
-                  class="editor-history-trigger"
-                  :disabled="!currentPath"
-                  @click="void openNoteHistory()"
-                >
-                  Note history
-                </button>
-              </div>
               <EditorPropertiesPanel
                 :expanded="propertiesExpanded(path)"
                 :has-properties="structuredPropertyKeys.length > 0 || activeParseErrors.length > 0"
@@ -1236,34 +1227,6 @@ defineExpose({
 
 .editor-header-shell {
   margin: 0;
-}
-
-.editor-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin: -0.15rem 0 0.55rem;
-}
-
-.editor-history-trigger {
-  border: 1px solid var(--border-subtle);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--surface-muted) 68%, transparent);
-  color: var(--text-main);
-  font: inherit;
-  font-size: 0.74rem;
-  font-weight: 650;
-  padding: 0.3rem 0.65rem;
-  cursor: pointer;
-}
-
-.editor-history-trigger:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--surface-muted) 82%, transparent);
-}
-
-.editor-history-trigger:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
 }
 
 .editor-pulse-panel-wrap {

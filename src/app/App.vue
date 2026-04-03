@@ -1910,6 +1910,10 @@ function onExplorerPathsMoved(moves: PathMove[]) {
   })
 }
 
+async function openActiveNoteHistory() {
+  await editorRef.value?.openNoteHistory()
+}
+
 async function readNoteSnapshot(path: string): Promise<ReadNoteSnapshotResult> {
   return await notePersistence.readNoteSnapshot(path)
 }
@@ -2172,6 +2176,7 @@ onBeforeUnmount(() => {
       @context-open-second-brain="void openConstitutedContextInSecondBrain()"
       @context-open-cosmos="void openConstitutedContextInCosmos()"
       @context-open-pulse="void openConstitutedContextInPulse()"
+      @active-note-open-history="void openActiveNoteHistory()"
     >
       <template #center>
         <EditorPaneGrid

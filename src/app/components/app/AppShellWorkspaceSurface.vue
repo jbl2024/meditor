@@ -139,6 +139,7 @@ const emit = defineEmits<{
   launchpadOpenRecentNote: [path: string]
   launchpadQuickStart: [kind: 'today' | 'second-brain' | 'cosmos' | 'command-palette' | 'alters']
   toggleFavorite: []
+  activeNoteOpenHistory: []
   activeNoteAddToContext: []
   activeNoteRemoveFromContext: []
   activeNoteOpenCosmos: []
@@ -261,6 +262,7 @@ defineExpose<AppShellWorkspaceSurfaceExposed>({
           :property-parse-error-count="propertyParseErrorCount"
           :to-relative-path="toRelativePath"
           @toggle-favorite="emit('toggleFavorite')"
+          @open-note-history="emit('activeNoteOpenHistory')"
           @active-note-add-to-context="emit('activeNoteAddToContext')"
           @active-note-remove-from-context="emit('activeNoteRemoveFromContext')"
           @active-note-open-cosmos="emit('activeNoteOpenCosmos')"

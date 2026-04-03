@@ -9,6 +9,7 @@ describe('EditorRightPane', () => {
     const onOutlineClick = vi.fn()
     const onBacklinkOpen = vi.fn()
     const onToggleFavorite = vi.fn()
+    const onOpenNoteHistory = vi.fn()
     const onActiveNoteAddToContext = vi.fn()
     const onActiveNoteRemoveFromContext = vi.fn()
     const onActiveNoteOpenCosmos = vi.fn()
@@ -63,6 +64,7 @@ describe('EditorRightPane', () => {
           propertyParseErrorCount: 0,
           toRelativePath: (path: string) => path.replace('/wk/', ''),
           onToggleFavorite,
+          onOpenNoteHistory,
           onOutlineClick,
           onBacklinkOpen,
           onActiveNoteAddToContext,
@@ -101,6 +103,8 @@ describe('EditorRightPane', () => {
 
     ;(root.querySelector('.favorite-toggle-btn') as HTMLButtonElement).click()
     expect(onToggleFavorite).toHaveBeenCalledTimes(1)
+    ;(root.querySelector('.history-toggle-btn') as HTMLButtonElement).click()
+    expect(onOpenNoteHistory).toHaveBeenCalledTimes(1)
 
     ;(root.querySelector('.primary-context-btn') as HTMLButtonElement).click()
     expect(onActiveNoteAddToContext).toHaveBeenCalledTimes(1)

@@ -26,6 +26,7 @@ export type EditorPaneGridExposed = {
   applyWorkspaceFsChanges: (changes: WorkspaceFsChange[]) => Promise<void>
   focusEditor: () => void
   focusFirstContentBlock: () => void
+  openNoteHistory: () => Promise<void>
   revealSnippet: (snippet: string) => Promise<void>
   revealOutlineHeading: (index: number) => Promise<void>
   revealAnchor: (anchor: WikilinkAnchor) => Promise<boolean>
@@ -240,6 +241,10 @@ function focusFirstContentBlock() {
   ensureCall((editor) => editor.focusFirstContentBlock(), undefined)
 }
 
+async function openNoteHistory() {
+  await ensureCall((editor) => editor.openNoteHistory(), Promise.resolve())
+}
+
 async function revealSnippet(snippet: string) {
   await ensureCall((editor) => editor.revealSnippet(snippet), Promise.resolve())
 }
@@ -282,6 +287,7 @@ defineExpose<EditorPaneGridExposed>({
   applyWorkspaceFsChanges,
   focusEditor,
   focusFirstContentBlock,
+  openNoteHistory,
   revealSnippet,
   revealOutlineHeading,
   revealAnchor,

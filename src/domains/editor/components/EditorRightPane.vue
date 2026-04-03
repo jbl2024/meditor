@@ -12,7 +12,7 @@
  *   and cross-surface orchestration.
  */
 import { computed, ref, watch } from 'vue'
-import { BookmarkIcon, ChevronRightIcon, StarIcon as StarOutlineIcon, XMarkIcon } from '@heroicons/vue/24/outline'
+import { BookmarkIcon, ChevronRightIcon, ClockIcon, StarIcon as StarOutlineIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import { StarIcon as StarSolidIcon } from '@heroicons/vue/24/solid'
 import EditorEchoesPanel from './editor/EditorEchoesPanel.vue'
 import UiButton from '../../../shared/components/ui/UiButton.vue'
@@ -59,6 +59,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'toggle-favorite': []
+  'open-note-history': []
   'active-note-add-to-context': []
   'active-note-remove-from-context': []
   'active-note-open-cosmos': []
@@ -102,32 +103,46 @@ watch(
   <aside class="right-pane" :style="{ width: `${props.width}px` }">
     <section class="pane-card pane-toolbar">
       <div class="pane-toolbar-row">
-        <div class="pane-toolbar-copy">
-          <h3 class="section-title pane-toolbar-title">Active Note</h3>
-          <p class="pane-toolbar-note-title">{{ props.activeNoteTitle || 'No active note' }}</p>
-          <p class="pane-toolbar-meta">
-            {{ props.activeStateLabel }}
+      <div class="pane-toolbar-copy">
+        <h3 class="section-title pane-toolbar-title">Active Note</h3>
+        <p class="pane-toolbar-note-title">{{ props.activeNoteTitle || 'No active note' }}</p>
+        <p class="pane-toolbar-meta">
+          {{ props.activeStateLabel }}
             <template v-if="props.activeNotePath">
               <span>· {{ props.backlinkCount }} backlinks</span>
               <span>· {{ props.semanticLinkCount }} semantic links</span>
             </template>
           </p>
         </div>
-        <UiIconButton
-          variant="ghost"
-          size="sm"
-          :class-name="[
-            'favorite-toggle-btn',
-            props.isFavorite ? 'favorite-toggle-btn--active' : ''
-          ].filter(Boolean).join(' ')"
-          :disabled="!props.canToggleFavorite"
-          :title="props.isFavorite ? 'Remove from Favorites' : 'Add to Favorites'"
-          :aria-label="props.isFavorite ? 'Remove from Favorites' : 'Add to Favorites'"
-          @click="emit('toggle-favorite')"
-        >
-          <StarSolidIcon v-if="props.isFavorite" />
-          <StarOutlineIcon v-else />
-        </UiIconButton>
+        <div class="pane-toolbar-actions">
+          <UiIconButton
+            variant="ghost"
+            size="sm"
+            :class-name="[
+              'favorite-toggle-btn',
+              props.isFavorite ? 'favorite-toggle-btn--active' : ''
+            ].filter(Boolean).join(' ')"
+            :disabled="!props.canToggleFavorite"
+            :title="props.isFavorite ? 'Remove from Favorites' : 'Add to Favorites'"
+            :aria-label="props.isFavorite ? 'Remove from Favorites' : 'Add to Favorites'"
+            @click="emit('toggle-favorite')"
+          >
+            <StarSolidIcon v-if="props.isFavorite" />
+            <StarOutlineIcon v-else />
+          </UiIconButton>
+          <UiButton
+            variant="ghost"
+            size="sm"
+            class-name="history-toggle-btn"
+            :disabled="!props.activeNotePath"
+            title="Open Note History"
+            aria-label="Open Note History"
+            @click="emit('open-note-history')"
+          >
+            <ClockIcon />
+            History
+          </UiButton>
+        </div>
       </div>
 
       <UiButton
@@ -426,6 +441,14 @@ watch(
   gap: 10px;
 }
 
+.pane-toolbar-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
 .pane-toolbar-copy {
   min-width: 0;
   display: flex;
@@ -469,6 +492,16 @@ watch(
 }
 
 .favorite-toggle-btn :deep(svg) {
+  width: 14px;
+  height: 14px;
+}
+
+.history-toggle-btn {
+  min-width: 0;
+  padding-inline: 0.5rem;
+}
+
+.history-toggle-btn :deep(svg) {
   width: 14px;
   height: 14px;
 }

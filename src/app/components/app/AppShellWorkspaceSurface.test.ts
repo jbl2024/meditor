@@ -68,6 +68,7 @@ function mountHarness() {
             onActiveNoteAddToContext: () => events.push('add-context'),
             onActiveNoteRemoveFromContext: () => events.push('remove-context'),
             onActiveNoteOpenCosmos: () => events.push('open-cosmos'),
+            onActiveNoteOpenHistory: () => events.push('open-history'),
             onContextOpenSecondBrain: () => events.push('context-second-brain'),
             onContextOpenCosmos: () => events.push('context-cosmos'),
             onContextOpenPulse: () => events.push('context-pulse'),
@@ -120,6 +121,7 @@ describe('AppShellWorkspaceSurface', () => {
     mounted.root.querySelector<HTMLButtonElement>('[aria-label="Explorer"]')?.click()
     mounted.root.querySelector<HTMLButtonElement>('[aria-label="Favorites"]')?.click()
     mounted.root.querySelector<HTMLButtonElement>('[aria-label="Search"]')?.click()
+    mounted.root.querySelector<HTMLButtonElement>('[aria-label="Open Note History"]')?.click()
     mounted.root.querySelector<HTMLDivElement>('.splitter')?.dispatchEvent(
       new MouseEvent('mousedown', { bubbles: true })
     )
@@ -129,6 +131,7 @@ describe('AppShellWorkspaceSurface', () => {
       'mode:explorer',
       'mode:favorites',
       'mode:search',
+      'open-history',
       'resize:left'
     ])
     expect(mounted.enqueueMarkdownReindex).toHaveBeenCalledWith('/vault/a.md')
