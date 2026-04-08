@@ -1,0 +1,29 @@
+# Maintainer: Codex <codex@openai.com>
+
+pkgname=tomosona
+pkgver=__PKGVER__
+pkgrel=1
+pkgdesc="Local-first markdown editor"
+arch=('x86_64' 'aarch64')
+url="https://github.com/jbl2024/tomosona"
+license=('MIT')
+depends=('gtk3' 'webkit2gtk-4.1' 'libayatana-appindicator' 'librsvg' 'xdg-utils')
+makedepends=('base-devel' 'nodejs' 'npm' 'rust' 'cargo' 'git')
+options=('!strip')
+source=("$pkgname-$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+  cd "$srcdir/$pkgname-$pkgver"
+  npm ci
+  npm run tauri:build -- --no-bundle
+}
+
+package() {
+  cd "$srcdir/$pkgname-$pkgver"
+
+  install -Dm755 src-tauri/target/release/tomosona "$pkgdir/usr/bin/tomosona"
+  install -Dm644 packaging/archlinux/tomosona.desktop "$pkgdir/usr/share/applications/tomosona.desktop"
+  install -Dm644 src-tauri/icons/icon.png "$pkgdir/usr/share/icons/hicolor/512x512/apps/tomosona.png"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

@@ -1,0 +1,72 @@
+name: Release (Arch Linux)
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build Arch package
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Arch build dependencies
+        run: |
+          pacman -Syu --noconfirm --needed
+          pacman -S --noconfirm --needed \
+            base-devel \
+            git \
+            nodejs \
+            npm \
+            rust \
+            cargo \
+            webkit2gtk-4.1 \
+            gtk3 \
+            libayatana-appindicator \
+            librsvg \
+            xdg-utils \
+            patchelf
+
+      - name: Prepare package build user
+        run: |
+          useradd -m builder
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+
+      - name: Build Arch package
+        run: |
+          set -euo pipefail
+
+          version="$(node -p "require('./package.json').version")"
+          workdir="$GITHUB_WORKSPACE/.archlinux"
+          pkgdir="$workdir/packaging"
+
+          rm -rf "$workdir" "$GITHUB_WORKSPACE/release-artifacts"
+          mkdir -p "$pkgdir" "$GITHUB_WORKSPACE/release-artifacts"
+
+          cp -R packaging/archlinux/. "$pkgdir/"
+          sed -i "s/__PKGVER__/${version}/g" "$pkgdir/PKGBUILD"
+
+          git archive --format=tar.gz --prefix="tomosona-${version}/" -o "$pkgdir/tomosona-${version}.tar.gz" HEAD
+
+          chown -R builder:builder "$workdir"
+
+          su builder -c "cd '$pkgdir' && makepkg --noconfirm --cleanbuild --skipinteg"
+
+          mv "$pkgdir"/*.pkg.tar.zst "$GITHUB_WORKSPACE/release-artifacts/"
+
+      - name: Upload Arch package to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-artifacts/*.pkg.tar.zst
