@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.33.7] - 2026-04-08
+
+### Fixed
+- fix(release): locate arch package artifact after makepkg (bb83a10)
+
 ## [0.33.6] - 2026-04-08
 
 ### Fixed
