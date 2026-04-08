@@ -43,6 +43,7 @@ jobs:
             cargo \
             gcc \
             make \
+            openssl-devel \
             pkgconf-pkg-config \
             webkit2gtk4.1-devel \
             gtk3-devel \

@@ -15,6 +15,7 @@ BuildRequires:  hicolor-icon-theme
 BuildRequires:  libappindicator-gtk3-devel
 BuildRequires:  librsvg2-devel
 BuildRequires:  make
+BuildRequires:  openssl-devel
 BuildRequires:  nodejs
 BuildRequires:  npm
 BuildRequires:  pkgconf-pkg-config
