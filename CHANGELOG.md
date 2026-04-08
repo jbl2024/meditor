@@ -18,6 +18,13 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.33.1] - 2026-04-08
+
+### Changed
+- build(fedora): add matrix rpm release workflow (afef77c)
+- build(archlinux): add srcinfo for aur compatibility (4c0590c)
+- build(archlinux): add dedicated pkgbuild release workflow (5dd0037)
+
 ## [0.33.0] - 2026-04-03
 
 ### Added
