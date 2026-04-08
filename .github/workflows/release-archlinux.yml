@@ -14,8 +14,17 @@ concurrency:
 
 jobs:
   build:
-    name: Build Arch package
-    runs-on: ubuntu-latest
+    name: Build Arch package (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runs-on: ubuntu-24.04
+          - arch: aarch64
+            runs-on: ubuntu-24.04-arm
+
+    runs-on: ${{ matrix.runs-on }}
     container:
       image: archlinux:base-devel
 
@@ -49,24 +58,47 @@ jobs:
           set -euo pipefail
 
           version="$(node -p "require('./package.json').version")"
-          workdir="$GITHUB_WORKSPACE/.archlinux"
+          workdir="$GITHUB_WORKSPACE/.archlinux-${{ matrix.arch }}"
           pkgdir="$workdir/packaging"
 
-          rm -rf "$workdir" "$GITHUB_WORKSPACE/release-artifacts"
-          mkdir -p "$pkgdir" "$GITHUB_WORKSPACE/release-artifacts"
+          rm -rf "$workdir" "$GITHUB_WORKSPACE/release-artifacts-${{ matrix.arch }}"
+          mkdir -p "$pkgdir" "$GITHUB_WORKSPACE/release-artifacts-${{ matrix.arch }}"
 
           cp -R packaging/archlinux/. "$pkgdir/"
           sed -i "s/__PKGVER__/${version}/g" "$pkgdir/PKGBUILD"
-
-          git archive --format=tar.gz --prefix="tomosona-${version}/" -o "$pkgdir/tomosona-${version}.tar.gz" HEAD
 
           chown -R builder:builder "$workdir"
 
           su builder -c "cd '$pkgdir' && makepkg --noconfirm --cleanbuild --skipinteg"
 
-          mv "$pkgdir"/*.pkg.tar.zst "$GITHUB_WORKSPACE/release-artifacts/"
+          mkdir -p "$GITHUB_WORKSPACE/release-artifacts-${{ matrix.arch }}"
+          mv "$pkgdir"/*.pkg.tar.zst "$GITHUB_WORKSPACE/release-artifacts-${{ matrix.arch }}/"
 
-      - name: Upload Arch package to release
+      - name: Upload Arch package artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: archlinux-${{ matrix.arch }}
+          path: release-artifacts-${{ matrix.arch }}/*.pkg.tar.zst
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+
+      - name: Show files
+        run: find artifacts -type f
+
+      - name: Create Release + Upload Assets
         uses: softprops/action-gh-release@v2
         with:
-          files: release-artifacts/*.pkg.tar.zst
+          generate_release_notes: false
+          files: artifacts/**/*.pkg.tar.zst
