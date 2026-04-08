@@ -34,7 +34,7 @@ Requires:       xdg-utils
 Local-first markdown editor.
 
 %prep
-%autosetup -q
+%autosetup
 
 %build
 npm ci
