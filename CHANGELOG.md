@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.33.3] - 2026-04-08
+
+### Fixed
+- fix(release): archive fedora sources from workspace instead of git (d845ac9)
+
 ## [0.33.2] - 2026-04-08
 
 ### Changed
