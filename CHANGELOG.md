@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.33.4] - 2026-04-08
+
+### Fixed
+- fix(release): initialize arch keyring in archlinux arm container (975cb84)
+
 ## [0.33.3] - 2026-04-08
 
 ### Fixed
