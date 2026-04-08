@@ -31,12 +31,26 @@ jobs:
     runs-on: ${{ matrix.runs-on }}
     container:
       image: ${{ matrix.container-image }}
+      options: --user 0
 
     steps:
       - uses: actions/checkout@v6
 
       - name: Install Arch build dependencies
         run: |
+          pacman-key --init
+          case "${{ matrix.arch }}" in
+            x86_64)
+              pacman-key --populate archlinux
+              ;;
+            aarch64)
+              pacman-key --populate archlinuxarm
+              ;;
+            *)
+              echo "Unsupported Arch package target: ${{ matrix.arch }}"
+              exit 1
+              ;;
+          esac
           pacman -Syu --noconfirm --needed
           pacman -S --noconfirm --needed \
             base-devel \
