@@ -69,7 +69,14 @@ jobs:
           cp packaging/fedora/tomosona.spec "$specdir/tomosona.spec"
           sed -i "s/__PKGVER__/${version}/g" "$specdir/tomosona.spec"
 
-          git archive --format=tar.gz --prefix="tomosona-${version}/" -o "$sourcedir/tomosona-${version}.tar.gz" HEAD
+          tar --create --gzip \
+            --file "$sourcedir/tomosona-${version}.tar.gz" \
+            --transform "s,^,tomosona-${version}/," \
+            --exclude='.git' \
+            --exclude='.fedora-*' \
+            --exclude='release-artifacts-*' \
+            --exclude='src-tauri/target' \
+            -C "$GITHUB_WORKSPACE" .
 
           rpmbuild -ba "$specdir/tomosona.spec" --define "_topdir $topdir"
 

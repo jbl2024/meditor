@@ -16,7 +16,7 @@ sha256sums=('SKIP')
 build() {
   cd "$srcdir/$pkgname-$pkgver"
   npm ci
-  npm run tauri:build -- --no-bundle
+  AWS_LC_SYS_NO_JITTER_ENTROPY=1 npm run tauri:build -- --no-bundle
 }
 
 package() {

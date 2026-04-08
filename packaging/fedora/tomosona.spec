@@ -38,7 +38,7 @@ Local-first markdown editor.
 
 %build
 npm ci
-npm run tauri:build -- --no-bundle
+AWS_LC_SYS_NO_JITTER_ENTROPY=1 npm run tauri:build -- --no-bundle
 
 %install
 install -Dm755 src-tauri/target/release/tomosona %{buildroot}%{_bindir}/tomosona

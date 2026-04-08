@@ -21,12 +21,16 @@ jobs:
         include:
           - arch: x86_64
             runs-on: ubuntu-24.04
+            container-image: docker.io/archlinux/archlinux:base-devel
           - arch: aarch64
             runs-on: ubuntu-24.04-arm
+            # Arch's official container image is amd64-only; use an Arch Linux ARM
+            # build environment on the arm64 runner for the aarch64 package.
+            container-image: docker.io/bamboocz/archlinuxarm:latest
 
     runs-on: ${{ matrix.runs-on }}
     container:
-      image: archlinux:base-devel
+      image: ${{ matrix.container-image }}
 
     steps:
       - uses: actions/checkout@v6
@@ -69,7 +73,7 @@ jobs:
 
           chown -R builder:builder "$workdir"
 
-          su builder -c "cd '$pkgdir' && makepkg --noconfirm --cleanbuild --skipinteg"
+          su builder -c "cd '$pkgdir' && AWS_LC_SYS_NO_JITTER_ENTROPY=1 makepkg --noconfirm --cleanbuild --skipinteg"
 
           mkdir -p "$GITHUB_WORKSPACE/release-artifacts-${{ matrix.arch }}"
           mv "$pkgdir"/*.pkg.tar.zst "$GITHUB_WORKSPACE/release-artifacts-${{ matrix.arch }}/"
