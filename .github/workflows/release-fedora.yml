@@ -1,0 +1,105 @@
+name: Release (Fedora Linux)
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build Fedora package (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runs-on: ubuntu-24.04
+          - arch: aarch64
+            runs-on: ubuntu-24.04-arm
+
+    runs-on: ${{ matrix.runs-on }}
+    container:
+      image: fedora:42
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Fedora build dependencies
+        run: |
+          dnf -y update
+          dnf -y install \
+            rpm-build \
+            git \
+            nodejs \
+            npm \
+            rust \
+            cargo \
+            gcc \
+            make \
+            pkgconf-pkg-config \
+            webkit2gtk4.1-devel \
+            gtk3-devel \
+            libappindicator-gtk3-devel \
+            librsvg2-devel \
+            xdg-utils \
+            desktop-file-utils \
+            hicolor-icon-theme
+
+      - name: Build Fedora package
+        run: |
+          set -euo pipefail
+
+          version="$(node -p "require('./package.json').version")"
+          workdir="$GITHUB_WORKSPACE/.fedora-${{ matrix.arch }}"
+          topdir="$workdir/rpmbuild"
+          sourcedir="$topdir/SOURCES"
+          specdir="$topdir/SPECS"
+          artifactdir="$GITHUB_WORKSPACE/release-artifacts-${{ matrix.arch }}"
+
+          rm -rf "$workdir" "$artifactdir"
+          mkdir -p "$sourcedir" "$specdir" "$artifactdir"
+
+          cp packaging/fedora/tomosona.spec "$specdir/tomosona.spec"
+          sed -i "s/__PKGVER__/${version}/g" "$specdir/tomosona.spec"
+
+          git archive --format=tar.gz --prefix="tomosona-${version}/" -o "$sourcedir/tomosona-${version}.tar.gz" HEAD
+
+          rpmbuild -ba "$specdir/tomosona.spec" --define "_topdir $topdir"
+
+          find "$topdir/RPMS" -name '*.rpm' -exec mv {} "$artifactdir/" \;
+
+      - name: Upload Fedora package artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: fedora-${{ matrix.arch }}
+          path: release-artifacts-${{ matrix.arch }}/*.rpm
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+
+      - name: Show files
+        run: find artifacts -type f
+
+      - name: Create Release + Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: false
+          files: artifacts/**/*.rpm

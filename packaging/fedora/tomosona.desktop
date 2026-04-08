@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Tomosona
+Comment=Local-first markdown editor
+Exec=tomosona %U
+Icon=tomosona
+Terminal=false
+Categories=Office;TextEditor;
+StartupWMClass=tomosona
