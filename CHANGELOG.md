@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.33.8] - 2026-04-08
+
+### Fixed
+- fix(release): set explicit pkgdest for archlinux packages (29784c4)
+
 ## [0.33.7] - 2026-04-08
 
 ### Fixed
