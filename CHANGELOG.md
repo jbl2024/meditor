@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.33.2] - 2026-04-08
+
+### Changed
+- ci(release): separate workflow concurrency for linux package builds (9cd02c8)
+
 ## [0.33.1] - 2026-04-08
 
 ### Changed
