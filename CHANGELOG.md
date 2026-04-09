@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.33.10] - 2026-04-09
+
+### Fixed
+- fix(release): keep arch pkgdest writable for builder (d1f4637)
+
 ## [0.33.9] - 2026-04-09
 
 ### Changed
