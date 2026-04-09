@@ -18,6 +18,12 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.33.9] - 2026-04-09
+
+### Changed
+- ci(release): normalize arch and fedora packaging workflows (03459fc)
+- chore(release): fix builds (b8a4225)
+
 ## [0.33.8] - 2026-04-08
 
 ### Fixed
