@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.33.13] - 2026-04-09
+
+### Fixed
+- fix(release): accept makepkg package extensions in arch workflow (81bc53c)
+
 ## [0.33.12] - 2026-04-09
 
 ### Fixed
