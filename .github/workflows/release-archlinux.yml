@@ -88,17 +88,26 @@ jobs:
           version="${{ steps.release_version.outputs.version }}"
           workdir="$GITHUB_WORKSPACE/.archlinux-${{ matrix.arch }}"
           pkgdir="$workdir/packaging"
+          pkgdest="$workdir/pkgdest"
           artifactdir="$GITHUB_WORKSPACE/release-artifacts-${{ matrix.arch }}"
 
           rm -rf "$workdir" "$artifactdir"
-          mkdir -p "$pkgdir" "$artifactdir"
+          mkdir -p "$pkgdir" "$pkgdest" "$artifactdir"
 
           cp -R packaging/archlinux/. "$pkgdir/"
           sed -i "s/__PKGVER__/${version}/g" "$pkgdir/PKGBUILD"
 
           chown -R builder:builder "$workdir"
 
-          su builder -c "cd '$pkgdir' && PKGDEST='$artifactdir' AWS_LC_SYS_NO_JITTER_ENTROPY=1 makepkg --noconfirm --cleanbuild --skipinteg"
+          su builder -c "cd '$pkgdir' && PKGDEST='$pkgdest' AWS_LC_SYS_NO_JITTER_ENTROPY=1 makepkg --noconfirm --cleanbuild --skipinteg"
+
+          package_file="$(find "$workdir" -name '*.pkg.tar.zst' -print -quit)"
+          if [ -z "$package_file" ]; then
+            echo "No Arch package was produced"
+            exit 1
+          fi
+
+          mv "$package_file" "$artifactdir/"
 
       - name: Upload Arch package artifact
         uses: actions/upload-artifact@v7
