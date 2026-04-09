@@ -106,7 +106,18 @@ jobs:
           ls -al "$pkgdest"
 
           shopt -s nullglob
-          package_files=("$pkgdest"/*.pkg.tar.zst)
+          package_files=(
+            "$pkgdest"/*.pkg.tar
+            "$pkgdest"/*.pkg.tar.zst
+            "$pkgdest"/*.pkg.tar.xz
+            "$pkgdest"/*.pkg.tar.gz
+            "$pkgdest"/*.pkg.tar.bz2
+            "$pkgdest"/*.pkg.tar.lz4
+            "$pkgdest"/*.pkg.tar.lz
+            "$pkgdest"/*.pkg.tar.lzo
+            "$pkgdest"/*.pkg.tar.lrz
+            "$pkgdest"/*.pkg.tar.Z
+          )
           if [ "${#package_files[@]}" -eq 0 ]; then
             echo "No Arch package was produced in $pkgdest"
             exit 1
@@ -121,7 +132,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: archlinux-${{ matrix.arch }}
-          path: release-artifacts-${{ matrix.arch }}/*.pkg.tar.zst
+          path: release-artifacts-${{ matrix.arch }}/*
           if-no-files-found: error
 
   release:
@@ -144,4 +155,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: false
-          files: artifacts/**/*.pkg.tar.zst
+          files: artifacts/**/*
