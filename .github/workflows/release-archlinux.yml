@@ -36,6 +36,16 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Resolve release version
+        id: release_version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="0.0.0-dev"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Install Arch build dependencies
         run: |
           pacman-key --init
@@ -75,28 +85,20 @@ jobs:
         run: |
           set -euo pipefail
 
-          version="$(node -p "require('./package.json').version")"
+          version="${{ steps.release_version.outputs.version }}"
           workdir="$GITHUB_WORKSPACE/.archlinux-${{ matrix.arch }}"
           pkgdir="$workdir/packaging"
-          pkgdest="$workdir/pkgdest"
+          artifactdir="$GITHUB_WORKSPACE/release-artifacts-${{ matrix.arch }}"
 
-          rm -rf "$workdir" "$GITHUB_WORKSPACE/release-artifacts-${{ matrix.arch }}"
-          mkdir -p "$pkgdir" "$pkgdest" "$GITHUB_WORKSPACE/release-artifacts-${{ matrix.arch }}"
+          rm -rf "$workdir" "$artifactdir"
+          mkdir -p "$pkgdir" "$artifactdir"
 
           cp -R packaging/archlinux/. "$pkgdir/"
           sed -i "s/__PKGVER__/${version}/g" "$pkgdir/PKGBUILD"
 
           chown -R builder:builder "$workdir"
 
-          su builder -c "cd '$pkgdir' && PKGDEST='$pkgdest' AWS_LC_SYS_NO_JITTER_ENTROPY=1 makepkg --noconfirm --cleanbuild --skipinteg"
-
-          package_file="$(find "$workdir" -name '*.pkg.tar.zst' -print -quit)"
-          if [ -z "$package_file" ]; then
-            echo "No Arch package was produced"
-            exit 1
-          fi
-
-          mv "$package_file" "$GITHUB_WORKSPACE/release-artifacts-${{ matrix.arch }}/"
+          su builder -c "cd '$pkgdir' && PKGDEST='$artifactdir' AWS_LC_SYS_NO_JITTER_ENTROPY=1 makepkg --noconfirm --cleanbuild --skipinteg"
 
       - name: Upload Arch package artifact
         uses: actions/upload-artifact@v7
