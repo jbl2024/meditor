@@ -42,6 +42,7 @@ jobs:
             rust \
             cargo \
             gcc \
+            gcc-c++ \
             make \
             openssl-devel \
             pkgconf-pkg-config \

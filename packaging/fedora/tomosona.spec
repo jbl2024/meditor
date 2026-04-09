@@ -9,6 +9,7 @@ Source0:        %{name}-%{version}.tar.gz
 
 BuildRequires:  cargo
 BuildRequires:  gcc
+BuildRequires:  gcc-c++
 BuildRequires:  git
 BuildRequires:  gtk3-devel
 BuildRequires:  hicolor-icon-theme

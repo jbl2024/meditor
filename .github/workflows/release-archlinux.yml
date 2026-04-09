@@ -90,7 +90,13 @@ jobs:
 
           su builder -c "cd '$pkgdir' && PKGDEST='$pkgdest' AWS_LC_SYS_NO_JITTER_ENTROPY=1 makepkg --noconfirm --cleanbuild --skipinteg"
 
-          mv "$pkgdest"/*.pkg.tar.zst "$GITHUB_WORKSPACE/release-artifacts-${{ matrix.arch }}/"
+          package_file="$(find "$workdir" -name '*.pkg.tar.zst' -print -quit)"
+          if [ -z "$package_file" ]; then
+            echo "No Arch package was produced"
+            exit 1
+          fi
+
+          mv "$package_file" "$GITHUB_WORKSPACE/release-artifacts-${{ matrix.arch }}/"
 
       - name: Upload Arch package artifact
         uses: actions/upload-artifact@v7
