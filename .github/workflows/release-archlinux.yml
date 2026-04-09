@@ -101,7 +101,7 @@ jobs:
 
           su builder -c "cd '$pkgdir' && PKGDEST='$pkgdest' AWS_LC_SYS_NO_JITTER_ENTROPY=1 makepkg --noconfirm --cleanbuild --skipinteg"
 
-          package_file="$(find "$workdir" -name '*.pkg.tar.zst' -print -quit)"
+          package_file="$(su builder -c "cd '$pkgdir' && PKGDEST='$pkgdest' makepkg --packagelist" | tail -n 1)"
           if [ -z "$package_file" ]; then
             echo "No Arch package was produced"
             exit 1
