@@ -9,7 +9,9 @@ url="https://github.com/jbl2024/tomosona"
 license=('MIT')
 depends=('gtk3' 'webkit2gtk-4.1' 'libayatana-appindicator' 'librsvg' 'xdg-utils')
 makedepends=('nodejs' 'npm' 'rust')
-options=('!strip')
+# Arch enables debug and LTO by default; both make release artifacts less
+# predictable here, and LTO has caused native-link failures in Rust deps.
+options=('!strip' '!debug' '!lto')
 source=("$pkgname-$pkgver.tar.gz::https://github.com/jbl2024/tomosona/archive/refs/tags/v$pkgver.tar.gz")
 sha256sums=('SKIP')
 

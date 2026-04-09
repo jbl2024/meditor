@@ -82,6 +82,7 @@ jobs:
           chown -R builder:builder "$GITHUB_WORKSPACE"
 
       - name: Build Arch package
+        shell: bash
         run: |
           set -euo pipefail
 
@@ -101,13 +102,20 @@ jobs:
 
           su builder -c "cd '$pkgdir' && PKGDEST='$pkgdest' AWS_LC_SYS_NO_JITTER_ENTROPY=1 makepkg --noconfirm --cleanbuild --skipinteg"
 
-          package_file="$(su builder -c "cd '$pkgdir' && PKGDEST='$pkgdest' makepkg --packagelist" | tail -n 1)"
-          if [ -z "$package_file" ]; then
-            echo "No Arch package was produced"
+          echo "Package output directory:"
+          ls -al "$pkgdest"
+
+          shopt -s nullglob
+          package_files=("$pkgdest"/*.pkg.tar.zst)
+          if [ "${#package_files[@]}" -eq 0 ]; then
+            echo "No Arch package was produced in $pkgdest"
             exit 1
           fi
 
-          mv "$package_file" "$artifactdir/"
+          mv "${package_files[@]}" "$artifactdir/"
+
+          echo "Release artifact directory:"
+          ls -al "$artifactdir"
 
       - name: Upload Arch package artifact
         uses: actions/upload-artifact@v7
