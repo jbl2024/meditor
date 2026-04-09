@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.33.12] - 2026-04-09
+
+### Fixed
+- fix(release): stabilize archlinux package build (e1885cf)
+
 ## [0.33.11] - 2026-04-09
 
 ### Fixed
