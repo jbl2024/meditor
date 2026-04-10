@@ -96,7 +96,8 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
     indexingSurfacePort,
     indexingUiEffectsPort
   } = options
-  const semanticDebounceMs = 15_000
+  // Keep a tiny batch window so repeated saves coalesce without leaving semantic links stale.
+  const semanticDebounceMs = 20
   const indexedViewRefreshDebounceMs = 120
   const indexedViewRefreshRetryMs = 120
   const indexedViewRefreshBusyTimeoutMs = 5_000

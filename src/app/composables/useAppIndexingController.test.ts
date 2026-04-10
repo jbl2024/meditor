@@ -283,7 +283,7 @@ describe('useAppIndexingController', () => {
     expect(controller.indexAlert.value?.message).toContain('sqlite ConstraintViolation')
   })
 
-  it('runs semantic refresh work only for due paths and refreshes backlinks once', async () => {
+  it('runs semantic refresh work promptly after queueing markdown reindex and refreshes backlinks once', async () => {
     vi.useFakeTimers()
     const {
       controller,
@@ -293,7 +293,8 @@ describe('useAppIndexingController', () => {
     } = createController()
 
     controller.enqueueMarkdownReindex('/vault/a.md')
-    vi.advanceTimersByTime(15_000)
+    expect(controller.semanticIndexState.value).toBe('pending')
+    await vi.advanceTimersByTimeAsync(200)
     await vi.runAllTimersAsync()
 
     expect(reindexMarkdownFileSemantic).toHaveBeenCalledWith('/vault/a.md')
