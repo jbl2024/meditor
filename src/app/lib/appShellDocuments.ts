@@ -1,4 +1,4 @@
-import { normalizeWorkspacePath } from '../../domains/explorer/lib/workspacePaths'
+import { normalizeWorkspacePath, toWorkspaceRelativePath } from '../../domains/explorer/lib/workspacePaths'
 import { fileName } from './appShellPaths'
 
 /**
@@ -114,8 +114,8 @@ export function parentPrefixForModal(parentPath: string, root: string): string {
   if (!root) return ''
   const normalizedRoot = normalizeWorkspacePath(root).replace(/\/+$/, '')
   const normalizedParent = normalizeWorkspacePath(parentPath).replace(/\/+$/, '')
-  if (!normalizedParent || normalizedParent === normalizedRoot) return ''
-  if (!normalizedParent.startsWith(`${normalizedRoot}/`)) return ''
-  const relative = normalizedParent.slice(normalizedRoot.length + 1)
-  return relative ? `${relative}/` : ''
+  if (!normalizedRoot || !normalizedParent) return ''
+  const relative = toWorkspaceRelativePath(normalizedRoot, normalizedParent)
+  if (!relative || relative === '.' || relative === normalizedParent) return ''
+  return `${relative.replace(/\/+$/, '')}/`
 }
