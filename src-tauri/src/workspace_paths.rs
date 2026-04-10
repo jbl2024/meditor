@@ -4,7 +4,7 @@
 use std::os::windows::fs::MetadataExt;
 use std::{
     fs,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
 };
 
 use unicode_normalization::UnicodeNormalization;
@@ -64,6 +64,29 @@ pub(crate) fn normalize_note_key(root: &Path, path: &Path) -> Result<String> {
 pub(crate) fn normalize_workspace_relative_path(root: &Path, path: &Path) -> Result<String> {
     let relative = path.strip_prefix(root).map_err(|_| AppError::InvalidPath)?;
     Ok(relative.to_string_lossy().replace('\\', "/"))
+}
+
+fn normalize_relative_components(path: &Path) -> Result<PathBuf> {
+    let mut normalized = PathBuf::new();
+
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if !normalized.pop() {
+                    return Err(AppError::InvalidPath);
+                }
+            }
+            Component::Normal(part) => normalized.push(part),
+            Component::RootDir | Component::Prefix(_) => return Err(AppError::InvalidPath),
+        }
+    }
+
+    if normalized.as_os_str().is_empty() {
+        return Err(AppError::InvalidPath);
+    }
+
+    Ok(normalized)
 }
 
 pub(crate) fn workspace_absolute_path(root: &Path, stored_path: &str) -> String {
@@ -183,7 +206,67 @@ pub(crate) fn normalize_workspace_relative_from_input(root: &Path, raw: &str) ->
     let parent = path.parent().ok_or(AppError::InvalidPath)?;
     let parent_canonical = fs::canonicalize(parent)?;
     ensure_within_root(root, &parent_canonical)?;
-    normalize_workspace_relative_path(root, &path)
+
+    let relative = path.strip_prefix(root).map_err(|_| AppError::InvalidPath)?;
+    let normalized_relative = normalize_relative_components(relative)?;
+    Ok(normalized_relative.to_string_lossy().replace('\\', "/"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{
+        fs,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    fn temp_workspace() -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("tomosona-workspace-paths-{nonce}"));
+        fs::create_dir_all(&root).expect("create temp workspace");
+        root
+    }
+
+    #[test]
+    fn normalize_workspace_relative_from_input_strips_curdir_segments() {
+        let root = temp_workspace();
+        fs::create_dir_all(root.join("notes")).expect("create notes");
+
+        let normalized = normalize_workspace_relative_from_input(&root, "notes/./today.md")
+            .expect("normalize path");
+
+        assert_eq!(normalized, "notes/today.md");
+
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn normalize_workspace_relative_from_input_collapses_parent_segments_inside_workspace() {
+        let root = temp_workspace();
+        fs::create_dir_all(root.join("notes")).expect("create notes");
+
+        let normalized = normalize_workspace_relative_from_input(&root, "notes/../secret.md")
+            .expect("normalize path");
+
+        assert_eq!(normalized, "secret.md");
+
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn normalize_workspace_relative_from_input_rejects_parent_escape() {
+        let root = temp_workspace();
+        fs::create_dir_all(root.join("notes")).expect("create notes");
+
+        let result = normalize_workspace_relative_from_input(&root, "../escape.md");
+
+        assert!(matches!(result, Err(AppError::InvalidPath)));
+
+        fs::remove_dir_all(root).expect("cleanup");
+    }
 }
 
 pub(crate) fn split_wikilink_target_suffix(content: &str) -> (&str, &str) {
