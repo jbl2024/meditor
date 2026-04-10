@@ -36,7 +36,10 @@ function createModals() {
     }),
     ensureAllFilesLoaded: vi.fn(async () => {}),
     hasAllFilesLoaded: vi.fn(() => false),
-    syncEditorZoom: vi.fn()
+    syncEditorZoom: vi.fn(),
+    submitNewFileFromModal: vi.fn(),
+    submitNewFolderFromModal: vi.fn(),
+    submitOpenDateFromModal: vi.fn()
   }
   const domPort = {
     focusQuickOpenInput: vi.fn(),
@@ -155,6 +158,33 @@ describe('useAppShellModals', () => {
     await nextTick()
 
     expect(domPort.focusCosmosLoadingModal).toHaveBeenCalled()
+    scope.stop()
+  })
+
+  it('routes modal input Enter and Escape keys through the modal controller', async () => {
+    const { api, scope, actionPort, statePort } = createModals()
+
+    const enterEvent = {
+      key: 'Enter',
+      metaKey: false,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn()
+    } as unknown as KeyboardEvent
+    api.onNewFileInputKeydown(enterEvent)
+    expect(actionPort.submitNewFileFromModal).toHaveBeenCalled()
+
+    const escapeEvent = {
+      key: 'Escape',
+      metaKey: false,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn()
+    } as unknown as KeyboardEvent
+    api.onOpenDateInputKeydown(escapeEvent)
+    await nextTick()
+    expect(statePort.openDateModalVisible.value).toBe(false)
+    expect(actionPort.restoreFocusAfterModalClose).toHaveBeenCalled()
+    expect(actionPort.submitOpenDateFromModal).not.toHaveBeenCalled()
+
     scope.stop()
   })
 })

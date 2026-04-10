@@ -34,6 +34,9 @@ export type AppShellModalsActionPort = {
   ensureAllFilesLoaded: () => Promise<void>
   hasAllFilesLoaded: () => boolean
   syncEditorZoom: () => void
+  submitNewFileFromModal: () => void | Promise<void>
+  submitNewFolderFromModal: () => void | Promise<void>
+  submitOpenDateFromModal: () => void | Promise<void>
 }
 
 /** Groups DOM selectors so modal orchestration stays testable and explicit. */
@@ -64,6 +67,24 @@ export type UseAppShellModalsOptions = {
  */
 export function useAppShellModals(options: UseAppShellModalsOptions) {
   const { statePort, actionPort, domPort } = options
+
+  function onDateOrPathInputKeydown(event: KeyboardEvent, onEscape: () => void, onEnter: () => void | Promise<void>) {
+    if (event.metaKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+      event.stopPropagation()
+      return
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      event.stopPropagation()
+      onEscape()
+      return
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      event.stopPropagation()
+      void onEnter()
+    }
+  }
 
   function closeWithFocusRestore(assign: () => void) {
     assign()
@@ -226,6 +247,18 @@ export function useAppShellModals(options: UseAppShellModalsOptions) {
     return true
   }
 
+  function onNewFileInputKeydown(event: KeyboardEvent) {
+    onDateOrPathInputKeydown(event, closeNewFileModal, actionPort.submitNewFileFromModal)
+  }
+
+  function onNewFolderInputKeydown(event: KeyboardEvent) {
+    onDateOrPathInputKeydown(event, closeNewFolderModal, actionPort.submitNewFolderFromModal)
+  }
+
+  function onOpenDateInputKeydown(event: KeyboardEvent) {
+    onDateOrPathInputKeydown(event, closeOpenDateModal, actionPort.submitOpenDateFromModal)
+  }
+
   watch(statePort.quickOpenQuery, () => {
     statePort.quickOpenActiveIndex.value = 0
   })
@@ -296,6 +329,9 @@ export function useAppShellModals(options: UseAppShellModalsOptions) {
     openShortcutsFromOverflow,
     openAboutFromOverflow,
     openSettingsFromOverflow,
-    openShortcutsFromPalette
+    openShortcutsFromPalette,
+    onNewFileInputKeydown,
+    onNewFolderInputKeydown,
+    onOpenDateInputKeydown
   }
 }

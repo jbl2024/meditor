@@ -140,7 +140,10 @@ describe('useAppShellPaneRuntime', () => {
     api.onCosmosJumpToRelatedNode('node-4')
     api.onCosmosLocateSelectedNode()
     await api.onCosmosOpenSelectedNode()
+    api.scheduleCosmosNodeFocus('node-5')
+    await nextTick()
     expect(focusCosmosNodeById).toHaveBeenCalledWith('node-2')
+    expect(focusCosmosNodeById).toHaveBeenCalledWith('node-5')
     expect(onCosmosOpenNode).toHaveBeenCalledWith('/vault/selected.md')
 
     api.onGlobalSearchModeSelect('semantic')

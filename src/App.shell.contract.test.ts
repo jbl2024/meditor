@@ -21,6 +21,10 @@ describe('App shell contract', () => {
     expect(appSource).not.toContain('function clearEditorStatusForPaths(')
     expect(appSource).not.toContain('function applyImmediatePathMovesLocally(')
     expect(appSource).not.toContain('function applyDeferredPathMovesLocally(')
+    expect(appSource).not.toContain('function onOpenDateInputKeydown(')
+    expect(appSource).not.toContain('function onNewFileInputKeydown(')
+    expect(appSource).not.toContain('function onNewFolderInputKeydown(')
+    expect(appSource).not.toContain('function scheduleCosmosNodeFocus(')
   })
 
   it('uses dedicated shell surface wrappers instead of inlining chrome and overlays', () => {

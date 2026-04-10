@@ -159,7 +159,7 @@ import { useAppShellViewModels } from './composables/useAppShellViewModels'
 import { useAppShellConstitutedContextActions } from './composables/useAppShellConstitutedContextActions'
 import { useAppShellPaneRuntime } from './composables/useAppShellPaneRuntime'
 import { useAppQuickOpen } from './composables/useAppQuickOpen'
-import { useAppTheme, type ThemePreference } from './composables/useAppTheme'
+import { useAppTheme } from './composables/useAppTheme'
 import { useAppSpellcheckPreference } from './composables/useAppSpellcheckPreference'
 import { useAppWorkspaceController } from './composables/useAppWorkspaceController'
 import { useEditorState } from '../domains/editor/composables/useEditorState'
@@ -300,8 +300,10 @@ const shellPersistence = useAppShellPersistence({
 const showDebugTools = import.meta.env.DEV
 const appVersion = packageJson.version
 let shellOpenFlow: ReturnType<typeof useAppShellOpenFlow> | null = null
-let shellModalInteractions: ReturnType<typeof useAppShellModalInteractions> | null = null
 let closeQuickOpenProxy = () => {}
+let submitNewFileFromModalAction: () => boolean | void | Promise<boolean | void> = () => false
+let submitNewFolderFromModalAction: () => boolean | void | Promise<boolean | void> = () => false
+let submitOpenDateFromModalAction: () => boolean | void | Promise<boolean | void> = () => false
 
 const paneCount = computed(() => Object.keys(multiPane.layout.value.panesById).length)
 const activeFilePath = computed(() => multiPane.getActiveDocumentPath())
@@ -832,7 +834,16 @@ const shellModals = useAppShellModals({
     resetQuickOpenState,
     ensureAllFilesLoaded: loadAllFiles,
     hasAllFilesLoaded: () => allWorkspaceFiles.value.length > 0,
-    syncEditorZoom: () => shellPersistence.syncEditorZoom()
+    syncEditorZoom: () => shellPersistence.syncEditorZoom(),
+    submitNewFileFromModal: () => {
+      void submitNewFileFromModalAction()
+    },
+    submitNewFolderFromModal: () => {
+      void submitNewFolderFromModalAction()
+    },
+    submitOpenDateFromModal: () => {
+      void submitOpenDateFromModalAction()
+    }
   },
   domPort: {
     focusQuickOpenInput: () => {
@@ -886,7 +897,10 @@ const {
   openShortcutsFromOverflow,
   openAboutFromOverflow,
   openSettingsFromOverflow,
-  openShortcutsFromPalette
+  openShortcutsFromPalette,
+  onNewFileInputKeydown,
+  onNewFolderInputKeydown,
+  onOpenDateInputKeydown
 } = shellModals
 const settingsWorkflow = useAppSettingsWorkflow({
   altersSettings,
@@ -940,6 +954,9 @@ const {
   submitNewFolderFromModal,
   submitOpenDateFromModal
 } = workspaceEntries
+submitNewFileFromModalAction = submitNewFileFromModal
+submitNewFolderFromModalAction = submitNewFolderFromModal
+submitOpenDateFromModalAction = submitOpenDateFromModal
 
 const mediaQuery = typeof window !== 'undefined'
   ? window.matchMedia('(prefers-color-scheme: dark)')
@@ -1230,7 +1247,8 @@ const {
   onCosmosLocateSelectedNode,
   onCosmosOpenSelectedNode,
   onGlobalSearchModeSelect,
-  saveActiveTab
+  saveActiveTab,
+  scheduleCosmosNodeFocus
 } = paneRuntime
 
 const shellViewModels = useAppShellViewModels({
@@ -1340,7 +1358,7 @@ const {
   forwardHistoryItems
 } = shellViewModels
 
-shellModalInteractions = useAppShellModalInteractions({
+const shellModalInteractions = useAppShellModalInteractions({
   quickOpenPort: {
     quickOpenVisible,
     quickOpenIsActionMode,
@@ -1404,6 +1422,18 @@ shellModalInteractions = useAppShellModalInteractions({
   applyTheme,
   applyThemePreview
 })
+const {
+  runQuickOpenAction,
+  onQuickOpenEnter,
+  onQuickOpenInputKeydown,
+  moveThemePickerSelection,
+  closeThemePickerModal,
+  previewThemePickerItem,
+  selectThemeFromModal,
+  onThemePickerEnter,
+  onThemePickerInputKeydown,
+  openThemePickerFromOverflow
+} = shellModalInteractions
 const historyUi = useAppShellHistoryUi({
   topbarPort: {
     getHistoryButtonEl: (side) => topbarRef.value?.getHistoryButtonEl(side) ?? null,
@@ -1830,37 +1860,8 @@ const keyboard = useAppShellKeyboard({
   }
 })
 
-function scheduleCosmosNodeFocus(nodeId: string, remainingAttempts = 12) {
-  if (!nodeId || remainingAttempts <= 0) return
-}
-
 function onGlobalPointerDown(event: MouseEvent) {
   onGlobalPointerDownInternal(event, overflowMenuOpen.value)
-}
-
-function moveThemePickerSelection(delta: number) {
-  shellModalInteractions?.moveThemePickerSelection(delta)
-}
-
-function closeThemePickerModal(restoreTheme = true) {
-  shellModalInteractions?.closeThemePickerModal(restoreTheme)
-}
-
-function previewThemePickerItem(next: ThemePreference) {
-  shellModalInteractions?.previewThemePickerItem(next)
-}
-
-function selectThemeFromModal(next: ThemePreference) {
-  shellModalInteractions?.setThemeFromPalette(next)
-  shellModalInteractions?.closeThemePickerModal(false)
-}
-
-function onThemePickerEnter() {
-  shellModalInteractions?.onThemePickerEnter()
-}
-
-function openThemePickerFromOverflow() {
-  shellModalInteractions?.openThemePickerFromOverflow()
 }
 
 function onExplorerError(message: string) {
@@ -1933,76 +1934,6 @@ async function onOutlineHeadingClick(payload: { index: number; heading: { level:
     if (revealed) return
   }
   await editorRef.value?.revealOutlineHeading(payload.index)
-}
-
-function runQuickOpenAction(id: string) {
-  shellModalInteractions?.runQuickOpenAction(id)
-}
-
-function onQuickOpenEnter() {
-  shellModalInteractions?.onQuickOpenEnter()
-}
-
-function onQuickOpenInputKeydown(event: KeyboardEvent) {
-  shellModalInteractions?.onQuickOpenInputKeydown(event)
-}
-
-function onThemePickerInputKeydown(event: KeyboardEvent) {
-  shellModalInteractions?.onThemePickerInputKeydown(event)
-}
-
-function onOpenDateInputKeydown(event: KeyboardEvent) {
-  if (event.metaKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
-    event.stopPropagation()
-    return
-  }
-  if (event.key === 'Escape') {
-    event.preventDefault()
-    event.stopPropagation()
-    closeOpenDateModal()
-    return
-  }
-  if (event.key === 'Enter') {
-    event.preventDefault()
-    event.stopPropagation()
-    void submitOpenDateFromModal()
-  }
-}
-
-function onNewFileInputKeydown(event: KeyboardEvent) {
-  if (event.metaKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
-    event.stopPropagation()
-    return
-  }
-  if (event.key === 'Escape') {
-    event.preventDefault()
-    event.stopPropagation()
-    closeNewFileModal()
-    return
-  }
-  if (event.key === 'Enter') {
-    event.preventDefault()
-    event.stopPropagation()
-    void submitNewFileFromModal()
-  }
-}
-
-function onNewFolderInputKeydown(event: KeyboardEvent) {
-  if (event.metaKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
-    event.stopPropagation()
-    return
-  }
-  if (event.key === 'Escape') {
-    event.preventDefault()
-    event.stopPropagation()
-    closeNewFolderModal()
-    return
-  }
-  if (event.key === 'Enter') {
-    event.preventDefault()
-    event.stopPropagation()
-    void submitNewFolderFromModal()
-  }
 }
 
 watch(

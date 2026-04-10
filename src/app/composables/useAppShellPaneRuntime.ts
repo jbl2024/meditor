@@ -93,6 +93,21 @@ type Options = {
 }
 
 export function useAppShellPaneRuntime(options: Options) {
+  function scheduleCosmosNodeFocus(nodeId: string, remainingAttempts = 12) {
+    if (!nodeId || remainingAttempts <= 0) return
+
+    void nextTick(() => {
+      if (options.editorRef.value) {
+        options.editorRef.value.focusCosmosNodeById(nodeId)
+        return
+      }
+
+      requestAnimationFrame(() => {
+        scheduleCosmosNodeFocus(nodeId, remainingAttempts - 1)
+      })
+    })
+  }
+
   async function onPaneTabClick(payload: { paneId: string; tabId: string }) {
     options.multiPane.setActivePane(payload.paneId)
     const pane = options.multiPane.layout.value.panesById[payload.paneId]
@@ -269,6 +284,7 @@ export function useAppShellPaneRuntime(options: Options) {
     onCosmosLocateSelectedNode,
     onCosmosOpenSelectedNode,
     onGlobalSearchModeSelect,
-    saveActiveTab
+    saveActiveTab,
+    scheduleCosmosNodeFocus
   }
 }
