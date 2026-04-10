@@ -45,6 +45,7 @@ const hoisted = vi.hoisted(() => {
     copyEntry: vi.fn(async (source: string) => source),
     moveEntry: vi.fn(async (source: string) => source),
     trashEntry: vi.fn(async (path: string) => path),
+    openPathExternal: vi.fn(async () => {}),
     revealInFileManager: vi.fn(async () => {}),
     listenWorkspaceFsChanged: vi.fn(async () => () => {}),
     getWikilinkGraph: vi.fn(async () => ({ nodes: [], edges: [], generated_at_ms: Date.now() }))
@@ -75,6 +76,7 @@ vi.mock('./shared/api/workspaceApi', () => ({
   copyEntry: hoisted.copyEntry,
   moveEntry: hoisted.moveEntry,
   trashEntry: hoisted.trashEntry,
+  openPathExternal: hoisted.openPathExternal,
   revealInFileManager: hoisted.revealInFileManager,
   listenWorkspaceFsChanged: hoisted.listenWorkspaceFsChanged
 }))

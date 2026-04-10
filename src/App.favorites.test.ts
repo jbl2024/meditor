@@ -45,6 +45,7 @@ vi.mock('./shared/api/workspaceApi', () => ({
   copyEntry: vi.fn(async (source: string) => source),
   moveEntry: vi.fn(async (source: string) => source),
   trashEntry: vi.fn(async (path: string) => path),
+  openPathExternal: vi.fn(async () => {}),
   revealInFileManager: vi.fn(async () => {}),
   listenWorkspaceFsChanged: vi.fn(async () => () => {})
 }))
