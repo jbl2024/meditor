@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.34.1] - 2026-04-10
+
+### Changed
+- chore: remove note-open perf tracing and open trace debug plumbing (74e1a23)
+
 ## [0.34.0] - 2026-04-10
 
 ### Changed
