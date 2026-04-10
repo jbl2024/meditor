@@ -8,40 +8,7 @@ const indexApiMocks = vi.hoisted(() => ({
   semanticLinksForPath: vi.fn()
 }))
 
-const openTraceLog = vi.hoisted(() => ({
-  events: [] as string[]
-}))
-
-const openTraceMocks = vi.hoisted(() => ({
-  bindPendingOpenTrace: vi.fn((path: string, traceId: string) => {
-    openTraceLog.events.push(`bind:${path}:${traceId}`)
-  }),
-  findOpenTrace: vi.fn((path: string) => (path ? 'trace-1' : null)),
-  finishOpenTraceSpan: vi.fn((_traceId: string | null, spanId: string, outcome: string) => {
-    openTraceLog.events.push(`finishSpan:${spanId}:${outcome}`)
-  }),
-  finishOpenTrace: vi.fn((_traceId: string | null, outcome: string) => {
-    openTraceLog.events.push(`finish:${outcome}`)
-  }),
-  runWithOpenTraceSpan: vi.fn(async (_traceId: string | null, name: string, callback: () => Promise<unknown>) => {
-    openTraceLog.events.push(`span:${name}`)
-    return await callback()
-  }),
-  startOpenTrace: vi.fn((path: string, source: string) => {
-    openTraceLog.events.push(`start:${source}:${path}`)
-    return `trace:${source}:${path}`
-  }),
-  startOpenTraceSpan: vi.fn((_traceId: string | null, name: string) => {
-    openTraceLog.events.push(`startSpan:${name}`)
-    return `span:${name}`
-  }),
-  traceOpenStep: vi.fn((_traceId: string | null, message: string) => {
-    openTraceLog.events.push(`step:${message}`)
-  })
-}))
-
 vi.mock('../../shared/api/indexApi', () => indexApiMocks)
-vi.mock('../../shared/lib/openTrace', () => openTraceMocks)
 
 function createDeferred<T>() {
   let resolve!: (value: T) => void
@@ -208,7 +175,6 @@ async function flushMicrotasks() {
 
 describe('useAppShellOpenFlow', () => {
   afterEach(() => {
-    openTraceLog.events.length = 0
     vi.clearAllMocks()
   })
 
@@ -280,10 +246,7 @@ describe('useAppShellOpenFlow', () => {
     harness.activeFilePath.value = '/vault/existing.md'
     await flushMicrotasks()
 
-    expect(harness.refreshActiveFileMetadata).toHaveBeenCalledWith('/vault/existing.md', {
-      traceId: 'trace-1',
-      parentSpanId: 'span:open.active_note_effects'
-    })
+    expect(harness.refreshActiveFileMetadata).toHaveBeenCalledWith('/vault/existing.md')
     expect(harness.editorState.consumeRevealSnippet).toHaveBeenCalledWith('/vault/existing.md')
     expect(harness.api.backlinks.value).toEqual(['/vault/back.md'])
     expect(harness.api.semanticLinks.value).toEqual([
@@ -357,32 +320,4 @@ describe('useAppShellOpenFlow', () => {
     harness.scope.stop()
   })
 
-  it('records the expected traced sequence for an active-note refresh', async () => {
-    const harness = createHarness()
-    harness.editorState.consumeRevealSnippet.mockReturnValue('')
-    indexApiMocks.backlinksForPath.mockResolvedValue([{ path: '/vault/back.md' }])
-    indexApiMocks.semanticLinksForPath.mockResolvedValue([
-      { path: '/vault/related.md', score: null, direction: 'incoming' }
-    ])
-
-    harness.activeFilePath.value = '/vault/trace.md'
-    await flushMicrotasks()
-
-    expect(openTraceLog.events).toEqual([
-      'step:active note effects started',
-      'startSpan:open.active_note_effects',
-      'startSpan:open.right_pane_data',
-      'step:active note metadata refresh started',
-      'step:active note metadata refresh finished',
-      'step:active note reveal snippet check',
-      'step:active note backlinks refresh started',
-      'span:open.backlinks',
-      'span:open.semantic_links',
-      'step:active note backlinks refresh finished',
-      'finishSpan:span:open.right_pane_data:done',
-      'finishSpan:span:open.active_note_effects:done',
-      'finish:done'
-    ])
-    harness.scope.stop()
-  })
 })

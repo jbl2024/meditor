@@ -1,11 +1,10 @@
 use std::{
     collections::HashMap,
-    env, fs,
+    fs,
     fs::File,
     io::{Read, Write},
     path::Path,
     sync::{Mutex, OnceLock},
-    time::Instant,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -104,35 +103,6 @@ fn now_ms() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|value| value.as_millis() as u64)
         .unwrap_or(0)
-}
-
-fn should_log_read_snapshot_perf(elapsed_ms: u128) -> bool {
-    env::var("TOMOSONA_DEBUG_OPEN")
-        .map(|value| value == "1")
-        .unwrap_or(false)
-        || elapsed_ms >= 75
-}
-
-fn log_read_snapshot_perf(
-    command: &str,
-    path: &Path,
-    started_at: Instant,
-    extra_fields: &[(&str, String)],
-) {
-    let elapsed_ms = started_at.elapsed().as_millis();
-    if !should_log_read_snapshot_perf(elapsed_ms) {
-        return;
-    }
-
-    let mut fields = vec![
-        format!("cmd={command}"),
-        format!("total_ms={elapsed_ms}"),
-        format!("path={}", path.to_string_lossy()),
-    ];
-    for (key, value) in extra_fields {
-        fields.push(format!("{key}={value}"));
-    }
-    eprintln!("[open-perf] {}", fields.join(" "));
 }
 
 fn version_from_metadata(metadata: &fs::Metadata) -> Option<FileVersion> {
@@ -274,42 +244,14 @@ fn write_atomically(path: &Path, content: &str) -> Result<()> {
 
 #[tauri::command]
 pub fn read_note_snapshot(path: String) -> Result<ReadNoteSnapshotResult> {
-    let started_at = Instant::now();
     let root = active_workspace_root()?;
-    let root_ms = started_at.elapsed().as_millis();
     let pb = normalize_path(&path)?;
-    let normalize_ms = started_at.elapsed().as_millis();
     ensure_within_root(&root, &pb)?;
-    let within_root_ms = started_at.elapsed().as_millis();
-    let open_started_at = Instant::now();
     let mut file = File::open(&pb)?;
-    let open_ms = open_started_at.elapsed().as_millis();
-    let content_started_at = Instant::now();
     let mut content = String::new();
     file.read_to_string(&mut content)?;
-    let read_ms = content_started_at.elapsed().as_millis();
-    let metadata_started_at = Instant::now();
     let metadata = fs::metadata(&pb)?;
-    let metadata_ms = metadata_started_at.elapsed().as_millis();
-    let version_started_at = Instant::now();
     let version = version_from_metadata(&metadata).ok_or(AppError::OperationFailed)?;
-    let version_ms = version_started_at.elapsed().as_millis();
-
-    log_read_snapshot_perf(
-        "read_note_snapshot",
-        &pb,
-        started_at,
-        &[
-            ("root_ms", root_ms.to_string()),
-            ("normalize_ms", normalize_ms.to_string()),
-            ("within_root_ms", within_root_ms.to_string()),
-            ("open_ms", open_ms.to_string()),
-            ("read_ms", read_ms.to_string()),
-            ("metadata_ms", metadata_ms.to_string()),
-            ("version_ms", version_ms.to_string()),
-            ("chars", content.len().to_string()),
-        ],
-    );
     Ok(ReadNoteSnapshotResult {
         path: normalize_slashes(&pb),
         content,

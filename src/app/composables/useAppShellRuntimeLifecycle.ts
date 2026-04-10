@@ -29,13 +29,6 @@ export type AppShellRuntimeSpellcheckPort = {
   loadSpellcheckPreference: () => void
 }
 
-/** Groups the open-trace hooks used to toggle shell echo behavior. */
-export type AppShellRuntimeOpenTracePort = {
-  installOpenDebugLongTaskObserver: () => void
-  subscribeOpenTraceActivity: (listener: (active: boolean) => void) => () => void
-  onOpenTraceActivityChange: (active: boolean) => void
-}
-
 /** Groups the window-level handlers that the runtime attaches and detaches. */
 export type AppShellRuntimeWindowPort = {
   onGlobalPointerDown: (event: MouseEvent) => void
@@ -56,7 +49,6 @@ export type UseAppShellRuntimeLifecycleOptions = {
   spellcheckPort: AppShellRuntimeSpellcheckPort
   alterSettingsPort: AppShellRuntimeAlterSettingsPort
   workspaceLifecyclePort: AppShellRuntimeWorkspaceLifecyclePort
-  openTracePort: AppShellRuntimeOpenTracePort
   windowPort: AppShellRuntimeWindowPort
   themePort: AppShellRuntimeThemePort
 }
@@ -71,7 +63,6 @@ export type UseAppShellRuntimeLifecycleOptions = {
 export function useAppShellRuntimeLifecycle(options: UseAppShellRuntimeLifecycleOptions) {
   let started = false
   let startPromise: Promise<void> | null = null
-  let disposeOpenTraceActivitySubscription: (() => void) | null = null
   let lifecycleGeneration = 0
 
   function addGlobalListeners() {
@@ -101,10 +92,6 @@ export function useAppShellRuntimeLifecycle(options: UseAppShellRuntimeLifecycle
       void warmupSpellcheckDictionaries()
       options.persistencePort.initializeShellPersistence()
       options.spellcheckPort.loadSpellcheckPreference()
-      options.openTracePort.installOpenDebugLongTaskObserver()
-      disposeOpenTraceActivitySubscription = options.openTracePort.subscribeOpenTraceActivity((active) => {
-        options.openTracePort.onOpenTraceActivityChange(active)
-      })
       addGlobalListeners()
       if (currentGeneration !== lifecycleGeneration) return
       await options.alterSettingsPort.syncAlterSettingsFromDisk()
@@ -127,8 +114,6 @@ export function useAppShellRuntimeLifecycle(options: UseAppShellRuntimeLifecycle
     startPromise = null
     lifecycleGeneration += 1
     removeGlobalListeners()
-    disposeOpenTraceActivitySubscription?.()
-    disposeOpenTraceActivitySubscription = null
     options.workspaceLifecyclePort.dispose()
   }
 

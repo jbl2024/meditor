@@ -19,19 +19,12 @@ describe('useAppShellRuntimeLifecycle', () => {
       addEventListener: vi.fn(),
       removeEventListener: vi.fn()
     } as unknown as MediaQueryList
-    let openTraceListener: ((active: boolean) => void) | null = null
 
     const initializeShellPersistence = vi.fn()
     const loadSpellcheckPreference = vi.fn()
     const syncAlterSettingsFromDisk = vi.fn(async () => {})
     const workspaceStart = vi.fn(async () => {})
     const workspaceDispose = vi.fn()
-    const installOpenDebugLongTaskObserver = vi.fn()
-    const subscribeOpenTraceActivity = vi.fn((listener: (active: boolean) => void) => {
-      openTraceListener = listener
-      return vi.fn()
-    })
-    const onOpenTraceActivityChange = vi.fn()
     const onSystemThemeChanged = vi.fn()
     const onGlobalPointerDown = vi.fn()
     const onWindowResize = vi.fn()
@@ -54,11 +47,6 @@ describe('useAppShellRuntimeLifecycle', () => {
         start: workspaceStart,
         dispose: workspaceDispose
       },
-      openTracePort: {
-        installOpenDebugLongTaskObserver,
-        subscribeOpenTraceActivity,
-        onOpenTraceActivityChange
-      },
       windowPort: {
         onGlobalPointerDown,
         onWindowResize,
@@ -77,8 +65,6 @@ describe('useAppShellRuntimeLifecycle', () => {
     expect(initializeShellPersistence).toHaveBeenCalledTimes(1)
     expect(loadSpellcheckPreference).toHaveBeenCalledTimes(1)
     expect(warmupSpellcheckDictionaries).toHaveBeenCalledTimes(1)
-    expect(installOpenDebugLongTaskObserver).toHaveBeenCalledTimes(1)
-    expect(subscribeOpenTraceActivity).toHaveBeenCalledTimes(1)
     expect(syncAlterSettingsFromDisk).toHaveBeenCalledTimes(1)
     expect(workspaceStart).toHaveBeenCalledTimes(1)
     expect(mediaQuery.addEventListener).toHaveBeenCalledWith('change', onSystemThemeChanged)
@@ -86,10 +72,6 @@ describe('useAppShellRuntimeLifecycle', () => {
     expect(addEventListenerSpy).toHaveBeenCalledWith('resize', onWindowResize)
     expect(addEventListenerSpy).toHaveBeenCalledWith('mousemove', onPointerMove)
     expect(addEventListenerSpy).toHaveBeenCalledWith('mouseup', stopResize)
-
-    expect(openTraceListener).not.toBeNull()
-    openTraceListener!(true)
-    expect(onOpenTraceActivityChange).toHaveBeenCalledWith(true)
 
     runtime.dispose()
 

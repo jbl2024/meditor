@@ -1,16 +1,6 @@
 import { nextTick, ref, watch, type Ref } from 'vue'
 import type { SemanticLink } from '../../shared/api/apiTypes'
 import { backlinksForPath, semanticLinksForPath } from '../../shared/api/indexApi'
-import {
-  bindPendingOpenTrace,
-  findOpenTrace,
-  finishOpenTrace,
-  finishOpenTraceSpan,
-  runWithOpenTraceSpan,
-  startOpenTrace,
-  startOpenTraceSpan,
-  traceOpenStep
-} from '../../shared/lib/openTrace'
 import { formatIsoDate } from '../lib/appShellPaths'
 import { parseWikilinkTarget, type WikilinkAnchor } from '../../domains/editor/lib/wikilinks'
 import { type HeadingNode } from '../../domains/editor/composables/useEditorState'
@@ -74,10 +64,7 @@ export type AppShellOpenFlowContextPort = {
 }
 
 export type AppShellOpenFlowWorkspaceDataPort = {
-  refreshActiveFileMetadata: (
-    path: string | null,
-    options?: { traceId?: string | null; parentSpanId?: string | null }
-  ) => Promise<void>
+  refreshActiveFileMetadata: (path: string | null) => Promise<void>
   isMarkdownPath: (path: string) => boolean
   loadWikilinkTargets: () => Promise<string[]>
   pathExists: (path: string) => Promise<boolean>
@@ -90,7 +77,7 @@ export type AppShellOpenFlowWorkspaceDataPort = {
 }
 
 export type AppShellOpenFlowNavigationPort = {
-  openTabWithAutosave: (path: string, options?: { traceId?: string | null }) => Promise<boolean>
+  openTabWithAutosave: (path: string, options?: { recordHistory?: boolean; targetPaneId?: string; revealInTargetPane?: boolean }) => Promise<boolean>
   openDailyNote: (date: string, openPath: (path: string) => Promise<boolean>) => Promise<boolean>
   recordCosmosHistorySnapshot: () => void
 }
@@ -110,8 +97,6 @@ export type AppShellOpenFlowOptions = {
 
 export type RefreshBacklinksOptions = {
   path?: string
-  traceId?: string | null
-  parentSpanId?: string | null
   requestToken?: number
 }
 
@@ -158,23 +143,14 @@ export function useAppShellOpenFlow(options: AppShellOpenFlowOptions) {
       return
     }
 
-    const traceId = optionsOverride.traceId ?? null
     backlinksLoading.value = true
     semanticLinksLoading.value = true
     backlinksError.value = ''
     semanticLinksError.value = ''
     try {
       const [backlinksResult, semanticLinksResult] = await Promise.allSettled([
-        runWithOpenTraceSpan(traceId, 'open.backlinks', async () => await backlinksForPath(path), {
-          parentSpanId: optionsOverride.parentSpanId,
-          bucket: 'backlinks',
-          payload: { path }
-        }),
-        runWithOpenTraceSpan(traceId, 'open.semantic_links', async () => await semanticLinksForPath(path), {
-          parentSpanId: optionsOverride.parentSpanId,
-          bucket: 'semantic_links',
-          payload: { path }
-        })
+        backlinksForPath(path),
+        semanticLinksForPath(path)
       ])
       if (optionsOverride.requestToken && !isCurrentActiveNoteEffectsRequest(optionsOverride.requestToken, path)) {
         return
@@ -233,30 +209,24 @@ export function useAppShellOpenFlow(options: AppShellOpenFlowOptions) {
     return await options.navigationPort.openDailyNote(formatIsoDate(value), options.navigationPort.openTabWithAutosave)
   }
 
-  async function showExplorerForActiveFile(optionsOverride: { focusTree?: boolean; traceId?: string | null; parentSpanId?: string | null } = {}) {
+  async function showExplorerForActiveFile(optionsOverride: { focusTree?: boolean } = {}) {
     options.workspacePort.setSidebarMode('explorer')
     if (!options.workspacePort.sidebarVisible.value) return
     const activePath = options.editorPort.activeFilePath.value
     if (!activePath) return
-    await runWithOpenTraceSpan(optionsOverride.traceId ?? null, 'open.explorer_reveal', async () => {
-      await nextTick()
-      for (let attempt = 0; attempt < 4; attempt += 1) {
-        const revealPathInView = options.editorPort.explorerRef.value?.revealPathInView
-        if (typeof revealPathInView === 'function') {
-          await revealPathInView(activePath, {
-            focusTree: optionsOverride.focusTree ?? false,
-            behavior: 'auto'
-          })
-          return
-        }
-        await nextTick()
-        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    await nextTick()
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const revealPathInView = options.editorPort.explorerRef.value?.revealPathInView
+      if (typeof revealPathInView === 'function') {
+        await revealPathInView(activePath, {
+          focusTree: optionsOverride.focusTree ?? false,
+          behavior: 'auto'
+        })
+        return
       }
-    }, {
-      parentSpanId: optionsOverride.parentSpanId,
-      bucket: 'explorer_reveal',
-      payload: { path: activePath }
-    })
+      await nextTick()
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    }
   }
 
   async function openOrPrepareMarkdown(path: string, titleLine: string) {
@@ -360,7 +330,7 @@ export function useAppShellOpenFlow(options: AppShellOpenFlowOptions) {
     options.workspacePort.setSidebarMode(fallback)
     await nextTick()
     if (fallback === 'explorer') {
-      await showExplorerForActiveFile({ traceId: null })
+      await showExplorerForActiveFile()
     }
     options.editorPort.editorRef.value?.focusEditor()
   }
@@ -418,22 +388,11 @@ export function useAppShellOpenFlow(options: AppShellOpenFlowOptions) {
   }
 
   async function onExplorerOpen(path: string) {
-    const traceId = startOpenTrace(path, 'explorer-click')
-    bindPendingOpenTrace(path, traceId)
-    traceOpenStep(traceId, 'explorer open requested')
-    const opened = await options.navigationPort.openTabWithAutosave(path, { traceId })
-    if (!opened) {
-      finishOpenTrace(traceId, 'blocked', { stage: 'navigation' })
-    }
+    await options.navigationPort.openTabWithAutosave(path)
   }
 
   async function runActiveNoteEffects(path: string) {
-    const traceId = findOpenTrace(path)
     const requestToken = ++activeNoteEffectsRequestToken
-    traceOpenStep(traceId, 'active note effects started', {
-      path,
-      request_token: requestToken
-    })
 
     if (!path || !options.dataPort.isMarkdownPath(path)) {
       options.editorPort.editorState.setActiveOutline([])
@@ -443,108 +402,33 @@ export function useAppShellOpenFlow(options: AppShellOpenFlowOptions) {
       semanticLinksError.value = ''
       backlinksSourcePath = ''
       semanticLinksSourcePath = ''
-      traceOpenStep(traceId, 'active note effects cleared', {
-        path,
-      request_token: requestToken
-      })
       await options.dataPort.refreshActiveFileMetadata(path)
       return
     }
 
-    const activeEffectsSpanId = startOpenTraceSpan(traceId, 'open.active_note_effects', {
-      bucket: 'active_note_effects',
-      payload: { path }
-    })
-    const rightPaneSpanId = startOpenTraceSpan(traceId, 'open.right_pane_data', {
-      parentSpanId: activeEffectsSpanId,
-      bucket: 'right_pane_data',
-      payload: { path }
-    })
-
-    const finishBlocked = (stage: string) => {
-      finishOpenTraceSpan(traceId, rightPaneSpanId, 'blocked', { stage, path })
-      finishOpenTraceSpan(traceId, activeEffectsSpanId, 'blocked', { stage, path })
-      finishOpenTrace(traceId, 'blocked', { stage, path })
-    }
-
     try {
-      traceOpenStep(traceId, 'active note metadata refresh started', {
-        path,
-        request_token: requestToken
-      })
-      await options.dataPort.refreshActiveFileMetadata(path, {
-        traceId,
-        parentSpanId: activeEffectsSpanId
-      })
-      traceOpenStep(traceId, 'active note metadata refresh finished', {
-        path,
-        request_token: requestToken
-      })
+      await options.dataPort.refreshActiveFileMetadata(path)
       if (!isCurrentActiveNoteEffectsRequest(requestToken, path)) {
-        finishBlocked('stale_after_metadata')
         return
       }
 
       const snippet = options.editorPort.editorState.consumeRevealSnippet(path)
-      traceOpenStep(traceId, 'active note reveal snippet check', {
-        path,
-        request_token: requestToken,
-        has_snippet: Boolean(snippet)
-      })
       if (snippet) {
-        await runWithOpenTraceSpan(traceId, 'open.reveal_snippet', async () => {
-          await nextTick()
-          await options.editorPort.editorRef.value?.revealSnippet(snippet)
-        }, {
-          parentSpanId: activeEffectsSpanId,
-          payload: { path, chars: snippet.length }
-        })
-        traceOpenStep(traceId, 'active note reveal snippet finished', {
-          path,
-          chars: snippet.length,
-          request_token: requestToken
-        })
+        await nextTick()
+        await options.editorPort.editorRef.value?.revealSnippet(snippet)
       }
       if (!isCurrentActiveNoteEffectsRequest(requestToken, path)) {
-        finishBlocked('stale_after_reveal_snippet')
         return
       }
 
-      traceOpenStep(traceId, 'active note backlinks refresh started', {
-        path,
-        request_token: requestToken
-      })
       await refreshBacklinks({
         path,
-        traceId,
-        parentSpanId: rightPaneSpanId,
         requestToken
       })
-      traceOpenStep(traceId, 'active note backlinks refresh finished', {
-        path,
-        backlink_count: backlinks.value.length,
-        semantic_count: semanticLinks.value.length,
-        request_token: requestToken
-      })
       if (!isCurrentActiveNoteEffectsRequest(requestToken, path)) {
-        finishBlocked('stale_after_right_pane')
         return
       }
-
-      finishOpenTraceSpan(traceId, rightPaneSpanId, 'done', { path })
-      finishOpenTraceSpan(traceId, activeEffectsSpanId, 'done', { path })
-      finishOpenTrace(traceId, 'done', {
-        stage: 'open.complete',
-        path
-      })
-    } catch (error) {
-      finishOpenTraceSpan(traceId, rightPaneSpanId, 'error', { path })
-      finishOpenTraceSpan(traceId, activeEffectsSpanId, 'error', { path })
-      finishOpenTrace(traceId, 'error', {
-        stage: 'active_note_effects',
-        path,
-        message: error instanceof Error ? error.message : String(error)
-      })
+    } catch {
     }
   }
 

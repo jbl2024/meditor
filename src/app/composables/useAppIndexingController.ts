@@ -2,7 +2,6 @@ import { computed, getCurrentInstance, onBeforeUnmount, ref, type Ref } from 'vu
 import type { IndexLogEntry, IndexOverviewStats, IndexRuntimeStatus } from '../../shared/api/apiTypes'
 import { buildIndexActivityRows, type IndexActivityRow, type IndexLogFilter } from '../lib/indexActivity'
 import { formatTimestamp } from '../lib/appShellPaths'
-import { hasActiveOpenTrace } from '../../shared/lib/openTrace'
 
 /**
  * Module: useAppIndexingController
@@ -145,7 +144,7 @@ export function useAppIndexingController(options: UseAppIndexingControllerOption
     if (indexingUiEffectsPort?.isBusyOpeningDocument) {
       return indexingUiEffectsPort.isBusyOpeningDocument()
     }
-    return hasActiveOpenTrace()
+    return false
   }
 
   /** Coalesces repeated backlinks/cosmos refresh requests so background indexing does not thrash the UI. */

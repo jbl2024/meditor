@@ -1,13 +1,6 @@
 import { ref } from 'vue'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { useAppWorkspaceController } from './useAppWorkspaceController'
-import {
-  clearOpenTraceDebugState,
-  finishOpenTrace,
-  readRecentOpenTraceEntries,
-  startOpenTrace,
-  startOpenTraceSpan
-} from '../../shared/lib/openTrace'
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void
@@ -136,7 +129,6 @@ function createController() {
 describe('useAppWorkspaceController', () => {
   beforeEach(() => {
     window.localStorage.clear()
-    clearOpenTraceDebugState()
   })
 
   it('loads every file from the workspace tree', async () => {
@@ -278,19 +270,6 @@ describe('useAppWorkspaceController', () => {
     await controller.refreshActiveFileMetadata('/vault/notes/a.md')
 
     expect(controller.activeFileMetadata.value).toBeNull()
-  })
-
-  it('traces active metadata refresh spans when a trace context is provided', async () => {
-    const { controller } = createController()
-    const traceId = startOpenTrace('/vault/notes/a.md', 'navigation-open')
-    const parentSpanId = startOpenTraceSpan(traceId, 'open.active_note_effects', { bucket: 'active_note_effects' })
-
-    await controller.refreshActiveFileMetadata('/vault/notes/a.md', { traceId, parentSpanId })
-    finishOpenTrace(traceId, 'done', { stage: 'open.complete' })
-
-    const entries = readRecentOpenTraceEntries()
-    expect(entries.some((entry) => entry.message === 'open.metadata started')).toBe(true)
-    expect(entries.some((entry) => entry.message === 'open.metadata done')).toBe(true)
   })
 
   it('fails opening a daily note when no workspace is available', async () => {

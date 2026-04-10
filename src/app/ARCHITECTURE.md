@@ -64,7 +64,7 @@
 - `useAppShellConstitutedContextActions`: constituted-context mutations and cross-surface routing into Second Brain or Cosmos.
 - `useAppShellPaneRuntime`: pane-tab, editor-status, and Cosmos pane event glue.
 - `useAppShellWorkspaceLifecycle`: workspace restore, workspace close/reset, and saved-workspace bootstrap.
-- `useAppShellRuntimeLifecycle`: runtime boot/teardown for persistence, open-trace, global listeners, and workspace lifecycle start/stop.
+- `useAppShellRuntimeLifecycle`: runtime boot/teardown for persistence, global listeners, and workspace lifecycle start/stop.
 - `useAppNotePersistence`: note snapshot, title-based rename, and save-buffer orchestration for the shell-owned root editor path.
 - `useAppSettingsWorkflow`: settings hydration from disk and save-result reactions that affect shell state.
 - `appNavigationHistory`: pure codecs and labels for pane-native history snapshots.

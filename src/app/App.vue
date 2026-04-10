@@ -49,11 +49,6 @@ import {
 } from '../shared/api/indexApi'
 import type { PathMove, WorkspaceFsChange } from '../shared/api/apiTypes'
 import type { AppSettingsAlters } from '../shared/api/apiTypes'
-import {
-  hasActiveOpenTrace,
-  installOpenDebugLongTaskObserver,
-  subscribeOpenTraceActivity,
-} from '../shared/lib/openTrace'
 import { parseSearchSnippet } from '../shared/lib/searchSnippets'
 import { type SearchMode } from '../shared/lib/searchMode'
 import { hasActiveTextSelectionInEditor, shouldBlockGlobalShortcutsFromTarget } from '../shared/lib/shortcutTargets'
@@ -299,7 +294,7 @@ const paneCount = computed(() => Object.keys(multiPane.layout.value.panesById).l
 const activeFilePath = computed(() => multiPane.getActiveDocumentPath())
 const activeStatus = computed(() => editorState.getStatus(activeFilePath.value))
 const activeNoteTitle = computed(() => activeFilePath.value ? noteTitleFromPath(activeFilePath.value) : 'No active note')
-const echoesEnabled = ref(!hasActiveOpenTrace())
+const echoesEnabled = ref(true)
 const activeStateLabel = computed(() => (
   activeStatus.value.saving
     ? 'saving'
@@ -1655,13 +1650,6 @@ const appShellRuntimeLifecycle = useAppShellRuntimeLifecycle({
   workspaceLifecyclePort: {
     start: () => workspaceLifecycle.start(),
     dispose: () => workspaceLifecycle.dispose()
-  },
-  openTracePort: {
-    installOpenDebugLongTaskObserver: () => installOpenDebugLongTaskObserver(),
-    subscribeOpenTraceActivity: (listener) => subscribeOpenTraceActivity(listener),
-    onOpenTraceActivityChange: (active) => {
-      echoesEnabled.value = !active
-    }
   },
   windowPort: {
     onGlobalPointerDown: (event) => rootWorkflow.onGlobalPointerDown(event),

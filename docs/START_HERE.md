@@ -61,7 +61,7 @@ Use this as a quick routing table when you need to make a change.
 | Change Type | Start Here | Main Follow-Ups |
 | --- | --- | --- |
 | Workspace boot / restore | `src/app/App.vue` | `src/app/composables/useAppShellWorkspaceLifecycle.ts`, `src/app/composables/useAppShellWorkspaceFsSync.ts`, `src/app/composables/useAppShellPersistence.ts`, `src/app/composables/useAppWorkspaceController.ts` |
-| App runtime bootstrap / teardown | `src/app/composables/useAppShellRuntimeLifecycle.ts` | `src/app/App.vue`, `src/app/composables/useAppShellWorkspaceLifecycle.ts`, `src/app/composables/useAppShellPersistence.ts`, `src/shared/lib/openTrace.ts` |
+| App runtime bootstrap / teardown | `src/app/composables/useAppShellRuntimeLifecycle.ts` | `src/app/App.vue`, `src/app/composables/useAppShellWorkspaceLifecycle.ts`, `src/app/composables/useAppShellPersistence.ts` |
 | Shell chrome controls | `src/app/composables/useAppShellChromeRuntime.ts` | `src/app/App.vue`, `src/app/composables/useAppShellHistoryUi.ts`, `src/app/composables/useAppShellPersistence.ts` |
 | Shell presentation surfaces | `src/app/components/app/AppShellChromeSurface.vue`, `src/app/components/app/AppShellWorkspaceSurface.vue`, `src/app/components/app/AppShellOverlays.vue` | `src/app/App.vue`, `src/app/components/app/TopbarNavigationControls.vue`, `src/app/components/app/SidebarSurface.vue`, `src/app/components/app/WorkspaceStatusBar.vue`, `src/app/components/app/*Modal.vue` |
 | Constituted context actions | `src/app/composables/useAppShellConstitutedContextActions.ts` | `src/app/App.vue`, `src/app/composables/useAppSecondBrainBridge.ts`, `src/domains/editor/composables/useConstitutedContext.ts` |

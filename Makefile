@@ -1,4 +1,4 @@
-.PHONY: help install dev tauri-dev tauri-dev-open-debug build tauri-build tauri-prod-local tauri-prod-local-open-debug preflight preflight-full test-front test-front-coverage coverage-front coverage-back coverage clean clean-frontend clean-tauri clean-deps prepare-release
+.PHONY: help install dev tauri-dev build tauri-build tauri-prod-local preflight preflight-full test-front test-front-coverage coverage-front coverage-back coverage clean clean-frontend clean-tauri clean-deps prepare-release
 
 # VS Code installed via Snap injects GTK paths/modules that break WebKitGTK child
 # processes on some Ubuntu/Kubuntu setups. Clear them for Tauri launches.
@@ -9,11 +9,9 @@ help:
 	@echo "  make install      Install dependencies"
 	@echo "  make dev          Run frontend dev server"
 	@echo "  make tauri-dev    Run Tauri desktop app in dev mode"
-	@echo "  make tauri-dev-open-debug  Run Tauri dev with note-open tracing enabled"
 	@echo "  make build        Build frontend production bundle"
 	@echo "  make tauri-build  Build Tauri desktop app bundle/installers"
 	@echo "  make tauri-prod-local  Build and run the local release binary with production frontend assets"
-	@echo "  make tauri-prod-local-open-debug  Same as tauri-prod-local with note-open tracing enabled"
 	@echo "  make test-front   Run frontend tests"
 	@echo "  make coverage-front  Run frontend tests with coverage"
 	@echo "  make coverage-back   Run Rust tests with coverage (requires cargo-llvm-cov)"
@@ -35,9 +33,6 @@ dev:
 tauri-dev:
 	$(TAURI_ENV_CLEAN) npm run tauri:dev
 
-tauri-dev-open-debug:
-	$(TAURI_ENV_CLEAN) TOMOSONA_DEBUG_OPEN=1 npm run tauri:dev
-
 build:
 	npm run build
 
@@ -47,10 +42,6 @@ tauri-build:
 tauri-prod-local:
 	$(TAURI_ENV_CLEAN) npm run tauri:build -- --no-bundle
 	$(TAURI_ENV_CLEAN) ./src-tauri/target/release/tomosona
-
-tauri-prod-local-open-debug:
-	$(TAURI_ENV_CLEAN) npm run tauri:build -- --no-bundle
-	$(TAURI_ENV_CLEAN) TOMOSONA_DEBUG_OPEN=1 ./src-tauri/target/release/tomosona
 
 preflight:
 	npm run preflight
