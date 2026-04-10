@@ -127,4 +127,62 @@ describe('useAppShellWorkspaceFsSync', () => {
 
     sync.dispose()
   })
+
+  it('reports editor relay failures without breaking filesystem fan-out', async () => {
+    const unlisten = vi.fn()
+    const controllerPort = {
+      applyWorkspaceFsChanges: vi.fn(),
+      relayEditorFsChanges: vi.fn(async () => {
+        throw new Error('relay failed')
+      })
+    }
+    const favoritesPort = {
+      applyWorkspaceFsChanges: vi.fn(),
+      renameFavorite: vi.fn(async () => {})
+    }
+    const uiPort = {
+      invalidateRecentNotes: vi.fn(),
+      removeLaunchpadRecentNote: vi.fn(),
+      renameLaunchpadRecentNote: vi.fn()
+    }
+    const shellPort = {
+      workingFolderPath: ref('/vault'),
+      normalizePath: (path: string) => path.replace(/\\/g, '/'),
+      notifyError: vi.fn()
+    }
+
+    hoisted.listenWorkspaceFsChanged.mockImplementationOnce(async (handler: (payload: {
+      root: string
+      changes: Array<{
+        kind: 'created' | 'removed' | 'renamed' | 'modified'
+        path?: string
+        old_path?: string
+        new_path?: string
+        is_dir?: boolean
+      }>
+    }) => void) => {
+      handler({
+        root: '/vault',
+        changes: [{ kind: 'modified', path: '/vault/a.md' }]
+      })
+      return unlisten
+    })
+
+    const sync = useAppShellWorkspaceFsSync({
+      shellPort,
+      controllerPort,
+      favoritesPort,
+      uiPort
+    })
+
+    await sync.start()
+
+    expect(controllerPort.applyWorkspaceFsChanges).toHaveBeenCalledTimes(1)
+    expect(controllerPort.relayEditorFsChanges).toHaveBeenCalledTimes(1)
+    expect(favoritesPort.applyWorkspaceFsChanges).toHaveBeenCalledTimes(1)
+    expect(uiPort.invalidateRecentNotes).toHaveBeenCalledTimes(1)
+    expect(shellPort.notifyError).toHaveBeenCalledWith('relay failed')
+
+    sync.dispose()
+  })
 })

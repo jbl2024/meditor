@@ -78,7 +78,9 @@ export function useAppShellWorkspaceFsSync(options: UseAppShellWorkspaceFsSyncOp
   function handleWorkspaceFsChanges(payload: { root: string; changes: WorkspaceFsChange[] }) {
     if (!rootMatches(payload.root)) return
     options.controllerPort.applyWorkspaceFsChanges(payload.changes)
-    void options.controllerPort.relayEditorFsChanges(payload.changes)
+    void options.controllerPort.relayEditorFsChanges(payload.changes).catch((err) => {
+      options.shellPort.notifyError(err instanceof Error ? err.message : 'Could not update editor state.')
+    })
     options.favoritesPort.applyWorkspaceFsChanges(payload.changes)
     syncFavoritesForWorkspaceChanges(payload.changes)
     syncViewedNotesForWorkspaceChanges(payload.changes)
