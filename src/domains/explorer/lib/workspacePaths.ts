@@ -66,6 +66,21 @@ export function toWorkspaceRelativePath(workspacePath: string, path: string): st
 }
 
 /**
+ * Returns true when the path is the workspace root or a descendant of it.
+ *
+ * This compares normalized paths with a segment boundary so `/vault2`
+ * does not match `/vault`.
+ */
+export function isWorkspacePathOrDescendant(workspacePath: string, path: string): boolean {
+  const normalizedPath = normalizeWorkspacePath(path)
+  const normalizedRoot = normalizeWorkspacePath(workspacePath).replace(/\/+$/, '')
+  if (!normalizedRoot || !normalizedPath) return false
+  const lowerPath = normalizedPath.toLowerCase()
+  const lowerRoot = normalizedRoot.toLowerCase()
+  return lowerPath === lowerRoot || lowerPath.startsWith(`${lowerRoot}/`)
+}
+
+/**
  * Resolves a path under the workspace root unless it is already absolute.
  *
  * For example `notes/today.md` under `/vault` becomes `/vault/notes/today.md`.

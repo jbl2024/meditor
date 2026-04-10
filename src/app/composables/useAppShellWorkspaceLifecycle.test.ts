@@ -139,4 +139,18 @@ describe('useAppShellWorkspaceLifecycle', () => {
     expect(shellPort.notifyError).toHaveBeenCalledWith('denied')
     scope.stop()
   })
+
+  it('closes workspace-specific tabs when the active file belongs to a different root prefix', async () => {
+    const { api, scope, shellPort, uiPort } = createLifecycle()
+    shellPort.hasWorkspace.value = true
+    shellPort.workingFolderPath.value = '/vault2'
+    shellPort.activeFilePath.value = '/vault/notes/a.md'
+
+    await api.loadWorkingFolder('/vault2')
+
+    expect(uiPort.resetToSinglePane).toHaveBeenCalled()
+    expect(uiPort.closeAllTabsInPane).toHaveBeenCalledWith('pane-1')
+    expect(uiPort.resetActiveOutline).toHaveBeenCalled()
+    scope.stop()
+  })
 })

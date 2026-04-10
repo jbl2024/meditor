@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   dedupeWorkspacePaths,
   isAbsoluteWorkspacePath,
+  isWorkspacePathOrDescendant,
   normalizeWorkspacePath,
   toWorkspaceAbsolutePath,
   toWorkspacePathKey,
@@ -43,6 +44,13 @@ describe('workspacePaths', () => {
     expect(toWorkspaceRelativePath('/vault', '/vault/notes/a.md')).toBe('notes/a.md')
     expect(toWorkspaceRelativePath('/vault/', '/vault')).toBe('.')
     expect(toWorkspaceRelativePath('/vault', 'C:\\other\\note.md')).toBe('C:/other/note.md')
+  })
+
+  it('detects workspace descendants with a path-segment boundary', () => {
+    expect(isWorkspacePathOrDescendant('/vault', '/vault')).toBe(true)
+    expect(isWorkspacePathOrDescendant('/vault', '/vault/notes/a.md')).toBe(true)
+    expect(isWorkspacePathOrDescendant('/vault', '/vault2/notes/a.md')).toBe(false)
+    expect(isWorkspacePathOrDescendant('D:/Vault', 'd:/vault/notes/a.md')).toBe(true)
   })
 
   it('matches workspace-relative paths case-insensitively for windows paths', () => {

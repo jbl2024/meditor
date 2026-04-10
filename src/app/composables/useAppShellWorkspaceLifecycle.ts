@@ -1,5 +1,6 @@
 import { watch, type Ref } from 'vue'
 import type { WorkspaceFsChange } from '../../shared/api/apiTypes'
+import { isWorkspacePathOrDescendant } from '../../domains/explorer/lib/workspacePaths'
 import { useAppShellWorkspaceFsSync } from './useAppShellWorkspaceFsSync'
 
 /** Groups workspace identity and persistence refs consumed by lifecycle orchestration. */
@@ -150,7 +151,10 @@ export function useAppShellWorkspaceLifecycle(options: UseAppShellWorkspaceLifec
       await options.cosmosPort.refreshGraph()
     }
 
-    if (options.shellPort.activeFilePath.value && !options.shellPort.activeFilePath.value.startsWith(canonical)) {
+    if (
+      options.shellPort.activeFilePath.value &&
+      !isWorkspacePathOrDescendant(canonical, options.shellPort.activeFilePath.value)
+    ) {
       options.uiPort.resetToSinglePane()
       options.uiPort.closeAllTabsInPane(options.uiPort.activePaneId.value)
       options.uiPort.resetActiveOutline()
