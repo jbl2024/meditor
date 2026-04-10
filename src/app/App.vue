@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import EditorPaneGrid, { type EditorPaneGridExposed } from './components/panes/EditorPaneGrid.vue'
 import AppShellChromeSurface, { type AppShellChromeSurfaceExposed } from './components/app/AppShellChromeSurface.vue'
 import AppShellWorkspaceSurface, { type AppShellWorkspaceSurfaceExposed } from './components/app/AppShellWorkspaceSurface.vue'
@@ -47,7 +47,7 @@ import {
   updateWikilinksForRename,
   writePropertyTypeSchema
 } from '../shared/api/indexApi'
-import type { FileVersion, PathMove, ReadNoteSnapshotResult, SaveNoteResult, WorkspaceFsChange } from '../shared/api/apiTypes'
+import type { PathMove, WorkspaceFsChange } from '../shared/api/apiTypes'
 import type { AppSettingsAlters } from '../shared/api/apiTypes'
 import {
   hasActiveOpenTrace,
@@ -153,6 +153,7 @@ import { useAppShellWorkspaceSetup } from './composables/useAppShellWorkspaceSet
 import { useAppShellWorkspaceRouting } from './composables/useAppShellWorkspaceRouting'
 import { useAppModalController } from './composables/useAppModalController'
 import { useAppNotePersistence } from './composables/useAppNotePersistence'
+import { useAppShellRootWorkflow } from './composables/useAppShellRootWorkflow'
 import { useAppSettingsWorkflow } from './composables/useAppSettingsWorkflow'
 import { useAppSecondBrainBridge } from './composables/useAppSecondBrainBridge'
 import { useAppShellViewModels } from './composables/useAppShellViewModels'
@@ -178,28 +179,18 @@ import {
 } from './composables/useMultiPaneWorkspaceState'
 import packageJson from '../../package.json'
 
-type PropertyPreviewRow = { key: string; value: string }
-
 type EditorViewExposed = EditorPaneGridExposed
 
 type ExplorerTreeExposed = AppShellWorkspaceSurfaceExposed
 
-type SaveFileOptions = {
-  explicit: boolean
-  expectedBaseVersion: FileVersion | null
-  force?: boolean
-}
-
-type SaveFileResult = SaveNoteResult
-
-type RenameFromTitleResult = {
-  path: string
-  title: string
-}
-
 type VirtualDoc = {
   content: string
   titleLine: string
+}
+
+type PropertyPreviewRow = {
+  key: string
+  value: string
 }
 
 // Top-level shell persistence lives here so App stays the single assembly point
@@ -253,6 +244,9 @@ const altersSettings = ref<AppSettingsAlters>({
   default_influence_intensity: 'balanced'
 })
 const overflowMenuOpen = ref(false)
+const closeOverflowMenu = () => {
+  overflowMenuOpen.value = false
+}
 const editorZoom = ref(1)
 const workspaceMutationEchoesToken = ref(0)
 const newFileModalVisible = ref(false)
@@ -301,9 +295,12 @@ const showDebugTools = import.meta.env.DEV
 const appVersion = packageJson.version
 let shellOpenFlow: ReturnType<typeof useAppShellOpenFlow> | null = null
 let closeQuickOpenProxy = () => {}
-let submitNewFileFromModalAction: () => boolean | void | Promise<boolean | void> = () => false
-let submitNewFolderFromModalAction: () => boolean | void | Promise<boolean | void> = () => false
-let submitOpenDateFromModalAction: () => boolean | void | Promise<boolean | void> = () => false
+let onGlobalPointerDownProxy: (event: MouseEvent) => void = () => {}
+let submitNewFileFromModalAction = () => {}
+let submitNewFolderFromModalAction = () => {}
+let submitOpenDateFromModalAction = () => {}
+let toggleSpellcheckFromPaletteProxy = () => false
+let openSpellcheckDictionaryFromPaletteProxy = () => false
 
 const paneCount = computed(() => Object.keys(multiPane.layout.value.panesById).length)
 const activeFilePath = computed(() => multiPane.getActiveDocumentPath())
@@ -540,7 +537,11 @@ const {
   runWorkspaceMutation,
   dispose: disposeIndexingController
 } = indexing
-const notePersistence = useAppNotePersistence({
+const {
+  readNoteSnapshot,
+  renameFileFromTitle,
+  saveNoteBuffer
+} = useAppNotePersistence({
   workingFolderPath: filesystem.workingFolderPath,
   virtualDocs,
   allWorkspaceFiles,
@@ -962,97 +963,6 @@ const mediaQuery = typeof window !== 'undefined'
   ? window.matchMedia('(prefers-color-scheme: dark)')
   : null
 
-function openIndexStatusModal() {
-  rememberFocusBeforeModalOpen()
-  openIndexStatusModalInternal()
-}
-
-function closeIndexStatusModal() {
-  closeIndexStatusModalInternal()
-  void nextTick(() => {
-    restoreFocusAfterModalClose()
-  })
-}
-
-function openSpellcheckDictionaryModal() {
-  if (!filesystem.hasWorkspace.value) {
-    filesystem.notifyError('Open a workspace first.')
-    return false
-  }
-  rememberFocusBeforeModalOpen()
-  spellcheckDictionaryModalVisible.value = true
-  return true
-}
-
-function closeSpellcheckDictionaryModal() {
-  spellcheckDictionaryModalVisible.value = false
-  void nextTick(() => {
-    restoreFocusAfterModalClose()
-  })
-}
-
-function onAlterExplorationNotify(payload: { tone: 'info' | 'success' | 'error'; message: string }) {
-  if (payload.tone === 'error') {
-    filesystem.notifyError(payload.message)
-    return
-  }
-  if (payload.tone === 'success') {
-    filesystem.notifySuccess(payload.message)
-    return
-  }
-  filesystem.notifyInfo(payload.message)
-}
-
-async function onIndexPrimaryAction() {
-  const shouldReloadFiles = !indexRunning.value
-  await onIndexPrimaryActionInternal()
-  if (shouldReloadFiles) {
-    await loadAllFiles()
-  }
-}
-
-async function rebuildIndexFromOverflow() {
-  closeOverflowMenu()
-  await rebuildIndexInternal()
-  await loadAllFiles()
-}
-
-function closeOverflowMenu() {
-  overflowMenuOpen.value = false
-}
-
-async function applyCosmosHistorySnapshot(snapshot: CosmosHistorySnapshot): Promise<boolean> {
-  if (!filesystem.hasWorkspace.value) return false
-
-  multiPane.openSurfaceInPane('cosmos')
-
-  // History replay may happen before the graph is ready, so restoration needs
-  // to rebuild enough domain state before selection/focus is applied.
-  if (!cosmos.graph.value.nodes.length) {
-    await cosmos.refreshGraph()
-  }
-
-  cosmos.query.value = snapshot.query
-  cosmos.focusMode.value = snapshot.focusMode
-  cosmos.focusDepth.value = snapshot.focusDepth
-  cosmos.selectedNodeId.value = snapshot.selectedNodeId
-
-  if (snapshot.selectedNodeId) {
-    scheduleCosmosNodeFocus(snapshot.selectedNodeId)
-  }
-  return true
-}
-
-async function openSecondBrainHistorySnapshot(_snapshot: SecondBrainHistorySnapshot): Promise<boolean> {
-  multiPane.openSurfaceInPane('second-brain-chat')
-  return true
-}
-
-async function openHomeHistorySnapshot(_snapshot: HomeHistorySnapshot): Promise<boolean> {
-  multiPane.openSurfaceInPane('home')
-  return true
-}
-
 const navigationWorkspacePort = {
   hasWorkspace: filesystem.hasWorkspace,
   allWorkspaceFiles,
@@ -1094,34 +1004,59 @@ const navigationHistoryPort = {
   documentHistory,
   cosmos: {
     read: readCosmosHistorySnapshot,
-    current: () =>
-      buildCosmosHistorySnapshot({
-        query: cosmos.query.value.trim(),
-        selectedNodeId: cosmos.selectedNodeId.value,
-        focusMode: cosmos.focusMode.value,
-        focusDepth: cosmos.focusDepth.value
-      }),
+    current: () => buildCosmosHistorySnapshot({
+      query: cosmos.query.value.trim(),
+      selectedNodeId: cosmos.selectedNodeId.value,
+      focusMode: cosmos.focusMode.value,
+      focusDepth: cosmos.focusDepth.value
+    }),
     stateKey: cosmosSnapshotStateKey,
     label: (snapshot: CosmosHistorySnapshot) =>
       cosmosHistoryLabel(snapshot, (nodeId) => {
         const node = cosmos.graph.value.nodes.find((item) => item.id === nodeId)
         return node ? node.displayLabel || node.label : null
       }),
-    apply: applyCosmosHistorySnapshot
+    apply: async (snapshot: CosmosHistorySnapshot): Promise<boolean> => {
+      if (!filesystem.hasWorkspace.value) return false
+
+      multiPane.openSurfaceInPane('cosmos')
+
+      // History replay may happen before the graph is ready, so restoration needs
+      // to rebuild enough domain state before selection/focus is applied.
+      if (!cosmos.graph.value.nodes.length) {
+        await cosmos.refreshGraph()
+      }
+
+      cosmos.query.value = snapshot.query
+      cosmos.focusMode.value = snapshot.focusMode
+      cosmos.focusDepth.value = snapshot.focusDepth
+      cosmos.selectedNodeId.value = snapshot.selectedNodeId
+
+      if (snapshot.selectedNodeId) {
+        scheduleCosmosNodeFocus(snapshot.selectedNodeId)
+      }
+      return true
+    }
   },
   home: {
     read: readHomeHistorySnapshot,
     current: () => buildHomeHistorySnapshot(),
     stateKey: homeSnapshotStateKey,
     label: homeHistoryLabel,
-    open: openHomeHistorySnapshot
+    open: async (_snapshot: HomeHistorySnapshot): Promise<boolean> => {
+      multiPane.openSurfaceInPane('home')
+      return true
+    }
   },
   secondBrain: {
     read: readSecondBrainHistorySnapshot,
     current: () => buildSecondBrainHistorySnapshot(),
     stateKey: secondBrainSnapshotStateKey,
     label: secondBrainHistoryLabel,
-    open: openSecondBrainHistorySnapshot
+    open: async (_snapshot: SecondBrainHistorySnapshot): Promise<boolean> => {
+      multiPane.openSurfaceInPane('second-brain-chat')
+      return true
+    }
   }
 }
 
@@ -1600,15 +1535,6 @@ const {
   resetPaneLayoutFromPalette
 } = commands
 
-function toggleSpellcheckFromPalette() {
-  toggleSpellcheckEnabled()
-  return true
-}
-
-function openSpellcheckDictionaryFromPalette() {
-  return openSpellcheckDictionaryModal()
-}
-
 entryActions.bindLaunchpadActionPort({
   openQuickOpen: (initialQuery = '') => openQuickOpen(initialQuery),
   openCommandPalette: () => openCommandPalette(),
@@ -1629,7 +1555,7 @@ entryActions.bindShellPaletteActionPort({
   addActiveNoteToFavoritesFromPalette,
   removeActiveNoteFromFavoritesFromPalette,
   openSettingsFromPalette,
-  openSpellcheckDictionaryFromPalette,
+  openSpellcheckDictionaryFromPalette: () => openSpellcheckDictionaryFromPaletteProxy(),
   openNoteInCosmosFromPalette,
   openWorkspaceFromPalette,
   closeWorkspaceFromPalette,
@@ -1637,7 +1563,7 @@ entryActions.bindShellPaletteActionPort({
   zoomInFromPalette,
   zoomOutFromPalette,
   resetZoomFromPalette,
-  toggleSpellcheckFromPalette,
+  toggleSpellcheckFromPalette: () => toggleSpellcheckFromPaletteProxy(),
   openTodayNote,
   openYesterdayNote,
   openSpecificDateNote,
@@ -1746,7 +1672,7 @@ const appShellRuntimeLifecycle = useAppShellRuntimeLifecycle({
     }
   },
   windowPort: {
-    onGlobalPointerDown,
+    onGlobalPointerDown: (event) => onGlobalPointerDownProxy(event),
     onWindowResize,
     onPointerMove,
     stopResize
@@ -1756,6 +1682,85 @@ const appShellRuntimeLifecycle = useAppShellRuntimeLifecycle({
     onSystemThemeChanged
   }
 })
+const rootWorkflow = useAppShellRootWorkflow({
+  runtimeLifecycle: appShellRuntimeLifecycle,
+  indexing: {
+    indexRunning,
+    indexStatusModalVisible,
+    refreshIndexModalData,
+    openIndexStatusModal: openIndexStatusModalInternal,
+    closeIndexStatusModal: closeIndexStatusModalInternal,
+    onIndexPrimaryAction: onIndexPrimaryActionInternal,
+    rebuildIndex: rebuildIndexInternal
+  },
+  modal: {
+    rememberFocusBeforeModalOpen,
+    restoreFocusAfterModalClose,
+    spellcheckDictionaryModalVisible,
+    toggleSpellcheckEnabled
+  },
+  surface: {
+    overflowMenuOpen,
+    closeOverflowMenu,
+    onGlobalPointerDownInternal,
+    openPathExternal,
+    convertMarkdownToWord: async (path: string) => await convertMarkdownToDocx(path)
+  },
+  filesystem: {
+    errorMessage: filesystem.errorMessage,
+    selectedCount: filesystem.selectedCount,
+    notifyError: (message) => filesystem.notifyError(message),
+    notifySuccess: (message) => filesystem.notifySuccess(message),
+    notifyInfo: (message) => filesystem.notifyInfo(message),
+    hasWorkspace: filesystem.hasWorkspace
+  },
+  history: {
+    noteEchoesItems: noteEchoes.items,
+    noteEchoesDiscoverability
+  },
+  explorer: {
+    favorites: {
+      markFavoriteMissing: (path) => favorites.markFavoriteMissing(path)
+    },
+    removeLaunchpadRecentNote
+  },
+  editor: {
+    editorRef
+  },
+  workspaceMutation: {
+    handlePathRenamed: (payload) => workspaceMutationEffects.handlePathRenamed(payload),
+    handlePathsMoved: (moves) => workspaceMutationEffects.handlePathsMoved(moves)
+  },
+  reloadAllFiles: loadAllFiles,
+  disposers: [
+    disposeShellLaunchpad,
+    disposeIndexingController,
+    disposeShellSearch,
+    disposeNavigationController,
+    disposeHistoryUi
+  ]
+})
+onGlobalPointerDownProxy = rootWorkflow.onGlobalPointerDown
+const {
+  openIndexStatusModal,
+  closeIndexStatusModal,
+  closeSpellcheckDictionaryModal,
+  onIndexPrimaryAction,
+  rebuildIndexFromOverflow,
+  onExplorerError,
+  onExplorerSelection,
+  onExplorerPathsDeleted,
+  onExplorerConvertToWord,
+  openPathNatively,
+  onEditorPathRenamed,
+  onExplorerPathRenamed,
+  onExplorerPathsMoved,
+  openActiveNoteHistory,
+  onOutlineHeadingClick,
+  onAlterExplorationNotify,
+} = rootWorkflow
+toggleSpellcheckFromPaletteProxy = rootWorkflow.toggleSpellcheckFromPalette
+openSpellcheckDictionaryFromPaletteProxy = rootWorkflow.openSpellcheckDictionaryFromPalette
 const workspaceSetup = useAppShellWorkspaceSetup({
   statePort: {
     workingFolderPath: filesystem.workingFolderPath,
@@ -1798,7 +1803,7 @@ const workspaceRouting = useAppShellWorkspaceRouting({
     applyWorkspaceSetupWizard: (payload) => applyWorkspaceSetupWizard(payload)
   }
 })
-const keyboard = useAppShellKeyboard({
+useAppShellKeyboard({
   isMacOs,
   statePort: {
     quickOpenVisible,
@@ -1860,113 +1865,6 @@ const keyboard = useAppShellKeyboard({
   }
 })
 
-function onGlobalPointerDown(event: MouseEvent) {
-  onGlobalPointerDownInternal(event, overflowMenuOpen.value)
-}
-
-function onExplorerError(message: string) {
-  filesystem.errorMessage.value = message
-}
-
-function onExplorerSelection(paths: string[]) {
-  filesystem.selectedCount.value = paths.length
-}
-
-function onExplorerPathsDeleted(paths: string[]) {
-  for (const path of paths) {
-    favorites.markFavoriteMissing(path)
-    removeLaunchpadRecentNote(path)
-  }
-}
-
-function onExplorerConvertToWord(path: string) {
-  void convertMarkdownToWord(path)
-}
-
-async function openPathNatively(path: string): Promise<void> {
-  const target = path.trim()
-  if (!target) return
-  try {
-    await openPathExternal(target)
-  } catch (err) {
-    filesystem.notifyError(err instanceof Error ? err.message : 'Could not open file natively.')
-  }
-}
-
-function onEditorPathRenamed(payload: { from: string; to: string; manual: boolean }) {
-  void workspaceMutationEffects.handlePathRenamed(payload).catch((err) => {
-    filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not update wikilinks.'
-  })
-}
-
-function onExplorerPathRenamed(payload: { from: string; to: string }) {
-  void workspaceMutationEffects.handlePathRenamed(payload).catch((err) => {
-    filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not update wikilinks.'
-  })
-}
-
-function onExplorerPathsMoved(moves: PathMove[]) {
-  void workspaceMutationEffects.handlePathsMoved(moves).catch((err) => {
-    filesystem.errorMessage.value = err instanceof Error ? err.message : 'Could not update wikilinks.'
-  })
-}
-
-async function openActiveNoteHistory() {
-  await editorRef.value?.openNoteHistory()
-}
-
-async function readNoteSnapshot(path: string): Promise<ReadNoteSnapshotResult> {
-  return await notePersistence.readNoteSnapshot(path)
-}
-
-async function renameFileFromTitle(path: string, rawTitle: string): Promise<RenameFromTitleResult> {
-  return await notePersistence.renameFileFromTitle(path, rawTitle)
-}
-
-async function saveNoteBuffer(path: string, txt: string, options: SaveFileOptions): Promise<SaveFileResult> {
-  return await notePersistence.saveNoteBuffer(path, txt, options)
-}
-
-async function onOutlineHeadingClick(payload: { index: number; heading: { level: 1 | 2 | 3; text: string } }) {
-  const heading = payload.heading.text.trim()
-  if (heading) {
-    const revealed = await editorRef.value?.revealAnchor({ heading })
-    if (revealed) return
-  }
-  await editorRef.value?.revealOutlineHeading(payload.index)
-}
-
-watch(
-  () => noteEchoes.items.value.length,
-  (count, previousCount = 0) => {
-    if (count > 0 && previousCount === 0) {
-      noteEchoesDiscoverability.markPackShown()
-    }
-  }
-)
-
-watch(
-  () => filesystem.indexingState.value,
-  () => {
-    if (indexStatusModalVisible.value) {
-      void refreshIndexModalData()
-    }
-  }
-)
-
-onMounted(() => {
-  void appShellRuntimeLifecycle.start()
-})
-
-onBeforeUnmount(() => {
-  disposeIndexingController()
-  disposeNavigationController()
-  disposeShellSearch()
-  disposeShellLaunchpad()
-  disposeHistoryUi()
-  appShellRuntimeLifecycle.dispose()
-  keyboard.dispose()
-})
 </script>
 
 <template>
