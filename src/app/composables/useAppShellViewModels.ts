@@ -59,6 +59,7 @@ type ViewModelOptions = {
   }
   notes: {
     noteEchoes: Ref<EchoesItem[]>
+    backlinks: Ref<string[]>
     semanticLinks: Ref<SemanticLink[]>
   }
   context: {
@@ -194,7 +195,7 @@ export function useAppShellViewModels(options: ViewModelOptions): AppShellViewMo
     })
   )
 
-  const backlinkCount = computed(() => options.notes.noteEchoes.value.length)
+  const backlinkCount = computed(() => options.notes.backlinks.value.length)
   const semanticLinkCount = computed(() => options.notes.semanticLinks.value.length)
   const activeNoteInContext = computed(() => {
     const path = options.workspace.activeFilePath.value.trim()

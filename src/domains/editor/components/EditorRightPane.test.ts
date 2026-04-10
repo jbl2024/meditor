@@ -86,6 +86,8 @@ describe('EditorRightPane', () => {
     }))
 
     app.mount(root)
+    expect(root.textContent).toContain('1 backlinks')
+    expect(root.textContent).toContain('2 semantic links')
     const sectionTitles = Array.from(root.querySelectorAll('.section-title')).map((el) => el.textContent?.trim())
     expect(sectionTitles.slice(0, 6)).toEqual([
       'Active Note',

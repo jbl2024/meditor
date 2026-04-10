@@ -52,6 +52,7 @@ describe('useAppShellViewModels', () => {
         signalSources: ['semantic']
       }
     ] satisfies EchoesItem[])
+    const backlinks = ref(['/vault/notes/alpha.md'])
     const semanticLinks = ref([
       { path: '/vault/notes/alpha.md', score: 0.8, direction: 'outgoing' as const }
     ])
@@ -124,6 +125,7 @@ describe('useAppShellViewModels', () => {
       },
       notes: {
         noteEchoes,
+        backlinks,
         semanticLinks
       },
       context: {
@@ -177,7 +179,7 @@ describe('useAppShellViewModels', () => {
     expect(viewModels.shortcutSections.value[0].title).toBe('General')
     expect(viewModels.filteredShortcutSections.value).toHaveLength(0)
     expect(viewModels.metadataRows.value[0]).toEqual({ label: 'Path', value: 'notes/alpha.md' })
-    expect(viewModels.backlinkCount.value).toBe(2)
+    expect(viewModels.backlinkCount.value).toBe(1)
     expect(viewModels.semanticLinkCount.value).toBe(1)
     expect(viewModels.activeNoteInContext.value).toBe(true)
     const selectedNode = viewModels.cosmosSelectedNodeForPanel.value

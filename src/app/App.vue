@@ -1200,6 +1200,7 @@ const shellViewModels = useAppShellViewModels({
   },
   notes: {
     noteEchoes: noteEchoes.items,
+    backlinks,
     semanticLinks
   },
   context: {
