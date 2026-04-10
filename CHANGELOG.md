@@ -18,6 +18,28 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.34.0] - 2026-04-10
+
+### Changed
+- test(app): add missing workspaceApi mock export (d2b218b)
+- refactor(app-shell): remove mutable proxy wiring from App.vue (688e5ba)
+- test(app-shell): cover root workflow orchestration (c95e5e1)
+- refactor(app-shell): move remaining root glue out of App.vue (56d2065)
+- refactor(app-shell): move modal and focus glue out of App.vue (5ff567c)
+
+### Fixed
+- fix(ui): normalize icon button padding (53ac864)
+- fix(indexing): refresh semantic links without long debounce (5b52b92)
+- fix(open-flow): surface backlink load errors (330fa4a)
+- fix(shell): count backlinks from the real backlink list (17928a3)
+- fix(workspace): load workspace files on open (c97e9b8)
+- fix(shell): handle editor relay failures in fs sync (6794f08)
+- fix(history): normalize cosmos snapshot query on read (814d98c)
+- fix(history): reject legacy second brain sessions snapshots (5ddee91)
+- fix(shell): derive modal prefixes case-insensitively (e78915d)
+- fix(shell): compare workspace paths with segment boundaries (c3ba141)
+- fix(backend): normalize relative workspace paths (ecc3365)
+
 ## [0.33.13] - 2026-04-09
 
 ### Fixed
