@@ -63,7 +63,7 @@ describe('appNavigationHistory', () => {
     expect(homeHistoryLabel({ surface: 'hub' })).toBe('Home')
 
     expect(readSecondBrainHistorySnapshot({ surface: 'chat' })).toEqual({ surface: 'chat' })
-    expect(readSecondBrainHistorySnapshot({ surface: 'sessions' })).toEqual({ surface: 'chat' })
+    expect(readSecondBrainHistorySnapshot({ surface: 'sessions' })).toBeNull()
     expect(readSecondBrainHistorySnapshot({ surface: 'other' })).toBeNull()
     expect(buildSecondBrainHistorySnapshot()).toEqual({ surface: 'chat' })
     expect(secondBrainSnapshotStateKey({ surface: 'chat' })).toBe('chat')

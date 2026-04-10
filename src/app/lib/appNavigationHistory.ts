@@ -70,7 +70,7 @@ export function cosmosHistoryLabel(
 export function readSecondBrainHistorySnapshot(payload: unknown): SecondBrainHistorySnapshot | null {
   if (!payload || typeof payload !== 'object') return null
   const value = payload as { surface?: string }
-  if (value.surface !== 'chat' && value.surface !== 'sessions') return null
+  if (value.surface !== 'chat') return null
   return { surface: 'chat' }
 }
 
