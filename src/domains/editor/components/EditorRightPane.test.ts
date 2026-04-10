@@ -57,8 +57,10 @@ describe('EditorRightPane', () => {
           outline: [{ level: 2, text: 'Roadmap' }],
           semanticLinks: [{ path: '/wk/notes/s.md', score: 0.88, direction: 'outgoing' }],
           semanticLinksLoading: false,
+          semanticLinksError: '',
           backlinks: ['/wk/notes/a.md'],
           backlinksLoading: false,
+          backlinksError: '',
           metadataRows: [{ label: 'Path', value: 'notes/a.md' }],
           propertiesPreview: [{ key: 'tags', value: 'doc' }],
           propertyParseErrorCount: 0,
@@ -197,8 +199,10 @@ describe('EditorRightPane', () => {
           outline: [],
           semanticLinks: [],
           semanticLinksLoading: false,
+          semanticLinksError: '',
           backlinks: [],
           backlinksLoading: false,
+          backlinksError: '',
           metadataRows: [],
           propertiesPreview: [],
           propertyParseErrorCount: 0,
@@ -210,6 +214,55 @@ describe('EditorRightPane', () => {
     app.mount(root)
     expect(root.textContent).not.toContain('Pinned Context')
     expect((root.querySelector('.context-primary-cta') as HTMLButtonElement).disabled).toBe(true)
+    app.unmount()
+  })
+
+  it('renders backlink and semantic link errors instead of a fake empty state', async () => {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+
+    const app = createApp(defineComponent({
+      setup() {
+        return () => h(EditorRightPane, {
+          width: 280,
+          activeNotePath: '/wk/notes/a.md',
+          activeNoteTitle: 'A',
+          activeStateLabel: 'saved',
+          backlinkCount: 0,
+          semanticLinkCount: 0,
+          activeNoteInContext: false,
+          canToggleFavorite: false,
+          isFavorite: false,
+          indexingState: 'indexed',
+          echoesItems: [],
+          echoesLoading: false,
+          echoesError: '',
+          echoesHintVisible: false,
+          localContextItems: [],
+          pinnedContextItems: [],
+          canReasonOnContext: false,
+          isLaunchingContextAction: false,
+          outline: [],
+          semanticLinks: [],
+          semanticLinksLoading: false,
+          semanticLinksError: 'Could not load semantic links.',
+          backlinks: [],
+          backlinksLoading: false,
+          backlinksError: 'Could not load backlinks.',
+          metadataRows: [],
+          propertiesPreview: [],
+          propertyParseErrorCount: 0,
+          toRelativePath: (path: string) => path
+        })
+      }
+    }))
+
+    app.mount(root)
+    await nextTick()
+    expect(root.textContent).toContain('Could not load semantic links.')
+    expect(root.textContent).toContain('Could not load backlinks.')
+    expect(root.textContent).not.toContain('No semantic links')
+    expect(root.textContent).not.toContain('No backlinks')
     app.unmount()
   })
 })

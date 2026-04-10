@@ -48,8 +48,10 @@ const props = defineProps<{
   outline: HeadingNode[]
   semanticLinks: SemanticLinkRow[]
   semanticLinksLoading: boolean
+  semanticLinksError: string
   backlinks: string[]
   backlinksLoading: boolean
+  backlinksError: string
   metadataRows: MetadataRow[]
   propertiesPreview: PropertyPreviewRow[]
   propertyParseErrorCount: number
@@ -328,19 +330,22 @@ watch(
       </button>
       <template v-if="semanticExpanded">
         <div v-if="props.semanticLinksLoading" class="empty-state">Loading...</div>
-        <div v-else-if="!props.semanticLinks.length" class="empty-state">No semantic links</div>
-        <button
-          v-for="item in props.semanticLinks"
-          :key="`semantic-${item.path}`"
-          type="button"
-          class="pane-item semantic-link-item"
-          @click="emit('backlink-open', item.path)"
-        >
-          <span class="semantic-link-path">{{ props.toRelativePath(item.path) }}</span>
-          <span class="semantic-link-meta">
-            <span class="semantic-link-direction">{{ item.direction === 'outgoing' ? 'out' : 'in' }}</span>
-          </span>
-        </button>
+        <template v-else>
+          <div v-if="props.semanticLinksError" class="empty-state">{{ props.semanticLinksError }}</div>
+          <div v-if="!props.semanticLinks.length && !props.semanticLinksError" class="empty-state">No semantic links</div>
+          <button
+            v-for="item in props.semanticLinks"
+            :key="`semantic-${item.path}`"
+            type="button"
+            class="pane-item semantic-link-item"
+            @click="emit('backlink-open', item.path)"
+          >
+            <span class="semantic-link-path">{{ props.toRelativePath(item.path) }}</span>
+            <span class="semantic-link-meta">
+              <span class="semantic-link-direction">{{ item.direction === 'outgoing' ? 'out' : 'in' }}</span>
+            </span>
+          </button>
+        </template>
       </template>
     </section>
 
@@ -351,16 +356,19 @@ watch(
       </button>
       <template v-if="backlinksExpanded">
         <div v-if="props.backlinksLoading" class="empty-state">Loading...</div>
-        <div v-else-if="!props.backlinks.length" class="empty-state">No backlinks</div>
-        <button
-          v-for="path in props.backlinks"
-          :key="path"
-          type="button"
-          class="pane-item"
-          @click="emit('backlink-open', path)"
-        >
-          {{ props.toRelativePath(path) }}
-        </button>
+        <template v-else>
+          <div v-if="props.backlinksError" class="empty-state">{{ props.backlinksError }}</div>
+          <div v-if="!props.backlinks.length && !props.backlinksError" class="empty-state">No backlinks</div>
+          <button
+            v-for="path in props.backlinks"
+            :key="path"
+            type="button"
+            class="pane-item"
+            @click="emit('backlink-open', path)"
+          >
+            {{ props.toRelativePath(path) }}
+          </button>
+        </template>
       </template>
     </section>
 

@@ -75,8 +75,10 @@ defineProps<{
   outline: HeadingNode[]
   semanticLinks: SemanticLinkRow[]
   semanticLinksLoading: boolean
+  semanticLinksError: string
   backlinks: string[]
   backlinksLoading: boolean
+  backlinksError: string
   metadataRows: MetadataRow[]
   propertiesPreview: PropertyPreviewRow[]
   propertyParseErrorCount: number
@@ -255,8 +257,10 @@ defineExpose<AppShellWorkspaceSurfaceExposed>({
           :outline="outline"
           :semantic-links="semanticLinks"
           :semantic-links-loading="semanticLinksLoading"
+          :semantic-links-error="semanticLinksError"
           :backlinks="backlinks"
           :backlinks-loading="backlinksLoading"
+          :backlinks-error="backlinksError"
           :metadata-rows="metadataRows"
           :properties-preview="propertiesPreview"
           :property-parse-error-count="propertyParseErrorCount"

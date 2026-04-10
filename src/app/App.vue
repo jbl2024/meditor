@@ -1113,8 +1113,10 @@ shellOpenFlow = useAppShellOpenFlow({
 const {
   backlinks,
   backlinksLoading,
+  backlinksError,
   semanticLinks,
   semanticLinksLoading,
+  semanticLinksError,
   openTodayNote,
   openYesterdayNote,
   showExplorerForActiveFile,
@@ -1951,8 +1953,10 @@ useAppShellKeyboard({
       :outline="editorState.activeOutline.value"
       :semantic-links="semanticLinks"
       :semantic-links-loading="semanticLinksLoading"
+      :semantic-links-error="semanticLinksError"
       :backlinks="backlinks"
       :backlinks-loading="backlinksLoading"
+      :backlinks-error="backlinksError"
       :metadata-rows="metadataRows"
       :properties-preview="propertiesPreview"
       :property-parse-error-count="propertyParseErrorCount"

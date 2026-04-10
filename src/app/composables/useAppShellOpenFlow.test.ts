@@ -289,6 +289,35 @@ describe('useAppShellOpenFlow', () => {
     expect(harness.api.semanticLinks.value).toEqual([
       { path: '/vault/related.md', score: 0.91, direction: 'incoming' }
     ])
+    expect(harness.api.backlinksError.value).toBe('')
+    expect(harness.api.semanticLinksError.value).toBe('')
+    harness.scope.stop()
+  })
+
+  it('keeps the last valid backlinks when a transient refresh fails and exposes an error', async () => {
+    const harness = createHarness()
+    harness.editorState.consumeRevealSnippet.mockReturnValue('')
+
+    indexApiMocks.backlinksForPath.mockResolvedValueOnce([{ path: '/vault/back.md' }])
+    indexApiMocks.semanticLinksForPath.mockResolvedValueOnce([
+      { path: '/vault/related.md', score: 0.91, direction: 'incoming' }
+    ])
+
+    await harness.api.refreshBacklinks({ path: '/vault/existing.md' })
+
+    indexApiMocks.backlinksForPath.mockRejectedValueOnce(new Error('database failed'))
+    indexApiMocks.semanticLinksForPath.mockResolvedValueOnce([
+      { path: '/vault/related-2.md', score: 0.5, direction: 'outgoing' }
+    ])
+
+    await harness.api.refreshBacklinks({ path: '/vault/existing.md' })
+
+    expect(harness.api.backlinks.value).toEqual(['/vault/back.md'])
+    expect(harness.api.semanticLinks.value).toEqual([
+      { path: '/vault/related-2.md', score: 0.5, direction: 'outgoing' }
+    ])
+    expect(harness.api.backlinksError.value).toBe('Could not load backlinks.')
+    expect(harness.api.semanticLinksError.value).toBe('')
     harness.scope.stop()
   })
 
