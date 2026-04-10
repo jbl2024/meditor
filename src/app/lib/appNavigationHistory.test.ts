@@ -24,11 +24,27 @@ describe('appNavigationHistory', () => {
         focusDepth: 12
       })
     ).toEqual({
-      query: '  graph  ',
+      query: 'graph',
       selectedNodeId: 'node-1',
       focusMode: true,
       focusDepth: 8
     })
+
+    expect(
+      readCosmosHistorySnapshot({
+        query: '  graph  ',
+        selectedNodeId: 'node-1',
+        focusMode: true,
+        focusDepth: 3
+      })
+    ).toEqual(
+      buildCosmosHistorySnapshot({
+        query: 'graph',
+        selectedNodeId: 'node-1',
+        focusMode: true,
+        focusDepth: 3
+      })
+    )
 
     expect(readCosmosHistorySnapshot({ query: 'x' })).toBeNull()
   })

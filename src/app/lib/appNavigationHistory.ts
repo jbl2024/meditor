@@ -26,7 +26,7 @@ export function readCosmosHistorySnapshot(payload: unknown): CosmosHistorySnapsh
     return null
   }
   return {
-    query: value.query,
+    query: value.query.trim(),
     selectedNodeId: value.selectedNodeId,
     focusMode: value.focusMode,
     focusDepth: Math.max(1, Math.min(8, Math.round(value.focusDepth)))
