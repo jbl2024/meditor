@@ -294,13 +294,6 @@ const shellPersistence = useAppShellPersistence({
 const showDebugTools = import.meta.env.DEV
 const appVersion = packageJson.version
 let shellOpenFlow: ReturnType<typeof useAppShellOpenFlow> | null = null
-let closeQuickOpenProxy = () => {}
-let onGlobalPointerDownProxy: (event: MouseEvent) => void = () => {}
-let submitNewFileFromModalAction = () => {}
-let submitNewFolderFromModalAction = () => {}
-let submitOpenDateFromModalAction = () => {}
-let toggleSpellcheckFromPaletteProxy = () => false
-let openSpellcheckDictionaryFromPaletteProxy = () => false
 
 const paneCount = computed(() => Object.keys(multiPane.layout.value.panesById).length)
 const activeFilePath = computed(() => multiPane.getActiveDocumentPath())
@@ -837,13 +830,13 @@ const shellModals = useAppShellModals({
     hasAllFilesLoaded: () => allWorkspaceFiles.value.length > 0,
     syncEditorZoom: () => shellPersistence.syncEditorZoom(),
     submitNewFileFromModal: () => {
-      void submitNewFileFromModalAction()
+      void workspaceEntries.submitNewFileFromModal()
     },
     submitNewFolderFromModal: () => {
-      void submitNewFolderFromModalAction()
+      void workspaceEntries.submitNewFolderFromModal()
     },
     submitOpenDateFromModal: () => {
-      void submitOpenDateFromModalAction()
+      void workspaceEntries.submitOpenDateFromModal()
     }
   },
   domPort: {
@@ -910,7 +903,6 @@ const settingsWorkflow = useAppSettingsWorkflow({
   notifyInfo: (message: string) => filesystem.notifyInfo(message),
   closeSettingsModal: () => closeSettingsModal()
 })
-closeQuickOpenProxy = () => closeQuickOpen()
 const workspaceEntries = useAppShellWorkspaceEntries({
   statePort: {
     workingFolderPath: filesystem.workingFolderPath,
@@ -955,9 +947,6 @@ const {
   submitNewFolderFromModal,
   submitOpenDateFromModal
 } = workspaceEntries
-submitNewFileFromModalAction = submitNewFileFromModal
-submitNewFolderFromModalAction = submitNewFolderFromModal
-submitOpenDateFromModalAction = submitOpenDateFromModal
 
 const mediaQuery = typeof window !== 'undefined'
   ? window.matchMedia('(prefers-color-scheme: dark)')
@@ -1118,7 +1107,7 @@ shellOpenFlow = useAppShellOpenFlow({
     recordCosmosHistorySnapshot
   },
   uiPort: {
-    closeQuickOpen: () => closeQuickOpenProxy()
+    closeQuickOpen: () => closeQuickOpen()
   }
 })
 const {
@@ -1555,7 +1544,7 @@ entryActions.bindShellPaletteActionPort({
   addActiveNoteToFavoritesFromPalette,
   removeActiveNoteFromFavoritesFromPalette,
   openSettingsFromPalette,
-  openSpellcheckDictionaryFromPalette: () => openSpellcheckDictionaryFromPaletteProxy(),
+  openSpellcheckDictionaryFromPalette: () => rootWorkflow.openSpellcheckDictionaryFromPalette(),
   openNoteInCosmosFromPalette,
   openWorkspaceFromPalette,
   closeWorkspaceFromPalette,
@@ -1563,7 +1552,7 @@ entryActions.bindShellPaletteActionPort({
   zoomInFromPalette,
   zoomOutFromPalette,
   resetZoomFromPalette,
-  toggleSpellcheckFromPalette: () => toggleSpellcheckFromPaletteProxy(),
+  toggleSpellcheckFromPalette: () => rootWorkflow.toggleSpellcheckFromPalette(),
   openTodayNote,
   openYesterdayNote,
   openSpecificDateNote,
@@ -1672,7 +1661,7 @@ const appShellRuntimeLifecycle = useAppShellRuntimeLifecycle({
     }
   },
   windowPort: {
-    onGlobalPointerDown: (event) => onGlobalPointerDownProxy(event),
+    onGlobalPointerDown: (event) => rootWorkflow.onGlobalPointerDown(event),
     onWindowResize,
     onPointerMove,
     stopResize
@@ -1740,7 +1729,6 @@ const rootWorkflow = useAppShellRootWorkflow({
     disposeHistoryUi
   ]
 })
-onGlobalPointerDownProxy = rootWorkflow.onGlobalPointerDown
 const {
   openIndexStatusModal,
   closeIndexStatusModal,
@@ -1759,8 +1747,6 @@ const {
   onOutlineHeadingClick,
   onAlterExplorationNotify,
 } = rootWorkflow
-toggleSpellcheckFromPaletteProxy = rootWorkflow.toggleSpellcheckFromPalette
-openSpellcheckDictionaryFromPaletteProxy = rootWorkflow.openSpellcheckDictionaryFromPalette
 const workspaceSetup = useAppShellWorkspaceSetup({
   statePort: {
     workingFolderPath: filesystem.workingFolderPath,

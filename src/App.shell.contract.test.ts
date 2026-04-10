@@ -25,6 +25,8 @@ describe('App shell contract', () => {
     expect(appSource).not.toContain('function onNewFileInputKeydown(')
     expect(appSource).not.toContain('function onNewFolderInputKeydown(')
     expect(appSource).not.toContain('function scheduleCosmosNodeFocus(')
+    expect(appSource).not.toMatch(/let\s+\w*Proxy\b/)
+    expect(appSource).not.toMatch(/\b\w*Proxy\s*=\s*/)
   })
 
   it('uses dedicated shell surface wrappers instead of inlining chrome and overlays', () => {
