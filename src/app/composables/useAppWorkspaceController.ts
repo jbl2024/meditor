@@ -414,6 +414,7 @@ export function useAppWorkspaceController(options: UseAppWorkspaceControllerOpti
       workspaceShellPort.indexingState.value = 'indexing'
       await workspaceFsPort.initDb()
       resetWorkspaceState()
+      await loadAllFiles()
       window.localStorage.setItem(workspaceShellPort.storageKey, canonical)
       return canonical
     } catch (err) {

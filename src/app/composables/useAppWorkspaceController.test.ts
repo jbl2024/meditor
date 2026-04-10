@@ -230,6 +230,12 @@ describe('useAppWorkspaceController', () => {
     expect(canonical).toBe('/vault')
     expect(indexingState.value).toBe('indexed')
     expect(window.localStorage.getItem('tomosona.test.workspace')).toBe('/vault')
+    expect(controller.allWorkspaceFiles.value).toEqual([
+      '/vault/cover.png',
+      '/vault/notes/a.md',
+      '/vault/notes/photo.png',
+      '/vault/root.md'
+    ])
   })
 
   it('ignores stale metadata responses when a newer request wins', async () => {
