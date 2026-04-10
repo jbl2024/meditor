@@ -65,6 +65,7 @@ defineExpose({
 .ui-icon-button {
   width: 2rem;
   min-width: 2rem;
+  padding: 0;
 }
 
 .ui-icon-button svg {
