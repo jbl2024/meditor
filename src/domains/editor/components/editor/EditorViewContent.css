@@ -429,7 +429,7 @@
   z-index: 35;
   transform: translate(calc(-100% - 8px), -50%);
   pointer-events: auto;
-  opacity: 0.15;
+  opacity: 0.35;
   transition: opacity 140ms ease;
 }
 
