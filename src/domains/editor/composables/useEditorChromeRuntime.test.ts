@@ -110,10 +110,15 @@ function createEditorStub(selection = { from: 1, to: 2, empty: false }) {
     view: {
       dom: document.createElement('div'),
       hasFocus: vi.fn(() => false),
+      coordsAtPos: vi.fn((pos: number) => {
+        if (pos === selection.from) return { left: 100, right: 120, top: 80 }
+        return { left: 200, right: 250, top: 84 }
+      }),
       posAtCoords: vi.fn(() => ({ pos: 2 })),
       dispatch: vi.fn(),
       nodeDOM: vi.fn(() => document.createElement('p'))
     },
+    isActive: vi.fn(() => false),
     getText: vi.fn(() => 'Alpha'),
     chain: vi.fn(() => ({
       focus: vi.fn(() => ({
@@ -541,6 +546,17 @@ describe('useEditorChromeRuntime', () => {
     expect(harness.runtime.pulse.pulseInstruction.value).toBe('Keep the same draft.')
     expect(previewMarkdown.value).toBe('Existing draft')
     expect(harness.runtime.pulse.pulseSelectionRange.value).toEqual({ from: 1, to: 2 })
+  })
+
+  it('refreshes the inline toolbar position when the holder scrolls', () => {
+    const harness = createRuntimeHarness()
+    harness.runtime.toolbars.inlineFormatToolbar.updateFormattingToolbar()
+    const initialTop = harness.runtime.toolbars.inlineFormatToolbar.formatToolbarTop.value
+
+    harness.holder.value.scrollTop = 40
+    harness.runtime.layout.onHolderScroll()
+
+    expect(harness.runtime.toolbars.inlineFormatToolbar.formatToolbarTop.value).toBe(initialTop + 40)
   })
 
   it('sendPulseContextToSecondBrain emits and closes Pulse, but ignores note mode without currentPath', () => {

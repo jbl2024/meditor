@@ -540,6 +540,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     holder: host.holder,
     contentShell: host.contentShell,
     onScrollSync: () => {
+      updateFormattingToolbar()
       tableInteractions.updateTableToolbar()
       blockGutter.syncAnchor()
     }
