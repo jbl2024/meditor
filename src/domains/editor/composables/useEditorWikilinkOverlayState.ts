@@ -29,7 +29,6 @@ export type UseEditorWikilinkOverlayStateOptions = {
   getEditor: () => Editor | null
   holder: Ref<HTMLElement | null>
   blockMenuOpen: Ref<boolean>
-  isDragMenuOpen: () => boolean
   closeBlockMenu: () => void
 }
 
@@ -106,7 +105,7 @@ export function useEditorWikilinkOverlayState(options: UseEditorWikilinkOverlayS
     }
 
     wikilinkOpen.value = true
-    if (options.blockMenuOpen.value || options.isDragMenuOpen()) {
+    if (options.blockMenuOpen.value) {
       options.closeBlockMenu()
     }
     wikilinkIndex.value = state.selectedIndex

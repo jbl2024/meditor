@@ -217,13 +217,11 @@ function createRuntimeHarness(input?: {
       menus: {
         blockMenuOpen: ref(false),
         tableToolbarOpen: ref(false),
-        isDragMenuOpen: () => false,
         closeBlockMenu: vi.fn(),
         hideTableToolbar: vi.fn()
       },
       blockHandles: {
-        syncSelectionTarget: vi.fn(),
-        suppressReveal: vi.fn()
+        syncSelectionTarget: vi.fn()
       },
       toolbars: {
         updateFormattingToolbar: vi.fn(),

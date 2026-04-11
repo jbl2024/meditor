@@ -69,12 +69,6 @@ async function flushUi() {
   await nextTick()
 }
 
-async function flushMicrotasks() {
-  await nextTick()
-  await Promise.resolve()
-  await nextTick()
-}
-
 function createEditorStub(selection = { from: 1, to: 2, empty: false }) {
   const insertContentAt = vi.fn(() => ({ run: vi.fn(() => true) }))
   const paragraph = {
@@ -388,38 +382,6 @@ describe('useEditorChromeRuntime', () => {
     await flushUi()
     expect(interactionMocks.onEditorKeydown).toHaveBeenCalled()
 
-    await runtime.dialogsAndLifecycle.onUnmountCleanup()
-  })
-
-  it('marks text typing activity on printable keydown and clears it after idle', async () => {
-    vi.useFakeTimers()
-    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
-      callback(0)
-      return 1
-    })
-    const { runtime, holder, interactionMocks } = createRuntimeHarness()
-    await runtime.dialogsAndLifecycle.onMountInit()
-
-    holder.value?.dispatchEvent(new KeyboardEvent('keydown', { key: 'x', bubbles: true }))
-    await flushMicrotasks()
-
-    expect(interactionMocks.markEditorInteraction).toHaveBeenCalled()
-    expect(interactionMocks.onEditorKeydown).toHaveBeenCalled()
-    expect(runtime.blockAndTable.typingText.value).toBe(true)
-
-    await vi.advanceTimersByTimeAsync(240)
-    await flushMicrotasks()
-
-    expect(runtime.blockAndTable.typingText.value).toBe(false)
-
-    await runtime.dialogsAndLifecycle.onUnmountCleanup()
-  })
-
-  it('keeps suppressBlockHandleReveal as a safe no-op for legacy input wiring', async () => {
-    const { runtime } = createRuntimeHarness()
-
-    runtime.blockAndTable.suppressBlockHandleReveal({ durationMs: 500 })
-    runtime.blockAndTable.suppressBlockHandleReveal()
     await runtime.dialogsAndLifecycle.onUnmountCleanup()
   })
 

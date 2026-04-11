@@ -76,7 +76,6 @@ describe('useEditorWikilinkOverlayState', () => {
       getEditor: () => editor as any,
       holder: ref(document.createElement('div')),
       blockMenuOpen: ref(true),
-      isDragMenuOpen: () => false,
       closeBlockMenu
     })
 
@@ -95,7 +94,6 @@ describe('useEditorWikilinkOverlayState', () => {
       getEditor: () => editor as any,
       holder: ref(document.createElement('div')),
       blockMenuOpen: ref(false),
-      isDragMenuOpen: () => false,
       closeBlockMenu: () => {}
     })
 
@@ -111,7 +109,6 @@ describe('useEditorWikilinkOverlayState', () => {
       getEditor: () => null,
       holder: ref(document.createElement('div')),
       blockMenuOpen: ref(false),
-      isDragMenuOpen: () => false,
       closeBlockMenu: () => {}
     })
 
@@ -139,7 +136,6 @@ describe('useEditorWikilinkOverlayState', () => {
       getEditor: () => editor as any,
       holder: ref(document.createElement('div')),
       blockMenuOpen: ref(false),
-      isDragMenuOpen: () => false,
       closeBlockMenu: () => {}
     })
 
@@ -175,7 +171,6 @@ describe('useEditorWikilinkOverlayState', () => {
       getEditor: () => editor as any,
       holder: ref(document.createElement('div')),
       blockMenuOpen: ref(false),
-      isDragMenuOpen: () => false,
       closeBlockMenu: () => {}
     })
 
@@ -202,7 +197,6 @@ describe('useEditorWikilinkOverlayState', () => {
       getEditor: () => editor as any,
       holder: ref(document.createElement('div')),
       blockMenuOpen: ref(false),
-      isDragMenuOpen: () => false,
       closeBlockMenu: () => {}
     })
 
@@ -228,7 +222,6 @@ describe('useEditorWikilinkOverlayState', () => {
       getEditor: () => editor as any,
       holder: ref(document.createElement('div')),
       blockMenuOpen: ref(false),
-      isDragMenuOpen: () => false,
       closeBlockMenu: () => {}
     })
 
@@ -254,7 +247,6 @@ describe('useEditorWikilinkOverlayState', () => {
       getEditor: () => editor as any,
       holder: ref(document.createElement('div')),
       blockMenuOpen: ref(false),
-      isDragMenuOpen: () => false,
       closeBlockMenu: () => {}
     })
 

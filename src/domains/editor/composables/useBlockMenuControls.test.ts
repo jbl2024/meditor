@@ -5,8 +5,7 @@ import { useBlockMenuControls } from './useBlockMenuControls'
 
 describe('useBlockMenuControls', () => {
   it('builds base and convert action lists from active target', () => {
-    const activeTarget = ref<BlockMenuTarget | null>(null)
-    const stableTarget = ref<BlockMenuTarget | null>(null)
+    const target = ref<BlockMenuTarget | null>(null)
     const controls = useBlockMenuControls({
       getEditor: () => null,
       turnIntoTypes: ['paragraph', 'heading1', 'quote'],
@@ -15,11 +14,10 @@ describe('useBlockMenuControls', () => {
         heading1: 'Heading 1',
         quote: 'Quote'
       } as never,
-      activeTarget,
-      stableTarget
+      target
     })
 
-    stableTarget.value = {
+    target.value = {
       pos: 5,
       nodeSize: 2,
       nodeType: 'paragraph',

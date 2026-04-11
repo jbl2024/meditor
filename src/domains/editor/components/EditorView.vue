@@ -197,13 +197,11 @@ interactionRuntime = useEditorInteractionRuntime({
     menus: {
       blockMenuOpen: chromeRuntime.blockAndTable.blockMenuOpen,
       tableToolbarOpen: chromeRuntime.blockAndTable.tableToolbarOpen,
-      isDragMenuOpen: () => chromeRuntime.blockAndTable.blockMenuOpen.value,
       closeBlockMenu: () => chromeRuntime.blockAndTable.closeBlockMenu(),
       hideTableToolbar: () => chromeRuntime.blockAndTable.hideTableToolbar()
     },
     blockHandles: {
-      syncSelectionTarget: () => chromeRuntime.blockAndTable.onBlockHandleSelectionUpdate(),
-      suppressReveal: (options) => chromeRuntime.blockAndTable.suppressBlockHandleReveal(options?.durationMs)
+      syncSelectionTarget: () => chromeRuntime.blockAndTable.onBlockHandleSelectionUpdate()
     },
     toolbars: {
       updateFormattingToolbar: () => chromeRuntime.toolbars.updateFormattingToolbar(),
@@ -344,9 +342,6 @@ const {
   loadDocumentStats
 } = documentRuntime
 const {
-  DRAG_HANDLE_DEBUG,
-} = chromeRuntime
-const {
   open: spellcheckOpen,
   floatingEl: spellcheckFloatingEl,
   left: spellcheckLeft,
@@ -407,11 +402,7 @@ const {
   blockGutterActiveTarget,
   blockGutterAnchorRect,
   blockGutterVisible,
-  blockGutterDragging,
   blockGutterMenuOpen,
-  blockGutterContentFocused,
-  debugTargetPos,
-  suppressBlockHandleReveal,
   blockMenuOpen,
   blockMenuIndex,
   blockMenuActions,
@@ -420,8 +411,6 @@ const {
   toggleBlockMenu,
   onBlockMenuPlus,
   onBlockMenuSelect,
-  onHandleDragStart,
-  onHandleDragEnd,
   syncBlockGutterAnchor,
   tableToolbarTriggerVisible,
   tableAddTopVisible,
@@ -440,7 +429,6 @@ const {
   onEditorMouseMove,
   onEditorMouseLeave
 } = blockAndTable
-void suppressBlockHandleReveal
 const activeBlockStructureLabel = computed(() => getBlockStructureLabel(blockGutterActiveTarget.value))
 const blockGutterToolbarStyle = computed(() => {
   const anchor = blockGutterAnchorRect.value
@@ -787,15 +775,7 @@ defineExpose({
       <div
         class="relative min-h-0 flex-1 overflow-hidden"
         :data-menu-open="blockGutterMenuOpen ? 'true' : 'false'"
-        :data-dragging="blockGutterDragging ? 'true' : 'false'"
-        :data-target-pos="debugTargetPos"
       >
-        <div
-          v-if="DRAG_HANDLE_DEBUG"
-          class="pointer-events-none absolute right-2 top-2 z-50 rounded bg-slate-900/80 px-2 py-1 text-[11px] text-white"
-        >
-          visible={{ blockGutterVisible }} focus={{ blockGutterContentFocused }} menu={{ blockGutterMenuOpen }} drag={{ blockGutterDragging }} target={{ debugTargetPos }}
-        </div>
         <div
           class="editor-gutter-hitbox"
           :style="gutterHitboxStyle"
@@ -869,10 +849,11 @@ defineExpose({
             </div>
           </div>
           <div
-            v-if="blockGutterVisible"
-            class="tomosona-drag-handle"
-            :style="blockGutterToolbarStyle"
-          >
+          v-if="blockGutterVisible"
+          class="tomosona-block-gutter"
+          :data-menu-open="blockGutterMenuOpen ? 'true' : 'false'"
+          :style="blockGutterToolbarStyle"
+        >
             <div class="tomosona-block-controls">
               <span
                 v-if="activeBlockStructureLabel"
@@ -900,25 +881,6 @@ defineExpose({
                 @click.stop.prevent="toggleBlockMenu"
               >
                 <Bars3Icon class="tomosona-block-menu-icon" aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                class="tomosona-block-control-btn tomosona-block-grip-btn"
-                aria-label="Drag block"
-                title="Drag block"
-                draggable="true"
-                @mousedown.stop
-                @dragstart.stop="onHandleDragStart"
-                @dragend.stop="onHandleDragEnd"
-              >
-                <span class="tomosona-block-grip-icon" aria-hidden="true">
-                  <span class="tomosona-block-grip-dot"></span>
-                  <span class="tomosona-block-grip-dot"></span>
-                  <span class="tomosona-block-grip-dot"></span>
-                  <span class="tomosona-block-grip-dot"></span>
-                  <span class="tomosona-block-grip-dot"></span>
-                  <span class="tomosona-block-grip-dot"></span>
-                </span>
               </button>
             </div>
           </div>

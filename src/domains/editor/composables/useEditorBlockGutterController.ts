@@ -20,7 +20,6 @@ export function useEditorBlockGutterController(options: {
   const target = ref<BlockMenuTarget | null>(null)
   const menuTarget = ref<BlockMenuTarget | null>(null)
   const menuOpen = ref(false)
-  const dragging = ref(false)
   const contentFocused = ref(false)
   const anchorRect = ref<{ left: number; top: number; width: number; height: number } | null>(null)
 
@@ -28,7 +27,7 @@ export function useEditorBlockGutterController(options: {
   const visible = computed(() => Boolean(
     activeTarget.value
       && anchorRect.value
-      && ((contentFocused.value && !options.titleEditorFocused.value) || menuOpen.value || dragging.value)
+      && ((contentFocused.value && !options.titleEditorFocused.value) || menuOpen.value)
   ))
 
   /**
@@ -104,22 +103,10 @@ export function useEditorBlockGutterController(options: {
     syncAnchor()
   }
 
-  function startDragging() {
-    dragging.value = true
-    menuOpen.value = false
-    syncAnchor()
-  }
-
-  function stopDragging() {
-    dragging.value = false
-    syncSelectionTarget()
-  }
-
   function clear() {
     target.value = null
     menuTarget.value = null
     menuOpen.value = false
-    dragging.value = false
     contentFocused.value = false
     anchorRect.value = null
   }
@@ -130,7 +117,6 @@ export function useEditorBlockGutterController(options: {
     activeTarget,
     anchorRect,
     menuOpen,
-    dragging,
     contentFocused,
     visible,
     syncContentFocus,
@@ -138,8 +124,6 @@ export function useEditorBlockGutterController(options: {
     syncAnchor,
     openMenu,
     closeMenu,
-    startDragging,
-    stopDragging,
     clear
   }
 }

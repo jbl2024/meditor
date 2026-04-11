@@ -45,13 +45,11 @@ export type EditorInteractionRuntimeChromePort = {
   menus: {
     blockMenuOpen: Ref<boolean>
     tableToolbarOpen: Ref<boolean>
-    isDragMenuOpen: () => boolean
     closeBlockMenu: () => void
     hideTableToolbar: () => void
   }
   blockHandles: {
     syncSelectionTarget: () => void
-    suppressReveal: (options?: { durationMs?: number }) => void
   }
   toolbars: {
     updateFormattingToolbar: () => void
@@ -145,7 +143,6 @@ export function useEditorInteractionRuntime(options: UseEditorInteractionRuntime
     getEditor: () => documentPort.activeEditor.value,
     holder: documentPort.holder,
     blockMenuOpen: chromePort.menus.blockMenuOpen,
-    isDragMenuOpen: () => chromePort.menus.isDragMenuOpen(),
     closeBlockMenu: () => chromePort.menus.closeBlockMenu()
   })
 
@@ -154,8 +151,7 @@ export function useEditorInteractionRuntime(options: UseEditorInteractionRuntime
     currentTextSelectionContext: slashMenu.currentTextSelectionContext,
     readSlashContext: slashMenu.readSlashContext,
     currentHeadings: () => navigation.parseOutlineFromDoc(),
-    slugifyHeading,
-    suppressBlockHandleReveal: (options) => chromePort.blockHandles.suppressReveal(options)
+    slugifyHeading
   })
 
   /**
@@ -318,9 +314,6 @@ export function useEditorInteractionRuntime(options: UseEditorInteractionRuntime
     zoomPort: {
       zoomEditorBy: (delta) => chromePort.zoom.zoomEditorBy(delta),
       resetEditorZoom: () => chromePort.zoom.resetEditorZoom()
-    },
-    blockHandlePort: {
-      suppressReveal: (options) => chromePort.blockHandles.suppressReveal(options)
     }
   })
 

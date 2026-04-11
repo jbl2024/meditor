@@ -4,7 +4,6 @@ import type { BlockMenuActionItem, BlockMenuTarget, TurnIntoType } from '../lib/
 import { deleteNode, duplicateNode, insertAbove, insertBelow, moveNodeDown, moveNodeUp, turnInto } from '../lib/tiptap/blockMenu/actions'
 import { extractSelectionClipboardPayload, writeSelectionPayloadToClipboard, type CopyAsFormat } from '../lib/editorClipboard'
 import { sanitizeExternalHref } from '../lib/markdownBlocks'
-import { beginEditorBlockDrag } from '../lib/editorBlockDrag'
 import { useInlineFormatToolbar } from './useInlineFormatToolbar'
 import { useEditorFindToolbar } from './useEditorFindToolbar'
 import { useBlockMenuControls } from './useBlockMenuControls'
@@ -101,7 +100,6 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   const TABLE_EDGE_STICKY_MS = 280
   const TABLE_MARKDOWN_MODE = true
   const LARGE_DOC_THRESHOLD = 40_000
-  const DRAG_HANDLE_DEBUG = false
   const TURN_INTO_TYPES: TurnIntoType[] = [
     'paragraph',
     'heading1',
@@ -147,9 +145,6 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   const pulseSelectionRange = ref<{ from: number; to: number } | null>(null)
   const pulseSourceText = ref('')
   const pulseAnchorNonce = ref(0)
-  const typingText = ref(false)
-  let typingTextTimer: number | null = null
-
   const blockMenuFloatingEl = ref<HTMLDivElement | null>(null)
   const blockMenuPos = ref({ x: 0, y: 0 })
   const tableToolbarFloatingEl = ref<HTMLDivElement | null>(null)
@@ -184,40 +179,11 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
 
   const renderedEditor = computed(() => host.getEditor())
 
-  function clearTypingTextTimer() {
-    if (!typingTextTimer) return
-    clearTimeout(typingTextTimer)
-    typingTextTimer = null
-  }
-
-  /**
-   * Treats printable key presses and direct text-edit keys as active typing so
-   * gutter controls can stay out of the way while content is being entered.
-   */
-  function isTypingInputKey(event: KeyboardEvent) {
-    if (event.isComposing) return true
-    if (event.metaKey || event.ctrlKey || event.altKey) return false
-    if (event.key.length === 1) return true
-    return event.key === 'Backspace' || event.key === 'Delete' || event.key === 'Enter'
-  }
-
-  function markTypingText() {
-    typingText.value = true
-    clearTypingTextTimer()
-    typingTextTimer = window.setTimeout(() => {
-      typingText.value = false
-      typingTextTimer = null
-    }, 220)
-  }
-
-  function suppressBlockHandleReveal(_durationOrOptions?: number | { durationMs?: number }) {}
-
   const blockGutter = useEditorBlockGutterController({
     getEditor: () => renderedEditor.value,
     holder: host.holder,
     titleEditorFocused
   })
-  const debugTargetPos = computed(() => String(blockGutter.activeTarget.value?.pos ?? ''))
 
   const inlineFormatToolbar = useInlineFormatToolbar({
     holder: host.holder,
@@ -315,19 +281,6 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
 
     closeBlockMenu()
     blockGutter.syncSelectionTarget()
-  }
-
-  function onHandleDragStart(event: DragEvent) {
-    const editor = host.getEditor()
-    const target = blockGutter.activeTarget.value
-    if (!editor || !target) return
-    closeBlockMenu()
-    if (!beginEditorBlockDrag({ event, editor, target })) return
-    blockGutter.startDragging()
-  }
-
-  function onHandleDragEnd() {
-    blockGutter.stopDragging()
   }
 
   watch(titleEditorFocused, (focused) => {
@@ -879,9 +832,6 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     onHolderKeydown(event: KeyboardEvent) {
       if (holderEvents.isTitleFieldEventTarget(event.target)) return
       interaction.editorEvents.markEditorInteraction()
-      if (isTypingInputKey(event)) {
-        markTypingText()
-      }
       if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === 'f') {
         event.preventDefault()
         event.stopPropagation()
@@ -1025,8 +975,6 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   async function onUnmountCleanup() {
     mountSequence += 1
     cancelPendingDocumentMouseDownBind()
-    clearTypingTextTimer()
-    typingText.value = false
     blockGutter.clear()
     tableInteractions.clearTimers()
     if (mermaidReplaceDialog.value.resolve) {
@@ -1072,13 +1020,10 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     tableToolbarViewportLeft,
     tableToolbarViewportTop,
     tableToolbarViewportMaxHeight,
-    debugTargetPos,
     closeBlockMenu,
     toggleBlockMenu,
     onBlockMenuPlus,
     onBlockMenuSelect,
-    onHandleDragStart,
-    onHandleDragEnd,
     hideTableToolbar: tableInteractions.hideTableToolbar,
     toggleTableToolbar: tableInteractions.toggleTableToolbar,
     onEditorMouseMove: tableInteractions.onEditorMouseMove,
@@ -1151,12 +1096,8 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     blockMenuTarget: blockAndTableControls.blockGutter.menuTarget,
     blockGutterAnchorRect: blockAndTableControls.blockGutter.anchorRect,
     blockGutterVisible: blockAndTableControls.blockGutter.visible,
-    blockGutterDragging: blockAndTableControls.blockGutter.dragging,
     blockGutterMenuOpen: blockAndTableControls.blockGutter.menuOpen,
     blockGutterContentFocused: blockAndTableControls.blockGutter.contentFocused,
-    debugTargetPos: blockAndTableControls.debugTargetPos,
-    typingText,
-    suppressBlockHandleReveal,
     blockMenuOpen: blockAndTableControls.blockGutter.menuOpen,
     blockMenuIndex: blockAndTableControls.blockMenuControls.blockMenuIndex,
     blockMenuActions: blockAndTableControls.blockMenuControls.actions,
@@ -1167,8 +1108,6 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     onBlockMenuSelect: blockAndTableControls.onBlockMenuSelect,
     onBlockHandleSelectionUpdate: blockAndTableControls.blockGutter.syncSelectionTarget,
     syncBlockGutterAnchor: blockAndTableControls.blockGutter.syncAnchor,
-    onHandleDragStart: blockAndTableControls.onHandleDragStart,
-    onHandleDragEnd: blockAndTableControls.onHandleDragEnd,
     tableToolbarTriggerVisible: blockAndTableControls.tableControls.tableToolbarTriggerVisible,
     tableAddTopVisible: blockAndTableControls.tableControls.tableAddTopVisible,
     tableAddBottomVisible: blockAndTableControls.tableControls.tableAddBottomVisible,
@@ -1252,7 +1191,6 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   }
 
   return {
-    DRAG_HANDLE_DEBUG,
     TABLE_MARKDOWN_MODE,
     loading,
     toolbars: {

@@ -246,19 +246,18 @@ describe('EditorView interactions contract', () => {
     blockAndTable.blockMenuTarget.value = headingTarget
     await flushUi()
 
-    const handle = root.querySelector('.tomosona-drag-handle') as HTMLElement | null
+    const handle = root.querySelector('.tomosona-block-gutter') as HTMLElement | null
     expect(handle).toBeTruthy()
     expect(handle?.style.left).not.toBe('')
     expect(handle?.style.top).not.toBe('')
     expect(root.querySelector('.tomosona-block-structure-label')?.textContent).toBe('H1')
     expect(root.querySelector('button[aria-label="Insert below"]')).toBeTruthy()
     expect(root.querySelector('button[aria-label="Open block menu"]')).toBeTruthy()
-    expect(root.querySelector('button[aria-label="Drag block"]')).toBeTruthy()
 
     const menuButton = root.querySelector('button[aria-label="Open block menu"]') as HTMLButtonElement
     menuButton.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }))
     await flushMicrotasks()
-    expect(root.querySelector('.tomosona-drag-handle')).toBeTruthy()
+    expect(root.querySelector('.tomosona-block-gutter')).toBeTruthy()
 
     app.unmount()
     document.body.innerHTML = ''
@@ -314,14 +313,14 @@ describe('EditorView interactions contract', () => {
       blockAndTable.blockGutterContentFocused.value = true
       await flushUi()
 
-      expect(root.querySelector('.tomosona-drag-handle')).toBeTruthy()
+      expect(root.querySelector('.tomosona-block-gutter')).toBeTruthy()
 
       const menuButton = root.querySelector('button[aria-label="Open block menu"]') as HTMLButtonElement
       menuButton.click()
       await flushUi()
 
       expect(document.body.querySelector('.tomosona-block-menu')).toBeTruthy()
-      expect(root.querySelector('.tomosona-drag-handle')).toBeTruthy()
+      expect(root.querySelector('.tomosona-block-gutter')).toBeTruthy()
     } finally {
       app.unmount()
       document.body.innerHTML = ''
