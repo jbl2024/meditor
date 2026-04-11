@@ -100,7 +100,10 @@ function createEditorStub(selection = { from: 1, to: 2, empty: false }) {
       },
       doc: {
         textBetween: vi.fn(() => 'Alpha'),
-        nodeAt: vi.fn(() => paragraph)
+        nodeAt: vi.fn(() => paragraph),
+        forEach: vi.fn((cb: (node: unknown, offset: number) => void) => {
+          cb(paragraph, 1)
+        })
       }
     },
     view: {

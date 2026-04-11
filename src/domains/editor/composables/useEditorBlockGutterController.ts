@@ -1,6 +1,6 @@
 import { computed, ref, type Ref } from 'vue'
 import type { Editor } from '@tiptap/vue-3'
-import { toSelectionBlockMenuTarget } from '../lib/tiptap/blockMenu/guards'
+import { toSelectionBlockMenuTarget, toSelectionBlockMenuTargets } from '../lib/tiptap/blockMenu/guards'
 import type { BlockMenuTarget } from '../lib/tiptap/blockMenu/types'
 
 /**
@@ -18,7 +18,9 @@ export function useEditorBlockGutterController(options: {
   titleEditorFocused: Ref<boolean>
 }) {
   const target = ref<BlockMenuTarget | null>(null)
+  const selectionTargets = ref<BlockMenuTarget[]>([])
   const menuTarget = ref<BlockMenuTarget | null>(null)
+  const menuTargets = ref<BlockMenuTarget[]>([])
   const menuOpen = ref(false)
   const contentFocused = ref(false)
   const anchorRect = ref<{ left: number; top: number; width: number; height: number } | null>(null)
@@ -57,7 +59,10 @@ export function useEditorBlockGutterController(options: {
    */
   function syncSelectionTarget() {
     syncContentFocus()
-    target.value = options.titleEditorFocused.value ? null : toSelectionBlockMenuTarget(options.getEditor())
+    const editor = options.getEditor()
+    const titleFocused = options.titleEditorFocused.value
+    target.value = titleFocused ? null : toSelectionBlockMenuTarget(editor)
+    selectionTargets.value = titleFocused ? [] : toSelectionBlockMenuTargets(editor)
     syncAnchor()
   }
 
@@ -93,6 +98,7 @@ export function useEditorBlockGutterController(options: {
   function openMenu() {
     if (!target.value) return null
     menuTarget.value = target.value
+    menuTargets.value = selectionTargets.value
     menuOpen.value = true
     syncAnchor()
     return menuTarget.value
@@ -101,12 +107,15 @@ export function useEditorBlockGutterController(options: {
   function closeMenu() {
     menuOpen.value = false
     menuTarget.value = null
+    menuTargets.value = []
     syncAnchor()
   }
 
   function clear() {
     target.value = null
+    selectionTargets.value = []
     menuTarget.value = null
+    menuTargets.value = []
     menuOpen.value = false
     contentFocused.value = false
     anchorRect.value = null
@@ -114,7 +123,9 @@ export function useEditorBlockGutterController(options: {
 
   return {
     target,
+    selectionTargets,
     menuTarget,
+    menuTargets,
     activeTarget,
     anchorRect,
     menuOpen,

@@ -4,7 +4,7 @@ import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table
 import StarterKit from '@tiptap/starter-kit'
 import { type JSONContent, Editor } from '@tiptap/vue-3'
 import { afterEach, describe, expect, it } from 'vitest'
-import { turnInto } from './actions'
+import { turnInto, turnIntoAll } from './actions'
 import type { BlockMenuTarget, TurnIntoType } from './types'
 
 const QuoteBlockNode = Node.create({
@@ -102,6 +102,10 @@ const TURN_INTO_TYPES: TurnIntoType[] = [
 const editors: Editor[] = []
 
 function createEditor(firstNode: JSONContent): Editor {
+  return createMultiEditor([firstNode])
+}
+
+function createMultiEditor(nodes: JSONContent[]): Editor {
   const editor = new Editor({
     element: document.createElement('div'),
     extensions: [
@@ -127,7 +131,7 @@ function createEditor(firstNode: JSONContent): Editor {
     ],
     content: {
       type: 'doc',
-      content: [firstNode]
+      content: nodes
     }
   })
   ;(editor.commands as { focus: (pos?: number) => boolean }).focus = () => true
@@ -198,14 +202,29 @@ function richInlineFixture(): JSONContent[] {
   ]
 }
 
-function expectRichInlinePreserved(container: any) {
+function richInlineFixtureWithoutBreak(): JSONContent[] {
+  return [
+    { type: 'wikilink', attrs: { target: 'Note.md', label: 'Note', exists: true } },
+    { type: 'text', text: ' ' },
+    { type: 'text', text: 'bold', marks: [{ type: 'bold' }] },
+    { type: 'text', text: ' ' },
+    { type: 'text', text: 'italic', marks: [{ type: 'italic' }] },
+    { type: 'text', text: 'inline', marks: [{ type: 'code' }] }
+  ]
+}
+
+function expectRichInlinePreserved(container: any, hasHardBreak = false) {
   expect(['paragraph', 'heading', 'codeBlock']).toContain(container.type.name)
   expect(container.child(0).type.name).toBe('wikilink')
   expect(String(container.child(0).attrs.target ?? '')).toBe('Note.md')
   expect(container.child(2).marks.some((mark: any) => mark.type.name === 'bold')).toBe(true)
   expect(container.child(4).marks.some((mark: any) => mark.type.name === 'italic')).toBe(true)
-  expect(container.child(5).type.name).toBe('hardBreak')
-  expect(container.child(6).marks.some((mark: any) => mark.type.name === 'code')).toBe(true)
+  if (hasHardBreak) {
+    expect(container.child(5).type.name).toBe('hardBreak')
+    expect(container.child(6).marks.some((mark: any) => mark.type.name === 'code')).toBe(true)
+  } else {
+    expect(container.child(5).marks.some((mark: any) => mark.type.name === 'code')).toBe(true)
+  }
 }
 
 afterEach(() => {
@@ -214,10 +233,10 @@ afterEach(() => {
 
 describe('blockMenu turnInto', () => {
   describe('preserves rich inline content when source supports fragment reuse', () => {
-    it('keeps wikilinks, marks and hard breaks when converting paragraph to heading', () => {
+    it('keeps wikilinks and marks when converting paragraph to heading', () => {
       const editor = createEditor({
         type: 'paragraph',
-        content: richInlineFixture()
+        content: richInlineFixtureWithoutBreak()
       })
 
       expect(turnInto(editor, createTarget(editor), 'heading2')).toBe(true)
@@ -227,10 +246,10 @@ describe('blockMenu turnInto', () => {
       expectRichInlinePreserved(converted)
     })
 
-    it('keeps wikilinks, marks and hard breaks when converting paragraph to task list', () => {
+    it('keeps wikilinks and marks when converting paragraph to task list', () => {
       const editor = createEditor({
         type: 'paragraph',
-        content: richInlineFixture()
+        content: richInlineFixtureWithoutBreak()
       })
 
       expect(turnInto(editor, createTarget(editor), 'taskList')).toBe(true)
@@ -239,11 +258,35 @@ describe('blockMenu turnInto', () => {
       expectRichInlinePreserved(firstTextContainer(converted))
     })
 
+    it('splits hard breaks into distinct list items when converting a paragraph to a bullet list', () => {
+      const editor = createEditor({
+        type: 'paragraph',
+        content: [
+          { type: 'text', text: 'a' },
+          { type: 'hardBreak' },
+          { type: 'text', text: 'b' },
+          { type: 'hardBreak' },
+          { type: 'text', text: 'c' },
+          { type: 'hardBreak' },
+          { type: 'text', text: 'd' }
+        ]
+      })
+
+      expect(turnInto(editor, createTarget(editor), 'bulletList')).toBe(true)
+      const converted = editor.state.doc.child(0)
+      expect(converted.type.name).toBe('bulletList')
+      expect(converted.childCount).toBe(4)
+      expect(converted.child(0).child(0).textContent).toBe('a')
+      expect(converted.child(1).child(0).textContent).toBe('b')
+      expect(converted.child(2).child(0).textContent).toBe('c')
+      expect(converted.child(3).child(0).textContent).toBe('d')
+    })
+
     it('keeps inline structure when converting a heading into a bullet list', () => {
       const editor = createEditor({
         type: 'heading',
         attrs: { level: 3 },
-        content: richInlineFixture()
+        content: richInlineFixtureWithoutBreak()
       })
 
       expect(turnInto(editor, createTarget(editor), 'bulletList')).toBe(true)
@@ -286,7 +329,7 @@ describe('blockMenu turnInto', () => {
       const converted = editor.state.doc.child(0)
       expect(converted.type.name).toBe('taskList')
       const taskItem = converted.child(0)
-      expectRichInlinePreserved(taskItem.child(0))
+      expectRichInlinePreserved(taskItem.child(0), true)
       expect(taskItem.child(1).type.name).toBe('bulletList')
       expect(nodeTextWithLineBreaks(taskItem.child(1))).toBe('Nested child')
     })
@@ -583,6 +626,122 @@ describe('blockMenu turnInto', () => {
         expect(converted.type.name, `${testCase.expectedType}:${testCase.target}`).toBe(testCase.expectedType)
         expect(nodeTextWithLineBreaks(converted), `${testCase.expectedType}:${testCase.target}`).toBe('')
       }
+    })
+  })
+
+  describe('turnIntoAll — multi-block selection', () => {
+    function targetsForAllChildren(editor: Editor): BlockMenuTarget[] {
+      const targets: BlockMenuTarget[] = []
+      editor.state.doc.forEach((node, offset) => {
+        targets.push(createTargetAtPos(editor, offset))
+      })
+      return targets
+    }
+
+    it('converts all selected paragraphs to heading1', () => {
+      const editor = createMultiEditor([
+        { type: 'paragraph', content: [{ type: 'text', text: 'First' }] },
+        { type: 'paragraph', content: [{ type: 'text', text: 'Second' }] },
+        { type: 'paragraph', content: [{ type: 'text', text: 'Third' }] }
+      ])
+      const targets = targetsForAllChildren(editor)
+      expect(turnIntoAll(editor, targets, 'heading1')).toBe(true)
+      expect(editor.state.doc.childCount).toBeGreaterThanOrEqual(3)
+      expect(editor.state.doc.child(0).type.name).toBe('heading')
+      expect(editor.state.doc.child(0).attrs.level).toBe(1)
+      expect(editor.state.doc.child(0).textContent).toBe('First')
+      expect(editor.state.doc.child(1).type.name).toBe('heading')
+      expect(editor.state.doc.child(1).attrs.level).toBe(1)
+      expect(editor.state.doc.child(1).textContent).toBe('Second')
+      expect(editor.state.doc.child(2).type.name).toBe('heading')
+      expect(editor.state.doc.child(2).attrs.level).toBe(1)
+      expect(editor.state.doc.child(2).textContent).toBe('Third')
+    })
+
+    it('converts a mix of headings and paragraphs to bullet list', () => {
+      const editor = createMultiEditor([
+        { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'Title' }] },
+        { type: 'paragraph', content: [{ type: 'text', text: 'Body' }] }
+      ])
+      const targets = targetsForAllChildren(editor)
+      expect(turnIntoAll(editor, targets, 'bulletList')).toBe(true)
+      // TipTap may append a trailing paragraph after list nodes, so check at least 2 converted nodes
+      expect(editor.state.doc.childCount).toBeGreaterThanOrEqual(2)
+      expect(editor.state.doc.child(0).type.name).toBe('bulletList')
+      expect(editor.state.doc.child(0).textContent).toBe('Title')
+      expect(editor.state.doc.child(1).type.name).toBe('bulletList')
+      expect(editor.state.doc.child(1).textContent).toBe('Body')
+    })
+
+    it('converts all paragraphs to codeBlock preserving text', () => {
+      const editor = createMultiEditor([
+        { type: 'paragraph', content: [{ type: 'text', text: 'line one' }] },
+        { type: 'paragraph', content: [{ type: 'text', text: 'line two' }] }
+      ])
+      const targets = targetsForAllChildren(editor)
+      expect(turnIntoAll(editor, targets, 'codeBlock')).toBe(true)
+      // TipTap may append a trailing paragraph after code block nodes
+      expect(editor.state.doc.childCount).toBeGreaterThanOrEqual(2)
+      expect(editor.state.doc.child(0).type.name).toBe('codeBlock')
+      expect(editor.state.doc.child(0).textContent).toBe('line one')
+      expect(editor.state.doc.child(1).type.name).toBe('codeBlock')
+      expect(editor.state.doc.child(1).textContent).toBe('line two')
+    })
+
+    it('converts multiple list nodes to a different list type', () => {
+      const editor = createMultiEditor([
+        {
+          type: 'bulletList',
+          content: [{ type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Item A' }] }] }]
+        },
+        {
+          type: 'bulletList',
+          content: [{ type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Item B' }] }] }]
+        }
+      ])
+      const targets = targetsForAllChildren(editor)
+      expect(turnIntoAll(editor, targets, 'taskList')).toBe(true)
+      // TipTap may append a trailing paragraph after list nodes
+      expect(editor.state.doc.childCount).toBeGreaterThanOrEqual(2)
+      expect(editor.state.doc.child(0).type.name).toBe('taskList')
+      expect(editor.state.doc.child(1).type.name).toBe('taskList')
+    })
+
+    it('falls back to single-block behavior for a single target', () => {
+      const editor = createMultiEditor([
+        { type: 'paragraph', content: [{ type: 'text', text: 'Solo' }] }
+      ])
+      const targets = targetsForAllChildren(editor)
+      expect(turnIntoAll(editor, targets, 'heading2')).toBe(true)
+      expect(editor.state.doc.child(0).type.name).toBe('heading')
+      expect(editor.state.doc.child(0).attrs.level).toBe(2)
+      expect(editor.state.doc.child(0).textContent).toBe('Solo')
+    })
+
+    it('returns false for empty targets', () => {
+      const editor = createMultiEditor([
+        { type: 'paragraph', content: [{ type: 'text', text: 'x' }] }
+      ])
+      expect(turnIntoAll(editor, [], 'heading1')).toBe(false)
+    })
+
+    it('converts only the two selected blocks, not unselected ones', () => {
+      const editor = createMultiEditor([
+        { type: 'paragraph', content: [{ type: 'text', text: 'Unselected' }] },
+        { type: 'paragraph', content: [{ type: 'text', text: 'Selected A' }] },
+        { type: 'paragraph', content: [{ type: 'text', text: 'Selected B' }] }
+      ])
+      // Manually pick only the 2nd and 3rd nodes
+      const targets = [
+        createTargetAtPos(editor, editor.state.doc.child(0).nodeSize),
+        createTargetAtPos(editor, editor.state.doc.child(0).nodeSize + editor.state.doc.child(1).nodeSize)
+      ]
+      expect(turnIntoAll(editor, targets, 'heading3')).toBe(true)
+      expect(editor.state.doc.child(0).type.name).toBe('paragraph')
+      expect(editor.state.doc.child(1).type.name).toBe('heading')
+      expect(editor.state.doc.child(1).attrs.level).toBe(3)
+      expect(editor.state.doc.child(2).type.name).toBe('heading')
+      expect(editor.state.doc.child(2).attrs.level).toBe(3)
     })
   })
 

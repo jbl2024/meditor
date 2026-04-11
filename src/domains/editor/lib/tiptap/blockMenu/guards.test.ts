@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getBlockStructureLabel, isSelectionInsideList, toBlockMenuTarget, toSelectionBlockMenuTarget } from './guards'
+import { getBlockStructureLabel, isSelectionInsideList, toBlockMenuTarget, toSelectionBlockMenuTarget, toSelectionBlockMenuTargets } from './guards'
 import type { BlockMenuTarget } from './types'
 
 function target(overrides: Partial<BlockMenuTarget>): BlockMenuTarget {
@@ -206,6 +206,100 @@ describe('toSelectionBlockMenuTarget', () => {
     } as any
 
     expect(toSelectionBlockMenuTarget(editor)).toBeNull()
+  })
+})
+
+describe('toSelectionBlockMenuTargets', () => {
+  function makeDocNode(name: string, size: number) {
+    return { type: { name }, nodeSize: size, attrs: {}, textContent: name }
+  }
+
+  function makeEditor(from: number, to: number, docNodes: Array<{ name: string; size: number }>) {
+    const nodes = docNodes.map(n => makeDocNode(n.name, n.size))
+    return {
+      state: {
+        selection: {
+          from,
+          to,
+          $from: {
+            depth: 1,
+            parent: nodes[0],
+            node: (depth: number) => (depth === 1 ? nodes[0] : { type: { name: 'doc' } }),
+            before: () => 0
+          }
+        },
+        doc: {
+          forEach(fn: (node: any, offset: number) => void) {
+            let offset = 0
+            for (const node of nodes) {
+              fn(node, offset)
+              offset += node.nodeSize
+            }
+          }
+        }
+      }
+    } as any
+  }
+
+  it('returns all top-level nodes that overlap the selection', () => {
+    // Three nodes: pos 0 (size 4), pos 4 (size 4), pos 8 (size 4)
+    // Selection from=2 to=10 covers all three
+    const editor = makeEditor(2, 10, [
+      { name: 'paragraph', size: 4 },
+      { name: 'heading', size: 4 },
+      { name: 'paragraph', size: 4 }
+    ])
+    const targets = toSelectionBlockMenuTargets(editor)
+    expect(targets).toHaveLength(3)
+    expect(targets[0].nodeType).toBe('paragraph')
+    expect(targets[0].pos).toBe(0)
+    expect(targets[1].nodeType).toBe('heading')
+    expect(targets[1].pos).toBe(4)
+    expect(targets[2].nodeType).toBe('paragraph')
+    expect(targets[2].pos).toBe(8)
+  })
+
+  it('returns only nodes that overlap the selection range', () => {
+    // Three nodes: pos 0 (size 4), pos 4 (size 4), pos 8 (size 4)
+    // Selection from=4 to=8 covers only the second node
+    const editor = makeEditor(4, 8, [
+      { name: 'paragraph', size: 4 },
+      { name: 'heading', size: 4 },
+      { name: 'paragraph', size: 4 }
+    ])
+    const targets = toSelectionBlockMenuTargets(editor)
+    expect(targets).toHaveLength(1)
+    expect(targets[0].nodeType).toBe('heading')
+    expect(targets[0].pos).toBe(4)
+  })
+
+  it('falls back to single-target logic when selection is collapsed', () => {
+    // from === to — collapsed cursor inside a paragraph
+    const paragraphNode = { type: { name: 'paragraph' }, nodeSize: 4, attrs: {}, textContent: 'Hello' } as any
+    const editor = {
+      state: {
+        selection: {
+          from: 2,
+          to: 2,
+          $from: {
+            depth: 1,
+            parent: paragraphNode,
+            node: (depth: number) => (depth === 1 ? paragraphNode : { type: { name: 'doc' } }),
+            before: () => 0
+          }
+        },
+        doc: {
+          forEach() {}
+        }
+      }
+    } as any
+    const targets = toSelectionBlockMenuTargets(editor)
+    expect(targets).toHaveLength(1)
+    expect(targets[0].nodeType).toBe('paragraph')
+  })
+
+  it('returns empty array for null editor', () => {
+    expect(toSelectionBlockMenuTargets(null)).toEqual([])
   })
 })
 

@@ -1,7 +1,7 @@
 import { computed, nextTick, ref, watch, type CSSProperties, type Ref } from 'vue'
 import type { Editor } from '@tiptap/vue-3'
 import type { BlockMenuActionItem, BlockMenuTarget, TurnIntoType } from '../lib/tiptap/blockMenu/types'
-import { deleteNode, duplicateNode, insertAbove, insertBelow, moveNodeDown, moveNodeUp, turnInto } from '../lib/tiptap/blockMenu/actions'
+import { deleteNode, duplicateNode, insertAbove, insertBelow, moveNodeDown, moveNodeUp, turnInto, turnIntoAll } from '../lib/tiptap/blockMenu/actions'
 import { extractSelectionClipboardPayload, writeSelectionPayloadToClipboard, type CopyAsFormat } from '../lib/editorClipboard'
 import { sanitizeExternalHref } from '../lib/markdownBlocks'
 import { useInlineFormatToolbar } from './useInlineFormatToolbar'
@@ -277,7 +277,14 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     if (item.actionId === 'duplicate') duplicateNode(editor, target)
     if (item.actionId === 'delete') deleteNode(editor, target)
     if (item.actionId === 'copy_anchor') copyAnchorTarget(target)
-    if (item.actionId === 'turn_into' && item.turnIntoType) turnInto(editor, target, item.turnIntoType)
+    if (item.actionId === 'turn_into' && item.turnIntoType) {
+      const allTargets = blockGutter.menuTargets.value
+      if (allTargets.length > 1) {
+        turnIntoAll(editor, allTargets, item.turnIntoType)
+      } else {
+        turnInto(editor, target, item.turnIntoType)
+      }
+    }
 
     closeBlockMenu()
     blockGutter.syncSelectionTarget()

@@ -45,6 +45,27 @@ function createParagraph(schema: Schema, text = '', inlineFragment?: Fragment | 
   return paragraph.create(null, content)
 }
 
+function splitInlineFragmentIntoParagraphs(schema: Schema, inlineFragment: Fragment): ProseNode[] {
+  const paragraph = schema.nodes.paragraph
+  if (!paragraph) return []
+
+  const paragraphs: ProseNode[] = []
+  let current: ProseNode[] = []
+
+  inlineFragment.forEach((child) => {
+    if (child.type.name === 'hardBreak') {
+      paragraphs.push(paragraph.create(null, current.length > 0 ? current : undefined))
+      current = []
+      return
+    }
+
+    current.push(child)
+  })
+
+  paragraphs.push(paragraph.create(null, current.length > 0 ? current : undefined))
+  return paragraphs
+}
+
 function createTurnIntoNode(schema: Schema, type: TurnIntoType, sourceNode: ProseNode, text: string): ProseNode | null {
   const inlineFragment = extractInlineFragmentFromNode(sourceNode)
   const paragraph = createParagraph(schema, text, inlineFragment)
@@ -75,14 +96,24 @@ function createTurnIntoNode(schema: Schema, type: TurnIntoType, sourceNode: Pros
     const listType = type === 'orderedList' ? schema.nodes.orderedList : schema.nodes.bulletList
     const listItem = schema.nodes.listItem
     if (!listType || !listItem) return null
-    return listType.create(null, [listItem.create(null, [paragraph])])
+    const inlineFragment = extractInlineFragmentFromNode(sourceNode)
+    const paragraphs = inlineFragment && inlineFragment.size > 0
+      ? splitInlineFragmentIntoParagraphs(schema, inlineFragment)
+      : [paragraph]
+    if (!paragraphs.length) return null
+    return listType.create(null, paragraphs.map((itemParagraph) => listItem.create(null, [itemParagraph])))
   }
 
   if (type === 'taskList') {
     const taskList = schema.nodes.taskList
     const taskItem = schema.nodes.taskItem
     if (!taskList || !taskItem) return null
-    return taskList.create(null, [taskItem.create({ checked: false }, [paragraph])])
+    const inlineFragment = extractInlineFragmentFromNode(sourceNode)
+    const paragraphs = inlineFragment && inlineFragment.size > 0
+      ? splitInlineFragmentIntoParagraphs(schema, inlineFragment)
+      : [paragraph]
+    if (!paragraphs.length) return null
+    return taskList.create(null, paragraphs.map((itemParagraph) => taskItem.create({ checked: false }, [itemParagraph])))
   }
 
   return null
@@ -344,6 +375,45 @@ export function deleteNode(editor: Editor, target: BlockMenuTarget): boolean {
   tr.setSelection(TextSelection.near(tr.doc.resolve(fallback), -1))
   editor.view.dispatch(tr)
   editor.commands.focus()
+  return true
+}
+
+export function turnIntoAll(editor: Editor, targets: BlockMenuTarget[], type: TurnIntoType): boolean {
+  if (targets.length === 0) return false
+  if (targets.length === 1) return turnInto(editor, targets[0], type)
+
+  // Process in reverse position order in a single transaction so earlier positions remain
+  // valid (later replacements may grow/shrink the doc, but only at positions we've already handled).
+  const { schema, doc } = editor.state
+  const sorted = [...targets].sort((a, b) => b.pos - a.pos)
+  const tr = editor.state.tr
+  let anyReplaced = false
+
+  for (const target of sorted) {
+    const node = doc.nodeAt(target.pos)
+    if (!node) continue
+
+    if (type === 'bulletList' || type === 'orderedList' || type === 'taskList') {
+      if (isListTypeName(node.type.name)) {
+        const converted = convertListNode(schema, node, type)
+        if (converted) {
+          tr.replaceWith(target.pos, target.pos + node.nodeSize, converted)
+          anyReplaced = true
+          continue
+        }
+      }
+    }
+
+    const replacement = createTurnIntoNode(schema, type, node, sourceTextForTurnInto(node))
+    if (!replacement) continue
+    tr.replaceWith(target.pos, target.pos + node.nodeSize, replacement)
+    anyReplaced = true
+  }
+
+  if (!anyReplaced) return false
+  editor.view.dispatch(tr)
+  const firstTarget = sorted[sorted.length - 1]
+  focusNearPos(editor, firstTarget.pos + 1)
   return true
 }
 

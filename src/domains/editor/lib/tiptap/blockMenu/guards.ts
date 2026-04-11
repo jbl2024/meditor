@@ -56,6 +56,28 @@ function isInsideTable(editor: Editor): boolean {
   return false
 }
 
+export function toSelectionBlockMenuTargets(editor: Editor | null): BlockMenuTarget[] {
+  if (!editor) return []
+
+  const { selection } = editor.state
+  if (isInsideTable(editor)) return []
+
+  const { from, to } = selection
+  if (from === to) {
+    const single = toSelectionBlockMenuTarget(editor)
+    return single ? [single] : []
+  }
+
+  const targets: BlockMenuTarget[] = []
+  editor.state.doc.forEach((node, offset) => {
+    const nodeEnd = offset + node.nodeSize
+    if (nodeEnd > from && offset < to) {
+      targets.push(toBlockMenuTarget(node, offset))
+    }
+  })
+  return targets
+}
+
 export function toSelectionBlockMenuTarget(editor: Editor | null): BlockMenuTarget | null {
   if (!editor) return null
 
