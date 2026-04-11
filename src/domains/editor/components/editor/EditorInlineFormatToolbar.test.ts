@@ -21,6 +21,7 @@ function mountHarness(options?: {
   const onOpenLink = vi.fn()
   const onWrapWikilink = vi.fn()
   const onExtractNote = vi.fn()
+  const onSelectBlockAction = vi.fn()
   const onCopyAs = vi.fn<(format: string) => void>()
   const onApplyLink = vi.fn()
   const onUnlink = vi.fn()
@@ -43,6 +44,13 @@ function mountHarness(options?: {
           code: false,
           link: true
         },
+        blockMenuActions: [
+          { id: 'insert_above', actionId: 'insert_above', label: 'Insert above' },
+          { id: 'delete', actionId: 'delete', label: 'Delete' }
+        ],
+        blockMenuConvertActions: [
+          { id: 'turn_into:paragraph', actionId: 'turn_into', label: 'Paragraph', turnIntoType: 'paragraph' }
+        ],
         linkPopoverOpen: linkPopoverOpen.value,
         linkValue: linkValue.value,
         linkError: options?.linkError ?? '',
@@ -50,6 +58,7 @@ function mountHarness(options?: {
         onOpenLink,
         onWrapWikilink,
         onExtractNote,
+        onSelectBlockAction,
         onCopyAs,
         onApplyLink,
         onUnlink,
@@ -69,6 +78,7 @@ function mountHarness(options?: {
     onOpenLink,
     onWrapWikilink,
     onExtractNote,
+    onSelectBlockAction,
     onCopyAs,
     onApplyLink,
     onUnlink,
@@ -109,6 +119,29 @@ describe('EditorInlineFormatToolbar', () => {
     expect(harness.onWrapWikilink).toHaveBeenCalledTimes(1)
     expect(harness.onExtractNote).toHaveBeenCalledTimes(1)
     expect(harness.onOpenLink).toHaveBeenCalledTimes(1)
+
+    harness.app.unmount()
+  })
+
+  it('opens block actions from the selection toolbar and emits the selected item', async () => {
+    const harness = mountHarness()
+    await flush()
+
+    ;(harness.root.querySelector('[data-action="block-menu-toggle"]') as HTMLButtonElement).click()
+    await flush()
+
+    const deleteButton = Array.from(harness.root.querySelectorAll('.tomosona-block-menu button')).find(
+      (button) => button.textContent?.trim() === 'Delete'
+    ) as HTMLButtonElement | undefined
+    expect(deleteButton).toBeTruthy()
+
+    deleteButton?.click()
+    expect(harness.onSelectBlockAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actionId: 'delete',
+        label: 'Delete'
+      })
+    )
 
     harness.app.unmount()
   })

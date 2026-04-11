@@ -897,6 +897,8 @@ defineExpose({
               code: inlineFormatToolbar.isMarkActive('code'),
               link: inlineFormatToolbar.isMarkActive('link')
             }"
+            :block-menu-actions="blockAndTable.blockMenuActions.value"
+            :block-menu-convert-actions="blockAndTable.blockMenuConvertActions.value"
             :link-popover-open="inlineFormatToolbar.linkPopoverOpen.value"
             :link-value="inlineFormatToolbar.linkValue.value"
             :link-error="inlineFormatToolbar.linkError.value"
@@ -904,6 +906,7 @@ defineExpose({
             @open-link="inlineFormatToolbar.openLinkPopover"
             @wrap-wikilink="inlineFormatToolbar.wrapSelectionWithWikilink"
             @extract-note="void interactionRuntime.extractSelectionToEmbeddedNote()"
+            @select-block-action="onBlockMenuSelect($event)"
             @open-pulse="openPulseForSelection"
             @copy-as="void onInlineToolbarCopyAs($event)"
             @apply-link="inlineFormatToolbar.applyLink"

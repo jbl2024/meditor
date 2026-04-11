@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { ClipboardDocumentIcon, CodeBracketIcon, LinkIcon } from '@heroicons/vue/24/outline'
+import { Bars3Icon, ClipboardDocumentIcon, CodeBracketIcon, LinkIcon } from '@heroicons/vue/24/outline'
 import { nextTick, ref, watch } from 'vue'
+import EditorBlockMenu from './EditorBlockMenu.vue'
+import type { BlockMenuActionItem } from '../../lib/tiptap/blockMenu/types'
 import type { InlineFormatMark, InlineFormatMarkOrLink } from '../../composables/useInlineFormatToolbar'
 
 /**
@@ -13,6 +15,8 @@ import type { InlineFormatMark, InlineFormatMarkOrLink } from '../../composables
  * How to use:
  * - Bind `open/left/top` and active marks from `useInlineFormatToolbar`.
  * - Forward emitted events back to composable actions.
+ * - Pass block menu actions from `useBlockMenuControls` to expose structural
+ *   commands next to text selection actions.
  *
  * Important:
  * - Buttons use `@mousedown.prevent` to avoid collapsing editor selection.
@@ -23,6 +27,8 @@ const props = defineProps<{
   left: number
   top: number
   activeMarks: Record<InlineFormatMarkOrLink, boolean>
+  blockMenuActions: BlockMenuActionItem[]
+  blockMenuConvertActions: BlockMenuActionItem[]
   linkPopoverOpen: boolean
   linkValue: string
   linkError: string
@@ -33,6 +39,7 @@ const emit = defineEmits<{
   'open-link': []
   'wrap-wikilink': []
   'extract-note': []
+  'select-block-action': [item: BlockMenuActionItem]
   'copy-as': [format: 'markdown' | 'html' | 'plain']
   'open-pulse': []
   'apply-link': []
@@ -43,6 +50,8 @@ const emit = defineEmits<{
 
 const linkInputEl = ref<HTMLInputElement | null>(null)
 const copyMenuOpen = ref(false)
+const blockMenuOpen = ref(false)
+const blockMenuIndex = ref(0)
 
 watch(
   () => props.linkPopoverOpen,
@@ -58,7 +67,19 @@ watch(
 watch(
   () => props.open,
   (open) => {
-    if (!open) copyMenuOpen.value = false
+    if (!open) {
+      copyMenuOpen.value = false
+      blockMenuOpen.value = false
+    }
+  }
+)
+
+watch(
+  () => props.linkPopoverOpen,
+  (open) => {
+    if (!open) return
+    copyMenuOpen.value = false
+    blockMenuOpen.value = false
   }
 )
 
@@ -80,6 +101,39 @@ function onLinkInputKeydown(event: KeyboardEvent) {
 function onCopyAs(format: 'markdown' | 'html' | 'plain') {
   emit('copy-as', format)
   copyMenuOpen.value = false
+}
+
+function closeLinkPopoverIfOpen() {
+  if (!props.linkPopoverOpen) return
+  emit('cancel-link')
+}
+
+function onToggleCopyMenu() {
+  if (copyMenuOpen.value) {
+    copyMenuOpen.value = false
+    return
+  }
+
+  blockMenuOpen.value = false
+  closeLinkPopoverIfOpen()
+  copyMenuOpen.value = true
+}
+
+function onToggleBlockMenu() {
+  if (blockMenuOpen.value) {
+    blockMenuOpen.value = false
+    return
+  }
+
+  copyMenuOpen.value = false
+  closeLinkPopoverIfOpen()
+  blockMenuIndex.value = 0
+  blockMenuOpen.value = true
+}
+
+function onSelectBlockAction(item: BlockMenuActionItem) {
+  emit('select-block-action', item)
+  blockMenuOpen.value = false
 }
 </script>
 
@@ -194,7 +248,7 @@ function onCopyAs(format: 'markdown' | 'html' | 'plain') {
         aria-label="Copy options"
         title="Copy options"
         @mousedown.prevent
-        @click="copyMenuOpen = !copyMenuOpen"
+        @click="onToggleCopyMenu"
       >
         <ClipboardDocumentIcon class="h-4 w-4" />
       </button>
@@ -228,6 +282,36 @@ function onCopyAs(format: 'markdown' | 'html' | 'plain') {
         >
           Copy as Plain text
         </button>
+      </div>
+    </div>
+
+    <div class="relative">
+      <button
+        type="button"
+        class="inline-format-toolbar-btn inline-flex items-center justify-center rounded-md px-2 py-1 text-xs font-semibold transition-all duration-150 active:translate-y-px active:scale-[0.98]"
+        data-action="block-menu-toggle"
+        aria-label="Block actions"
+        title="Block actions"
+        @mousedown.prevent
+        @click="onToggleBlockMenu"
+      >
+        <Bars3Icon class="h-4 w-4" />
+      </button>
+
+      <div
+        v-if="blockMenuOpen"
+        class="inline-format-toolbar-popover absolute right-0 top-full z-40 mt-2"
+        @mousedown.stop
+      >
+        <EditorBlockMenu
+          :open="blockMenuOpen"
+          :index="blockMenuIndex"
+          :actions="blockMenuActions"
+          :convert-actions="blockMenuConvertActions"
+          @update:index="blockMenuIndex = $event"
+          @select="onSelectBlockAction"
+          @close="blockMenuOpen = false"
+        />
       </div>
     </div>
 

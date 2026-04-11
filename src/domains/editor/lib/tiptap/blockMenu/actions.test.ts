@@ -632,7 +632,7 @@ describe('blockMenu turnInto', () => {
   describe('turnIntoAll — multi-block selection', () => {
     function targetsForAllChildren(editor: Editor): BlockMenuTarget[] {
       const targets: BlockMenuTarget[] = []
-      editor.state.doc.forEach((node, offset) => {
+      editor.state.doc.forEach((_node, offset) => {
         targets.push(createTargetAtPos(editor, offset))
       })
       return targets
