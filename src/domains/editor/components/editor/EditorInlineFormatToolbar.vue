@@ -420,6 +420,11 @@ function onSelectBlockAction(item: BlockMenuActionItem) {
 
 .inline-format-toolbar {
   overflow: visible;
+  width: 420px;
+  min-width: 420px;
+  max-width: 420px;
+  box-sizing: border-box;
+  justify-content: space-between;
 }
 
 .inline-format-toolbar-btn,
