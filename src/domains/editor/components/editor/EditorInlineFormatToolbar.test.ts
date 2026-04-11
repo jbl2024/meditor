@@ -130,7 +130,7 @@ describe('EditorInlineFormatToolbar', () => {
     ;(harness.root.querySelector('[data-action="block-menu-toggle"]') as HTMLButtonElement).click()
     await flush()
 
-    const deleteButton = Array.from(harness.root.querySelectorAll('.tomosona-block-menu button')).find(
+    const deleteButton = Array.from(document.body.querySelectorAll('.tomosona-block-menu button')).find(
       (button) => button.textContent?.trim() === 'Delete'
     ) as HTMLButtonElement | undefined
     expect(deleteButton).toBeTruthy()

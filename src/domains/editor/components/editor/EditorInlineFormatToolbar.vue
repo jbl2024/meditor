@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Bars3Icon, ClipboardDocumentIcon, CodeBracketIcon, LinkIcon } from '@heroicons/vue/24/outline'
-import { nextTick, ref, watch } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import EditorBlockMenu from './EditorBlockMenu.vue'
 import type { BlockMenuActionItem } from '../../lib/tiptap/blockMenu/types'
 import type { InlineFormatMark, InlineFormatMarkOrLink } from '../../composables/useInlineFormatToolbar'
@@ -49,6 +49,9 @@ const emit = defineEmits<{
 }>()
 
 const linkInputEl = ref<HTMLInputElement | null>(null)
+const blockMenuButtonEl = ref<HTMLButtonElement | null>(null)
+const blockMenuLeft = ref(0)
+const blockMenuTop = ref(0)
 const copyMenuOpen = ref(false)
 const blockMenuOpen = ref(false)
 const blockMenuIndex = ref(0)
@@ -82,6 +85,21 @@ watch(
     blockMenuOpen.value = false
   }
 )
+
+function onViewportChange() {
+  if (!blockMenuOpen.value) return
+  positionBlockMenu()
+}
+
+onMounted(() => {
+  window.addEventListener('resize', onViewportChange)
+  window.addEventListener('scroll', onViewportChange, true)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', onViewportChange)
+  window.removeEventListener('scroll', onViewportChange, true)
+})
 
 /**
  * Handles keyboard submit/cancel while editing URL.
@@ -129,6 +147,35 @@ function onToggleBlockMenu() {
   closeLinkPopoverIfOpen()
   blockMenuIndex.value = 0
   blockMenuOpen.value = true
+  void nextTick(() => {
+    positionBlockMenu()
+  })
+}
+
+function positionBlockMenu() {
+  const button = blockMenuButtonEl.value
+  if (!button) return
+
+  const viewportPadding = 8
+  const menuWidth = 256
+  const menuHeight = 360
+  const rect = button.getBoundingClientRect()
+
+  let left = rect.right - menuWidth
+  if (left + menuWidth > window.innerWidth - viewportPadding) {
+    left = window.innerWidth - menuWidth - viewportPadding
+  }
+  if (left < viewportPadding) {
+    left = viewportPadding
+  }
+
+  let top = rect.bottom + 8
+  if (top + menuHeight > window.innerHeight - viewportPadding) {
+    top = Math.max(viewportPadding, rect.top - menuHeight - 8)
+  }
+
+  blockMenuLeft.value = left
+  blockMenuTop.value = top
 }
 
 function onSelectBlockAction(item: BlockMenuActionItem) {
@@ -287,6 +334,7 @@ function onSelectBlockAction(item: BlockMenuActionItem) {
 
     <div class="relative">
       <button
+        ref="blockMenuButtonEl"
         type="button"
         class="inline-format-toolbar-btn inline-flex items-center justify-center rounded-md px-2 py-1 text-xs font-semibold transition-all duration-150 active:translate-y-px active:scale-[0.98]"
         data-action="block-menu-toggle"
@@ -297,17 +345,23 @@ function onSelectBlockAction(item: BlockMenuActionItem) {
       >
         <Bars3Icon class="h-4 w-4" />
       </button>
-      <EditorBlockMenu
-        v-if="blockMenuOpen"
-        class="absolute right-0 top-full z-40 mt-2"
-        :open="blockMenuOpen"
-        :index="blockMenuIndex"
-        :actions="blockMenuActions"
-        :convert-actions="blockMenuConvertActions"
-        @update:index="blockMenuIndex = $event"
-        @select="onSelectBlockAction"
-        @close="blockMenuOpen = false"
-      />
+      <Teleport to="body">
+        <div
+          v-if="blockMenuOpen"
+          class="fixed z-50"
+          :style="{ left: `${blockMenuLeft}px`, top: `${blockMenuTop}px` }"
+        >
+          <EditorBlockMenu
+            :open="blockMenuOpen"
+            :index="blockMenuIndex"
+            :actions="blockMenuActions"
+            :convert-actions="blockMenuConvertActions"
+            @update:index="blockMenuIndex = $event"
+            @select="onSelectBlockAction"
+            @close="blockMenuOpen = false"
+          />
+        </div>
+      </Teleport>
     </div>
 
     <div
