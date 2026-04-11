@@ -18,6 +18,38 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.35.0] - 2026-04-11
+
+### Changed
+- test: add unit tests for echoes, explorerTreeUtils, propertyTypes, frontmatter (#77) (bb46e3b)
+- Merge pull request #75 from jbl2024/dependabot/cargo/src-tauri/comrak-0.52.0 (183cd8f)
+- Merge pull request #71 from jbl2024/dependabot/npm_and_yarn/tiptap/extension-table-header-3.22.2 (66b802d)
+- chore(deps): bump comrak from 0.51.0 to 0.52.0 in /src-tauri (c557137)
+- chore(deps): bump @tiptap/extension-table-header from 3.20.0 to 3.22.2 (1de3bb8)
+- Merge pull request #74 from jbl2024/dependabot/npm_and_yarn/vue-3.5.32 (4d4fe36)
+- Merge pull request #73 from jbl2024/dependabot/npm_and_yarn/vue-dnd-kit/core-2.4.4 (113fd5b)
+- Merge pull request #72 from jbl2024/dependabot/cargo/src-tauri/zip-8.5.0 (b5dafb0)
+- Merge pull request #70 from jbl2024/dependabot/cargo/src-tauri/sqlite-vec-0.1.9 (67cfed3)
+- Merge pull request #69 from jbl2024/dependabot/npm_and_yarn/tiptap/extension-code-block-lowlight-3.22.2 (5f808ee)
+- Merge pull request #68 from jbl2024/dependabot/npm_and_yarn/tiptap/extension-list-3.22.2 (7484e65)
+- Merge pull request #67 from jbl2024/dependabot/cargo/src-tauri/blake3-1.8.4 (5703115)
+- chore(deps): bump vue from 3.5.29 to 3.5.32 (d2e6030)
+- chore(deps): bump @vue-dnd-kit/core from 2.2.0 to 2.4.4 (ba098f4)
+- chore(deps): bump @tiptap/extension-list from 3.20.1 to 3.22.2 (eacf6dc)
+- chore(deps): bump @tiptap/extension-code-block-lowlight (dfa0394)
+- chore: add .claude to gitignore (24e2e11)
+- Merge pull request #76 from jbl2024/claude/infallible-dubinsky (2c2e6c1)
+- refactor(editor): remove block drag affordance and dead gutter plumbing (ba52438)
+- chore(deps): bump zip from 8.4.0 to 8.5.0 in /src-tauri (510a25c)
+- chore(deps): bump sqlite-vec from 0.1.7 to 0.1.9 in /src-tauri (9bcceb9)
+- chore(deps): bump blake3 from 1.8.3 to 1.8.4 in /src-tauri (0eeb29b)
+
+### Fixed
+- fix(ci): package-lock.json (e12d754)
+- fix(editor): anchor gutter toolbar to editor left edge for indented blocks (8a11827)
+- fix(editor): clarify gutter menu and drag controls (31422a0)
+- fix(editor): polish toolrefactor(editor): replace hover-driven gutter with a selection-based controller (c8dc163)
+
 ## [0.34.1] - 2026-04-10
 
 ### Changed
