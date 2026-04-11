@@ -18,6 +18,31 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.35.1] - 2026-04-11
+
+### Added
+- feat(pulse): preserve panel draft state across close and reopen (18e2b60)
+- feat(pulse): add copy button for generated preview (37ece67)
+- feat(pulse): add note-level pulse entrypoint and broaden selection actions (595e3bb)
+- feat(pulse): add format action and grouped dropdown sections (066979b)
+- feat(editor): replace copy menu ellipsis with clipboard icon (b547bc1)
+
+### Changed
+- Merge pull request #78 from jbl2024/claude/determined-faraday (2ab800d)
+- style(editor): rendre le gutter toolbar plus discret au repos (8b283fb)
+
+### Fixed
+- fix(editor): keep inline toolbar width fixed (cc26e59)
+- fix(editor): keep inline toolbar inside viewport (bac5b42)
+- fix(editor): refresh inline toolbar on holder scroll (290e60b)
+- fix(pulse): render markdown previews with marked (cca70d9)
+- fix(editor): parse pulse markdown before insertion (d58219b)
+- fix(editor): apply block actions to multi-block selections (362324e)
+- fix(editor): render block menu outside inline toolbar (cf2e63c)
+- fix(editor): remove duplicate wrapper around block menu (53a4c37)
+- fix(editor): expose block actions in selection toolbar (afcd625)
+- fix(editor): split multiline paragraphs into list items (c04d3ec)
+
 ## [0.35.0] - 2026-04-11
 
 ### Changed
