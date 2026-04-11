@@ -645,7 +645,9 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     layoutResizeObserver?.disconnect()
     layoutResizeObserver = null
     if (typeof ResizeObserver === 'undefined') return
-    const targets = [host.holder.value, host.contentShell.value].filter((value): value is HTMLElement => Boolean(value))
+    const targets: HTMLElement[] = []
+    if (host.holder.value) targets.push(host.holder.value)
+    if (host.contentShell.value) targets.push(host.contentShell.value)
     if (!targets.length) return
     layoutResizeObserver = new ResizeObserver(() => {
       syncLayoutGeometry()

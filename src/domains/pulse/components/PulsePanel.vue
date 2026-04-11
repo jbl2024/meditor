@@ -225,42 +225,43 @@ onBeforeUnmount(() => {
     <div class="pulse-preview">
       <div class="pulse-preview-head">
         <strong>Preview</strong>
-      <div v-if="panelState === 'result'" class="pulse-preview-controls">
-        <button
-          type="button"
-          class="pulse-tab-btn pulse-copy-btn"
-          :disabled="!canCopyPreview"
-          :title="copyFeedback ? 'Copied' : 'Copy preview as markdown'"
-          @click="copyPreviewMarkdown"
-        >
-          {{ copyButtonLabel }}
-        </button>
-        <div class="pulse-preview-tabs">
-          <button
-            v-if="canShowDiff"
-            type="button"
-            class="pulse-tab-btn"
-            :data-active="effectivePreviewMode === 'diff'"
-            @click="setPreviewMode('diff')"
-          >
-            Diff
-          </button>
+        <div v-if="panelState === 'result'" class="pulse-preview-controls">
           <button
             type="button"
-            class="pulse-tab-btn"
-            :data-active="effectivePreviewMode === 'preview'"
-            @click="setPreviewMode('preview')"
+            class="pulse-tab-btn pulse-copy-btn"
+            :disabled="!canCopyPreview"
+            :title="copyFeedback ? 'Copied' : 'Copy preview as markdown'"
+            @click="copyPreviewMarkdown"
           >
-            Preview
+            {{ copyButtonLabel }}
           </button>
-          <button
-            type="button"
-            class="pulse-tab-btn"
-            :data-active="effectivePreviewMode === 'markdown'"
-            @click="setPreviewMode('markdown')"
-          >
-            Markdown
-          </button>
+          <div class="pulse-preview-tabs">
+            <button
+              v-if="canShowDiff"
+              type="button"
+              class="pulse-tab-btn"
+              :data-active="effectivePreviewMode === 'diff'"
+              @click="setPreviewMode('diff')"
+            >
+              Diff
+            </button>
+            <button
+              type="button"
+              class="pulse-tab-btn"
+              :data-active="effectivePreviewMode === 'preview'"
+              @click="setPreviewMode('preview')"
+            >
+              Preview
+            </button>
+            <button
+              type="button"
+              class="pulse-tab-btn"
+              :data-active="effectivePreviewMode === 'markdown'"
+              @click="setPreviewMode('markdown')"
+            >
+              Markdown
+            </button>
+          </div>
         </div>
       </div>
 
@@ -401,7 +402,7 @@ onBeforeUnmount(() => {
 }
 
 .pulse-btn:hover:not(:disabled),
-.pulse-tab-btn:hover {
+.pulse-tab-btn:hover:not(:disabled) {
   background: var(--pulse-muted-btn-hover);
 }
 
@@ -439,7 +440,8 @@ onBeforeUnmount(() => {
 }
 
 .pulse-btn:disabled,
-.pulse-textarea:disabled {
+.pulse-textarea:disabled,
+.pulse-tab-btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -560,6 +562,14 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid color-mix(in srgb, var(--pulse-panel-border) 44%, transparent);
 }
 
+.pulse-preview-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
 .pulse-preview-tabs {
   display: flex;
   flex-wrap: wrap;
@@ -570,6 +580,10 @@ onBeforeUnmount(() => {
   min-height: 24px;
   padding: 4px 8px;
   font-size: 11px;
+}
+
+.pulse-copy-btn {
+  min-width: 58px;
 }
 
 .pulse-tab-btn[data-active="true"] {

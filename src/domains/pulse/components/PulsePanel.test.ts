@@ -164,6 +164,31 @@ describe('PulsePanel', () => {
     harness.app.unmount()
   })
 
+  it('copies the generated preview markdown to the clipboard', async () => {
+    const writeText = vi.fn(async () => {})
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText }
+    })
+
+    const harness = mountHarness({
+      previewMarkdown: '# Title\n\n- Item',
+      sourceText: ''
+    })
+    await flush()
+
+    const copyButton = Array.from(harness.root.querySelectorAll('button'))
+      .find((button) => button.textContent?.trim() === 'Copy') as HTMLButtonElement
+    expect(copyButton).toBeTruthy()
+    copyButton.click()
+    await flush()
+
+    expect(writeText).toHaveBeenCalledWith('# Title\n\n- Item')
+    expect(copyButton.textContent?.trim()).toBe('Copied')
+
+    harness.app.unmount()
+  })
+
   it('falls back to rendered preview when no diff source is available', async () => {
     const harness = mountHarness({
       previewMarkdown: '# Title\n\n- Item',
