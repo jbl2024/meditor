@@ -16,7 +16,8 @@ import {
   turnIntoAll
 } from '../lib/tiptap/blockMenu/actions'
 import { extractSelectionClipboardPayload, writeSelectionPayloadToClipboard, type CopyAsFormat } from '../lib/editorClipboard'
-import { sanitizeExternalHref } from '../lib/markdownBlocks'
+import { markdownToEditorData, sanitizeExternalHref } from '../lib/markdownBlocks'
+import { toTiptapDoc } from '../lib/tiptap/editorBlocksToTiptapDoc'
 import { useInlineFormatToolbar } from './useInlineFormatToolbar'
 import { useEditorFindToolbar } from './useEditorFindToolbar'
 import { useBlockMenuControls } from './useBlockMenuControls'
@@ -742,25 +743,36 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     return guidance ? `${basePrompt}\n\nAdditional guidance: ${guidance}${quotedSource}` : `${basePrompt}${quotedSource}`
   }
 
+  function pulseMarkdownToInsertableContent(markdown: string) {
+    const parsed = markdownToEditorData(markdown)
+    if (!parsed.blocks.length) return []
+    const doc = toTiptapDoc(parsed.blocks)
+    return Array.isArray(doc.content) ? doc.content : []
+  }
+
   function replaceSelectionWithPulseOutput() {
     const editor = host.getEditor()
     if (!editor || !pulse.previewMarkdown.value.trim() || !pulseSelectionRange.value) return
-    editor.chain().focus().setTextSelection(pulseSelectionRange.value).insertContent(pulse.previewMarkdown.value).run()
+    const content = pulseMarkdownToInsertableContent(pulse.previewMarkdown.value)
+    if (!content.length) return
+    editor.chain().focus().setTextSelection(pulseSelectionRange.value).insertContent(content).run()
     closePulsePanel()
   }
 
   function insertPulseBelow() {
     const editor = host.getEditor()
     if (!editor || !pulse.previewMarkdown.value.trim()) return
+    const content = pulseMarkdownToInsertableContent(pulse.previewMarkdown.value)
+    if (!content.length) return
     if (pulseSelectionRange.value) {
       editor
         .chain()
         .focus()
         .setTextSelection({ from: pulseSelectionRange.value.to, to: pulseSelectionRange.value.to })
-        .insertContent(`\n\n${pulse.previewMarkdown.value}`)
+        .insertContent(content)
         .run()
     } else {
-      editor.chain().focus('end').insertContent(`\n\n${pulse.previewMarkdown.value}`).run()
+      editor.chain().focus('end').insertContent(content).run()
     }
     closePulsePanel()
   }

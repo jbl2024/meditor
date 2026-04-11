@@ -71,6 +71,7 @@ async function flushUi() {
 
 function createEditorStub(selection = { from: 1, to: 2, empty: false }) {
   const insertContentAt = vi.fn(() => ({ run: vi.fn(() => true) }))
+  const insertContent = vi.fn(() => ({ run: vi.fn(() => true) }))
   const paragraph = {
     type: { name: 'paragraph' },
     nodeSize: 4,
@@ -117,11 +118,14 @@ function createEditorStub(selection = { from: 1, to: 2, empty: false }) {
     chain: vi.fn(() => ({
       focus: vi.fn(() => ({
         setTextSelection: vi.fn(() => ({
-          insertContent: vi.fn(() => ({ run: vi.fn(() => true) }))
+          insertContent
         }))
       }))
-    }))
-  } as unknown as Editor
+    })),
+    __test: {
+      insertContent
+    }
+  } as unknown as Editor & { __test: { insertContent: ReturnType<typeof vi.fn> } }
 }
 
 function createClipboardEvent() {
@@ -442,6 +446,63 @@ describe('useEditorChromeRuntime', () => {
 
     expect(cancelMock).toHaveBeenCalled()
     expect(resetMock).toHaveBeenCalled()
+    expect(runtime.pulse.pulseOpen.value).toBe(false)
+  })
+
+  it('replaces the selection with interpreted markdown blocks instead of raw markdown text', () => {
+    const editor = createEditorStub()
+    const { runtime } = createRuntimeHarness({ activeEditor: ref<Editor | null>(editor) as Ref<Editor | null> })
+
+    previewMarkdown.value = '# Title\n\n- Item\n\n**Bold**'
+    runtime.pulse.pulseSelectionRange.value = { from: 10, to: 20 }
+    runtime.pulse.pulseOpen.value = true
+
+    runtime.pulse.replaceSelectionWithPulseOutput()
+
+    const insertContent = (editor as Editor & { __test: { insertContent: ReturnType<typeof vi.fn> } }).__test.insertContent
+    expect(insertContent).toHaveBeenCalledTimes(1)
+    const inserted = insertContent.mock.calls[0]?.[0]
+    expect(Array.isArray(inserted)).toBe(true)
+    expect(inserted).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'heading' }),
+        expect.objectContaining({ type: 'bulletList' }),
+        expect.objectContaining({
+          type: 'paragraph',
+          content: expect.arrayContaining([
+            expect.objectContaining({
+              type: 'text',
+              text: 'Bold'
+            })
+          ])
+        })
+      ])
+    )
+    expect(inserted).not.toContain('# Title\n\n- Item\n\n**Bold**')
+    expect(runtime.pulse.pulseOpen.value).toBe(false)
+  })
+
+  it('inserts interpreted markdown below the selection instead of raw markdown text', () => {
+    const editor = createEditorStub()
+    const { runtime } = createRuntimeHarness({ activeEditor: ref<Editor | null>(editor) as Ref<Editor | null> })
+
+    previewMarkdown.value = '## Follow up\n\n- Item'
+    runtime.pulse.pulseSelectionRange.value = { from: 10, to: 20 }
+    runtime.pulse.pulseOpen.value = true
+
+    runtime.pulse.insertPulseBelow()
+
+    const insertContent = (editor as Editor & { __test: { insertContent: ReturnType<typeof vi.fn> } }).__test.insertContent
+    expect(insertContent).toHaveBeenCalledTimes(1)
+    const inserted = insertContent.mock.calls[0]?.[0]
+    expect(Array.isArray(inserted)).toBe(true)
+    expect(inserted).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'heading' }),
+        expect.objectContaining({ type: 'bulletList' })
+      ])
+    )
+    expect(inserted).not.toContain('## Follow up\n\n- Item')
     expect(runtime.pulse.pulseOpen.value).toBe(false)
   })
 
