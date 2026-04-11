@@ -429,6 +429,14 @@
   z-index: 35;
   transform: translate(calc(-100% - 8px), -50%);
   pointer-events: auto;
+  opacity: 0.15;
+  transition: opacity 140ms ease;
+}
+
+.editor-holder .tomosona-block-gutter:hover,
+.editor-holder .tomosona-block-gutter:focus-within,
+.editor-holder .tomosona-block-gutter[data-menu-open="true"] {
+  opacity: 1;
 }
 
 .editor-holder .tomosona-block-controls {
@@ -468,18 +476,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  opacity: 0.52;
-  transition: opacity 140ms ease, background-color 120ms ease, border-color 120ms ease;
-}
-
-.editor-holder .tomosona-block-gutter:hover .tomosona-block-control-btn,
-.editor-holder .tomosona-block-gutter:focus-within .tomosona-block-control-btn,
-.editor-holder .tomosona-block-gutter[data-menu-open="true"] .tomosona-block-control-btn {
-  opacity: 1;
+  transition: background-color 120ms ease, border-color 120ms ease;
 }
 
 .editor-holder .tomosona-block-control-btn:hover {
-  opacity: 1;
   background: var(--editor-block-control-hover);
 }
 
