@@ -13,6 +13,7 @@ describe('EditorRightPane', () => {
     const onActiveNoteAddToContext = vi.fn()
     const onActiveNoteRemoveFromContext = vi.fn()
     const onActiveNoteOpenCosmos = vi.fn()
+    const onActiveNoteOpenPulse = vi.fn()
     const onEchoesAddToContext = vi.fn()
     const onEchoesReindex = vi.fn()
     const onContextOpen = vi.fn()
@@ -72,6 +73,7 @@ describe('EditorRightPane', () => {
           onActiveNoteAddToContext,
           onActiveNoteRemoveFromContext,
           onActiveNoteOpenCosmos,
+          onActiveNoteOpenPulse,
           onEchoesAddToContext,
           onEchoesReindex,
           onContextOpen,
@@ -103,6 +105,7 @@ describe('EditorRightPane', () => {
     expect(root.querySelector('.favorite-toggle-btn--active')).toBeTruthy()
     expect(root.textContent).toContain('Reason on This Context')
     expect(root.textContent).toContain('Explore in Cosmos')
+    expect(root.textContent).toContain('Pulse note')
     expect(root.textContent).toContain('Transform with Pulse')
 
     ;(root.querySelector('.favorite-toggle-btn') as HTMLButtonElement).click()
@@ -114,6 +117,9 @@ describe('EditorRightPane', () => {
     expect(onActiveNoteAddToContext).toHaveBeenCalledTimes(1)
     ;(root.querySelector('.secondary-note-btn') as HTMLButtonElement).click()
     expect(onActiveNoteOpenCosmos).toHaveBeenCalledTimes(1)
+    const secondaryButtons = Array.from(root.querySelectorAll('.secondary-note-btn')) as HTMLButtonElement[]
+    secondaryButtons[1].click()
+    expect(onActiveNoteOpenPulse).toHaveBeenCalledTimes(1)
 
     const echoesButtons = Array.from(root.querySelectorAll('.echoes-action-btn')) as HTMLButtonElement[]
     echoesButtons[0].click()

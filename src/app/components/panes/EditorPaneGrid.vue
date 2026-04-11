@@ -27,6 +27,7 @@ export type EditorPaneGridExposed = {
   focusEditor: () => void
   focusFirstContentBlock: () => void
   openNoteHistory: () => Promise<void>
+  openPulseForNote: () => void
   revealSnippet: (snippet: string) => Promise<void>
   revealOutlineHeading: (index: number) => Promise<void>
   revealAnchor: (anchor: WikilinkAnchor) => Promise<boolean>
@@ -245,6 +246,10 @@ async function openNoteHistory() {
   await ensureCall((editor) => editor.openNoteHistory(), Promise.resolve())
 }
 
+function openPulseForNote() {
+  ensureCall((editor) => editor.openPulseForNote(), undefined)
+}
+
 async function revealSnippet(snippet: string) {
   await ensureCall((editor) => editor.revealSnippet(snippet), Promise.resolve())
 }
@@ -288,6 +293,7 @@ defineExpose<EditorPaneGridExposed>({
   focusEditor,
   focusFirstContentBlock,
   openNoteHistory,
+  openPulseForNote,
   revealSnippet,
   revealOutlineHeading,
   revealAnchor,

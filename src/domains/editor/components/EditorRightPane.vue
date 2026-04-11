@@ -64,6 +64,7 @@ const emit = defineEmits<{
   'active-note-add-to-context': []
   'active-note-remove-from-context': []
   'active-note-open-cosmos': []
+  'active-note-open-pulse': []
   'echoes-open': [path: string]
   'echoes-add-to-context': [path: string]
   'echoes-remove-from-context': [path: string]
@@ -163,6 +164,15 @@ watch(
         @click="emit('active-note-open-cosmos')"
       >
         Open in Cosmos
+      </UiButton>
+      <UiButton
+        variant="ghost"
+        size="sm"
+        class-name="secondary-note-btn"
+        :disabled="!props.activeNotePath"
+        @click="emit('active-note-open-pulse')"
+      >
+        Pulse note
       </UiButton>
     </section>
 

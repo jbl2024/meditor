@@ -145,6 +145,7 @@ const emit = defineEmits<{
   activeNoteAddToContext: []
   activeNoteRemoveFromContext: []
   activeNoteOpenCosmos: []
+  activeNoteOpenPulse: []
   echoesOpen: [path: string]
   echoesAddToContext: [path: string]
   echoesRemoveFromContext: [path: string]
@@ -270,6 +271,7 @@ defineExpose<AppShellWorkspaceSurfaceExposed>({
           @active-note-add-to-context="emit('activeNoteAddToContext')"
           @active-note-remove-from-context="emit('activeNoteRemoveFromContext')"
           @active-note-open-cosmos="emit('activeNoteOpenCosmos')"
+          @active-note-open-pulse="emit('activeNoteOpenPulse')"
           @echoes-open="emit('echoesOpen', $event)"
           @echoes-add-to-context="emit('echoesAddToContext', $event)"
           @echoes-remove-from-context="emit('echoesRemoveFromContext', $event)"

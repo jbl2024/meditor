@@ -148,6 +148,21 @@ describe('EditorView Pulse flow', () => {
     harness.app.unmount()
   })
 
+  it('opens Pulse from the full note when requested from the side panel', async () => {
+    const harness = mountHarness()
+    await flushUi()
+
+    ;(harness.editorRef.value as { openPulseForNote?: () => void })?.openPulseForNote?.()
+    await flushUi()
+
+    const setupState = (harness.editorRef.value as { $?: { setupState?: Record<string, any> } })?.$?.setupState
+    expect(setupState?.pulseSourceKind).toBe('editor_note')
+    expect(setupState?.pulseSelectionRange).toBeNull()
+    expect(setupState?.pulseActionId).toBe('synthesize')
+
+    harness.app.unmount()
+  })
+
   it('runs with Enter, invalidates stale preview on prompt edit, and applies with Cmd+Enter', async () => {
     const harness = mountHarness()
     await flushUi()

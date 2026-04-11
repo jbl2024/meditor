@@ -33,7 +33,7 @@ export const PULSE_ACTIONS: PulseActionSpec[] = [
     description: 'Change the shape of the selected passage without judging it or altering its content.',
     family: 'text',
     keywords: ['text', 'selection', 'format', 'structure', 'shape', 'layout'],
-    available_in: ['editor_selection', 'second_brain_context']
+    available_in: ['editor_selection', 'editor_note', 'second_brain_context']
   },
   {
     id: 'rewrite',
@@ -41,7 +41,7 @@ export const PULSE_ACTIONS: PulseActionSpec[] = [
     description: 'Rewrite the selected passage for clarity while preserving its meaning.',
     family: 'text',
     keywords: ['text', 'selection', 'rewrite', 'clarify', 'rephrase'],
-    available_in: ['editor_selection', 'second_brain_context']
+    available_in: ['editor_selection', 'editor_note', 'second_brain_context']
   },
   {
     id: 'condense',
@@ -49,7 +49,7 @@ export const PULSE_ACTIONS: PulseActionSpec[] = [
     description: 'Shorten the selected text while preserving the essentials.',
     family: 'text',
     keywords: ['text', 'selection', 'condense', 'shorten', 'compress', 'summary'],
-    available_in: ['editor_selection', 'second_brain_context']
+    available_in: ['editor_selection', 'editor_note', 'second_brain_context']
   },
   {
     id: 'expand',
@@ -57,7 +57,7 @@ export const PULSE_ACTIONS: PulseActionSpec[] = [
     description: 'Develop the selected text into a fuller passage.',
     family: 'text',
     keywords: ['text', 'selection', 'expand', 'develop', 'elaborate'],
-    available_in: ['editor_selection', 'second_brain_context']
+    available_in: ['editor_selection', 'editor_note', 'second_brain_context']
   },
   {
     id: 'change_tone',
@@ -65,7 +65,7 @@ export const PULSE_ACTIONS: PulseActionSpec[] = [
     description: 'Adapt the tone while keeping the underlying content intact.',
     family: 'text',
     keywords: ['text', 'selection', 'tone', 'style', 'voice', 'rewrite'],
-    available_in: ['editor_selection', 'second_brain_context']
+    available_in: ['editor_selection', 'editor_note', 'second_brain_context']
   },
   {
     id: 'synthesize',
@@ -73,7 +73,7 @@ export const PULSE_ACTIONS: PulseActionSpec[] = [
     description: 'Synthesize the current context into a concise structure.',
     family: 'relations',
     keywords: ['context', 'relations', 'summary', 'synthesis'],
-    available_in: ['editor_note', 'second_brain_context', 'cosmos_focus']
+    available_in: ['editor_selection', 'editor_note', 'second_brain_context', 'cosmos_focus']
   },
   {
     id: 'outline',
@@ -81,7 +81,7 @@ export const PULSE_ACTIONS: PulseActionSpec[] = [
     description: 'Generate a clear plan from the active context set.',
     family: 'relations',
     keywords: ['context', 'relations', 'outline', 'plan', 'structure'],
-    available_in: ['editor_note', 'second_brain_context', 'cosmos_focus']
+    available_in: ['editor_selection', 'editor_note', 'second_brain_context', 'cosmos_focus']
   },
   {
     id: 'brief',
@@ -89,7 +89,7 @@ export const PULSE_ACTIONS: PulseActionSpec[] = [
     description: 'Turn the active context into a working brief.',
     family: 'relations',
     keywords: ['context', 'relations', 'brief', 'memo', 'summary'],
-    available_in: ['editor_note', 'second_brain_context', 'cosmos_focus']
+    available_in: ['editor_selection', 'editor_note', 'second_brain_context', 'cosmos_focus']
   },
   {
     id: 'extract_themes',
@@ -97,7 +97,7 @@ export const PULSE_ACTIONS: PulseActionSpec[] = [
     description: 'Identify dominant themes in the active context.',
     family: 'relations',
     keywords: ['context', 'relations', 'themes', 'topics', 'patterns'],
-    available_in: ['second_brain_context', 'cosmos_focus']
+    available_in: ['editor_selection', 'editor_note', 'second_brain_context', 'cosmos_focus']
   },
   {
     id: 'identify_tensions',
@@ -105,7 +105,7 @@ export const PULSE_ACTIONS: PulseActionSpec[] = [
     description: 'Call out tensions, gaps, and contradictions.',
     family: 'relations',
     keywords: ['context', 'relations', 'tensions', 'gaps', 'contradictions'],
-    available_in: ['second_brain_context', 'cosmos_focus']
+    available_in: ['editor_selection', 'editor_note', 'second_brain_context', 'cosmos_focus']
   }
 ]
 

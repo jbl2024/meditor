@@ -1984,6 +1984,7 @@ useAppShellKeyboard({
       @context-open-second-brain="void openConstitutedContextInSecondBrain()"
       @context-open-cosmos="void openConstitutedContextInCosmos()"
       @context-open-pulse="void openConstitutedContextInPulse()"
+      @active-note-open-pulse="void editorRef?.openPulseForNote()"
       @active-note-open-history="void openActiveNoteHistory()"
     >
       <template #center>

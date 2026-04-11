@@ -1,4 +1,4 @@
-import { computed, nextTick, ref, watch, type CSSProperties, type Ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type CSSProperties, type Ref } from 'vue'
 import type { Editor } from '@tiptap/vue-3'
 import type { BlockMenuActionItem, BlockMenuTarget, TurnIntoType } from '../lib/tiptap/blockMenu/types'
 import {
@@ -190,6 +190,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   const tableBoxTop = ref(0)
   const tableBoxWidth = ref(0)
   const tableBoxHeight = ref(0)
+  let layoutResizeObserver: ResizeObserver | null = null
 
   const renderedEditor = computed(() => host.getEditor())
 
@@ -568,6 +569,15 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     inlineFormatToolbar.updateFormattingToolbar()
   }
 
+  function syncLayoutGeometry() {
+    layoutMetrics.updateGutterHitboxStyle()
+    updateFormattingToolbar()
+    if (pulseOpen.value) {
+      pulseAnchorNonce.value += 1
+      updatePulsePanelMetrics()
+    }
+  }
+
   /**
    * Re-measures the floating Pulse panel after async content settles.
    */
@@ -630,6 +640,29 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
       layoutMetrics.updateGutterHitboxStyle()
     })
   }, { deep: true })
+
+  function observeLayoutResize() {
+    layoutResizeObserver?.disconnect()
+    layoutResizeObserver = null
+    if (typeof ResizeObserver === 'undefined') return
+    const targets = [host.holder.value, host.contentShell.value].filter((value): value is HTMLElement => Boolean(value))
+    if (!targets.length) return
+    layoutResizeObserver = new ResizeObserver(() => {
+      syncLayoutGeometry()
+    })
+    for (const target of targets) {
+      layoutResizeObserver.observe(target)
+    }
+  }
+
+  onMounted(() => {
+    observeLayoutResize()
+  })
+
+  onBeforeUnmount(() => {
+    layoutResizeObserver?.disconnect()
+    layoutResizeObserver = null
+  })
 
   function pulseDefaultInstruction(actionId: PulseActionId): string {
     return PULSE_ACTIONS_BY_SOURCE[pulseSourceKind.value].find((item) => item.id === actionId)?.description
@@ -698,6 +731,25 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     pulseActionId.value = 'rewrite'
     setPulseInstruction(pulseDefaultInstruction('rewrite'), { markDirty: false })
     pulseSelectionRange.value = { from, to }
+    pulseSourceText.value = text
+    resetPulseResult()
+    pulseAnchorNonce.value += 1
+    pulseOpen.value = true
+  }
+
+  /**
+   * Opens Pulse for the current note content so note-level actions can work on
+   * the full document instead of a selection.
+   */
+  function openPulseForNote() {
+    const editor = host.getEditor()
+    if (!editor) return
+    const text = editor.getText().trim()
+    if (!text) return
+    pulseSourceKind.value = 'editor_note'
+    pulseActionId.value = 'synthesize'
+    setPulseInstruction(pulseDefaultInstruction('synthesize'), { markDirty: false })
+    pulseSelectionRange.value = null
     pulseSourceText.value = text
     resetPulseResult()
     pulseAnchorNonce.value += 1
@@ -1116,6 +1168,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     pulsePanelStyle,
     updatePulsePanelMetrics,
     openPulseForSelection,
+    openPulseForNote,
     runPulseFromEditor,
     replaceSelectionWithPulseOutput,
     insertPulseBelow,
@@ -1226,6 +1279,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     pulseSelectionRange: pulseAndDialogs.pulseSelectionRange,
     pulsePanelStyle: pulseAndDialogs.pulsePanelStyle,
     openPulseForSelection: pulseAndDialogs.openPulseForSelection,
+    openPulseForNote: pulseAndDialogs.openPulseForNote,
     runPulseFromEditor: pulseAndDialogs.runPulseFromEditor,
     replaceSelectionWithPulseOutput: pulseAndDialogs.replaceSelectionWithPulseOutput,
     insertPulseBelow: pulseAndDialogs.insertPulseBelow,

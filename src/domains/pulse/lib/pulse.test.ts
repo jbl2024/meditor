@@ -4,6 +4,7 @@ import { PULSE_ACTIONS_BY_SOURCE, PULSE_APPLY_LABELS, getPulseDropdownItems } fr
 describe('pulse contracts', () => {
   it('defines actions for every supported source kind', () => {
     expect(PULSE_ACTIONS_BY_SOURCE.editor_selection.map((item) => item.id)).toContain('format')
+    expect(PULSE_ACTIONS_BY_SOURCE.editor_selection.map((item) => item.id)).toContain('extract_themes')
     expect(PULSE_ACTIONS_BY_SOURCE.editor_selection.map((item) => item.id)).toContain('rewrite')
     expect(PULSE_ACTIONS_BY_SOURCE.editor_note.map((item) => item.id)).toContain('synthesize')
     expect(PULSE_ACTIONS_BY_SOURCE.second_brain_context.map((item) => item.id)).toContain('outline')

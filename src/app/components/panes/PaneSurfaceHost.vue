@@ -96,6 +96,7 @@ type EditorSurfaceExposed = {
   focusEditor: () => void
   focusFirstContentBlock: () => void
   openNoteHistory: () => Promise<void>
+  openPulseForNote: () => void
   revealSnippet: (snippet: string) => Promise<void>
   revealOutlineHeading: (index: number) => Promise<void>
   revealAnchor: (anchor: WikilinkAnchor) => Promise<boolean>
@@ -159,6 +160,7 @@ defineExpose<EditorSurfaceExposed>({
   focusEditor: () => withEditor((editor) => editor.focusEditor(), undefined),
   focusFirstContentBlock: () => withEditor((editor) => editor.focusFirstContentBlock(), undefined),
   openNoteHistory: async () => await withEditor((editor) => editor.openNoteHistory(), Promise.resolve()),
+  openPulseForNote: () => withEditor((editor) => editor.openPulseForNote(), undefined),
   revealSnippet: async (snippet: string) => await withEditor((editor) => editor.revealSnippet(snippet), Promise.resolve()),
   revealOutlineHeading: async (index: number) => await withEditor((editor) => editor.revealOutlineHeading(index), Promise.resolve()),
   revealAnchor: async (anchor: WikilinkAnchor) => await withEditor((editor) => editor.revealAnchor(anchor), Promise.resolve(false)),

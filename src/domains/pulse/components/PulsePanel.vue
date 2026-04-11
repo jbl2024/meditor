@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { ChevronDownIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import UiFilterableDropdown, { type FilterableDropdownItem } from '../../../shared/components/ui/UiFilterableDropdown.vue'
 import { PULSE_APPLY_LABELS, type PulseActionSpec, type PulseApplyMode } from '../lib/pulse'
@@ -50,6 +50,8 @@ const compactMenuOpen = ref(false)
 const compactQuery = ref('')
 const compactActiveIndex = ref(0)
 const previewMode = ref<PulsePreviewMode>('preview')
+const copyFeedback = ref(false)
+let copyResetTimer: number | null = null
 const compactItems = computed<FilterableDropdownItem[]>(() =>
   props.actions.map((action) => ({
     id: action.id,
@@ -68,6 +70,8 @@ const effectivePreviewMode = computed<PulsePreviewMode>(() => {
 })
 const applyModesVisible = computed(() => panelState.value === 'result' && !props.running)
 const primaryApplyModeValue = computed(() => props.primaryApplyMode ?? props.applyModes[0] ?? null)
+const canCopyPreview = computed(() => panelState.value === 'result' && hasPreview.value && !props.running)
+const copyButtonLabel = computed(() => (copyFeedback.value ? 'Copied' : 'Copy'))
 const helperText = computed(() => {
   if (panelState.value === 'running') return 'Pulse is generating a preview. Nothing is applied until you confirm.'
   if (panelState.value === 'result') return 'Review the result, then choose how to apply it.'
@@ -85,6 +89,31 @@ function onCompactSelect(item: FilterableDropdownItem) {
 
 function setPreviewMode(mode: PulsePreviewMode) {
   previewMode.value = mode
+}
+
+function resetCopyFeedback() {
+  copyFeedback.value = false
+  if (copyResetTimer !== null) {
+    window.clearTimeout(copyResetTimer)
+    copyResetTimer = null
+  }
+}
+
+async function copyPreviewMarkdown() {
+  if (!canCopyPreview.value) return
+
+  try {
+    await navigator.clipboard.writeText(props.previewMarkdown)
+    copyFeedback.value = true
+    if (copyResetTimer !== null) {
+      window.clearTimeout(copyResetTimer)
+    }
+    copyResetTimer = window.setTimeout(() => {
+      resetCopyFeedback()
+    }, 1800)
+  } catch {
+    resetCopyFeedback()
+  }
 }
 
 function onPromptKeydown(event: KeyboardEvent) {
@@ -112,9 +141,14 @@ watch(
   () => props.previewMarkdown,
   () => {
     previewMode.value = canShowDiff.value ? 'diff' : 'preview'
+    resetCopyFeedback()
   },
   { immediate: true }
 )
+
+onBeforeUnmount(() => {
+  resetCopyFeedback()
+})
 </script>
 
 <template>
@@ -191,7 +225,17 @@ watch(
     <div class="pulse-preview">
       <div class="pulse-preview-head">
         <strong>Preview</strong>
-        <div v-if="panelState === 'result'" class="pulse-preview-tabs">
+      <div v-if="panelState === 'result'" class="pulse-preview-controls">
+        <button
+          type="button"
+          class="pulse-tab-btn pulse-copy-btn"
+          :disabled="!canCopyPreview"
+          :title="copyFeedback ? 'Copied' : 'Copy preview as markdown'"
+          @click="copyPreviewMarkdown"
+        >
+          {{ copyButtonLabel }}
+        </button>
+        <div class="pulse-preview-tabs">
           <button
             v-if="canShowDiff"
             type="button"

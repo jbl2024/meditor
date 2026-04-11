@@ -733,6 +733,7 @@ defineExpose({
   pulseActionId: pulse.pulseActionId,
   pulseSourceText: pulse.pulseSourceText,
   pulseSelectionRange: pulse.pulseSelectionRange,
+  openPulseForNote: pulse.openPulseForNote,
   setPulseInstruction: pulse.setPulseInstruction
 })
 </script>

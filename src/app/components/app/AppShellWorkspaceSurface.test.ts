@@ -70,6 +70,7 @@ function mountHarness() {
             onActiveNoteAddToContext: () => events.push('add-context'),
             onActiveNoteRemoveFromContext: () => events.push('remove-context'),
             onActiveNoteOpenCosmos: () => events.push('open-cosmos'),
+            onActiveNoteOpenPulse: () => events.push('open-pulse'),
             onActiveNoteOpenHistory: () => events.push('open-history'),
             onContextOpenSecondBrain: () => events.push('context-second-brain'),
             onContextOpenCosmos: () => events.push('context-cosmos'),
