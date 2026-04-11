@@ -25,11 +25,16 @@ function createEditorHarness() {
   })
 
   const selection = createSelection('heading', { level: 2 }, 'Title')
+  const editorDom = document.createElement('div')
+  Object.defineProperty(editorDom, 'getBoundingClientRect', {
+    configurable: true,
+    value: () => ({ left: 80, top: 50, width: 320, height: 600, right: 400, bottom: 650 })
+  })
   const editor = {
     isFocused: true,
     state: { selection },
     view: {
-      dom: document.createElement('div'),
+      dom: editorDom,
       hasFocus: () => true,
       nodeDOM: () => blockEl
     }
@@ -118,6 +123,29 @@ describe('useEditorBlockGutterController', () => {
       nodeType: 'bulletList',
       text: 'Item'
     })
+  })
+
+  it('anchors the toolbar to the editor left edge even for indented blocks', () => {
+    const harness = createEditorHarness()
+
+    // Simulate an indented block whose left edge is 40px right of the editor's left
+    const indentedBlockEl = document.createElement('div')
+    Object.defineProperty(indentedBlockEl, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({ left: 120, top: 120, width: 280, height: 24, right: 400, bottom: 144 })
+    })
+    harness.editor.view.nodeDOM = () => indentedBlockEl
+
+    const controller = useEditorBlockGutterController({
+      getEditor: () => harness.editor,
+      holder: harness.holder,
+      titleEditorFocused: harness.titleEditorFocused
+    })
+
+    controller.syncSelectionTarget()
+
+    // left must use editor.view.dom.left (80), not the indented block's left (120)
+    expect(controller.anchorRect.value?.left).toBe(64) // 80 - 20 + 4
   })
 
   it('pins a stable menu target while the live selection keeps moving', () => {
