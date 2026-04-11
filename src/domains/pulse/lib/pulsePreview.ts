@@ -1,4 +1,5 @@
-import { sanitizeExternalHref } from '../../editor/lib/markdownBlocks'
+import { marked } from 'marked'
+import { sanitizeHtmlForPreview } from '../../../shared/lib/htmlSanitizer'
 
 export type PulseDiffKind = 'unchanged' | 'removed' | 'added'
 
@@ -7,135 +8,24 @@ export type PulseDiffSegment = {
   text: string
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-}
+const PULSE_MARKED_OPTIONS = {
+  gfm: true,
+  breaks: true
+} as const
 
-function renderInlineMarkdown(value: string): string {
-  const escaped = escapeHtml(value)
-
-  return escaped
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, label: string, href: string) => {
-      const safeHref = sanitizeExternalHref(href.trim())
-      if (!safeHref) return `<span>${label}</span>`
-      return `<a href="${escapeHtml(safeHref)}" target="_blank" rel="noreferrer">${label}</a>`
-    })
-}
-
-function flushParagraph(lines: string[], html: string[]) {
-  if (lines.length === 0) return
-  html.push(`<p>${renderInlineMarkdown(lines.join(' '))}</p>`)
-  lines.length = 0
-}
-
-function flushList(kind: 'ul' | 'ol' | null, items: string[], html: string[]) {
-  if (!kind || items.length === 0) return
-  html.push(`<${kind}>${items.map((item) => `<li>${renderInlineMarkdown(item)}</li>`).join('')}</${kind}>`)
-  items.length = 0
-}
-
+/**
+ * Converts Pulse markdown into sanitized preview HTML.
+ *
+ * Pulse previews use the shared markdown renderer pattern so tables, task
+ * lists, and other GFM structures render consistently without trusting raw
+ * HTML output.
+ */
 export function renderPulseMarkdown(markdown: string): string {
-  const normalized = markdown.replace(/\r\n?/g, '\n').trim()
-  if (!normalized) return ''
+  const normalized = String(markdown ?? '').replace(/\r\n?/g, '\n')
+  if (!normalized.trim()) return ''
 
-  const html: string[] = []
-  const paragraph: string[] = []
-  const listItems: string[] = []
-  let listKind: 'ul' | 'ol' | null = null
-  let inFence = false
-  let fenceLines: string[] = []
-
-  for (const rawLine of normalized.split('\n')) {
-    const line = rawLine.trimEnd()
-
-    if (line.startsWith('```')) {
-      flushParagraph(paragraph, html)
-      flushList(listKind, listItems, html)
-      if (inFence) {
-        html.push(`<pre><code>${escapeHtml(fenceLines.join('\n'))}</code></pre>`)
-        fenceLines = []
-        inFence = false
-      } else {
-        inFence = true
-      }
-      continue
-    }
-
-    if (inFence) {
-      fenceLines.push(rawLine)
-      continue
-    }
-
-    if (!line) {
-      flushParagraph(paragraph, html)
-      flushList(listKind, listItems, html)
-      listKind = null
-      continue
-    }
-
-    const headingMatch = line.match(/^(#{1,6})\s+(.*)$/)
-    if (headingMatch) {
-      flushParagraph(paragraph, html)
-      flushList(listKind, listItems, html)
-      listKind = null
-      html.push(`<h${headingMatch[1].length}>${renderInlineMarkdown(headingMatch[2])}</h${headingMatch[1].length}>`)
-      continue
-    }
-
-    const quoteMatch = line.match(/^>\s?(.*)$/)
-    if (quoteMatch) {
-      flushParagraph(paragraph, html)
-      flushList(listKind, listItems, html)
-      listKind = null
-      html.push(`<blockquote><p>${renderInlineMarkdown(quoteMatch[1])}</p></blockquote>`)
-      continue
-    }
-
-    const unorderedMatch = line.match(/^[-*+]\s+(.*)$/)
-    if (unorderedMatch) {
-      flushParagraph(paragraph, html)
-      if (listKind && listKind !== 'ul') {
-        flushList(listKind, listItems, html)
-        listKind = null
-      }
-      listKind = 'ul'
-      listItems.push(unorderedMatch[1])
-      continue
-    }
-
-    const orderedMatch = line.match(/^\d+\.\s+(.*)$/)
-    if (orderedMatch) {
-      flushParagraph(paragraph, html)
-      if (listKind && listKind !== 'ol') {
-        flushList(listKind, listItems, html)
-        listKind = null
-      }
-      listKind = 'ol'
-      listItems.push(orderedMatch[1])
-      continue
-    }
-
-    flushList(listKind, listItems, html)
-    listKind = null
-    paragraph.push(line)
-  }
-
-  if (inFence) {
-    html.push(`<pre><code>${escapeHtml(fenceLines.join('\n'))}</code></pre>`)
-  }
-
-  flushParagraph(paragraph, html)
-  flushList(listKind, listItems, html)
-
-  return html.join('')
+  const html = marked.parse(normalized, PULSE_MARKED_OPTIONS)
+  return sanitizeHtmlForPreview(String(html ?? ''))
 }
 
 function tokenizeDiffInput(value: string): string[] {

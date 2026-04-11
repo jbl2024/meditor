@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { buildPulseDiff, renderPulseMarkdown } from './pulsePreview'
 
 describe('renderPulseMarkdown', () => {
-  it('renders headings, paragraphs, lists, quotes, and code blocks', () => {
+  it('renders headings, paragraphs, lists, quotes, code blocks, and tables', () => {
     const html = renderPulseMarkdown([
       '# Title',
       '',
@@ -15,14 +15,24 @@ describe('renderPulseMarkdown', () => {
       '',
       '```',
       'const value = 1 < 2',
-      '```'
+      '```',
+      '',
+      '| A | B |',
+      '| - | - |',
+      '| 1 | 2 |'
     ].join('\n'))
 
     expect(html).toContain('<h1>Title</h1>')
     expect(html).toContain('<p>Paragraph with <strong>bold</strong> and <em>emphasis</em>.</p>')
-    expect(html).toContain('<ul><li>First</li><li>Second</li></ul>')
-    expect(html).toContain('<blockquote><p>Quote</p></blockquote>')
+    expect(html).toContain('<ul>')
+    expect(html).toContain('<li>First</li>')
+    expect(html).toContain('<li>Second</li>')
+    expect(html).toContain('<blockquote>')
+    expect(html).toContain('<p>Quote</p>')
     expect(html).toContain('&lt; 2')
+    expect(html).toContain('<table>')
+    expect(html).toContain('<th>A</th>')
+    expect(html).toContain('<td>2</td>')
   })
 
   it('sanitizes dangerous links and escapes raw html', () => {
@@ -30,12 +40,14 @@ describe('renderPulseMarkdown', () => {
 
     expect(html).not.toContain('javascript:alert(1)')
     expect(html).not.toContain('<script>')
-    expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;')
+    expect(html).not.toContain('javascript:alert(1)')
   })
 
-  it('falls back cleanly on unsupported markdown structures', () => {
-    const html = renderPulseMarkdown('| A | B |\n| - | - |\n| 1 | 2 |')
-    expect(html).toContain('<p>| A | B | | - | - | | 1 | 2 |</p>')
+  it('sanitizes table and link html through the shared preview sanitizer', () => {
+    const html = renderPulseMarkdown('| A | B |\n| - | - |\n| 1 | [bad](javascript:alert(1)) |')
+    expect(html).toContain('<table>')
+    expect(html).not.toContain('javascript:alert(1)')
+    expect(html).not.toContain('<script>')
   })
 })
 
