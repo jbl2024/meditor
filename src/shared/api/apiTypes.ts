@@ -516,6 +516,7 @@ export type SecondBrainStreamEvent = {
 export type PulseSourceKind = 'editor_selection' | 'editor_note' | 'second_brain_context' | 'cosmos_focus'
 
 export type PulseActionId =
+  | 'format'
   | 'rewrite'
   | 'condense'
   | 'expand'

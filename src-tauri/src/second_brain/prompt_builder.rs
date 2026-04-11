@@ -201,6 +201,7 @@ pub(super) fn normalize_title_from_first_message(raw: &str) -> String {
 pub(super) fn normalize_pulse_action_id(raw: &str) -> Result<String> {
     let normalized = raw.trim().to_lowercase().replace('-', "_");
     let allowed = [
+        "format",
         "rewrite",
         "condense",
         "expand",
@@ -222,6 +223,9 @@ pub(super) fn normalize_pulse_action_id(raw: &str) -> Result<String> {
 
 pub(super) fn pulse_action_prompt(action_id: &str) -> &'static str {
     match action_id {
+        "format" => {
+            "Reformate la matiere fournie en changeant uniquement sa forme (structure, longueur, presentation), sans jugement ni ajout de contenu. Reponds en markdown."
+        }
         "rewrite" => {
             "Reecris la matiere fournie pour la rendre plus claire et plus fluide sans changer le fond. Reponds en markdown."
         }
@@ -652,6 +656,7 @@ mod tests {
 
     #[test]
     fn normalizes_supported_pulse_actions() {
+        assert_eq!(normalize_pulse_action_id("format").unwrap(), "format");
         assert_eq!(normalize_pulse_action_id("rewrite").unwrap(), "rewrite");
         assert_eq!(
             normalize_pulse_action_id("identify-tensions").unwrap(),
@@ -681,6 +686,11 @@ mod tests {
         assert!(built.user_prompt.contains("Use a diplomatic tone."));
         assert!(built.user_prompt.contains("Selection editeur"));
         assert!(built.included_context_paths.is_empty());
+    }
+
+    #[test]
+    fn format_prompt_emphasizes_shape_without_judgment() {
+        assert!(pulse_action_prompt("format").contains("sans ajouter de jugement"));
     }
 
     #[test]

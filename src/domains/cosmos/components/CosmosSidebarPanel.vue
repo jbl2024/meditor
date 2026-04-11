@@ -58,7 +58,7 @@ const pulseDropdownOpen = ref(false)
 const pulseDropdownQuery = ref('')
 const pulseDropdownActiveIndex = ref(0)
 const pulseActions = computed(() => PULSE_ACTIONS_BY_SOURCE.cosmos_focus)
-const pulseDropdownItems = computed(() => getPulseDropdownItems('cosmos_focus'))
+const pulseDropdownItems = computed(() => getPulseDropdownItems('cosmos_focus', { grouped: true }))
 const activePulseAction = computed(
   () => pulseActions.value.find((item) => item.id === pulseActionId.value) ?? pulseActions.value[0]
 )
@@ -118,6 +118,7 @@ const pulseContextPaths = computed(() => {
 function openPulseInSecondBrain() {
   if (!props.selectedNode) return
   const pulsePrompts: Partial<Record<PulseActionId, string>> = {
+    format: 'Reformat the selected graph context by changing only its shape (structure, length, presentation), not its content or judgment.',
     synthesize: 'Synthesize the selected graph context into a concise, structured summary. Highlight key themes and uncertainties.',
     outline: 'Turn the selected graph context into a clear outline with sections and logical progression.',
     brief: 'Draft a working brief from the selected graph context, including objective, key points, and open questions.',

@@ -3,6 +3,7 @@ import { PULSE_ACTIONS_BY_SOURCE, PULSE_APPLY_LABELS, getPulseDropdownItems } fr
 
 describe('pulse contracts', () => {
   it('defines actions for every supported source kind', () => {
+    expect(PULSE_ACTIONS_BY_SOURCE.editor_selection.map((item) => item.id)).toContain('format')
     expect(PULSE_ACTIONS_BY_SOURCE.editor_selection.map((item) => item.id)).toContain('rewrite')
     expect(PULSE_ACTIONS_BY_SOURCE.editor_note.map((item) => item.id)).toContain('synthesize')
     expect(PULSE_ACTIONS_BY_SOURCE.second_brain_context.map((item) => item.id)).toContain('outline')
@@ -17,8 +18,8 @@ describe('pulse contracts', () => {
 
   it('builds grouped dropdown items for second brain', () => {
     const items = getPulseDropdownItems('second_brain_context', { grouped: true })
-    expect(items.some((item) => item.group === 'Text' && item.id === 'rewrite')).toBe(true)
-    expect(items.some((item) => item.group === 'Relations' && item.id === 'identify_tensions')).toBe(true)
+    expect(items.some((item) => item.group === 'Transform text' && item.id === 'rewrite')).toBe(true)
+    expect(items.some((item) => item.group === 'Analyze context' && item.id === 'identify_tensions')).toBe(true)
     expect(items.find((item) => item.id === 'outline')?.aliases).toContain('plan')
   })
 })

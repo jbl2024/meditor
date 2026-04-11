@@ -341,6 +341,7 @@ export function useSecondBrainConversationRuntime(options: UseSecondBrainConvers
     }
     const nextInstruction = inputMessage.value.trim()
     const pulsePrompts: Partial<Record<PulseActionId, string>> = {
+      format: 'Reformat the current context by changing only its shape (structure, length, presentation), not its content or judgment.',
       rewrite: 'Rewrite the current context into a clearer version while preserving meaning.',
       condense: 'Condense the current context into a shorter version that keeps the key information.',
       expand: 'Expand the current context into a fuller draft with clearer structure and supporting detail.',

@@ -8,7 +8,7 @@ import { buildPulseDiff, renderPulseMarkdown } from '../lib/pulsePreview'
 type PulsePanelState = 'configure' | 'running' | 'result' | 'error'
 type PulsePreviewMode = 'diff' | 'preview' | 'markdown'
 
-const TEXT_ACTION_IDS = new Set(['rewrite', 'condense', 'expand', 'change_tone'])
+const TEXT_ACTION_IDS = new Set(['format', 'rewrite', 'condense', 'expand', 'change_tone'])
 
 const props = defineProps<{
   title?: string
@@ -55,6 +55,7 @@ const compactItems = computed<FilterableDropdownItem[]>(() =>
     id: action.id,
     label: action.label,
     description: action.description,
+    group: action.family === 'text' ? 'Transform text' : 'Analyze context',
     aliases: [action.label, action.description, ...action.keywords]
   }))
 )

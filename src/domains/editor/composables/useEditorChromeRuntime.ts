@@ -728,6 +728,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
    */
   function buildSecondBrainPulsePrompt(): string {
     const pulsePrompts: Partial<Record<PulseActionId, string>> = {
+      format: 'Reformat the provided material by changing only its shape (structure, length, presentation), not its content or judgment.',
       rewrite: 'Rewrite the provided material into a clearer version while preserving the original meaning.',
       condense: 'Condense the provided material into a shorter version that keeps the key information.',
       expand: 'Expand the provided material into a fuller draft with clearer transitions and supporting detail.',

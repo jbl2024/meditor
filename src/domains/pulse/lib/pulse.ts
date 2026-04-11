@@ -28,9 +28,17 @@ export type PulseDropdownItem = PulseActionSpec & {
 /** Complete catalog of Pulse actions supported by the frontend. */
 export const PULSE_ACTIONS: PulseActionSpec[] = [
   {
+    id: 'format',
+    label: 'Format',
+    description: 'Change the shape of the selected passage without judging it or altering its content.',
+    family: 'text',
+    keywords: ['text', 'selection', 'format', 'structure', 'shape', 'layout'],
+    available_in: ['editor_selection', 'second_brain_context']
+  },
+  {
     id: 'rewrite',
     label: 'Rewrite',
-    description: 'Clarify the selected passage without changing its meaning.',
+    description: 'Rewrite the selected passage for clarity while preserving its meaning.',
     family: 'text',
     keywords: ['text', 'selection', 'rewrite', 'clarify', 'rephrase'],
     available_in: ['editor_selection', 'second_brain_context']
@@ -38,7 +46,7 @@ export const PULSE_ACTIONS: PulseActionSpec[] = [
   {
     id: 'condense',
     label: 'Condense',
-    description: 'Shorten the selected text while preserving essentials.',
+    description: 'Shorten the selected text while preserving the essentials.',
     family: 'text',
     keywords: ['text', 'selection', 'condense', 'shorten', 'compress', 'summary'],
     available_in: ['editor_selection', 'second_brain_context']
@@ -54,7 +62,7 @@ export const PULSE_ACTIONS: PulseActionSpec[] = [
   {
     id: 'change_tone',
     label: 'Change tone',
-    description: 'Adapt tone while keeping the underlying content.',
+    description: 'Adapt the tone while keeping the underlying content intact.',
     family: 'text',
     keywords: ['text', 'selection', 'tone', 'style', 'voice', 'rewrite'],
     available_in: ['editor_selection', 'second_brain_context']
@@ -62,7 +70,7 @@ export const PULSE_ACTIONS: PulseActionSpec[] = [
   {
     id: 'synthesize',
     label: 'Synthesize',
-    description: 'Summarize the current context into a concise structure.',
+    description: 'Synthesize the current context into a concise structure.',
     family: 'relations',
     keywords: ['context', 'relations', 'summary', 'synthesis'],
     available_in: ['editor_note', 'second_brain_context', 'cosmos_focus']
@@ -110,7 +118,7 @@ export const PULSE_ACTIONS_BY_SOURCE: Record<PulseSourceKind, PulseActionSpec[]>
 }
 
 function pulseFamilyLabel(family: PulseActionSpec['family']): string {
-  return family === 'text' ? 'Text' : 'Relations'
+  return family === 'text' ? 'Transform text' : 'Analyze context'
 }
 
 /**
