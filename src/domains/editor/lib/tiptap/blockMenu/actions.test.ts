@@ -4,7 +4,7 @@ import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table
 import StarterKit from '@tiptap/starter-kit'
 import { type JSONContent, Editor } from '@tiptap/vue-3'
 import { afterEach, describe, expect, it } from 'vitest'
-import { turnInto, turnIntoAll } from './actions'
+import { deleteNodes, duplicateNodes, moveNodesDown, moveNodesUp, turnInto, turnIntoAll } from './actions'
 import type { BlockMenuTarget, TurnIntoType } from './types'
 
 const QuoteBlockNode = Node.create({
@@ -742,6 +742,65 @@ describe('blockMenu turnInto', () => {
       expect(editor.state.doc.child(1).attrs.level).toBe(3)
       expect(editor.state.doc.child(2).type.name).toBe('heading')
       expect(editor.state.doc.child(2).attrs.level).toBe(3)
+    })
+  })
+
+  describe('multi-block actions', () => {
+    function selectedTargets(editor: Editor, indexes: number[]): BlockMenuTarget[] {
+      const targets: BlockMenuTarget[] = []
+      editor.state.doc.forEach((_node, offset, index) => {
+        if (!indexes.includes(index)) return
+        targets.push(createTargetAtPos(editor, offset))
+      })
+      return targets
+    }
+
+    function docTexts(editor: Editor) {
+      return Array.from({ length: editor.state.doc.childCount }, (_unused, index) => editor.state.doc.child(index).textContent)
+    }
+
+    it('duplicates the full selected block range', () => {
+      const editor = createMultiEditor([
+        { type: 'paragraph', content: [{ type: 'text', text: 'A' }] },
+        { type: 'paragraph', content: [{ type: 'text', text: 'B' }] },
+        { type: 'paragraph', content: [{ type: 'text', text: 'C' }] }
+      ])
+
+      expect(duplicateNodes(editor, selectedTargets(editor, [0, 1]))).toBe(true)
+      expect(docTexts(editor).slice(0, 5)).toEqual(['A', 'B', 'A', 'B', 'C'])
+    })
+
+    it('deletes the full selected block range', () => {
+      const editor = createMultiEditor([
+        { type: 'paragraph', content: [{ type: 'text', text: 'A' }] },
+        { type: 'paragraph', content: [{ type: 'text', text: 'B' }] },
+        { type: 'paragraph', content: [{ type: 'text', text: 'C' }] }
+      ])
+
+      expect(deleteNodes(editor, selectedTargets(editor, [0, 1]))).toBe(true)
+      expect(docTexts(editor)[0]).toBe('C')
+    })
+
+    it('moves the selected block range up and down as a group', () => {
+      const upEditor = createMultiEditor([
+        { type: 'paragraph', content: [{ type: 'text', text: 'A' }] },
+        { type: 'paragraph', content: [{ type: 'text', text: 'B' }] },
+        { type: 'paragraph', content: [{ type: 'text', text: 'C' }] },
+        { type: 'paragraph', content: [{ type: 'text', text: 'D' }] }
+      ])
+
+      expect(moveNodesUp(upEditor, selectedTargets(upEditor, [1, 2]))).toBe(true)
+      expect(docTexts(upEditor).slice(0, 4)).toEqual(['B', 'C', 'A', 'D'])
+
+      const downEditor = createMultiEditor([
+        { type: 'paragraph', content: [{ type: 'text', text: 'A' }] },
+        { type: 'paragraph', content: [{ type: 'text', text: 'B' }] },
+        { type: 'paragraph', content: [{ type: 'text', text: 'C' }] },
+        { type: 'paragraph', content: [{ type: 'text', text: 'D' }] }
+      ])
+
+      expect(moveNodesDown(downEditor, selectedTargets(downEditor, [1, 2]))).toBe(true)
+      expect(docTexts(downEditor).slice(0, 4)).toEqual(['A', 'D', 'B', 'C'])
     })
   })
 

@@ -1,7 +1,20 @@
 import { computed, nextTick, ref, watch, type CSSProperties, type Ref } from 'vue'
 import type { Editor } from '@tiptap/vue-3'
 import type { BlockMenuActionItem, BlockMenuTarget, TurnIntoType } from '../lib/tiptap/blockMenu/types'
-import { deleteNode, duplicateNode, insertAbove, insertBelow, moveNodeDown, moveNodeUp, turnInto, turnIntoAll } from '../lib/tiptap/blockMenu/actions'
+import {
+  deleteNode,
+  deleteNodes,
+  duplicateNode,
+  duplicateNodes,
+  insertAbove,
+  insertBelow,
+  moveNodeDown,
+  moveNodeUp,
+  moveNodesDown,
+  moveNodesUp,
+  turnInto,
+  turnIntoAll
+} from '../lib/tiptap/blockMenu/actions'
 import { extractSelectionClipboardPayload, writeSelectionPayloadToClipboard, type CopyAsFormat } from '../lib/editorClipboard'
 import { sanitizeExternalHref } from '../lib/markdownBlocks'
 import { useInlineFormatToolbar } from './useInlineFormatToolbar'
@@ -269,16 +282,42 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     const editor = host.getEditor()
     const target = blockMenuControls.actionTarget.value
     if (!editor || !target || item.disabled) return
+    const selectionTargets = blockGutter.selectionTargets.value.filter((entry) => entry.pos >= 0)
+    const multiTargets = selectionTargets.length > 1 ? selectionTargets : []
 
     if (item.actionId === 'insert_above') insertAbove(editor, target)
     if (item.actionId === 'insert_below') insertBelow(editor, target)
-    if (item.actionId === 'move_up') moveNodeUp(editor, target)
-    if (item.actionId === 'move_down') moveNodeDown(editor, target)
-    if (item.actionId === 'duplicate') duplicateNode(editor, target)
-    if (item.actionId === 'delete') deleteNode(editor, target)
+    if (item.actionId === 'move_up') {
+      if (multiTargets.length > 0) {
+        moveNodesUp(editor, multiTargets)
+      } else {
+        moveNodeUp(editor, target)
+      }
+    }
+    if (item.actionId === 'move_down') {
+      if (multiTargets.length > 0) {
+        moveNodesDown(editor, multiTargets)
+      } else {
+        moveNodeDown(editor, target)
+      }
+    }
+    if (item.actionId === 'duplicate') {
+      if (multiTargets.length > 0) {
+        duplicateNodes(editor, multiTargets)
+      } else {
+        duplicateNode(editor, target)
+      }
+    }
+    if (item.actionId === 'delete') {
+      if (multiTargets.length > 0) {
+        deleteNodes(editor, multiTargets)
+      } else {
+        deleteNode(editor, target)
+      }
+    }
     if (item.actionId === 'copy_anchor') copyAnchorTarget(target)
     if (item.actionId === 'turn_into' && item.turnIntoType) {
-      const allTargets = blockGutter.menuTargets.value
+      const allTargets = multiTargets.length > 0 ? multiTargets : blockGutter.menuTargets.value
       if (allTargets.length > 1) {
         turnIntoAll(editor, allTargets, item.turnIntoType)
       } else {

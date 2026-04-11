@@ -295,6 +295,25 @@ function topLevelEntryByIndex(editor: Editor, index: number): { index: number; p
   return found
 }
 
+function topLevelEntriesForTargets(editor: Editor, targets: BlockMenuTarget[]) {
+  return targets
+    .map((target) => topLevelEntryByPos(editor, target.pos))
+    .filter((entry): entry is { index: number; pos: number; node: ProseNode } => Boolean(entry))
+    .sort((a, b) => a.pos - b.pos)
+}
+
+function topLevelRangeForTargets(editor: Editor, targets: BlockMenuTarget[]) {
+  const entries = topLevelEntriesForTargets(editor, targets)
+  if (!entries.length) return null
+  const first = entries[0]
+  const last = entries[entries.length - 1]
+  return {
+    entries,
+    from: first.pos,
+    to: last.pos + last.node.nodeSize
+  }
+}
+
 export function canMoveUp(editor: Editor, target: BlockMenuTarget): boolean {
   const current = topLevelEntryByPos(editor, target.pos)
   if (!current) return false
@@ -375,6 +394,72 @@ export function deleteNode(editor: Editor, target: BlockMenuTarget): boolean {
   tr.setSelection(TextSelection.near(tr.doc.resolve(fallback), -1))
   editor.view.dispatch(tr)
   editor.commands.focus()
+  return true
+}
+
+export function deleteNodes(editor: Editor, targets: BlockMenuTarget[]): boolean {
+  const range = topLevelRangeForTargets(editor, targets)
+  if (!range) return false
+
+  const tr = editor.state.tr.delete(range.from, range.to)
+  const fallback = Math.max(1, Math.min(range.from, tr.doc.content.size))
+  tr.setSelection(TextSelection.near(tr.doc.resolve(fallback), -1))
+  editor.view.dispatch(tr)
+  editor.commands.focus()
+  return true
+}
+
+export function duplicateNodes(editor: Editor, targets: BlockMenuTarget[]): boolean {
+  const range = topLevelRangeForTargets(editor, targets)
+  if (!range) return false
+
+  const clones = range.entries
+    .map((entry) => editor.state.doc.nodeAt(entry.pos))
+    .filter((node): node is ProseNode => Boolean(node))
+    .map((node) => editor.state.schema.nodeFromJSON(node.toJSON()))
+
+  if (!clones.length) return false
+
+  const insertPos = range.to
+  const tr = editor.state.tr.insert(insertPos, Fragment.fromArray(clones))
+  editor.view.dispatch(tr)
+  focusNearPos(editor, insertPos + 1)
+  return true
+}
+
+export function moveNodesUp(editor: Editor, targets: BlockMenuTarget[]): boolean {
+  const range = topLevelRangeForTargets(editor, targets)
+  if (!range || range.entries.length === 0) return false
+
+  const first = range.entries[0]
+  if (first.index === 0) return false
+  const previous = topLevelEntryByIndex(editor, first.index - 1)
+  if (!previous) return false
+
+  const from = previous.pos
+  const to = range.to
+  const fragment = Fragment.fromArray([...range.entries.map((entry) => entry.node), previous.node])
+  const tr = editor.state.tr.replaceWith(from, to, fragment)
+  editor.view.dispatch(tr)
+  focusNearPos(editor, from + 1)
+  return true
+}
+
+export function moveNodesDown(editor: Editor, targets: BlockMenuTarget[]): boolean {
+  const range = topLevelRangeForTargets(editor, targets)
+  if (!range || range.entries.length === 0) return false
+
+  const last = range.entries[range.entries.length - 1]
+  if (last.index >= editor.state.doc.childCount - 1) return false
+  const next = topLevelEntryByIndex(editor, last.index + 1)
+  if (!next) return false
+
+  const from = range.from
+  const to = next.pos + next.node.nodeSize
+  const fragment = Fragment.fromArray([next.node, ...range.entries.map((entry) => entry.node)])
+  const tr = editor.state.tr.replaceWith(from, to, fragment)
+  editor.view.dispatch(tr)
+  focusNearPos(editor, next.pos + 1)
   return true
 }
 
