@@ -475,18 +475,18 @@
 }
 
 .editor-holder .tomosona-block-menu-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 0.9rem;
-  font-size: 0.8rem;
-  font-weight: 700;
-  letter-spacing: -0.08em;
-  transform: translateY(-0.03rem);
+  width: 0.95rem;
+  height: 0.95rem;
+  stroke-width: 2;
 }
 
 .editor-holder .tomosona-block-grip-btn {
   padding: 0;
+  cursor: grab;
+}
+
+.editor-holder .tomosona-block-grip-btn:active {
+  cursor: grabbing;
 }
 
 .editor-holder .tomosona-block-grip-icon {

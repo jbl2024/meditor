@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, type Ref } from 'vue'
 import { Editor, EditorContent } from '@tiptap/vue-3'
+import { Bars3Icon } from '@heroicons/vue/24/outline'
 import { createExtractedNote, openExternalUrl } from '../../../shared/api/workspaceApi'
 import type {
   NoteHistoryEntry,
@@ -894,15 +895,17 @@ defineExpose({
                 type="button"
                 class="tomosona-block-control-btn"
                 aria-label="Open block menu"
+                title="Open block menu"
                 @mousedown.prevent.stop
                 @click.stop.prevent="toggleBlockMenu"
               >
-                <span class="tomosona-block-menu-icon" aria-hidden="true">...</span>
+                <Bars3Icon class="tomosona-block-menu-icon" aria-hidden="true" />
               </button>
               <button
                 type="button"
                 class="tomosona-block-control-btn tomosona-block-grip-btn"
                 aria-label="Drag block"
+                title="Drag block"
                 draggable="true"
                 @mousedown.stop
                 @dragstart.stop="onHandleDragStart"
