@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CodeBracketIcon, LinkIcon } from '@heroicons/vue/24/outline'
+import { ClipboardDocumentIcon, CodeBracketIcon, LinkIcon } from '@heroicons/vue/24/outline'
 import { nextTick, ref, watch } from 'vue'
 import type { InlineFormatMark, InlineFormatMarkOrLink } from '../../composables/useInlineFormatToolbar'
 
@@ -191,12 +191,12 @@ function onCopyAs(format: 'markdown' | 'html' | 'plain') {
         type="button"
         class="inline-format-toolbar-btn inline-flex items-center justify-center rounded-md px-2 py-1 text-xs font-semibold transition-all duration-150 active:translate-y-px active:scale-[0.98]"
         data-action="copy-menu-toggle"
-        aria-label="Copy as"
-        title="Copy as"
+        aria-label="Copy options"
+        title="Copy options"
         @mousedown.prevent
         @click="copyMenuOpen = !copyMenuOpen"
       >
-        ...
+        <ClipboardDocumentIcon class="h-4 w-4" />
       </button>
 
       <div
