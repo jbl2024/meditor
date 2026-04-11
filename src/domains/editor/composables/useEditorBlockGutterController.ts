@@ -81,8 +81,9 @@ export function useEditorBlockGutterController(options: {
 
     const holderRect = holder.getBoundingClientRect()
     const blockRect = blockElement.getBoundingClientRect()
+    const editorRect = editor.view.dom.getBoundingClientRect()
     anchorRect.value = {
-      left: blockRect.left - holderRect.left + holder.scrollLeft,
+      left: editorRect.left - holderRect.left + holder.scrollLeft,
       top: blockRect.top - holderRect.top + holder.scrollTop + blockRect.height / 2,
       width: blockRect.width,
       height: blockRect.height
