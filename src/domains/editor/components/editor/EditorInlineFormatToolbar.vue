@@ -297,22 +297,17 @@ function onSelectBlockAction(item: BlockMenuActionItem) {
       >
         <Bars3Icon class="h-4 w-4" />
       </button>
-
-      <div
+      <EditorBlockMenu
         v-if="blockMenuOpen"
-        class="inline-format-toolbar-popover absolute right-0 top-full z-40 mt-2"
-        @mousedown.stop
-      >
-        <EditorBlockMenu
-          :open="blockMenuOpen"
-          :index="blockMenuIndex"
-          :actions="blockMenuActions"
-          :convert-actions="blockMenuConvertActions"
-          @update:index="blockMenuIndex = $event"
-          @select="onSelectBlockAction"
-          @close="blockMenuOpen = false"
-        />
-      </div>
+        class="absolute right-0 top-full z-40 mt-2"
+        :open="blockMenuOpen"
+        :index="blockMenuIndex"
+        :actions="blockMenuActions"
+        :convert-actions="blockMenuConvertActions"
+        @update:index="blockMenuIndex = $event"
+        @select="onSelectBlockAction"
+        @close="blockMenuOpen = false"
+      />
     </div>
 
     <div
