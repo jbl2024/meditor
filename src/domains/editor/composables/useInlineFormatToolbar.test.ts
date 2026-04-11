@@ -85,6 +85,7 @@ describe('useInlineFormatToolbar', () => {
     const holder = ref<HTMLElement | null>({
       scrollLeft: 10,
       scrollTop: 5,
+      clientHeight: 400,
       getBoundingClientRect: () => ({ left: 50, top: 20 } as DOMRect)
     } as HTMLElement)
     const { editor } = createFakeEditor()
@@ -98,7 +99,28 @@ describe('useInlineFormatToolbar', () => {
 
     expect(toolbar.formatToolbarOpen.value).toBe(true)
     expect(toolbar.formatToolbarLeft.value).toBe(135)
-    expect(toolbar.formatToolbarTop.value).toBe(55)
+    expect(toolbar.formatToolbarTop.value).toBe(57)
+  })
+
+  it('keeps the toolbar inside the visible viewport when selection is near the top', () => {
+    const holder = ref<HTMLElement | null>({
+      scrollLeft: 0,
+      scrollTop: 0,
+      clientHeight: 120,
+      getBoundingClientRect: () => ({ left: 0, top: 0 } as DOMRect)
+    } as HTMLElement)
+    const { editor } = createFakeEditor()
+    const toolbar = useInlineFormatToolbar({
+      holder,
+      getEditor: () => editor,
+      sanitizeHref: (raw) => raw
+    })
+
+    toolbar.setToolbarHeight(44)
+    toolbar.updateFormattingToolbar()
+
+    expect(toolbar.formatToolbarOpen.value).toBe(true)
+    expect(toolbar.formatToolbarTop.value).toBe(70)
   })
 
   it('hides toolbar for empty selection', () => {

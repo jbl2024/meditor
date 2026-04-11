@@ -44,6 +44,7 @@ export function useInlineFormatToolbar(options: UseInlineFormatToolbarOptions) {
   const formatToolbarOpen = ref(false)
   const formatToolbarLeft = ref(0)
   const formatToolbarTop = ref(0)
+  const toolbarHeight = ref(44)
   const linkPopoverOpen = ref(false)
   const linkValue = ref('')
   const linkError = ref('')
@@ -118,9 +119,35 @@ export function useInlineFormatToolbar(options: UseInlineFormatToolbarOptions) {
     const end = editor.view.coordsAtPos(to)
     const holderRect = holderEl.getBoundingClientRect()
     const centerX = (start.left + end.right) / 2
+    const measuredToolbarHeight = Math.max(0, toolbarHeight.value || 44)
+    const viewportPadding = 8
+    const selectionTop = Math.min(start.top, end.top) - holderRect.top + holderEl.scrollTop
+    const selectionBottom = Math.max(start.bottom, end.bottom) - holderRect.top + holderEl.scrollTop
+    const viewportTop = holderEl.scrollTop + viewportPadding
+    const viewportBottom = holderEl.scrollTop + holderEl.clientHeight - viewportPadding
+    const aboveRenderedTop = selectionTop - 10 - measuredToolbarHeight
+    const belowRenderedTop = selectionBottom + 10
+
+    let renderedTop = aboveRenderedTop
+    if (renderedTop < viewportTop) {
+      renderedTop = belowRenderedTop + measuredToolbarHeight <= viewportBottom ? belowRenderedTop : viewportTop
+    } else if (renderedTop + measuredToolbarHeight > viewportBottom) {
+      renderedTop = belowRenderedTop + measuredToolbarHeight <= viewportBottom
+        ? belowRenderedTop
+        : Math.max(viewportTop, viewportBottom - measuredToolbarHeight)
+    }
+
     formatToolbarLeft.value = centerX - holderRect.left + holderEl.scrollLeft
-    formatToolbarTop.value = Math.min(start.top, end.top) - holderRect.top + holderEl.scrollTop - 10
+    formatToolbarTop.value = renderedTop + measuredToolbarHeight
     formatToolbarOpen.value = true
+  }
+
+  /**
+   * Records the current rendered toolbar height so selection positioning can
+   * keep the toolbar inside the visible viewport.
+   */
+  function setToolbarHeight(height: number) {
+    toolbarHeight.value = Math.max(0, height)
   }
 
   /**
@@ -276,6 +303,7 @@ export function useInlineFormatToolbar(options: UseInlineFormatToolbarOptions) {
     applyLink,
     unlinkLink,
     cancelLink,
+    setToolbarHeight,
     dismissToolbar
   }
 }

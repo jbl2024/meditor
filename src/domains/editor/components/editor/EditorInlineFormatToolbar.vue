@@ -45,9 +45,11 @@ const emit = defineEmits<{
   'apply-link': []
   unlink: []
   'cancel-link': []
+  'measure': [height: number]
   'update:linkValue': [value: string]
 }>()
 
+const toolbarEl = ref<HTMLDivElement | null>(null)
 const linkInputEl = ref<HTMLInputElement | null>(null)
 const blockMenuButtonEl = ref<HTMLButtonElement | null>(null)
 const blockMenuLeft = ref(0)
@@ -55,6 +57,11 @@ const blockMenuTop = ref(0)
 const copyMenuOpen = ref(false)
 const blockMenuOpen = ref(false)
 const blockMenuIndex = ref(0)
+let toolbarResizeObserver: ResizeObserver | null = null
+
+function reportToolbarHeight() {
+  emit('measure', toolbarEl.value?.getBoundingClientRect().height ?? 0)
+}
 
 watch(
   () => props.linkPopoverOpen,
@@ -73,7 +80,18 @@ watch(
     if (!open) {
       copyMenuOpen.value = false
       blockMenuOpen.value = false
+      emit('measure', 0)
+      return
     }
+    void nextTick(() => {
+      reportToolbarHeight()
+      if (!toolbarEl.value || typeof ResizeObserver === 'undefined') return
+      toolbarResizeObserver?.disconnect()
+      toolbarResizeObserver = new ResizeObserver(() => {
+        reportToolbarHeight()
+      })
+      toolbarResizeObserver.observe(toolbarEl.value)
+    })
   }
 )
 
@@ -99,6 +117,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('resize', onViewportChange)
   window.removeEventListener('scroll', onViewportChange, true)
+  toolbarResizeObserver?.disconnect()
+  toolbarResizeObserver = null
 })
 
 /**
@@ -186,6 +206,7 @@ function onSelectBlockAction(item: BlockMenuActionItem) {
 
 <template>
   <div
+    ref="toolbarEl"
     v-if="open"
     class="inline-format-toolbar absolute z-30 flex -translate-x-1/2 -translate-y-full items-center gap-1 rounded-md border p-1"
     :style="{ left: `${left}px`, top: `${top}px` }"

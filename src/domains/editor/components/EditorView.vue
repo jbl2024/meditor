@@ -910,6 +910,7 @@ defineExpose({
             @select-block-action="onBlockMenuSelect($event)"
             @open-pulse="openPulseForSelection"
             @copy-as="void onInlineToolbarCopyAs($event)"
+            @measure="inlineFormatToolbar.setToolbarHeight($event)"
             @apply-link="inlineFormatToolbar.applyLink"
             @unlink="inlineFormatToolbar.unlinkLink"
             @cancel-link="inlineFormatToolbar.cancelLink"
