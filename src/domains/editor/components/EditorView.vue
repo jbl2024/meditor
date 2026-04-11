@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch, type Ref } from 'vue'
+import { computed, ref, watch, type Ref } from 'vue'
 import { Editor, EditorContent } from '@tiptap/vue-3'
-import { DragHandle as DragHandleVue3 } from '@tiptap/extension-drag-handle-vue-3'
 import { createExtractedNote, openExternalUrl } from '../../../shared/api/workspaceApi'
 import type {
   NoteHistoryEntry,
@@ -197,7 +196,7 @@ interactionRuntime = useEditorInteractionRuntime({
     menus: {
       blockMenuOpen: chromeRuntime.blockAndTable.blockMenuOpen,
       tableToolbarOpen: chromeRuntime.blockAndTable.tableToolbarOpen,
-      isDragMenuOpen: () => chromeRuntime.blockAndTable.dragHandleUiState.value.menuOpen,
+      isDragMenuOpen: () => chromeRuntime.blockAndTable.blockMenuOpen.value,
       closeBlockMenu: () => chromeRuntime.blockAndTable.closeBlockMenu(),
       hideTableToolbar: () => chromeRuntime.blockAndTable.hideTableToolbar()
     },
@@ -344,7 +343,6 @@ const {
   loadDocumentStats
 } = documentRuntime
 const {
-  DRAG_HANDLE_PLUGIN_KEY,
   DRAG_HANDLE_DEBUG,
 } = chromeRuntime
 const {
@@ -405,13 +403,14 @@ const {
   tableToolbarViewportLeft,
   tableToolbarViewportTop,
   tableToolbarViewportMaxHeight,
-  dragHandleUiState,
-  computedDragLock,
+  blockGutterActiveTarget,
+  blockGutterAnchorRect,
+  blockGutterVisible,
+  blockGutterDragging,
+  blockGutterMenuOpen,
+  blockGutterContentFocused,
   debugTargetPos,
-  typingText,
-  blockHandleRevealSuppressedUntil,
   suppressBlockHandleReveal,
-  dragHandleComputePositionConfig,
   blockMenuOpen,
   blockMenuIndex,
   blockMenuActions,
@@ -420,11 +419,9 @@ const {
   toggleBlockMenu,
   onBlockMenuPlus,
   onBlockMenuSelect,
-  onBlockHandleNodeChange,
-  onHandleControlsEnter,
-  onHandleControlsLeave,
   onHandleDragStart,
   onHandleDragEnd,
+  syncBlockGutterAnchor,
   tableToolbarTriggerVisible,
   tableAddTopVisible,
   tableAddBottomVisible,
@@ -439,92 +436,19 @@ const {
   addRowBeforeFromTrigger,
   addColumnBeforeFromTrigger,
   addColumnAfterFromTrigger,
-  dragHandleNestedOptions,
   onEditorMouseMove,
   onEditorMouseLeave
 } = blockAndTable
 void suppressBlockHandleReveal
-const activeBlockStructureLabel = computed(() => getBlockStructureLabel(dragHandleUiState.value.activeTarget))
-const blockHandleVisible = ref(false)
-let blockHandleVisibilityTimer: number | null = null
-const BLOCK_HANDLE_HIDE_DELAY_MS = 120
-const BLOCK_HANDLE_SHOW_DELAY_MS = 320
-
-function clearBlockHandleVisibilityTimer() {
-  if (!blockHandleVisibilityTimer) return
-  clearTimeout(blockHandleVisibilityTimer)
-  blockHandleVisibilityTimer = null
-}
-
-function applyBlockHandleVisibility(nextVisible: boolean) {
-  const handleElement = contentShell.value?.querySelector('.tomosona-drag-handle') as HTMLElement | null
-  if (!handleElement) return
-  handleElement.style.visibility = 'visible'
-  handleElement.style.opacity = nextVisible ? '1' : '0'
-  handleElement.style.pointerEvents = nextVisible ? 'auto' : 'none'
-}
-
-function syncBlockDragHandleVisibilityState(options?: { immediateHide?: boolean }) {
-  const shouldShow = Boolean(dragHandleUiState.value.activeTarget)
-    && !typingText.value
-    && blockHandleRevealSuppressedUntil.value <= Date.now()
-  const nextVisible = shouldShow
-
-  if (options?.immediateHide && !nextVisible) {
-    clearBlockHandleVisibilityTimer()
-    blockHandleVisible.value = false
-    applyBlockHandleVisibility(false)
-    return
+const activeBlockStructureLabel = computed(() => getBlockStructureLabel(blockGutterActiveTarget.value))
+const blockGutterToolbarStyle = computed(() => {
+  const anchor = blockGutterAnchorRect.value
+  if (!anchor) return {}
+  return {
+    left: `${anchor.left}px`,
+    top: `${anchor.top}px`
   }
-
-  if (blockHandleVisible.value === nextVisible && blockHandleVisibilityTimer === null) {
-    applyBlockHandleVisibility(nextVisible)
-    return
-  }
-
-  clearBlockHandleVisibilityTimer()
-  blockHandleVisibilityTimer = window.setTimeout(() => {
-    blockHandleVisible.value = nextVisible
-    blockHandleVisibilityTimer = null
-    applyBlockHandleVisibility(nextVisible)
-  }, nextVisible ? BLOCK_HANDLE_SHOW_DELAY_MS : BLOCK_HANDLE_HIDE_DELAY_MS)
-}
-
-function syncBlockDragHandleVisibility() {
-  syncBlockDragHandleVisibilityState()
-}
-
-function syncBlockDragHandlePosition() {
-  const editor = renderedEditor.value
-  const target = dragHandleUiState.value.activeTarget
-  if (!editor || !target) return
-
-  const handleElement = contentShell.value?.querySelector('.tomosona-drag-handle') as HTMLElement | null
-  if (!handleElement) return
-
-  const targetDom = editor.view.nodeDOM(target.pos)
-  const blockElement = targetDom instanceof HTMLElement
-    ? targetDom
-    : targetDom instanceof Node
-      ? targetDom.parentElement
-      : null
-  if (!blockElement) return
-
-  const blockRect = blockElement.getBoundingClientRect()
-  const handleRect = handleElement.getBoundingClientRect()
-  const offsetParent = handleElement.offsetParent instanceof HTMLElement
-    ? handleElement.offsetParent
-    : (contentShell.value?.parentElement ?? contentShell.value)
-  const parentRect = offsetParent?.getBoundingClientRect()
-  if (!parentRect) return
-
-  const left = blockRect.left - parentRect.left - handleRect.width - 8
-  const top = blockRect.top - parentRect.top + Math.max(0, (blockRect.height - handleRect.height) / 2)
-
-  handleElement.style.position = 'absolute'
-  handleElement.style.left = `${left}px`
-  handleElement.style.top = `${top}px`
-}
+})
 
 const {
   renderedEditor,
@@ -534,32 +458,16 @@ const {
   gutterHitboxStyle
 } = layout
 watch(
-  () => dragHandleUiState.value.activeTarget,
+  [renderedEditor, blockGutterActiveTarget],
   () => {
-    syncBlockDragHandleVisibility()
-    syncBlockDragHandlePosition()
-  },
-  { immediate: true, flush: 'post' }
-)
-watch(
-  typingText,
-  () => {
-    syncBlockDragHandleVisibility()
-  },
-  { immediate: true, flush: 'post' }
-)
-watch(
-  blockHandleRevealSuppressedUntil,
-  () => {
-    syncBlockDragHandleVisibilityState({ immediateHide: true })
+    syncBlockGutterAnchor()
   },
   { immediate: true, flush: 'post' }
 )
 watch(
   renderedEditor,
   () => {
-    syncBlockDragHandleVisibility()
-    syncBlockDragHandlePosition()
+    syncBlockGutterAnchor()
   },
   { immediate: true, flush: 'post' }
 )
@@ -571,9 +479,6 @@ watch(
   },
   { immediate: true, flush: 'post' }
 )
-onBeforeUnmount(() => {
-  clearBlockHandleVisibilityTimer()
-})
 const {
   pulseOpen,
   pulse: pulseState,
@@ -880,17 +785,15 @@ defineExpose({
       </div>
       <div
         class="relative min-h-0 flex-1 overflow-hidden"
-        :data-drag-lock="computedDragLock ? 'true' : 'false'"
-        :data-menu-open="dragHandleUiState.menuOpen ? 'true' : 'false'"
-        :data-gutter-hover="dragHandleUiState.gutterHover ? 'true' : 'false'"
-        :data-controls-hover="dragHandleUiState.controlsHover ? 'true' : 'false'"
+        :data-menu-open="blockGutterMenuOpen ? 'true' : 'false'"
+        :data-dragging="blockGutterDragging ? 'true' : 'false'"
         :data-target-pos="debugTargetPos"
       >
         <div
           v-if="DRAG_HANDLE_DEBUG"
           class="pointer-events-none absolute right-2 top-2 z-50 rounded bg-slate-900/80 px-2 py-1 text-[11px] text-white"
         >
-          lock={{ computedDragLock }} menu={{ dragHandleUiState.menuOpen }} gutter={{ dragHandleUiState.gutterHover }} controls={{ dragHandleUiState.controlsHover }} drag={{ dragHandleUiState.dragging }} target={{ debugTargetPos }}
+          visible={{ blockGutterVisible }} focus={{ blockGutterContentFocused }} menu={{ blockGutterMenuOpen }} drag={{ blockGutterDragging }} target={{ debugTargetPos }}
         </div>
         <div
           class="editor-gutter-hitbox"
@@ -964,23 +867,16 @@ defineExpose({
               />
             </div>
           </div>
-          <!-- Invariant: interactive overlays/drag-handle stay bound to active editor only. -->
-          <DragHandleVue3
-            v-if="renderedEditor"
-            :key="`drag-handle:${currentPath || 'none'}`"
-            :editor="renderedEditor"
-            :plugin-key="DRAG_HANDLE_PLUGIN_KEY"
-            :compute-position-config="dragHandleComputePositionConfig"
+          <div
+            v-if="blockGutterVisible"
             class="tomosona-drag-handle"
-            :nested="dragHandleNestedOptions"
-            :on-node-change="onBlockHandleNodeChange"
-            :on-element-drag-start="onHandleDragStart"
-            :on-element-drag-end="onHandleDragEnd"
+            :style="blockGutterToolbarStyle"
           >
-            <div class="tomosona-block-controls" @mouseenter="onHandleControlsEnter" @mouseleave="onHandleControlsLeave">
+            <div class="tomosona-block-controls">
               <span
                 v-if="activeBlockStructureLabel"
                 class="tomosona-block-structure-label"
+                :title="blockGutterActiveTarget?.nodeType ?? ''"
                 aria-hidden="true"
               >
                 {{ activeBlockStructureLabel }}
@@ -989,17 +885,28 @@ defineExpose({
                 type="button"
                 class="tomosona-block-control-btn"
                 aria-label="Insert below"
-                @mousedown.stop
+                @mousedown.prevent.stop
                 @click.stop.prevent="onBlockMenuPlus"
               >
                 +
               </button>
               <button
                 type="button"
-                class="tomosona-block-control-btn tomosona-block-grip-btn"
+                class="tomosona-block-control-btn"
                 aria-label="Open block menu"
-                @mousedown.stop
+                @mousedown.prevent.stop
                 @click.stop.prevent="toggleBlockMenu"
+              >
+                <span class="tomosona-block-menu-icon" aria-hidden="true">...</span>
+              </button>
+              <button
+                type="button"
+                class="tomosona-block-control-btn tomosona-block-grip-btn"
+                aria-label="Drag block"
+                draggable="true"
+                @mousedown.stop
+                @dragstart.stop="onHandleDragStart"
+                @dragend.stop="onHandleDragEnd"
               >
                 <span class="tomosona-block-grip-icon" aria-hidden="true">
                   <span class="tomosona-block-grip-dot"></span>
@@ -1011,7 +918,7 @@ defineExpose({
                 </span>
               </button>
             </div>
-          </DragHandleVue3>
+          </div>
 
           <EditorInlineFormatToolbar
             :open="inlineFormatToolbar.formatToolbarOpen.value"

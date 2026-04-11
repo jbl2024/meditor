@@ -2,7 +2,6 @@ import { computed, ref, type Ref } from 'vue'
 import type { BlockMenuActionItem, BlockMenuTarget, TurnIntoType } from '../lib/tiptap/blockMenu/types'
 import { canCopyAnchor, canTurnInto } from '../lib/tiptap/blockMenu/guards'
 import { canMoveDown, canMoveUp } from '../lib/tiptap/blockMenu/actions'
-import { resolveActiveTarget } from '../lib/tiptap/blockMenu/dragHandleState'
 import type { Editor } from '@tiptap/vue-3'
 
 /**
@@ -12,7 +11,7 @@ import type { Editor } from '@tiptap/vue-3'
  * - Encapsulate block-menu target/action derivation.
  *
  * Responsibilities:
- * - Resolve active target from transient and stable values.
+ * - Resolve action availability from the current gutter/menu target.
  * - Build enabled/disabled action rows for move/duplicate/delete/copy.
  * - Build "turn into" action rows from allowed block types.
  *
@@ -23,14 +22,10 @@ export function useBlockMenuControls(options: {
   getEditor: () => Editor | null
   turnIntoTypes: TurnIntoType[]
   turnIntoLabels: Record<TurnIntoType, string>
-  activeTarget: Ref<BlockMenuTarget | null>
-  stableTarget: Ref<BlockMenuTarget | null>
+  target: Ref<BlockMenuTarget | null>
 }) {
-  const blockMenuOpen = ref(false)
   const blockMenuIndex = ref(0)
-  const blockMenuTarget = ref<BlockMenuTarget | null>(null)
-
-  const actionTarget = computed(() => resolveActiveTarget(options.activeTarget.value, options.stableTarget.value))
+  const actionTarget = computed(() => options.target.value)
 
   const actions = computed<BlockMenuActionItem[]>(() => {
     const editor = options.getEditor()
@@ -61,9 +56,7 @@ export function useBlockMenuControls(options: {
   })
 
   return {
-    blockMenuOpen,
     blockMenuIndex,
-    blockMenuTarget,
     actionTarget,
     actions,
     convertActions

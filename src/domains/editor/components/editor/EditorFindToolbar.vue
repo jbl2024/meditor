@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { XMarkIcon } from '@heroicons/vue/24/outline'
 import UiButton from '../../../../shared/components/ui/UiButton.vue'
 import UiInput from '../../../../shared/components/ui/UiInput.vue'
 import UiPanel from '../../../../shared/components/ui/UiPanel.vue'
@@ -129,7 +130,7 @@ function onInputKeydown(event: KeyboardEvent) {
       aria-label="Close find"
       @click="emit('close')"
     >
-      x
+      <XMarkIcon class="h-4 w-4" aria-hidden="true" />
     </UiButton>
   </UiPanel>
 </template>

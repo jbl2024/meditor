@@ -425,9 +425,10 @@
 }
 
 .editor-holder .tomosona-drag-handle {
+  position: absolute;
   z-index: 35;
-  opacity: 1;
-  transition: opacity 280ms ease;
+  transform: translate(calc(-100% - 8px), -50%);
+  pointer-events: auto;
 }
 
 .editor-holder .tomosona-block-controls {
@@ -435,18 +436,7 @@
   align-items: center;
   gap: 0.35rem;
   padding: 0;
-  padding-right: 0.8rem;
   line-height: 1;
-  opacity: 1;
-  transition: opacity 160ms ease;
-}
-
-@media (hover: hover) {
-  [data-menu-open='false'][data-gutter-hover='false'][data-controls-hover='false']
-    .tomosona-drag-handle[data-dragging='false']
-    .tomosona-block-controls:not(:hover):not(:focus-within) {
-    opacity: 0.56;
-  }
 }
 
 .editor-holder .tomosona-block-structure-label {
@@ -482,6 +472,17 @@
 
 .editor-holder .tomosona-block-control-btn:hover {
   background: var(--editor-block-control-hover);
+}
+
+.editor-holder .tomosona-block-menu-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0.9rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: -0.08em;
+  transform: translateY(-0.03rem);
 }
 
 .editor-holder .tomosona-block-grip-btn {

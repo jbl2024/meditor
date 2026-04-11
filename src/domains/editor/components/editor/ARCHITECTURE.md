@@ -10,7 +10,7 @@
 - Chrome runtime (toolbars/overlays/layout/pulse): `useEditorChromeRuntime`
   Internal organization should stay in a few local zones (`toolbars`, `blockAndTableControls`, `layoutAndZoom`, `pulseAndDialogs`) rather than new public mini-runtimes.
   Public API should stay grouped by usage (`loading`, `toolbars`, `blockAndTable`, `layout`, `pulse`, `dialogsAndLifecycle`) instead of being flattened back into `EditorView.vue`.
-  The block gutter reveal is intentionally delayed and can be suppressed briefly after typing or list-item insertion so structural edits do not flash the handle.
+  The block gutter is selection-driven: one controller owns target, anchor, visibility, menu pinning, and drag state so hover timing does not become a second source of truth.
 - Session lifecycle/status/autosave/request token: `useEditorSessionLifecycle`
 - Session status mutation bridge for session store + lifecycle emits: `useEditorSessionStatus`
 - File load/save orchestration: `useEditorFileLifecycle`
@@ -21,7 +21,7 @@
 - Wikilink overlay state machine: `useEditorWikilinkOverlayState`
 - Wikilink target/headings cache and resolve: `useEditorWikilinkDataSource`
 - Slash descriptor insertion mapping: `useEditorSlashInsertion`
-- Block handle/menu orchestration and drag lock: `useEditorBlockHandleControls`
+- Block gutter target/anchor/menu pinning: `useEditorBlockGutterController`
 - Header title state and rename sync: `useEditorTitleState`
 - Frontmatter generation, merge, and AI-assisted property actions: `useFrontmatterProperties`
 - Block menu action derivation: `useBlockMenuControls`

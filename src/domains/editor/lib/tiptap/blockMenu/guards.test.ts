@@ -18,12 +18,16 @@ describe('getBlockStructureLabel', () => {
   it('returns short labels for common block types', () => {
     expect(getBlockStructureLabel(target({ nodeType: 'paragraph' }))).toBe('P')
     expect(getBlockStructureLabel(target({ nodeType: 'codeBlock' }))).toBe('Code')
-    expect(getBlockStructureLabel(target({ nodeType: 'taskList' }))).toBe('List')
-    expect(getBlockStructureLabel(target({ nodeType: 'quoteBlock' }))).toBe('Quote')
-    expect(getBlockStructureLabel(target({ nodeType: 'calloutBlock' }))).toBe('Callout')
-    expect(getBlockStructureLabel(target({ nodeType: 'mermaidBlock' }))).toBe('Mermaid')
+    expect(getBlockStructureLabel(target({ nodeType: 'bulletList' }))).toBe('UL')
+    expect(getBlockStructureLabel(target({ nodeType: 'orderedList' }))).toBe('OL')
+    expect(getBlockStructureLabel(target({ nodeType: 'taskList' }))).toBe('TL')
+    expect(getBlockStructureLabel(target({ nodeType: 'listItem' }))).toBe('LI')
+    expect(getBlockStructureLabel(target({ nodeType: 'taskItem' }))).toBe('TI')
+    expect(getBlockStructureLabel(target({ nodeType: 'quoteBlock' }))).toBe('Q')
+    expect(getBlockStructureLabel(target({ nodeType: 'calloutBlock' }))).toBe('Cal')
+    expect(getBlockStructureLabel(target({ nodeType: 'mermaidBlock' }))).toBe('Mmd')
     expect(getBlockStructureLabel(target({ nodeType: 'htmlBlock' }))).toBe('HTML')
-    expect(getBlockStructureLabel(target({ nodeType: 'tableCell' }))).toBe('Table')
+    expect(getBlockStructureLabel(target({ nodeType: 'tableCell' }))).toBe('Tbl')
   })
 
   it('includes heading level when present', () => {

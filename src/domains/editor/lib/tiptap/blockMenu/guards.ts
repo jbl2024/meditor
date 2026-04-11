@@ -105,25 +105,29 @@ export function getBlockStructureLabel(target: BlockMenuTarget | null): string {
     case 'paragraph':
       return 'P'
     case 'bulletList':
+      return 'UL'
     case 'orderedList':
+      return 'OL'
     case 'taskList':
+      return 'TL'
     case 'listItem':
+      return 'LI'
     case 'taskItem':
-      return 'List'
+      return 'TI'
     case 'codeBlock':
       return 'Code'
     case 'blockquote':
     case 'quoteBlock':
-      return 'Quote'
+      return 'Q'
     case 'table':
     case 'tableRow':
     case 'tableCell':
     case 'tableHeader':
-      return 'Table'
+      return 'Tbl'
     case 'calloutBlock':
-      return 'Callout'
+      return 'Cal'
     case 'mermaidBlock':
-      return 'Mermaid'
+      return 'Mmd'
     case 'htmlBlock':
       return 'HTML'
     default:

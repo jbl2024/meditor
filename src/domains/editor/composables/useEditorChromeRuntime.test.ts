@@ -77,24 +77,44 @@ async function flushMicrotasks() {
 
 function createEditorStub(selection = { from: 1, to: 2, empty: false }) {
   const insertContentAt = vi.fn(() => ({ run: vi.fn(() => true) }))
+  const paragraph = {
+    type: { name: 'paragraph' },
+    nodeSize: 4,
+    attrs: {},
+    textContent: 'Alpha'
+  }
+  const normalizedSelection = {
+    ...selection,
+    $from: {
+      depth: 1,
+      parent: paragraph,
+      before: () => 1,
+      node: (depth: number) => (depth === 1 ? paragraph : { type: { name: 'doc' } })
+    }
+  }
   return {
+    isFocused: false,
     commands: {
       focus: vi.fn(),
       setMeta: vi.fn(),
       insertContentAt
     },
     state: {
-      selection,
+      selection: normalizedSelection,
       tr: {
         setMeta: vi.fn(() => ({}))
       },
       doc: {
-        textBetween: vi.fn(() => 'Alpha')
+        textBetween: vi.fn(() => 'Alpha'),
+        nodeAt: vi.fn(() => paragraph)
       }
     },
     view: {
+      dom: document.createElement('div'),
+      hasFocus: vi.fn(() => false),
       posAtCoords: vi.fn(() => ({ pos: 2 })),
-      dispatch: vi.fn()
+      dispatch: vi.fn(),
+      nodeDOM: vi.fn(() => document.createElement('p'))
     },
     getText: vi.fn(() => 'Alpha'),
     chain: vi.fn(() => ({
@@ -284,10 +304,27 @@ describe('useEditorChromeRuntime', () => {
     expect(insertContentAt).toHaveBeenCalledWith({ from: 10, to: 14 }, 'word')
   })
 
-  it('keeps nested drag-handle edge detection disabled so top text blocks stay targetable', () => {
+  it('exposes selection-driven block gutter state', () => {
     const { runtime } = createRuntimeHarness()
 
-    expect(runtime.blockAndTable.dragHandleNestedOptions.edgeDetection).toBe('none')
+    expect(runtime.blockAndTable.blockGutterVisible.value).toBe(false)
+    runtime.blockAndTable.blockGutterTarget.value = {
+      pos: 12,
+      nodeType: 'paragraph',
+      nodeSize: 4,
+      canDelete: true,
+      canConvert: true,
+      text: 'Alpha'
+    }
+    runtime.blockAndTable.blockGutterAnchorRect.value = {
+      left: 40,
+      top: 64,
+      width: 400,
+      height: 24
+    }
+    runtime.blockAndTable.blockGutterContentFocused.value = true
+
+    expect(runtime.blockAndTable.blockGutterVisible.value).toBe(true)
   })
 
   it('exposes loading overlay refs for document orchestration', () => {
@@ -302,11 +339,22 @@ describe('useEditorChromeRuntime', () => {
 
   it('resetTransientUiState closes menus, toolbars, and transient caches', async () => {
     const { runtime, interactionMocks } = createRuntimeHarness()
-    runtime.blockAndTable.dragHandleUiState.value = {
-      ...runtime.blockAndTable.dragHandleUiState.value,
-      activeTarget: { pos: 12, node: null, dom: null } as any
+    runtime.blockAndTable.blockGutterTarget.value = {
+      pos: 12,
+      nodeType: 'paragraph',
+      nodeSize: 4,
+      canDelete: true,
+      canConvert: true,
+      text: 'Alpha'
     }
-    runtime.blockAndTable.blockMenuTarget.value = { pos: 3, node: null, dom: null } as any
+    runtime.blockAndTable.blockMenuTarget.value = {
+      pos: 3,
+      nodeType: 'heading',
+      nodeSize: 4,
+      canDelete: true,
+      canConvert: true,
+      text: 'Title'
+    }
     runtime.toolbars.findToolbar.openToolbar()
     runtime.dialogsAndLifecycle.openMermaidPreview({
       svg: '<svg viewBox="0 0 10 10"></svg>',
@@ -321,7 +369,7 @@ describe('useEditorChromeRuntime', () => {
     expect(interactionMocks.closeWikilinkMenu).toHaveBeenCalled()
     expect(interactionMocks.resetWikilinkDataCache).toHaveBeenCalled()
     expect(runtime.blockAndTable.blockMenuTarget.value).toBeNull()
-    expect(runtime.blockAndTable.dragHandleUiState.value.activeTarget).toBeNull()
+    expect(runtime.blockAndTable.blockGutterTarget.value).toBeNull()
     expect(runtime.toolbars.findToolbar.open.value).toBe(false)
     expect(runtime.dialogsAndLifecycle.mermaidPreviewDialog.value.visible).toBe(false)
   })
@@ -367,32 +415,12 @@ describe('useEditorChromeRuntime', () => {
     await runtime.dialogsAndLifecycle.onUnmountCleanup()
   })
 
-  it('suppresses gutter reveal across structural list edits until the delay expires', async () => {
-    vi.useFakeTimers()
-    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
-      callback(0)
-      return 1
-    })
-    vi.setSystemTime(new Date('2026-03-09T10:00:00Z'))
+  it('keeps suppressBlockHandleReveal as a safe no-op for legacy input wiring', async () => {
     const { runtime } = createRuntimeHarness()
 
-    try {
-      runtime.blockAndTable.suppressBlockHandleReveal({ durationMs: 500 })
-
-      expect(runtime.blockAndTable.blockHandleRevealSuppressedUntil.value).toBeGreaterThan(Date.now())
-
-      await vi.advanceTimersByTimeAsync(250)
-      await flushMicrotasks()
-      expect(runtime.blockAndTable.blockHandleRevealSuppressedUntil.value).toBeGreaterThan(Date.now())
-
-      await vi.advanceTimersByTimeAsync(300)
-      await flushMicrotasks()
-      expect(runtime.blockAndTable.blockHandleRevealSuppressedUntil.value).toBe(0)
-
-      await runtime.dialogsAndLifecycle.onUnmountCleanup()
-    } finally {
-      vi.useRealTimers()
-    }
+    runtime.blockAndTable.suppressBlockHandleReveal({ durationMs: 500 })
+    runtime.blockAndTable.suppressBlockHandleReveal()
+    await runtime.dialogsAndLifecycle.onUnmountCleanup()
   })
 
   it('ignores title-field key events so header Enter does not route through body editor handlers', async () => {

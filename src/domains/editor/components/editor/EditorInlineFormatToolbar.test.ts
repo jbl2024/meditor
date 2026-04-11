@@ -90,7 +90,8 @@ describe('EditorInlineFormatToolbar', () => {
     const italic = harness.root.querySelector('[data-action="italic"]') as HTMLButtonElement
     expect(bold).toBeTruthy()
     expect(italic).toBeTruthy()
-    expect(bold.className).toContain('bg-slate-200')
+    expect(bold.className).toContain('inline-format-toolbar-btn--active')
+    expect(bold.className).not.toContain('bg-slate-200')
 
     harness.app.unmount()
   })

@@ -93,7 +93,7 @@ function onCopyAs(format: 'markdown' | 'html' | 'plain') {
       type="button"
       class="inline-format-toolbar-btn inline-flex items-center justify-center rounded-md px-2 py-1 text-xs transition-all duration-150 active:translate-y-px active:scale-[0.98]"
       data-action="bold"
-      :class="activeMarks.bold ? 'inline-format-toolbar-btn--active bg-slate-200' : ''"
+      :class="activeMarks.bold ? 'inline-format-toolbar-btn--active' : ''"
       @mousedown.prevent
       @click="emit('toggle-mark', 'bold')"
     >
@@ -103,7 +103,7 @@ function onCopyAs(format: 'markdown' | 'html' | 'plain') {
       type="button"
       class="inline-format-toolbar-btn inline-flex items-center justify-center rounded-md px-2 py-1 text-xs italic transition-all duration-150 active:translate-y-px active:scale-[0.98]"
       data-action="italic"
-      :class="activeMarks.italic ? 'inline-format-toolbar-btn--active bg-slate-200' : ''"
+      :class="activeMarks.italic ? 'inline-format-toolbar-btn--active' : ''"
       @mousedown.prevent
       @click="emit('toggle-mark', 'italic')"
     >
@@ -113,7 +113,7 @@ function onCopyAs(format: 'markdown' | 'html' | 'plain') {
       type="button"
       class="inline-format-toolbar-btn inline-flex items-center justify-center rounded-md px-2 py-1 text-xs line-through transition-all duration-150 active:translate-y-px active:scale-[0.98]"
       data-action="strike"
-      :class="activeMarks.strike ? 'inline-format-toolbar-btn--active bg-slate-200' : ''"
+      :class="activeMarks.strike ? 'inline-format-toolbar-btn--active' : ''"
       @mousedown.prevent
       @click="emit('toggle-mark', 'strike')"
     >
@@ -123,7 +123,7 @@ function onCopyAs(format: 'markdown' | 'html' | 'plain') {
       type="button"
       class="inline-format-toolbar-btn inline-flex items-center justify-center rounded-md px-2 py-1 text-xs underline transition-all duration-150 active:translate-y-px active:scale-[0.98]"
       data-action="underline"
-      :class="activeMarks.underline ? 'inline-format-toolbar-btn--active bg-slate-200' : ''"
+      :class="activeMarks.underline ? 'inline-format-toolbar-btn--active' : ''"
       @mousedown.prevent
       @click="emit('toggle-mark', 'underline')"
     >
@@ -135,7 +135,7 @@ function onCopyAs(format: 'markdown' | 'html' | 'plain') {
       data-action="code"
       aria-label="Code"
       title="Code"
-      :class="activeMarks.code ? 'inline-format-toolbar-btn--active bg-slate-200' : ''"
+      :class="activeMarks.code ? 'inline-format-toolbar-btn--active' : ''"
       @mousedown.prevent
       @click="emit('toggle-mark', 'code')"
     >
@@ -180,7 +180,7 @@ function onCopyAs(format: 'markdown' | 'html' | 'plain') {
       data-action="link"
       aria-label="Link"
       title="Link"
-      :class="activeMarks.link ? 'inline-format-toolbar-btn--active bg-slate-200' : ''"
+      :class="activeMarks.link ? 'inline-format-toolbar-btn--active' : ''"
       @mousedown.prevent
       @click="emit('open-link')"
     >
@@ -302,7 +302,7 @@ function onCopyAs(format: 'markdown' | 'html' | 'plain') {
   width: 7px;
   height: 7px;
   border-radius: 999px;
-  background: #22c55e;
+  background: var(--editor-pulse-indicator, #22c55e);
   position: relative;
   display: inline-block;
   flex-shrink: 0;
@@ -315,7 +315,7 @@ function onCopyAs(format: 'markdown' | 'html' | 'plain') {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: #22c55e;
+  background: var(--editor-pulse-indicator, #22c55e);
   animation: inline-format-toolbar-sonar 2.4s ease-out infinite;
 }
 
@@ -332,6 +332,13 @@ function onCopyAs(format: 'markdown' | 'html' | 'plain') {
   100% {
     transform: scale(3.6);
     opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inline-format-toolbar-pulse-dot::before,
+  .inline-format-toolbar-pulse-dot::after {
+    animation: none;
   }
 }
 

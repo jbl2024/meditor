@@ -1,14 +1,14 @@
 import { computed, nextTick, ref, watch, type CSSProperties, type Ref } from 'vue'
 import type { Editor } from '@tiptap/vue-3'
-import type { Middleware, MiddlewareState } from '@floating-ui/dom'
-import type { BlockMenuTarget, TurnIntoType } from '../lib/tiptap/blockMenu/types'
-import { computeHandleLock, type DragHandleUiState } from '../lib/tiptap/blockMenu/dragHandleState'
+import type { BlockMenuActionItem, BlockMenuTarget, TurnIntoType } from '../lib/tiptap/blockMenu/types'
+import { deleteNode, duplicateNode, insertAbove, insertBelow, moveNodeDown, moveNodeUp, turnInto } from '../lib/tiptap/blockMenu/actions'
 import { extractSelectionClipboardPayload, writeSelectionPayloadToClipboard, type CopyAsFormat } from '../lib/editorClipboard'
 import { sanitizeExternalHref } from '../lib/markdownBlocks'
+import { beginEditorBlockDrag } from '../lib/editorBlockDrag'
 import { useInlineFormatToolbar } from './useInlineFormatToolbar'
 import { useEditorFindToolbar } from './useEditorFindToolbar'
 import { useBlockMenuControls } from './useBlockMenuControls'
-import { useEditorBlockHandleControls } from './useEditorBlockHandleControls'
+import { useEditorBlockGutterController } from './useEditorBlockGutterController'
 import { useTableToolbarControls } from './useTableToolbarControls'
 import { useEditorTableGeometry } from './useEditorTableGeometry'
 import { useEditorTableInteractions } from './useEditorTableInteractions'
@@ -101,9 +101,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   const TABLE_EDGE_STICKY_MS = 280
   const TABLE_MARKDOWN_MODE = true
   const LARGE_DOC_THRESHOLD = 40_000
-  const DRAG_HANDLE_PLUGIN_KEY = 'tomosona-drag-handle'
   const DRAG_HANDLE_DEBUG = false
-  const DRAG_HANDLE_CONTENT_EDGE_GAP_PX = 2
   const TURN_INTO_TYPES: TurnIntoType[] = [
     'paragraph',
     'heading1',
@@ -151,10 +149,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   const pulseAnchorNonce = ref(0)
   const typingText = ref(false)
   let typingTextTimer: number | null = null
-  const blockHandleRevealSuppressedUntil = ref(0)
-  let blockHandleRevealSuppressionTimer: number | null = null
 
-  const lastStableBlockMenuTarget = ref<BlockMenuTarget | null>(null)
   const blockMenuFloatingEl = ref<HTMLDivElement | null>(null)
   const blockMenuPos = ref({ x: 0, y: 0 })
   const tableToolbarFloatingEl = ref<HTMLDivElement | null>(null)
@@ -186,29 +181,13 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   const tableBoxTop = ref(0)
   const tableBoxWidth = ref(0)
   const tableBoxHeight = ref(0)
-  const dragHandleUiState = ref<DragHandleUiState>({
-    menuOpen: false,
-    gutterHover: false,
-    controlsHover: false,
-    dragging: false,
-    selectionLocked: false,
-    activeTarget: null
-  })
 
   const renderedEditor = computed(() => host.getEditor())
-  const computedDragLock = computed(() => computeHandleLock(dragHandleUiState.value))
-  const debugTargetPos = computed(() => String(dragHandleUiState.value.activeTarget?.pos ?? ''))
 
   function clearTypingTextTimer() {
     if (!typingTextTimer) return
     clearTimeout(typingTextTimer)
     typingTextTimer = null
-  }
-
-  function clearBlockHandleRevealSuppressionTimer() {
-    if (!blockHandleRevealSuppressionTimer) return
-    clearTimeout(blockHandleRevealSuppressionTimer)
-    blockHandleRevealSuppressionTimer = null
   }
 
   /**
@@ -231,23 +210,14 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     }, 220)
   }
 
-  /**
-   * Delays gutter reappearance after list edits so new list items do not flash
-   * the block handle while the caret is still settling.
-   */
-  function suppressBlockHandleReveal(durationOrOptions?: number | { durationMs?: number }) {
-    const durationMs = typeof durationOrOptions === 'number'
-      ? durationOrOptions
-      : durationOrOptions?.durationMs ?? 500
-    const nextUntil = Date.now() + durationMs
-    blockHandleRevealSuppressedUntil.value = Math.max(blockHandleRevealSuppressedUntil.value, nextUntil)
-    clearBlockHandleRevealSuppressionTimer()
-    const remaining = Math.max(0, blockHandleRevealSuppressedUntil.value - Date.now())
-    blockHandleRevealSuppressionTimer = window.setTimeout(() => {
-      blockHandleRevealSuppressionTimer = null
-      blockHandleRevealSuppressedUntil.value = 0
-    }, remaining)
-  }
+  function suppressBlockHandleReveal(_durationOrOptions?: number | { durationMs?: number }) {}
+
+  const blockGutter = useEditorBlockGutterController({
+    getEditor: () => renderedEditor.value,
+    holder: host.holder,
+    titleEditorFocused
+  })
+  const debugTargetPos = computed(() => String(blockGutter.activeTarget.value?.pos ?? ''))
 
   const inlineFormatToolbar = useInlineFormatToolbar({
     holder: host.holder,
@@ -263,36 +233,110 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     getEditor: () => renderedEditor.value,
     turnIntoTypes: TURN_INTO_TYPES,
     turnIntoLabels: TURN_INTO_LABELS,
-    activeTarget: computed(() => dragHandleUiState.value.activeTarget),
-    stableTarget: lastStableBlockMenuTarget
+    target: computed(() => blockGutter.activeTarget.value)
   })
-  const blockHandleControls = useEditorBlockHandleControls({
-    getEditor: () => host.getEditor(),
-    blockMenuOpen: blockMenuControls.blockMenuOpen,
-    blockMenuIndex: blockMenuControls.blockMenuIndex,
-    blockMenuTarget: blockMenuControls.blockMenuTarget,
-    blockMenuActionTarget: blockMenuControls.actionTarget,
-    dragHandleUiState,
-    lastStableBlockMenuTarget,
-    setBlockMenuPos: (payload) => {
-      blockMenuPos.value = payload
-    },
-    setDragHandleLockMeta: (locked) => {
-      host.getEditor()?.commands.setMeta('lockDragHandle', locked)
-    },
-    closeSlashMenu: () => interaction.menus.closeSlashMenu(),
-    closeWikilinkMenu: () => interaction.menus.closeWikilinkMenu(),
-    openSlashAtSelection: () => interaction.menus.openSlashAtSelection(),
-    copyTextToClipboard: (text) => {
-      if (!navigator.clipboard?.writeText) return
-      void navigator.clipboard.writeText(text)
-    },
-    debug: DRAG_HANDLE_DEBUG
-      ? (event, detail) => {
-        // eslint-disable-next-line no-console
-        console.info('[drag-handle]', event, detail ?? '', dragHandleUiState.value)
-      }
-      : undefined
+
+  function closeBlockMenu() {
+    if (!blockGutter.menuOpen.value && blockMenuControls.blockMenuIndex.value === 0) {
+      return
+    }
+    blockMenuControls.blockMenuIndex.value = 0
+    blockGutter.closeMenu()
+  }
+
+  function positionBlockMenuFromTrigger(trigger: HTMLElement) {
+    const rect = trigger.getBoundingClientRect()
+    const estimatedWidth = 260
+    const estimatedHeight = 360
+    const maxX = Math.max(12, window.innerWidth - estimatedWidth - 12)
+    const maxY = Math.max(12, window.innerHeight - estimatedHeight - 12)
+    blockMenuPos.value = {
+      x: Math.max(12, Math.min(rect.right + 8, maxX)),
+      y: Math.max(12, Math.min(rect.top, maxY)),
+    }
+  }
+
+  function toggleBlockMenu(event: MouseEvent) {
+    event.preventDefault()
+    event.stopPropagation()
+    if (!blockGutter.target.value) return
+
+    if (blockGutter.menuOpen.value) {
+      closeBlockMenu()
+      return
+    }
+
+    if (event.currentTarget instanceof HTMLElement) {
+      positionBlockMenuFromTrigger(event.currentTarget)
+    }
+
+    interaction.menus.closeSlashMenu()
+    interaction.menus.closeWikilinkMenu()
+    blockMenuControls.blockMenuIndex.value = 0
+    blockGutter.openMenu()
+  }
+
+  function onBlockMenuPlus(event: MouseEvent) {
+    event.preventDefault()
+    event.stopPropagation()
+    const editor = host.getEditor()
+    const target = blockGutter.target.value
+    if (!editor || !target) return
+    interaction.menus.closeSlashMenu()
+    interaction.menus.closeWikilinkMenu()
+    insertBelow(editor, target)
+    interaction.menus.openSlashAtSelection()
+    blockGutter.syncSelectionTarget()
+  }
+
+  function copyTextToClipboard(text: string) {
+    if (!navigator.clipboard?.writeText) return
+    void navigator.clipboard.writeText(text)
+  }
+
+  function copyAnchorTarget(target: BlockMenuTarget) {
+    if (!target.text.trim()) return
+    copyTextToClipboard(`[[#${target.text.trim()}]]`)
+  }
+
+  function onBlockMenuSelect(item: BlockMenuActionItem) {
+    const editor = host.getEditor()
+    const target = blockMenuControls.actionTarget.value
+    if (!editor || !target || item.disabled) return
+
+    if (item.actionId === 'insert_above') insertAbove(editor, target)
+    if (item.actionId === 'insert_below') insertBelow(editor, target)
+    if (item.actionId === 'move_up') moveNodeUp(editor, target)
+    if (item.actionId === 'move_down') moveNodeDown(editor, target)
+    if (item.actionId === 'duplicate') duplicateNode(editor, target)
+    if (item.actionId === 'delete') deleteNode(editor, target)
+    if (item.actionId === 'copy_anchor') copyAnchorTarget(target)
+    if (item.actionId === 'turn_into' && item.turnIntoType) turnInto(editor, target, item.turnIntoType)
+
+    closeBlockMenu()
+    blockGutter.syncSelectionTarget()
+  }
+
+  function onHandleDragStart(event: DragEvent) {
+    const editor = host.getEditor()
+    const target = blockGutter.activeTarget.value
+    if (!editor || !target) return
+    closeBlockMenu()
+    if (!beginEditorBlockDrag({ event, editor, target })) return
+    blockGutter.startDragging()
+  }
+
+  function onHandleDragEnd() {
+    blockGutter.stopDragging()
+  }
+
+  watch(titleEditorFocused, (focused) => {
+    if (focused) {
+      closeBlockMenu()
+      blockGutter.syncContentFocus()
+      return
+    }
+    blockGutter.syncSelectionTarget()
   })
 
   function closeSpellcheckMenu() {
@@ -494,7 +538,10 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   const layoutMetrics = useEditorLayoutMetrics({
     holder: host.holder,
     contentShell: host.contentShell,
-    onScrollSync: () => tableInteractions.updateTableToolbar()
+    onScrollSync: () => {
+      tableInteractions.updateTableToolbar()
+      blockGutter.syncAnchor()
+    }
   })
   const {
     editorZoomStyle,
@@ -516,38 +563,6 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     exportMermaidSvg,
     exportMermaidPng
   } = useMermaidPreviewDialog()
-
-  const dragHandleLockXMiddleware: Middleware = {
-    name: 'tomosonaLockXToContent',
-    fn(state: MiddlewareState) {
-      const shellEl = host.contentShell.value
-      if (!shellEl) return {}
-      const shellRect = shellEl.getBoundingClientRect()
-      const shellStyle = window.getComputedStyle(shellEl)
-      const shellPaddingLeft = Number.parseFloat(shellStyle.paddingLeft || '0') || 0
-      const floatingEl = state.elements.floating
-      const offsetParent = floatingEl instanceof HTMLElement && floatingEl.offsetParent instanceof HTMLElement
-        ? floatingEl.offsetParent
-        : null
-      const offsetParentLeft = offsetParent?.getBoundingClientRect().left ?? 0
-      const referenceLeft = state.rects.reference.x
-      const targetReferenceLeft = shellRect.left + shellPaddingLeft - offsetParentLeft - DRAG_HANDLE_CONTENT_EDGE_GAP_PX
-      return { x: state.x + (targetReferenceLeft - referenceLeft) }
-    }
-  }
-  /**
-   * Keep nested drag targets eligible at the edges of headings/paragraphs.
-   *
-   * The default left/top edge preference can skip the first text blocks in the
-   * document, which makes the gutter feel absent even though the handle exists.
-   */
-  const dragHandleNestedOptions = {
-    edgeDetection: 'none' as const
-  }
-  const dragHandleComputePositionConfig = {
-    placement: 'left-start' as const,
-    middleware: [dragHandleLockXMiddleware]
-  }
 
   function updateFormattingToolbar() {
     inlineFormatToolbar.updateFormattingToolbar()
@@ -764,16 +779,14 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     interaction.menus.dismissSlashMenu()
     interaction.menus.closeWikilinkMenu()
     closeSpellcheckMenu()
-    blockHandleControls.closeBlockMenu()
-    blockMenuControls.blockMenuTarget.value = null
+    closeBlockMenu()
     inlineFormatToolbar.dismissToolbar()
     findToolbar.closeToolbar()
     tableInteractions.hideTableToolbarAnchor()
   }
 
   function resetDragHandleState() {
-    lastStableBlockMenuTarget.value = null
-    dragHandleUiState.value = { ...dragHandleUiState.value, activeTarget: null }
+    blockGutter.clear()
   }
 
   function resetTransientCaches() {
@@ -787,8 +800,6 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     closeTransientMenus()
     resetDragHandleState()
     resetTransientCaches()
-    clearBlockHandleRevealSuppressionTimer()
-    blockHandleRevealSuppressedUntil.value = 0
     closeMermaidPreview()
   }
 
@@ -798,10 +809,10 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
       if (!(target instanceof Node)) return
       const handleRoot = target instanceof Element ? target.closest('.tomosona-block-controls') : null
 
-      if (blockMenuControls.blockMenuOpen.value) {
+      if (blockGutter.menuOpen.value) {
         if (blockMenuFloatingEl.value?.contains(target)) return
         if (handleRoot) return
-        blockHandleControls.closeBlockMenu()
+        closeBlockMenu()
       }
 
       if (spellcheckMenuOpen.value) {
@@ -853,6 +864,16 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
 
     onHolderPointerDownMarkInteraction() {
       interaction.editorEvents.markEditorInteraction()
+    },
+
+    onHolderFocusIn() {
+      blockGutter.syncSelectionTarget()
+    },
+
+    onHolderFocusOut() {
+      window.setTimeout(() => {
+        blockGutter.syncContentFocus()
+      }, 0)
     },
 
     onHolderKeydown(event: KeyboardEvent) {
@@ -929,6 +950,8 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
    */
   function bindChromeEventListeners() {
     host.holder.value?.addEventListener('pointerdown', holderEvents.onHolderPointerDownMarkInteraction, true)
+    host.holder.value?.addEventListener('focusin', holderEvents.onHolderFocusIn, true)
+    host.holder.value?.addEventListener('focusout', holderEvents.onHolderFocusOut, true)
     host.holder.value?.addEventListener('keydown', holderEvents.onHolderKeydown, true)
     host.holder.value?.addEventListener('keyup', holderEvents.onHolderKeyup, true)
     host.holder.value?.addEventListener('contextmenu', holderEvents.onHolderContextMenu, true)
@@ -936,6 +959,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     host.holder.value?.addEventListener('copy', holderEvents.onHolderCopy, true)
     host.holder.value?.addEventListener('scroll', layoutMetrics.onHolderScroll, true)
     window.addEventListener('resize', layoutMetrics.updateGutterHitboxStyle)
+    window.addEventListener('resize', blockGutter.syncAnchor)
     document.addEventListener('keydown', documentEvents.onDocumentKeydown, true)
   }
 
@@ -944,6 +968,8 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
    */
   function unbindChromeEventListeners() {
     host.holder.value?.removeEventListener('pointerdown', holderEvents.onHolderPointerDownMarkInteraction, true)
+    host.holder.value?.removeEventListener('focusin', holderEvents.onHolderFocusIn, true)
+    host.holder.value?.removeEventListener('focusout', holderEvents.onHolderFocusOut, true)
     host.holder.value?.removeEventListener('keydown', holderEvents.onHolderKeydown, true)
     host.holder.value?.removeEventListener('keyup', holderEvents.onHolderKeyup, true)
     host.holder.value?.removeEventListener('contextmenu', holderEvents.onHolderContextMenu, true)
@@ -951,6 +977,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     host.holder.value?.removeEventListener('copy', holderEvents.onHolderCopy, true)
     host.holder.value?.removeEventListener('scroll', layoutMetrics.onHolderScroll, true)
     window.removeEventListener('resize', layoutMetrics.updateGutterHitboxStyle)
+    window.removeEventListener('resize', blockGutter.syncAnchor)
     document.removeEventListener('mousedown', documentEvents.onDocumentMouseDown, true)
     document.removeEventListener('keydown', documentEvents.onDocumentKeydown, true)
   }
@@ -991,6 +1018,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     initEditorZoomFromStorage()
     bindChromeEventListeners()
     await nextTick()
+    blockGutter.syncSelectionTarget()
     await waitForDocumentMouseDownBindFrame(sequence)
   }
 
@@ -998,9 +1026,8 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     mountSequence += 1
     cancelPendingDocumentMouseDownBind()
     clearTypingTextTimer()
-    clearBlockHandleRevealSuppressionTimer()
     typingText.value = false
-    blockHandleRevealSuppressedUntil.value = 0
+    blockGutter.clear()
     tableInteractions.clearTimers()
     if (mermaidReplaceDialog.value.resolve) {
       mermaidReplaceDialog.value.resolve(false)
@@ -1009,12 +1036,14 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   }
 
   function onActiveSessionChanged() {
-    blockHandleControls.resetLockState()
+    blockGutter.clear()
+    blockGutter.syncSelectionTarget()
     findToolbar.syncFromEditor()
   }
 
   function onDocumentContentChanged() {
     findToolbar.syncFromEditor()
+    blockGutter.syncAnchor()
   }
 
   const toolbars = {
@@ -1027,7 +1056,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   }
   const blockAndTableControls = {
     blockMenuControls,
-    blockHandleControls,
+    blockGutter,
     tableControls,
     tableGeometry,
     tableInteractions,
@@ -1043,10 +1072,13 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     tableToolbarViewportLeft,
     tableToolbarViewportTop,
     tableToolbarViewportMaxHeight,
-    dragHandleUiState,
-    computedDragLock,
     debugTargetPos,
-    closeBlockMenu: blockHandleControls.closeBlockMenu,
+    closeBlockMenu,
+    toggleBlockMenu,
+    onBlockMenuPlus,
+    onBlockMenuSelect,
+    onHandleDragStart,
+    onHandleDragEnd,
     hideTableToolbar: tableInteractions.hideTableToolbar,
     toggleTableToolbar: tableInteractions.toggleTableToolbar,
     onEditorMouseMove: tableInteractions.onEditorMouseMove,
@@ -1114,28 +1146,29 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     tableToolbarViewportLeft: blockAndTableControls.tableToolbarViewportLeft,
     tableToolbarViewportTop: blockAndTableControls.tableToolbarViewportTop,
     tableToolbarViewportMaxHeight: blockAndTableControls.tableToolbarViewportMaxHeight,
-    dragHandleUiState: blockAndTableControls.dragHandleUiState,
-    computedDragLock: blockAndTableControls.computedDragLock,
+    blockGutterTarget: blockAndTableControls.blockGutter.target,
+    blockGutterActiveTarget: blockAndTableControls.blockGutter.activeTarget,
+    blockMenuTarget: blockAndTableControls.blockGutter.menuTarget,
+    blockGutterAnchorRect: blockAndTableControls.blockGutter.anchorRect,
+    blockGutterVisible: blockAndTableControls.blockGutter.visible,
+    blockGutterDragging: blockAndTableControls.blockGutter.dragging,
+    blockGutterMenuOpen: blockAndTableControls.blockGutter.menuOpen,
+    blockGutterContentFocused: blockAndTableControls.blockGutter.contentFocused,
     debugTargetPos: blockAndTableControls.debugTargetPos,
     typingText,
-    blockHandleRevealSuppressedUntil,
     suppressBlockHandleReveal,
-    dragHandleComputePositionConfig,
-    blockMenuOpen: blockAndTableControls.blockMenuControls.blockMenuOpen,
+    blockMenuOpen: blockAndTableControls.blockGutter.menuOpen,
     blockMenuIndex: blockAndTableControls.blockMenuControls.blockMenuIndex,
-    blockMenuTarget: blockAndTableControls.blockMenuControls.blockMenuTarget,
     blockMenuActions: blockAndTableControls.blockMenuControls.actions,
     blockMenuConvertActions: blockAndTableControls.blockMenuControls.convertActions,
-    closeBlockMenu: blockAndTableControls.blockHandleControls.closeBlockMenu,
-    toggleBlockMenu: blockAndTableControls.blockHandleControls.toggleBlockMenu,
-    onBlockMenuPlus: blockAndTableControls.blockHandleControls.onBlockMenuPlus,
-    onBlockMenuSelect: blockAndTableControls.blockHandleControls.onBlockMenuSelect,
-    onBlockHandleNodeChange: blockAndTableControls.blockHandleControls.onBlockHandleNodeChange,
-    onBlockHandleSelectionUpdate: blockAndTableControls.blockHandleControls.onSelectionUpdate,
-    onHandleControlsEnter: blockAndTableControls.blockHandleControls.onHandleControlsEnter,
-    onHandleControlsLeave: blockAndTableControls.blockHandleControls.onHandleControlsLeave,
-    onHandleDragStart: blockAndTableControls.blockHandleControls.onHandleDragStart,
-    onHandleDragEnd: blockAndTableControls.blockHandleControls.onHandleDragEnd,
+    closeBlockMenu: blockAndTableControls.closeBlockMenu,
+    toggleBlockMenu: blockAndTableControls.toggleBlockMenu,
+    onBlockMenuPlus: blockAndTableControls.onBlockMenuPlus,
+    onBlockMenuSelect: blockAndTableControls.onBlockMenuSelect,
+    onBlockHandleSelectionUpdate: blockAndTableControls.blockGutter.syncSelectionTarget,
+    syncBlockGutterAnchor: blockAndTableControls.blockGutter.syncAnchor,
+    onHandleDragStart: blockAndTableControls.onHandleDragStart,
+    onHandleDragEnd: blockAndTableControls.onHandleDragEnd,
     tableToolbarTriggerVisible: blockAndTableControls.tableControls.tableToolbarTriggerVisible,
     tableAddTopVisible: blockAndTableControls.tableControls.tableAddTopVisible,
     tableAddBottomVisible: blockAndTableControls.tableControls.tableAddBottomVisible,
@@ -1152,7 +1185,6 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     addRowBeforeFromTrigger: blockAndTableControls.tableInteractions.addRowBeforeFromTrigger,
     addColumnBeforeFromTrigger: blockAndTableControls.tableInteractions.addColumnBeforeFromTrigger,
     addColumnAfterFromTrigger: blockAndTableControls.tableInteractions.addColumnAfterFromTrigger,
-    dragHandleNestedOptions,
     onEditorMouseMove: blockAndTableControls.onEditorMouseMove,
     onEditorMouseLeave: blockAndTableControls.onEditorMouseLeave
   }
@@ -1220,7 +1252,6 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   }
 
   return {
-    DRAG_HANDLE_PLUGIN_KEY,
     DRAG_HANDLE_DEBUG,
     TABLE_MARKDOWN_MODE,
     loading,
