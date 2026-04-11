@@ -716,7 +716,6 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
       void pulse.cancel()
     }
     pulseOpen.value = false
-    resetPulseResult()
   }
 
   /**
@@ -729,13 +728,20 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     if (empty || from === to) return
     const text = editor.state.doc.textBetween(from, to, '\n', '\n').trim()
     if (!text) return
+    const sameSelection =
+      pulseSourceKind.value === 'editor_selection' &&
+      pulseSelectionRange.value?.from === from &&
+      pulseSelectionRange.value?.to === to &&
+      pulseSourceText.value === text
     pulseSourceKind.value = 'editor_selection'
-    pulseActionId.value = 'rewrite'
-    setPulseInstruction(pulseDefaultInstruction('rewrite'), { markDirty: false })
     pulseSelectionRange.value = { from, to }
     pulseSourceText.value = text
-    resetPulseResult()
-    pulseAnchorNonce.value += 1
+    if (!sameSelection) {
+      pulseActionId.value = 'rewrite'
+      setPulseInstruction(pulseDefaultInstruction('rewrite'), { markDirty: false })
+      resetPulseResult()
+      pulseAnchorNonce.value += 1
+    }
     pulseOpen.value = true
   }
 
@@ -748,13 +754,18 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     if (!editor) return
     const text = editor.getText().trim()
     if (!text) return
+    const sameNote =
+      pulseSourceKind.value === 'editor_note' &&
+      pulseSourceText.value === text
     pulseSourceKind.value = 'editor_note'
-    pulseActionId.value = 'synthesize'
-    setPulseInstruction(pulseDefaultInstruction('synthesize'), { markDirty: false })
     pulseSelectionRange.value = null
     pulseSourceText.value = text
-    resetPulseResult()
-    pulseAnchorNonce.value += 1
+    if (!sameNote) {
+      pulseActionId.value = 'synthesize'
+      setPulseInstruction(pulseDefaultInstruction('synthesize'), { markDirty: false })
+      resetPulseResult()
+      pulseAnchorNonce.value += 1
+    }
     pulseOpen.value = true
   }
 

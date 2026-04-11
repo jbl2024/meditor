@@ -436,7 +436,7 @@ describe('useEditorChromeRuntime', () => {
     await runtime.dialogsAndLifecycle.onUnmountCleanup()
   })
 
-  it('closePulsePanel cancels a running request and resets the preview state', () => {
+  it('closePulsePanel cancels a running request and preserves the preview state', () => {
     const { runtime } = createRuntimeHarness()
     runtime.pulse.pulseOpen.value = true
     previewMarkdown.value = 'Draft'
@@ -445,8 +445,8 @@ describe('useEditorChromeRuntime', () => {
     runtime.pulse.closePulsePanel()
 
     expect(cancelMock).toHaveBeenCalled()
-    expect(resetMock).toHaveBeenCalled()
     expect(runtime.pulse.pulseOpen.value).toBe(false)
+    expect(previewMarkdown.value).toBe('Draft')
   })
 
   it('replaces the selection with interpreted markdown blocks instead of raw markdown text', () => {
@@ -522,6 +522,25 @@ describe('useEditorChromeRuntime', () => {
     expect(valid.runtime.pulse.pulseSourceKind.value).toBe('editor_selection')
     expect(valid.runtime.pulse.pulseSelectionRange.value).toEqual({ from: 1, to: 2 })
     expect(valid.runtime.pulse.pulseSourceText.value).toBe('Alpha')
+  })
+
+  it('reopens Pulse with the existing draft when the same selection is opened again', () => {
+    const harness = createRuntimeHarness()
+    harness.runtime.pulse.pulseActionId.value = 'condense'
+    harness.runtime.pulse.pulseInstruction.value = 'Keep the same draft.'
+    previewMarkdown.value = 'Existing draft'
+    harness.runtime.pulse.pulseSourceKind.value = 'editor_selection'
+    harness.runtime.pulse.pulseSelectionRange.value = { from: 1, to: 2 }
+    harness.runtime.pulse.pulseSourceText.value = 'Alpha'
+
+    harness.runtime.pulse.closePulsePanel()
+    harness.runtime.pulse.openPulseForSelection()
+
+    expect(harness.runtime.pulse.pulseOpen.value).toBe(true)
+    expect(harness.runtime.pulse.pulseActionId.value).toBe('condense')
+    expect(harness.runtime.pulse.pulseInstruction.value).toBe('Keep the same draft.')
+    expect(previewMarkdown.value).toBe('Existing draft')
+    expect(harness.runtime.pulse.pulseSelectionRange.value).toEqual({ from: 1, to: 2 })
   })
 
   it('sendPulseContextToSecondBrain emits and closes Pulse, but ignores note mode without currentPath', () => {
