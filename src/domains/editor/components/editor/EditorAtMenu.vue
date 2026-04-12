@@ -58,10 +58,6 @@ function labelForItem(item: unknown): string {
 function detailForItem(item: unknown): string {
   return ((item as { item?: EditorAtMacroEntry })?.item?.replacement ?? '') as string
 }
-
-function macroForItem(item: unknown): EditorAtMacroEntry | null {
-  return (item as { item?: EditorAtMacroEntry } | null)?.item ?? null
-}
 </script>
 
 <template>
