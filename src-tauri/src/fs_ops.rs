@@ -1064,6 +1064,82 @@ fn preview_srcdoc_csp_meta() -> &'static str {
     r#"<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; font-src 'self' data:; media-src data:">"#
 }
 
+fn find_ascii_case_insensitive(haystack: &str, needle: &str) -> Option<usize> {
+    let haystack = haystack.as_bytes();
+    let needle = needle.as_bytes();
+    if needle.is_empty() || needle.len() > haystack.len() {
+        return None;
+    }
+
+    haystack
+        .windows(needle.len())
+        .position(|window| window.eq_ignore_ascii_case(needle))
+}
+
+fn find_tag_open_end(html: &str, tag_start: usize) -> Option<usize> {
+    let bytes = html.as_bytes();
+    let mut index = tag_start;
+    let mut quote: Option<u8> = None;
+
+    while index < bytes.len() {
+        let current = bytes[index];
+        match quote {
+            Some(active_quote) if current == active_quote => quote = None,
+            Some(_) => {}
+            None if current == b'"' || current == b'\'' => quote = Some(current),
+            None if current == b'>' => return Some(index + 1),
+            None => {}
+        }
+        index += 1;
+    }
+
+    None
+}
+
+fn find_open_tag_bounds(html: &str, tag: &str) -> Option<(usize, usize)> {
+    let open_tag = format!("<{tag}");
+    let start = find_ascii_case_insensitive(html, &open_tag)?;
+    let boundary = html.as_bytes().get(start + 1 + tag.len()).copied();
+    if !matches!(boundary, Some(b'>') | Some(b'/') | Some(b' ') | Some(b'\t') | Some(b'\n') | Some(b'\r')) {
+        return None;
+    }
+
+    let end = find_tag_open_end(html, start)?;
+    Some((start, end))
+}
+
+fn find_closing_tag_start(html: &str, tag: &str) -> Option<usize> {
+    let close_tag = format!("</{tag}>");
+    find_ascii_case_insensitive(html, &close_tag)
+}
+
+fn inject_into_head(html: &str, injection: &str) -> Option<String> {
+    let (_, head_end) = find_open_tag_bounds(html, "head")?;
+    let mut decorated = String::with_capacity(html.len() + injection.len());
+    decorated.push_str(&html[..head_end]);
+    decorated.push_str(injection);
+    decorated.push_str(&html[head_end..]);
+    Some(decorated)
+}
+
+fn wrap_body_contents(html: &str) -> Option<String> {
+    let (_, body_end) = find_open_tag_bounds(html, "body")?;
+    let body_close = find_closing_tag_start(html, "body")?;
+
+    if body_close <= body_end {
+        return None;
+    }
+
+    let mut wrapped = String::with_capacity(html.len() + 72);
+    wrapped.push_str(&html[..body_end]);
+    wrapped.push_str("<div class=\"pandoc-preview-shell\"><article class=\"pandoc-preview\">");
+    wrapped.push_str(&html[body_end..body_close]);
+    wrapped.push_str("</article></div>");
+    wrapped.push_str(&html[body_close..]);
+
+    Some(wrapped)
+}
+
 fn decorate_pandoc_html(html: String, title: &str) -> String {
     let injection = format!(
         r#"{}<style>
@@ -1291,27 +1367,13 @@ body {{
         title
     );
 
-    if let Some(head_end) = html.find("</head>") {
-        let mut decorated = String::with_capacity(html.len() + injection.len());
-        decorated.push_str(&html[..head_end]);
-        decorated.push_str(&injection);
-        decorated.push_str(&html[head_end..]);
-        if let Some(body_start) = decorated.find("<body>") {
-            let insert_at = body_start + "<body>".len();
-            let body_end = decorated.rfind("</body>").unwrap_or(decorated.len());
-            let mut wrapped = String::with_capacity(decorated.len() + 72);
-            wrapped.push_str(&decorated[..insert_at]);
-            wrapped.push_str("<div class=\"pandoc-preview-shell\"><article class=\"pandoc-preview\">");
-            wrapped.push_str(&decorated[insert_at..body_end]);
-            wrapped.push_str("</article></div>");
-            wrapped.push_str(&decorated[body_end..]);
-            wrapped
-        } else {
-            decorated
-        }
+    let decorated = if let Some(decorated) = inject_into_head(&html, &injection) {
+        decorated
     } else {
-        html
-    }
+        format!("{injection}{html}")
+    };
+
+    wrap_body_contents(&decorated).unwrap_or(decorated)
 }
 
 fn decorate_pandoc_preview_html(html: String, title: &str) -> String {
@@ -1880,6 +1942,17 @@ mod tests {
         assert!(decorated.contains("script-src 'unsafe-inline'"));
         assert!(decorated.contains("<meta name=\"color-scheme\" content=\"light dark\">"));
         assert!(decorated.contains("<title>Preview</title>"));
+    }
+
+    #[test]
+    fn decorate_pandoc_html_handles_body_attributes() {
+        let html = "<!DOCTYPE html><html><head><meta charset=\"utf-8\"></head><body class=\"doc\" data-kind=\"pandoc\"><main>Preview</main></body></html>".to_string();
+
+        let decorated = decorate_pandoc_html(html, "Preview");
+
+        assert!(decorated.contains("<body class=\"doc\" data-kind=\"pandoc\"><div class=\"pandoc-preview-shell\"><article class=\"pandoc-preview\">"));
+        assert!(decorated.contains("<main>Preview</main>"));
+        assert!(decorated.contains("</article></div></body>"));
     }
 
     #[test]
