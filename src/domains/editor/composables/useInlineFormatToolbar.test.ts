@@ -123,6 +123,31 @@ describe('useInlineFormatToolbar', () => {
     expect(toolbar.formatToolbarTop.value).toBe(70)
   })
 
+  it('waits for mouse selection to finish before opening the toolbar', () => {
+    const holder = ref<HTMLElement | null>({
+      scrollLeft: 0,
+      scrollTop: 0,
+      clientHeight: 120,
+      getBoundingClientRect: () => ({ left: 0, top: 0 } as DOMRect)
+    } as HTMLElement)
+    const { editor } = createFakeEditor()
+    const toolbar = useInlineFormatToolbar({
+      holder,
+      getEditor: () => editor,
+      sanitizeHref: (raw) => raw
+    })
+
+    toolbar.setPointerSelectionActive(true)
+    toolbar.updateFormattingToolbar()
+
+    expect(toolbar.formatToolbarOpen.value).toBe(false)
+
+    toolbar.setPointerSelectionActive(false)
+    toolbar.updateFormattingToolbar()
+
+    expect(toolbar.formatToolbarOpen.value).toBe(true)
+  })
+
   it('hides toolbar for empty selection', () => {
     const holder = ref<HTMLElement | null>({
       scrollLeft: 0,

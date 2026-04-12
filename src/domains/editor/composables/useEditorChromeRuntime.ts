@@ -570,6 +570,10 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     inlineFormatToolbar.updateFormattingToolbar()
   }
 
+  function setPointerSelectionActive(active: boolean) {
+    inlineFormatToolbar.setPointerSelectionActive(active)
+  }
+
   function syncLayoutGeometry() {
     layoutMetrics.updateGutterHitboxStyle()
     updateFormattingToolbar()
@@ -913,6 +917,16 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
       }
     },
 
+    onDocumentPointerUp(event: PointerEvent) {
+      if (event.button !== 0) return
+      setPointerSelectionActive(false)
+      updateFormattingToolbar()
+    },
+
+    onDocumentPointerCancel() {
+      setPointerSelectionActive(false)
+    },
+
     onDocumentKeydown(event: KeyboardEvent) {
       if (event.key === 'Escape' && findToolbar.open.value) {
         event.preventDefault()
@@ -940,8 +954,16 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
       return Boolean(element?.closest('.editor-title-field'))
     },
 
-    onHolderPointerDownMarkInteraction() {
+    onHolderPointerDownMarkInteraction(event: PointerEvent) {
       interaction.editorEvents.markEditorInteraction()
+      if (event.button !== 0) return
+      const target = event.target
+      if (!(target instanceof Element)) return
+      if (target.closest('.inline-format-toolbar')) return
+      if (target.closest('.editor-find-toolbar')) return
+      if (target.closest('.ProseMirror')) {
+        setPointerSelectionActive(true)
+      }
     },
 
     onHolderFocusIn() {
@@ -1035,6 +1057,8 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     host.holder.value?.addEventListener('scroll', layoutMetrics.onHolderScroll, true)
     window.addEventListener('resize', layoutMetrics.updateGutterHitboxStyle)
     window.addEventListener('resize', blockGutter.syncAnchor)
+    document.addEventListener('pointerup', documentEvents.onDocumentPointerUp, true)
+    document.addEventListener('pointercancel', documentEvents.onDocumentPointerCancel, true)
     document.addEventListener('keydown', documentEvents.onDocumentKeydown, true)
   }
 
@@ -1053,6 +1077,8 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     host.holder.value?.removeEventListener('scroll', layoutMetrics.onHolderScroll, true)
     window.removeEventListener('resize', layoutMetrics.updateGutterHitboxStyle)
     window.removeEventListener('resize', blockGutter.syncAnchor)
+    document.removeEventListener('pointerup', documentEvents.onDocumentPointerUp, true)
+    document.removeEventListener('pointercancel', documentEvents.onDocumentPointerCancel, true)
     document.removeEventListener('mousedown', documentEvents.onDocumentMouseDown, true)
     document.removeEventListener('keydown', documentEvents.onDocumentKeydown, true)
   }

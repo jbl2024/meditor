@@ -45,6 +45,7 @@ export function useInlineFormatToolbar(options: UseInlineFormatToolbarOptions) {
   const formatToolbarLeft = ref(0)
   const formatToolbarTop = ref(0)
   const toolbarHeight = ref(44)
+  const pointerSelectionActive = ref(false)
   const linkPopoverOpen = ref(false)
   const linkValue = ref('')
   const linkError = ref('')
@@ -67,6 +68,19 @@ export function useInlineFormatToolbar(options: UseInlineFormatToolbarOptions) {
   function closeToolbar() {
     formatToolbarOpen.value = false
     clearLinkState()
+  }
+
+  /**
+   * Tracks whether a mouse-driven text selection is still in progress.
+   *
+   * While active, the toolbar stays hidden so it only appears once the user
+   * releases the mouse button and the selection is finished.
+   */
+  function setPointerSelectionActive(active: boolean) {
+    pointerSelectionActive.value = active
+    if (active) {
+      closeToolbar()
+    }
   }
 
   /**
@@ -100,6 +114,11 @@ export function useInlineFormatToolbar(options: UseInlineFormatToolbarOptions) {
     const editor = options.getEditor()
     const holderEl = options.holder.value
     if (!editor || !holderEl) {
+      closeToolbar()
+      return
+    }
+
+    if (pointerSelectionActive.value) {
       closeToolbar()
       return
     }
@@ -296,6 +315,7 @@ export function useInlineFormatToolbar(options: UseInlineFormatToolbarOptions) {
     linkValue,
     linkError,
     updateFormattingToolbar,
+    setPointerSelectionActive,
     isMarkActive,
     toggleMark,
     openLinkPopover,
