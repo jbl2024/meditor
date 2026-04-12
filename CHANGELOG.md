@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.35.5] - 2026-04-12
+
+### Fixed
+- fix(preview): harden pandoc html injection (155d9e1)
+
 ## [0.35.4] - 2026-04-12
 
 ### Fixed
