@@ -12,6 +12,7 @@ function createModals() {
     newFileModalVisible: ref(false),
     newFilePathInput: ref(''),
     newFileModalError: ref(''),
+    newFileTemplatePath: ref(''),
     newFolderModalVisible: ref(false),
     newFolderPathInput: ref(''),
     newFolderModalError: ref(''),
@@ -73,6 +74,19 @@ describe('useAppShellModals', () => {
     expect(statePort.quickOpenVisible.value).toBe(true)
     expect(actionPort.ensureAllFilesLoaded).toHaveBeenCalled()
     expect(domPort.focusQuickOpenInput).toHaveBeenCalled()
+    scope.stop()
+  })
+
+  it('resets the new note template selection when opening and closing the modal', async () => {
+    const { api, scope, statePort } = createModals()
+    statePort.newFileTemplatePath.value = '/vault/_templates/meetings/regular.md'
+
+    await api.openNewFileModal('notes/')
+    expect(statePort.newFileTemplatePath.value).toBe('')
+
+    api.closeNewFileModal()
+    await nextTick()
+    expect(statePort.newFileTemplatePath.value).toBe('')
     scope.stop()
   })
 

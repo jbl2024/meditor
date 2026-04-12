@@ -19,6 +19,7 @@ import type {
 } from '../../composables/useAppQuickOpen'
 import type { ThemePreference } from '../../composables/useAppTheme'
 import type { WorkspaceSetupOption, WorkspaceSetupUseCase } from '../../lib/workspaceSetupWizard'
+import type { NewNoteTemplateDropdownItem } from '../../lib/newNoteTemplates'
 
 /**
  * Module: AppShellOverlays
@@ -87,6 +88,8 @@ defineProps<{
   newFileModalVisible: boolean
   newFilePathInput: string
   newFileModalError: string
+  newFileTemplateItems: NewNoteTemplateDropdownItem[]
+  newFileTemplatePath: string
   newFolderModalVisible: boolean
   newFolderPathInput: string
   newFolderModalError: string
@@ -127,6 +130,7 @@ const emit = defineEmits<{
   closeNewFile: []
   updateNewFilePath: [value: string]
   keydownNewFile: [event: KeyboardEvent]
+  selectNewFileTemplate: [value: string]
   submitNewFile: []
   closeNewFolder: []
   updateNewFolderPath: [value: string]
@@ -262,6 +266,8 @@ const emit = defineEmits<{
     :new-file-visible="newFileModalVisible"
     :new-file-path-input="newFilePathInput"
     :new-file-error="newFileModalError"
+    :new-file-template-items="newFileTemplateItems"
+    :new-file-template-path="newFileTemplatePath"
     :new-folder-visible="newFolderModalVisible"
     :new-folder-path-input="newFolderPathInput"
     :new-folder-error="newFolderModalError"
@@ -271,6 +277,7 @@ const emit = defineEmits<{
     @close-new-file="emit('closeNewFile')"
     @update-new-file-path="emit('updateNewFilePath', $event)"
     @keydown-new-file="emit('keydownNewFile', $event)"
+    @select-new-file-template="emit('selectNewFileTemplate', $event)"
     @submit-new-file="emit('submitNewFile')"
     @close-new-folder="emit('closeNewFolder')"
     @update-new-folder-path="emit('updateNewFolderPath', $event)"

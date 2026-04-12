@@ -1,22 +1,27 @@
 <script setup lang="ts">
+import { computed, ref, watch } from 'vue'
 import UiButton from '../../../shared/components/ui/UiButton.vue'
 import UiField from '../../../shared/components/ui/UiField.vue'
+import UiFilterableDropdown, { type FilterableDropdownItem } from '../../../shared/components/ui/UiFilterableDropdown.vue'
 import UiInput from '../../../shared/components/ui/UiInput.vue'
 import UiModalShell from '../../../shared/components/ui/UiModalShell.vue'
+import type { NewNoteTemplateDropdownItem } from '../../lib/newNoteTemplates'
 
 /**
  * Module: WorkspaceEntryModals
  *
  * Purpose:
- * - Render the shell modals used to create files, create folders, and open a
- *   specific daily note.
+ * - Render the shell modals used to create files, create folders, open a
+ *   specific daily note, and pick a template for new notes.
  */
 
 /** Props required to render the workspace entry modals. */
-defineProps<{
+const props = defineProps<{
   newFileVisible: boolean
   newFilePathInput: string
   newFileError: string
+  newFileTemplateItems: NewNoteTemplateDropdownItem[]
+  newFileTemplatePath: string
   newFolderVisible: boolean
   newFolderPathInput: string
   newFolderError: string
@@ -30,6 +35,7 @@ const emit = defineEmits<{
   closeNewFile: []
   updateNewFilePath: [value: string]
   keydownNewFile: [event: KeyboardEvent]
+  selectNewFileTemplate: [value: string]
   submitNewFile: []
   closeNewFolder: []
   updateNewFolderPath: [value: string]
@@ -40,6 +46,72 @@ const emit = defineEmits<{
   keydownOpenDate: [event: KeyboardEvent]
   submitOpenDate: []
 }>()
+
+const templateMenuOpen = ref(false)
+const templateMenuQuery = ref('')
+const templateMenuActiveIndex = ref(0)
+const notePathInputRef = ref<{ rootEl: HTMLInputElement | null } | null>(null)
+
+const selectedTemplateLabel = computed(() => {
+  if (!props.newFileTemplatePath) return 'Blank note'
+  return props.newFileTemplateItems.find((item) => item.path === props.newFileTemplatePath)?.label ?? 'Template unavailable'
+})
+
+function syncTemplateMenuState() {
+  templateMenuQuery.value = ''
+  templateMenuActiveIndex.value = Math.max(
+    0,
+    props.newFileTemplateItems.findIndex((item) => item.path === props.newFileTemplatePath)
+  )
+}
+
+function onTemplateOpenChange(value: boolean) {
+  templateMenuOpen.value = value
+  if (!value) {
+    templateMenuQuery.value = ''
+    return
+  }
+  syncTemplateMenuState()
+}
+
+function onTemplateSelect(item: FilterableDropdownItem) {
+  emit('selectNewFileTemplate', String((item as NewNoteTemplateDropdownItem).path ?? ''))
+  void queueMicrotask(() => {
+    const input = notePathInputRef.value?.rootEl
+    if (!input) return
+    input.focus()
+    const length = input.value.length
+    if (typeof input.setSelectionRange === 'function') {
+      input.setSelectionRange(length, length)
+    }
+  })
+}
+
+watch(
+  () => props.newFileVisible,
+  (visible) => {
+    if (!visible) return
+    templateMenuOpen.value = false
+    templateMenuQuery.value = ''
+    templateMenuActiveIndex.value = 0
+  }
+)
+
+watch(
+  () => props.newFileTemplateItems,
+  () => {
+    if (!templateMenuOpen.value) return
+    syncTemplateMenuState()
+  }
+)
+
+watch(
+  () => props.newFileTemplatePath,
+  () => {
+    if (!templateMenuOpen.value) return
+    syncTemplateMenuState()
+  }
+)
 </script>
 
 <template>
@@ -53,9 +125,42 @@ const emit = defineEmits<{
     panel-class="confirm-modal"
     @close="emit('closeNewFile')"
   >
+    <UiField for-id="new-file-template-trigger" label="Template">
+      <template #default>
+        <UiFilterableDropdown
+          :items="newFileTemplateItems"
+          :model-value="templateMenuOpen"
+          :query="templateMenuQuery"
+          :active-index="templateMenuActiveIndex"
+          filter-placeholder="Search templates..."
+          :max-height="260"
+          menu-mode="portal"
+          @open-change="onTemplateOpenChange"
+          @query-change="templateMenuQuery = $event"
+          @active-index-change="templateMenuActiveIndex = $event"
+          @select="onTemplateSelect"
+        >
+          <template #trigger="{ toggleMenu }">
+            <UiButton
+              id="new-file-template-trigger"
+              type="button"
+              variant="secondary"
+              size="sm"
+              class="new-file-template-trigger"
+              @click="toggleMenu"
+            >
+              <span class="new-file-template-trigger__label">{{ selectedTemplateLabel }}</span>
+              <span aria-hidden="true" class="new-file-template-trigger__chevron">▾</span>
+            </UiButton>
+          </template>
+        </UiFilterableDropdown>
+      </template>
+    </UiField>
+
     <UiField for-id="new-file-input" label="Note path" :error="newFileError">
       <template #default="{ describedBy, invalid }">
         <UiInput
+          ref="notePathInputRef"
           id="new-file-input"
           :model-value="newFilePathInput"
           size="sm"
@@ -69,8 +174,8 @@ const emit = defineEmits<{
       </template>
     </UiField>
     <template #footer>
-        <UiButton size="sm" variant="ghost" @click="emit('closeNewFile')">Cancel</UiButton>
-        <UiButton size="sm" variant="primary" @click="emit('submitNewFile')">Create</UiButton>
+      <UiButton size="sm" variant="ghost" @click="emit('closeNewFile')">Cancel</UiButton>
+      <UiButton size="sm" variant="primary" @click="emit('submitNewFile')">Create</UiButton>
     </template>
   </UiModalShell>
 
@@ -100,8 +205,8 @@ const emit = defineEmits<{
       </template>
     </UiField>
     <template #footer>
-        <UiButton size="sm" variant="ghost" @click="emit('closeNewFolder')">Cancel</UiButton>
-        <UiButton size="sm" variant="primary" @click="emit('submitNewFolder')">Create</UiButton>
+      <UiButton size="sm" variant="ghost" @click="emit('closeNewFolder')">Cancel</UiButton>
+      <UiButton size="sm" variant="primary" @click="emit('submitNewFolder')">Create</UiButton>
     </template>
   </UiModalShell>
 
@@ -131,8 +236,27 @@ const emit = defineEmits<{
       </template>
     </UiField>
     <template #footer>
-        <UiButton size="sm" variant="ghost" @click="emit('closeOpenDate')">Cancel</UiButton>
-        <UiButton size="sm" variant="primary" @click="emit('submitOpenDate')">Open</UiButton>
+      <UiButton size="sm" variant="ghost" @click="emit('closeOpenDate')">Cancel</UiButton>
+      <UiButton size="sm" variant="primary" @click="emit('submitOpenDate')">Open</UiButton>
     </template>
   </UiModalShell>
 </template>
+
+<style scoped>
+.new-file-template-trigger {
+  width: 100%;
+  justify-content: space-between;
+}
+
+.new-file-template-trigger__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.new-file-template-trigger__chevron {
+  flex: 0 0 auto;
+  margin-left: 0.5rem;
+}
+</style>

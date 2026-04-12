@@ -6,6 +6,7 @@ export type AppShellWorkspaceEntriesStatePort = {
   activeFilePath: Readonly<Ref<string>>
   newFilePathInput: Ref<string>
   newFileModalError: Ref<string>
+  newFileTemplatePath: Ref<string>
   newFolderPathInput: Ref<string>
   newFolderModalError: Ref<string>
   openDateInput: Ref<string>
@@ -27,6 +28,8 @@ export type AppShellWorkspaceEntriesFsPort = {
   pathExists: (path: string) => Promise<boolean>
   createEntry: (parentPath: string, name: string, kind: 'file' | 'folder', conflict: 'fail' | 'rename') => Promise<string>
   ensureParentFolders: (path: string) => Promise<void>
+  readTextFile: (path: string) => Promise<string>
+  writeTextFile: (path: string, content: string) => Promise<void>
   openTabWithAutosave: (path: string) => Promise<boolean>
   upsertWorkspaceFilePath: (path: string) => void
   openDailyNote: (date: string) => Promise<boolean>
@@ -154,18 +157,33 @@ export function useAppShellWorkspaceEntries(options: UseAppShellWorkspaceEntries
     const name = /\.(md|markdown)$/i.test(rawName) ? rawName : `${rawName}.md`
     const relativeWithExt = parts.length > 1 ? `${parts.slice(0, -1).join('/')}/${name}` : name
     const fullPath = `${root}/${relativeWithExt}`
-    const parentPath = parts.length > 1 ? `${root}/${parts.slice(0, -1).join('/')}` : root
+    const templatePath = options.statePort.newFileTemplatePath.value.trim()
+    let templateContent = ''
+
+    if (templatePath) {
+      try {
+        templateContent = await options.fsPort.readTextFile(templatePath)
+      } catch {
+        options.statePort.newFileModalError.value = 'Could not read the selected template.'
+        return false
+      }
+    }
 
     try {
+      if (await options.fsPort.pathExists(fullPath)) {
+        options.statePort.newFileModalError.value = 'A note already exists at that path.'
+        return false
+      }
+
       await options.fsPort.ensureParentFolders(fullPath)
-      const created = await options.fsPort.createEntry(parentPath, name, 'file', 'fail')
-      const opened = await options.fsPort.openTabWithAutosave(created)
+      await options.fsPort.writeTextFile(fullPath, templateContent)
+      const opened = await options.fsPort.openTabWithAutosave(fullPath)
       if (!opened) return false
-      options.fsPort.upsertWorkspaceFilePath(created)
+      options.fsPort.upsertWorkspaceFilePath(fullPath)
       options.modalPort.closeNewFileModal()
       return true
-    } catch (err) {
-      options.statePort.newFileModalError.value = err instanceof Error ? err.message : 'Could not create file.'
+    } catch {
+      options.statePort.newFileModalError.value = 'Could not create file.'
       return false
     }
   }

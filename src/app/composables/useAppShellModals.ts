@@ -10,6 +10,7 @@ export type AppShellModalsStatePort = {
   newFileModalVisible: Ref<boolean>
   newFilePathInput: Ref<string>
   newFileModalError: Ref<string>
+  newFileTemplatePath: Ref<string>
   newFolderModalVisible: Ref<boolean>
   newFolderPathInput: Ref<string>
   newFolderModalError: Ref<string>
@@ -180,6 +181,7 @@ export function useAppShellModals(options: UseAppShellModalsOptions) {
     actionPort.rememberFocusBeforeModalOpen()
     statePort.newFilePathInput.value = prefill
     statePort.newFileModalError.value = ''
+    statePort.newFileTemplatePath.value = ''
     statePort.newFileModalVisible.value = true
     await nextTick()
     domPort.focusNewFileInput()
@@ -190,6 +192,7 @@ export function useAppShellModals(options: UseAppShellModalsOptions) {
       statePort.newFileModalVisible.value = false
       statePort.newFilePathInput.value = ''
       statePort.newFileModalError.value = ''
+      statePort.newFileTemplatePath.value = ''
     })
   }
 

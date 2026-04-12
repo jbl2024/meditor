@@ -8,6 +8,7 @@ function createEntries() {
     activeFilePath: ref('/vault/current.md'),
     newFilePathInput: ref(''),
     newFileModalError: ref(''),
+    newFileTemplatePath: ref(''),
     newFolderPathInput: ref(''),
     newFolderModalError: ref(''),
     openDateInput: ref(''),
@@ -25,6 +26,8 @@ function createEntries() {
     pathExists: vi.fn(async () => false),
     createEntry: vi.fn(async (parent: string, name: string) => `${parent}/${name}`),
     ensureParentFolders: vi.fn(async () => {}),
+    readTextFile: vi.fn(async (_path: string) => ''),
+    writeTextFile: vi.fn(async () => {}),
     openTabWithAutosave: vi.fn(async () => true),
     upsertWorkspaceFilePath: vi.fn(),
     openDailyNote: vi.fn(async () => true)
@@ -76,8 +79,39 @@ describe('useAppShellWorkspaceEntries', () => {
 
     expect(await api.submitNewFileFromModal()).toBe(true)
     expect(fsPort.ensureParentFolders).toHaveBeenCalledWith('/vault/ideas/today.md')
-    expect(fsPort.createEntry).toHaveBeenCalledWith('/vault/ideas', 'today.md', 'file', 'fail')
+    expect(fsPort.writeTextFile).toHaveBeenCalledWith('/vault/ideas/today.md', '')
     expect(modalPort.closeNewFileModal).toHaveBeenCalled()
+    scope.stop()
+  })
+
+  it('copies template content when a template is selected', async () => {
+    const { api, scope, statePort, fsPort } = createEntries()
+    statePort.newFilePathInput.value = 'meetings/weekly'
+    statePort.newFileTemplatePath.value = '/vault/_templates/meetings/regular.md'
+    fsPort.readTextFile = vi.fn(async (path: string) => {
+      if (path === '/vault/_templates/meetings/regular.md') {
+        return '# Weekly meeting\n'
+      }
+      return ''
+    })
+
+    expect(await api.submitNewFileFromModal()).toBe(true)
+    expect(fsPort.readTextFile).toHaveBeenCalledWith('/vault/_templates/meetings/regular.md')
+    expect(fsPort.writeTextFile).toHaveBeenCalledWith('/vault/meetings/weekly.md', '# Weekly meeting\n')
+    scope.stop()
+  })
+
+  it('fails cleanly when the selected template cannot be read', async () => {
+    const { api, scope, statePort, fsPort } = createEntries()
+    statePort.newFilePathInput.value = 'ideas/template-fail'
+    statePort.newFileTemplatePath.value = '/vault/_templates/missing.md'
+    fsPort.readTextFile = vi.fn(async () => {
+      throw new Error('missing template')
+    })
+
+    expect(await api.submitNewFileFromModal()).toBe(false)
+    expect(statePort.newFileModalError.value).toBe('Could not read the selected template.')
+    expect(fsPort.writeTextFile).not.toHaveBeenCalled()
     scope.stop()
   })
 

@@ -83,6 +83,7 @@ import {
   parentPrefixForModal,
   resolveExistingWikilinkPath,
 } from './lib/appShellDocuments'
+import { buildNewNoteTemplateItems } from './lib/newNoteTemplates'
 import { formatDurationMs } from './lib/indexActivity'
 import {
   basenameLabel,
@@ -247,6 +248,7 @@ const workspaceMutationEchoesToken = ref(0)
 const newFileModalVisible = ref(false)
 const newFilePathInput = ref('')
 const newFileModalError = ref('')
+const newFileTemplatePath = ref('')
 const newFolderModalVisible = ref(false)
 const newFolderPathInput = ref('')
 const newFolderModalError = ref('')
@@ -397,6 +399,12 @@ const {
   closeWorkspace: closeWorkspaceInternal,
   loadWorkingFolder: loadWorkingFolderInternal
 } = workspaceController
+const newFileTemplateItems = computed(() =>
+  buildNewNoteTemplateItems({
+    workspaceRoot: filesystem.workingFolderPath.value,
+    allWorkspaceFiles: allWorkspaceFiles.value
+  })
+)
 const entryActions = useAppShellEntryActions()
 const launchpad = useAppShellLaunchpad({
   storageKey: RECENT_WORKSPACES_STORAGE_KEY,
@@ -802,6 +810,7 @@ const shellModals = useAppShellModals({
     newFileModalVisible,
     newFilePathInput,
     newFileModalError,
+    newFileTemplatePath,
     newFolderModalVisible,
     newFolderPathInput,
     newFolderModalError,
@@ -904,6 +913,7 @@ const workspaceEntries = useAppShellWorkspaceEntries({
     activeFilePath,
     newFilePathInput,
     newFileModalError,
+    newFileTemplatePath,
     newFolderPathInput,
     newFolderModalError,
     openDateInput,
@@ -921,6 +931,8 @@ const workspaceEntries = useAppShellWorkspaceEntries({
     pathExists,
     createEntry,
     ensureParentFolders,
+    readTextFile,
+    writeTextFile,
     openTabWithAutosave: (path) => openTabWithAutosave(path),
     upsertWorkspaceFilePath,
     openDailyNote: (date) => openDailyNote(date, openTabWithAutosave)
@@ -2118,6 +2130,8 @@ useAppShellKeyboard({
       :new-file-modal-visible="newFileModalVisible"
       :new-file-path-input="newFilePathInput"
       :new-file-modal-error="newFileModalError"
+      :new-file-template-items="newFileTemplateItems"
+      :new-file-template-path="newFileTemplatePath"
       :new-folder-modal-visible="newFolderModalVisible"
       :new-folder-path-input="newFolderPathInput"
       :new-folder-modal-error="newFolderModalError"
@@ -2155,6 +2169,7 @@ useAppShellKeyboard({
       @close-new-file="closeNewFileModal"
       @update-new-file-path="newFilePathInput = $event"
       @keydown-new-file="onNewFileInputKeydown"
+      @select-new-file-template="newFileTemplatePath = $event"
       @submit-new-file="submitNewFileFromModal"
       @close-new-folder="closeNewFolderModal"
       @update-new-folder-path="newFolderPathInput = $event"
