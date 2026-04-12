@@ -1,6 +1,6 @@
 [package]
 name = "tomosona"
-version = "0.35.5"
+version = "0.36.0"
 description = "Local-first markdown editor"
 authors = ["you"]
 edition = "2021"

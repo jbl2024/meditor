@@ -18,6 +18,18 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.36.0] - 2026-04-12
+
+### Changed
+- chore(deps): bump @tiptap/extension-table-row from 3.20.0 to 3.22.3 (#86) (ec05694)
+- chore(deps): bump mermaid from 11.12.3 to 11.14.0 (#85) (e9f9376)
+- chore(deps): bump @tiptap/extension-link from 3.20.1 to 3.22.3 (#84) (4d7ee72)
+- chore(deps): bump zip from 8.5.0 to 8.5.1 in /src-tauri (#83) (eab5cd9)
+- chore(deps-dev): bump postcss from 8.5.8 to 8.5.9 (#82) (ac0f491)
+- chore(deps): bump fastembed from 5.13.0 to 5.13.2 in /src-tauri (#81) (68a6c6c)
+- chore(deps-dev): bump @tailwindcss/postcss from 4.2.1 to 4.2.2 (#80) (929aaf6)
+- chore(deps): bump softprops/action-gh-release from 2 to 3 (#79) (0396cfd)
+
 ## [0.35.5] - 2026-04-12
 
 ### Fixed
