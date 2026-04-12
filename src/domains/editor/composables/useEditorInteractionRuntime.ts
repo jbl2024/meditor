@@ -1,6 +1,7 @@
 import { computed, ref, type Ref } from 'vue'
 import type { Editor } from '@tiptap/vue-3'
 import { useEditorCaretOutline } from './useEditorCaretOutline'
+import { useEditorAtMenu } from './useEditorAtMenu'
 import { useEditorInputHandlers } from './useEditorInputHandlers'
 import { useEditorNavigation, type EditorHeadingNode } from './useEditorNavigation'
 import { useEditorSlashInsertion } from './useEditorSlashInsertion'
@@ -30,6 +31,7 @@ import type { MermaidPreviewPayload } from './useMermaidPreviewDialog'
 /** Exposes the active document/session surface required for editor interactions. */
 export type EditorInteractionRuntimeDocumentPort = {
   currentPath: Ref<string>
+  currentTitle: Ref<string>
   holder: Ref<HTMLDivElement | null>
   activeEditor: Ref<Editor | null>
   getSession: (path: string) => DocumentSession | null
@@ -113,6 +115,19 @@ export function useEditorInteractionRuntime(options: UseEditorInteractionRuntime
     getEditor: () => documentPort.activeEditor.value,
     commands: SLASH_COMMANDS,
     closeCompetingMenus: () => chromePort.menus.closeBlockMenu()
+  })
+
+  const atMenu = useEditorAtMenu({
+    getEditor: () => documentPort.activeEditor.value,
+    currentTextSelectionContext: slashMenu.currentTextSelectionContext,
+    closeCompetingMenus: () => {
+      chromePort.menus.closeBlockMenu()
+      slashMenu.dismissSlashMenu()
+    },
+    getDocumentMetadata: () => ({
+      title: documentPort.currentTitle.value,
+      path: documentPort.currentPath.value
+    })
   })
 
   const navigation = useEditorNavigation({
@@ -256,7 +271,9 @@ export function useEditorInteractionRuntime(options: UseEditorInteractionRuntime
     getCurrentEditor: () => documentPort.activeEditor.value,
     getSessionEditor: (path) => documentPort.getSession(path)?.editor ?? null,
     markSlashActivatedByUser: slashMenu.markSlashActivatedByUser,
+    markAtActivatedByUser: atMenu.markAtActivatedByUser,
     syncSlashMenuFromSelection: slashMenu.syncSlashMenuFromSelection,
+    syncAtMenuFromSelection: atMenu.syncAtMenuFromSelection,
     syncBlockHandleFromSelection: () => chromePort.blockHandles.syncSelectionTarget(),
     updateTableToolbar: () => chromePort.toolbars.updateTableToolbar(),
     syncWikilinkUiFromPluginState: wikilinkOverlay.syncWikilinkUiFromPluginState,
@@ -294,9 +311,15 @@ export function useEditorInteractionRuntime(options: UseEditorInteractionRuntime
     },
     menusPort: {
       visibleSlashCommands: slashMenu.visibleSlashCommands,
+      visibleAtMacros: atMenu.visibleAtMacros,
       slashOpen: slashMenu.slashOpen,
       slashIndex: slashMenu.slashIndex,
+      atOpen: atMenu.atOpen,
+      atIndex: atMenu.atIndex,
       closeSlashMenu: slashMenu.dismissSlashMenu,
+      closeAtMenu: atMenu.dismissAtMenu,
+      dismissAtMenu: atMenu.dismissAtMenu,
+      insertAtMacro: atMenu.insertAtMacro,
       blockMenuOpen: chromePort.menus.blockMenuOpen,
       closeBlockMenu: () => chromePort.menus.closeBlockMenu(),
       tableToolbarOpen: chromePort.menus.tableToolbarOpen,
@@ -309,7 +332,8 @@ export function useEditorInteractionRuntime(options: UseEditorInteractionRuntime
     uiPort: {
       updateFormattingToolbar: () => chromePort.toolbars.updateFormattingToolbar(),
       updateTableToolbar: () => chromePort.toolbars.updateTableToolbar(),
-      syncSlashMenuFromSelection: slashMenu.syncSlashMenuFromSelection
+      syncSlashMenuFromSelection: slashMenu.syncSlashMenuFromSelection,
+      syncAtMenuFromSelection: atMenu.syncAtMenuFromSelection
     },
     zoomPort: {
       zoomEditorBy: (delta) => chromePort.zoom.zoomEditorBy(delta),
@@ -319,11 +343,15 @@ export function useEditorInteractionRuntime(options: UseEditorInteractionRuntime
 
   const slashAndInsertion = {
     slashMenu,
+    atMenu,
     slashInsertion,
     markEditorInteraction,
     markSlashActivatedByUser: slashMenu.markSlashActivatedByUser,
+    markAtActivatedByUser: atMenu.markAtActivatedByUser,
     openSlashAtSelection: slashMenu.openSlashAtSelection,
-    setSlashQuery: slashMenu.setSlashQuery
+    openAtSelection: atMenu.openAtSelection,
+    setSlashQuery: slashMenu.setSlashQuery,
+    setAtQuery: atMenu.setAtQuery
   }
   const wikilinkFlow = {
     wikilinkDataSource,
@@ -366,12 +394,25 @@ export function useEditorInteractionRuntime(options: UseEditorInteractionRuntime
     visibleSlashCommands: slashAndInsertion.slashMenu.visibleSlashCommands,
     closeSlashMenu: slashAndInsertion.slashMenu.closeSlashMenu,
     dismissSlashMenu: slashAndInsertion.slashMenu.dismissSlashMenu,
+    atOpen: slashAndInsertion.atMenu.atOpen,
+    atIndex: slashAndInsertion.atMenu.atIndex,
+    atLeft: slashAndInsertion.atMenu.atLeft,
+    atTop: slashAndInsertion.atMenu.atTop,
+    atQuery: slashAndInsertion.atMenu.atQuery,
+    visibleAtMacros: slashAndInsertion.atMenu.visibleAtMacros,
+    closeAtMenu: slashAndInsertion.atMenu.closeAtMenu,
+    dismissAtMenu: slashAndInsertion.atMenu.dismissAtMenu,
     setSlashQuery: slashAndInsertion.setSlashQuery,
+    setAtQuery: slashAndInsertion.setAtQuery,
     markSlashActivatedByUser: slashAndInsertion.markSlashActivatedByUser,
+    markAtActivatedByUser: slashAndInsertion.markAtActivatedByUser,
     currentTextSelectionContext: slashAndInsertion.slashMenu.currentTextSelectionContext,
     readSlashContext: slashAndInsertion.slashMenu.readSlashContext,
     openSlashAtSelection: slashAndInsertion.openSlashAtSelection,
+    openAtSelection: slashAndInsertion.openAtSelection,
     syncSlashMenuFromSelection: slashAndInsertion.slashMenu.syncSlashMenuFromSelection,
+    syncAtMenuFromSelection: slashAndInsertion.atMenu.syncAtMenuFromSelection,
+    insertAtMacro: slashAndInsertion.atMenu.insertAtMacro,
     wikilinkOpen: wikilinkFlow.wikilinkOverlay.wikilinkOpen,
     wikilinkIndex: wikilinkFlow.wikilinkOverlay.wikilinkIndex,
     wikilinkLeft: wikilinkFlow.wikilinkOverlay.wikilinkLeft,

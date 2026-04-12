@@ -23,6 +23,7 @@ export type UseEditorPathWatchersOptions = {
   resetPropertySchemaState: () => void
   emitEmptyProperties: () => void
   closeSlashMenu: () => void
+  closeAtMenu?: () => void
   closeWikilinkMenu: () => void
   closeBlockMenu: () => void
   hideTableToolbarAnchor: () => void
@@ -78,6 +79,7 @@ export function useEditorPathWatchers(options: UseEditorPathWatchersOptions) {
         options.resetPropertySchemaState()
         options.emitEmptyProperties()
         options.closeSlashMenu()
+        options.closeAtMenu?.()
         options.closeWikilinkMenu()
         options.closeBlockMenu()
         options.hideTableToolbarAnchor()

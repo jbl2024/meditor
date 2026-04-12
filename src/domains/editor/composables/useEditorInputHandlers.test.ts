@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Editor } from '@tiptap/vue-3'
 import { useEditorInputHandlers } from './useEditorInputHandlers'
 
-function createHandlers(overrides: Partial<Parameters<typeof useEditorInputHandlers>[0]> = {}) {
+function createHandlers(overrides: any = {}) {
   const insertContent = vi.fn()
   const editor = {
     chain: () => ({
@@ -16,7 +16,7 @@ function createHandlers(overrides: Partial<Parameters<typeof useEditorInputHandl
     })
   } as unknown as Editor
 
-  const options: Parameters<typeof useEditorInputHandlers>[0] = {
+  const defaultOptions: Parameters<typeof useEditorInputHandlers>[0] = {
     editingPort: {
       getEditor: () => editor,
       currentPath: ref('a.md'),
@@ -26,9 +26,15 @@ function createHandlers(overrides: Partial<Parameters<typeof useEditorInputHandl
     },
     menusPort: {
       visibleSlashCommands: ref([{ id: 'quote', label: 'Quote', type: 'quote', data: {} }]),
+      visibleAtMacros: ref([{ id: 'today', label: 'Today', group: 'Time', description: '', replacement: '2026-04-12', aliases: [] }]),
       slashOpen: ref(true),
       slashIndex: ref(0),
+      atOpen: ref(false),
+      atIndex: ref(0),
       closeSlashMenu: vi.fn(),
+      closeAtMenu: vi.fn(),
+      dismissAtMenu: vi.fn(),
+      insertAtMacro: vi.fn(() => true),
       blockMenuOpen: ref(false),
       closeBlockMenu: vi.fn(),
       tableToolbarOpen: ref(false),
@@ -41,13 +47,38 @@ function createHandlers(overrides: Partial<Parameters<typeof useEditorInputHandl
     uiPort: {
       updateFormattingToolbar: vi.fn(),
       updateTableToolbar: vi.fn(),
-      syncSlashMenuFromSelection: vi.fn()
+      syncSlashMenuFromSelection: vi.fn(),
+      syncAtMenuFromSelection: vi.fn()
     },
     zoomPort: {
       zoomEditorBy: vi.fn(() => 1),
       resetEditorZoom: vi.fn(() => 1)
+    }
+  }
+
+  const options: Parameters<typeof useEditorInputHandlers>[0] = {
+    ...defaultOptions,
+    ...overrides,
+    editingPort: {
+      ...defaultOptions.editingPort,
+      ...(overrides.editingPort ?? {})
     },
-    ...overrides
+    menusPort: {
+      ...defaultOptions.menusPort,
+      ...(overrides.menusPort ?? {}),
+      inlineFormatToolbar: {
+        ...defaultOptions.menusPort.inlineFormatToolbar,
+        ...(overrides.menusPort?.inlineFormatToolbar ?? {})
+      }
+    },
+    uiPort: {
+      ...defaultOptions.uiPort,
+      ...(overrides.uiPort ?? {})
+    },
+    zoomPort: {
+      ...defaultOptions.zoomPort,
+      ...(overrides.zoomPort ?? {})
+    }
   }
 
   return { handlers: useEditorInputHandlers(options), options, insertContent }
@@ -61,9 +92,15 @@ describe('useEditorInputHandlers', () => {
           { id: 'quote', label: 'Quote', type: 'quote', data: {} },
           { id: 'code', label: 'Code', type: 'code', data: {} }
         ]),
+        visibleAtMacros: ref([]),
         slashOpen: ref(true),
         slashIndex: ref(0),
+        atOpen: ref(false),
+        atIndex: ref(0),
         closeSlashMenu: vi.fn(),
+        closeAtMenu: vi.fn(),
+        dismissAtMenu: vi.fn(),
+        insertAtMacro: vi.fn(() => true),
         blockMenuOpen: ref(false),
         closeBlockMenu: vi.fn(),
         tableToolbarOpen: ref(false),
@@ -146,9 +183,15 @@ describe('useEditorInputHandlers', () => {
     const { handlers, options } = createHandlers({
       menusPort: {
         visibleSlashCommands: ref([{ id: 'quote', label: 'Quote', type: 'quote', data: {} }]),
+        visibleAtMacros: ref([]),
         slashOpen: ref(false),
         slashIndex: ref(0),
+        atOpen: ref(false),
+        atIndex: ref(0),
         closeSlashMenu: vi.fn(),
+        closeAtMenu: vi.fn(),
+        dismissAtMenu: vi.fn(),
+        insertAtMacro: vi.fn(() => true),
         blockMenuOpen: ref(false),
         closeBlockMenu: vi.fn(),
         tableToolbarOpen: ref(false),
@@ -168,9 +211,15 @@ describe('useEditorInputHandlers', () => {
     const { handlers, insertContent } = createHandlers({
       menusPort: {
         visibleSlashCommands: ref([{ id: 'quote', label: 'Quote', type: 'quote', data: {} }]),
+        visibleAtMacros: ref([]),
         slashOpen: ref(false),
         slashIndex: ref(0),
+        atOpen: ref(false),
+        atIndex: ref(0),
         closeSlashMenu: vi.fn(),
+        closeAtMenu: vi.fn(),
+        dismissAtMenu: vi.fn(),
+        insertAtMacro: vi.fn(() => true),
         blockMenuOpen: ref(false),
         closeBlockMenu: vi.fn(),
         tableToolbarOpen: ref(false),
@@ -206,9 +255,15 @@ describe('useEditorInputHandlers', () => {
     const { handlers, insertContent } = createHandlers({
       menusPort: {
         visibleSlashCommands: ref([{ id: 'quote', label: 'Quote', type: 'quote', data: {} }]),
+        visibleAtMacros: ref([]),
         slashOpen: ref(false),
         slashIndex: ref(0),
+        atOpen: ref(false),
+        atIndex: ref(0),
         closeSlashMenu: vi.fn(),
+        closeAtMenu: vi.fn(),
+        dismissAtMenu: vi.fn(),
+        insertAtMacro: vi.fn(() => true),
         blockMenuOpen: ref(false),
         closeBlockMenu: vi.fn(),
         tableToolbarOpen: ref(false),
@@ -241,9 +296,15 @@ describe('useEditorInputHandlers', () => {
     const { handlers, insertContent } = createHandlers({
       menusPort: {
         visibleSlashCommands: ref([{ id: 'quote', label: 'Quote', type: 'quote', data: {} }]),
+        visibleAtMacros: ref([]),
         slashOpen: ref(false),
         slashIndex: ref(0),
+        atOpen: ref(false),
+        atIndex: ref(0),
         closeSlashMenu: vi.fn(),
+        closeAtMenu: vi.fn(),
+        dismissAtMenu: vi.fn(),
+        insertAtMacro: vi.fn(() => true),
         blockMenuOpen: ref(false),
         closeBlockMenu: vi.fn(),
         tableToolbarOpen: ref(false),
@@ -330,9 +391,15 @@ describe('useEditorInputHandlers', () => {
     const { handlers } = createHandlers({
       menusPort: {
         visibleSlashCommands: ref([]),
+        visibleAtMacros: ref([]),
         slashOpen: ref(false),
         slashIndex: ref(0),
+        atOpen: ref(false),
+        atIndex: ref(0),
         closeSlashMenu: vi.fn(),
+        closeAtMenu: vi.fn(),
+        dismissAtMenu: vi.fn(),
+        insertAtMacro: vi.fn(() => true),
         blockMenuOpen: ref(false),
         closeBlockMenu: vi.fn(),
         tableToolbarOpen: ref(false),
@@ -369,9 +436,15 @@ describe('useEditorInputHandlers', () => {
     const { handlers, options } = createHandlers({
       menusPort: {
         visibleSlashCommands: ref([]),
+        visibleAtMacros: ref([]),
         slashOpen: ref(false),
         slashIndex: ref(0),
+        atOpen: ref(false),
+        atIndex: ref(0),
         closeSlashMenu: vi.fn(),
+        closeAtMenu: vi.fn(),
+        dismissAtMenu: vi.fn(),
+        insertAtMacro: vi.fn(() => true),
         blockMenuOpen: ref(false),
         closeBlockMenu: vi.fn(),
         tableToolbarOpen: ref(false),
@@ -397,5 +470,48 @@ describe('useEditorInputHandlers', () => {
       { text: 'title', level: 2 },
       { replaceRange: { from: 10, to: 18 } }
     )
+  })
+
+  it('selects an @ macro with Enter when the macro menu is open', () => {
+    const insertAtMacro = vi.fn(() => true)
+    const { handlers, options } = createHandlers({
+      menusPort: {
+        atOpen: ref(true),
+        atIndex: ref(0),
+        visibleAtMacros: ref([
+          { id: 'today', label: 'Today', group: 'Time', description: '', replacement: '2026-04-12', aliases: [] }
+        ]),
+        visibleSlashCommands: ref([]),
+        slashOpen: ref(false),
+        slashIndex: ref(0),
+        closeAtMenu: vi.fn(),
+        dismissAtMenu: vi.fn(),
+        insertAtMacro,
+        closeSlashMenu: vi.fn(),
+        blockMenuOpen: ref(false),
+        closeBlockMenu: vi.fn(),
+        tableToolbarOpen: ref(false),
+        hideTableToolbar: vi.fn(),
+        inlineFormatToolbar: {
+          linkPopoverOpen: ref(false),
+          cancelLink: vi.fn()
+        }
+      },
+      editingPort: {
+        currentTextSelectionContext: () => ({ text: 'Draft @today', nodeType: 'paragraph', from: 1, to: 13, offset: 12, marks: [] })
+      }
+    })
+
+    handlers.onEditorKeydown(new KeyboardEvent('keydown', { key: 'Enter' }))
+
+    expect(options.menusPort.dismissAtMenu).toHaveBeenCalledTimes(1)
+    expect(insertAtMacro).toHaveBeenCalledWith({
+      id: 'today',
+      label: 'Today',
+      group: 'Time',
+      description: '',
+      replacement: '2026-04-12',
+      aliases: []
+    })
   })
 })

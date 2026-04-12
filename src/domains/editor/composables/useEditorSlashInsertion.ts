@@ -21,7 +21,7 @@ export type BlockInsertOptions = {
  */
 export type UseEditorSlashInsertionOptions = {
   getEditor: () => Editor | null
-  currentTextSelectionContext: () => { text: string; nodeType: string; from: number; to: number } | null
+  currentTextSelectionContext: () => { text: string; nodeType: string; from: number; to: number; marks?: string[] } | null
   readSlashContext: () => SlashInsertionContext | null
   currentHeadings: () => Array<{ level: 1 | 2 | 3; text: string }>
   slugifyHeading: (heading: string) => string

@@ -47,3 +47,34 @@ Object.defineProperty(globalThis, 'sessionStorage', {
   configurable: true,
   value: sessionStorageMock
 })
+
+Object.defineProperty(window, 'scrollBy', {
+  configurable: true,
+  value: () => {}
+})
+
+Object.defineProperty(window, 'scrollTo', {
+  configurable: true,
+  value: () => {}
+})
+
+Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+  configurable: true,
+  writable: true,
+  value: () => {}
+})
+
+Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
+  configurable: true,
+  writable: true,
+  value: function scrollTo(optionsOrX?: ScrollToOptions | number, y?: number) {
+    if (typeof optionsOrX === 'number') {
+      this.scrollTop = typeof y === 'number' ? y : optionsOrX
+      return
+    }
+
+    if (optionsOrX && typeof optionsOrX === 'object' && typeof optionsOrX.top === 'number') {
+      this.scrollTop = optionsOrX.top
+    }
+  }
+})

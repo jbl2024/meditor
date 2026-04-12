@@ -38,7 +38,9 @@ export type UseEditorTiptapSetupOptions = {
   getCurrentEditor: () => Editor | null
   getSessionEditor: (path: string) => Editor | null
   markSlashActivatedByUser: () => void
+  markAtActivatedByUser: () => void
   syncSlashMenuFromSelection: (options?: { preserveIndex?: boolean }) => void
+  syncAtMenuFromSelection: (options?: { preserveIndex?: boolean }) => void
   syncBlockHandleFromSelection: () => void
   updateTableToolbar: () => void
   syncWikilinkUiFromPluginState: () => void
@@ -304,6 +306,9 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
           ) {
             options.markSlashActivatedByUser()
           }
+          if (event.key === '@' && !event.metaKey && !event.ctrlKey) {
+            options.markAtActivatedByUser()
+          }
           return false
         },
         handleClick: (view: ProseMirrorEditorView, pos: number, event: MouseEvent) => {
@@ -322,6 +327,7 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
       onUpdate: () => {
         if (options.currentPath.value !== path) return
         options.syncSlashMenuFromSelection({ preserveIndex: true })
+        options.syncAtMenuFromSelection({ preserveIndex: true })
         options.updateTableToolbar()
         options.syncWikilinkUiFromPluginState()
       },
@@ -334,6 +340,7 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
         if (activePath && allowCapture) options.captureCaret(activePath)
         options.syncBlockHandleFromSelection()
         options.syncSlashMenuFromSelection({ preserveIndex: true })
+        options.syncAtMenuFromSelection({ preserveIndex: true })
         options.updateFormattingToolbar()
         options.updateTableToolbar()
         options.syncWikilinkUiFromPluginState()

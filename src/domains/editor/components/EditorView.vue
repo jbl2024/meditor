@@ -28,6 +28,7 @@ import EditorContextOverlays from './editor/EditorContextOverlays.vue'
 import EditorFindToolbar from './editor/EditorFindToolbar.vue'
 import EditorInlineFormatToolbar from './editor/EditorInlineFormatToolbar.vue'
 import EditorLargeDocOverlay from './editor/EditorLargeDocOverlay.vue'
+import EditorAtOverlay from './editor/EditorAtOverlay.vue'
 import EditorMermaidPreviewDialog from './editor/EditorMermaidPreviewDialog.vue'
 import EditorMermaidReplaceDialog from './editor/EditorMermaidReplaceDialog.vue'
 import EditorPropertiesPanel from './editor/EditorPropertiesPanel.vue'
@@ -179,6 +180,7 @@ chromeRuntime = useEditorChromeRuntime({
 interactionRuntime = useEditorInteractionRuntime({
   interactionDocumentPort: {
     currentPath: currentPathSource,
+    currentTitle: computed(() => documentRuntime?.currentTitle.value ?? ''),
     holder,
     activeEditor,
     getSession: (path) => getSession(path),
@@ -284,6 +286,7 @@ documentRuntime = useEditorDocumentRuntime({
       clearOutlineTimer: interactionRuntime.clearOutlineTimer,
       emitOutlineSoon: interactionRuntime.emitOutlineSoon,
       closeSlashMenu: interactionRuntime.closeSlashMenu,
+      closeAtMenu: interactionRuntime.closeAtMenu,
       closeWikilinkMenu: interactionRuntime.closeWikilinkMenu,
       syncWikilinkUiFromPluginState: interactionRuntime.syncWikilinkUiFromPluginState
     }
@@ -502,6 +505,14 @@ const {
   closeWikilinkMenu,
   dismissSlashMenu,
   setSlashQuery,
+  atOpen,
+  atIndex,
+  atLeft,
+  atTop,
+  atQuery,
+  visibleAtMacros,
+  dismissAtMenu,
+  setAtQuery,
   insertBlockFromDescriptor,
   wikilinkOpen,
   wikilinkIndex,
@@ -782,13 +793,13 @@ defineExpose({
           :style="gutterHitboxStyle"
         />
         <div
-          ref="holder"
-          class="editor-holder relative h-full min-h-0 overflow-y-auto px-8 py-6"
-          :style="editorZoomStyle"
-          @mousemove="onEditorMouseMove"
-          @mouseleave="onEditorMouseLeave"
-          @click="dismissSlashMenu(); closeWikilinkMenu(); closeBlockMenu()"
-        >
+        ref="holder"
+        class="editor-holder relative h-full min-h-0 overflow-y-auto px-8 py-6"
+        :style="editorZoomStyle"
+        @mousemove="onEditorMouseMove"
+        @mouseleave="onEditorMouseLeave"
+        @click="dismissSlashMenu(); dismissAtMenu(); closeWikilinkMenu(); closeBlockMenu()"
+      >
           <div ref="contentShell" class="editor-content-shell">
             <div class="editor-header-shell">
               <EditorTitleField
@@ -947,6 +958,19 @@ defineExpose({
             @update:query="setSlashQuery($event)"
             @select="dismissSlashMenu(); insertBlockFromDescriptor($event.type, $event.data)"
             @close="dismissSlashMenu(); focusEditor()"
+          />
+
+          <EditorAtOverlay
+            :open="atOpen"
+            :index="atIndex"
+            :left="atLeft"
+            :top="atTop"
+            :query="atQuery"
+            :items="visibleAtMacros"
+            @update:index="atIndex = $event"
+            @update:query="setAtQuery($event)"
+            @select="dismissAtMenu(); interactionRuntime.insertAtMacro($event)"
+            @close="dismissAtMenu(); focusEditor()"
           />
 
           <EditorWikilinkOverlay

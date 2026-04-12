@@ -29,6 +29,7 @@ type TextSelectionContext = {
   text: string
   offset: number
   nodeType: string
+  marks?: string[]
 }
 
 export type UseSlashMenuOptions = {
@@ -87,7 +88,8 @@ export function useSlashMenu(options: UseSlashMenuOptions) {
       to: $from.end(),
       text: parent.textContent,
       offset: $from.parentOffset,
-      nodeType: parent.type.name
+      nodeType: parent.type.name,
+      marks: typeof $from.marks === 'function' ? $from.marks().map((mark) => mark.type.name) : []
     }
   }
 

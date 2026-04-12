@@ -14,7 +14,9 @@ function createSetup(overrides: Partial<Parameters<typeof useEditorTiptapSetup>[
     getCurrentEditor: () => currentEditor,
     getSessionEditor: () => null,
     markSlashActivatedByUser: vi.fn(),
+    markAtActivatedByUser: vi.fn(),
     syncSlashMenuFromSelection: vi.fn(),
+    syncAtMenuFromSelection: vi.fn(),
     syncBlockHandleFromSelection: vi.fn(),
     updateTableToolbar: vi.fn(),
     syncWikilinkUiFromPluginState: vi.fn(),
@@ -71,6 +73,7 @@ describe('useEditorTiptapSetup', () => {
     editorOptions.onTransaction({ transaction: { docChanged: true } })
 
     expect(options.syncSlashMenuFromSelection).toHaveBeenCalled()
+    expect(options.syncAtMenuFromSelection).toHaveBeenCalled()
     expect(options.syncBlockHandleFromSelection).toHaveBeenCalled()
     expect(options.updateTableToolbar).toHaveBeenCalled()
     expect(options.syncWikilinkUiFromPluginState).toHaveBeenCalled()
@@ -88,6 +91,7 @@ describe('useEditorTiptapSetup', () => {
 
     expect(options.captureCaret).not.toHaveBeenCalled()
     expect(options.syncSlashMenuFromSelection).toHaveBeenCalled()
+    expect(options.syncAtMenuFromSelection).toHaveBeenCalled()
     expect(options.syncBlockHandleFromSelection).toHaveBeenCalled()
     expect(options.updateFormattingToolbar).toHaveBeenCalled()
   })
@@ -100,6 +104,43 @@ describe('useEditorTiptapSetup', () => {
 
     expect(options.onEditorDocChanged).toHaveBeenCalledWith('a.md')
     expect(options.syncBlockHandleFromSelection).toHaveBeenCalled()
+  })
+
+  it('syncs the @ menu from selection updates after user activation', () => {
+    const { setup, options } = createSetup()
+    const editorOptions = setup.createEditorOptions('a.md') as any
+
+    editorOptions.editorProps.handleKeyDown(
+      {
+        state: {
+          selection: {
+            empty: true,
+            $from: {
+              parent: {
+                isTextblock: true,
+                textContent: 'Draft @',
+                type: { name: 'paragraph' }
+              },
+              parentOffset: 7,
+              start: () => 1,
+              end: () => 8,
+              marks: () => []
+            }
+          }
+        }
+      } as any,
+      {
+        key: '@',
+        metaKey: false,
+        ctrlKey: false,
+        altKey: false
+      } as KeyboardEvent
+    )
+
+    editorOptions.onSelectionUpdate()
+
+    expect(options.markAtActivatedByUser).toHaveBeenCalledTimes(1)
+    expect(options.syncAtMenuFromSelection).toHaveBeenCalled()
   })
 
   it('handles wikilink and external link click behavior', async () => {
@@ -416,5 +457,40 @@ describe('useEditorTiptapSetup', () => {
     expect(setNodeMarkup).not.toHaveBeenCalled()
     expect(dispatch).not.toHaveBeenCalled()
     expect(event.preventDefault).not.toHaveBeenCalled()
+  })
+
+  it('marks @ macros as user activated on keydown', () => {
+    const { setup, options } = createSetup()
+    const editorOptions = setup.createEditorOptions('a.md') as any
+
+    const handled = editorOptions.editorProps.handleKeyDown(
+      {
+        state: {
+          selection: {
+            empty: true,
+            $from: {
+              parent: {
+                isTextblock: true,
+                textContent: 'Draft @',
+                type: { name: 'paragraph' }
+              },
+              parentOffset: 7,
+              start: () => 1,
+              end: () => 8,
+              marks: () => []
+            }
+          }
+        }
+      } as any,
+      {
+        key: '@',
+        metaKey: false,
+        ctrlKey: false,
+        altKey: false
+      } as KeyboardEvent
+    )
+
+    expect(handled).toBe(false)
+    expect(options.markAtActivatedByUser).toHaveBeenCalledTimes(1)
   })
 })

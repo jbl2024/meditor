@@ -19,6 +19,24 @@ const slashMenuMock = {
   syncSlashMenuFromSelection: vi.fn()
 }
 
+const atMenuMock = {
+  atOpen: ref(false),
+  atIndex: ref(0),
+  atLeft: ref(0),
+  atTop: ref(0),
+  atQuery: ref(''),
+  atActivatedByUser: ref(false),
+  atEntries: ref([] as Array<{ id: string }>),
+  visibleAtMacros: ref([] as Array<{ id: string; label: string; replacement: string }>),
+  closeAtMenu: vi.fn(),
+  dismissAtMenu: vi.fn(),
+  markAtActivatedByUser: vi.fn(),
+  openAtSelection: vi.fn(),
+  setAtQuery: vi.fn(),
+  syncAtMenuFromSelection: vi.fn(),
+  insertAtMacro: vi.fn(() => true)
+}
+
 const navigationMock = {
   parseOutlineFromDoc: vi.fn(() => [{ text: 'Heading', level: 1, id: 'heading' }]),
   revealSnippet: vi.fn(),
@@ -71,6 +89,10 @@ let capturedTiptapOptions: Record<string, any> | null = null
 
 vi.mock('./useSlashMenu', () => ({
   useSlashMenu: () => slashMenuMock
+}))
+
+vi.mock('./useEditorAtMenu', () => ({
+  useEditorAtMenu: () => atMenuMock
 }))
 
 vi.mock('./useEditorNavigation', () => ({
@@ -199,6 +221,7 @@ function createRuntimeHarness(input?: {
   const runtime = useEditorInteractionRuntime({
     interactionDocumentPort: {
       currentPath: ref(input?.currentPath ?? 'a.md'),
+      currentTitle: ref('A note'),
       holder,
       activeEditor,
       getSession: () => (input?.session ?? null) as any,

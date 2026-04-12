@@ -21,6 +21,7 @@
 - Wikilink overlay state machine: `useEditorWikilinkOverlayState`
 - Wikilink target/headings cache and resolve: `useEditorWikilinkDataSource`
 - Slash descriptor insertion mapping: `useEditorSlashInsertion`
+- Inline `@` macro trigger/insertion: `useEditorAtMenu`
 - Block gutter target/anchor/menu pinning: `useEditorBlockGutterController`
 - Header title state and rename sync: `useEditorTitleState`
 - Frontmatter generation, merge, and AI-assisted property actions: `useFrontmatterProperties`
@@ -65,6 +66,7 @@
 - Turning internal chrome sub-zones into new public APIs before there is a demonstrated ownership boundary.
 - Re-flattening grouped chrome runtime APIs in `EditorView.vue` instead of consuming them by sub-system.
 - Turning internal interaction flow zones into new public APIs before there is a demonstrated ownership boundary.
+- Letting the `@` macro flow bypass `useEditorAtMenu` and re-implement trigger logic in the view.
 - Letting toolbar components perform note-creation or replacement work directly instead of routing through `useEditorInteractionRuntime`.
 - Turning internal document runtime sub-zones into new public APIs before there is a demonstrated ownership boundary.
 - Using Vue-only selectors (for example `:deep(...)`) in extracted plain CSS files.

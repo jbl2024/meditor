@@ -67,6 +67,15 @@ describe('SecondBrainView', () => {
         writeText: vi.fn()
       }
     })
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: function scrollIntoView() {
+        const parent = this.parentElement as HTMLElement | null
+        if (parent) {
+          parent.scrollTop = parent.scrollHeight
+        }
+      }
+    })
 
     api.fetchSecondBrainConfigStatus.mockResolvedValue({ configured: true, error: null })
     api.fetchSecondBrainSessions.mockResolvedValue([

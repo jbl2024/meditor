@@ -1,5 +1,6 @@
 import type { Ref } from 'vue'
 import type { Editor } from '@tiptap/vue-3'
+import type { EditorAtMacroEntry } from '../lib/editorAtMacros'
 import type { SlashCommand } from '../lib/editorSlashCommands'
 import {
   applyMarkdownShortcut,
@@ -32,7 +33,7 @@ export type UseEditorInputHandlersOptions = {
     getEditor: () => Editor | null
     currentPath: Ref<string>
     captureCaret: (path: string) => void
-    currentTextSelectionContext: () => { text: string; nodeType: string; from: number; to: number } | null
+    currentTextSelectionContext: () => { text: string; nodeType: string; from: number; to: number; marks?: string[] } | null
     insertBlockFromDescriptor: (
       type: string,
       data: Record<string, unknown>,
@@ -41,9 +42,15 @@ export type UseEditorInputHandlersOptions = {
   }
   menusPort: {
     visibleSlashCommands: Ref<SlashCommand[]>
+    visibleAtMacros: Ref<EditorAtMacroEntry[]>
     slashOpen: Ref<boolean>
     slashIndex: Ref<number>
+    atOpen: Ref<boolean>
+    atIndex: Ref<number>
     closeSlashMenu: () => void
+    closeAtMenu: () => void
+    dismissAtMenu: () => void
+    insertAtMacro: (item: EditorAtMacroEntry) => boolean
     blockMenuOpen: Ref<boolean>
     closeBlockMenu: () => void
     tableToolbarOpen: Ref<boolean>
@@ -57,6 +64,7 @@ export type UseEditorInputHandlersOptions = {
     updateFormattingToolbar: () => void
     updateTableToolbar: () => void
     syncSlashMenuFromSelection: (options?: { preserveIndex?: boolean }) => void
+    syncAtMenuFromSelection: (options?: { preserveIndex?: boolean }) => void
   }
   zoomPort: {
     zoomEditorBy: (delta: number) => number
@@ -86,15 +94,16 @@ export function useEditorInputHandlers(options: UseEditorInputHandlersOptions) {
       return
     }
 
-    const slashInteractionKey =
+    const interactionKey =
       event.key === 'ArrowDown' ||
       event.key === 'ArrowUp' ||
       event.key === 'Enter'
 
     // Keep slash interactions responsive even when reactive open-state lags one tick
     // behind the current cursor token (e.g. fast "/"+ArrowDown key sequences).
-    if (!options.menusPort.slashOpen.value && slashInteractionKey) {
+    if (!options.menusPort.slashOpen.value && !options.menusPort.atOpen.value && interactionKey) {
       options.uiPort.syncSlashMenuFromSelection({ preserveIndex: true })
+      options.uiPort.syncAtMenuFromSelection({ preserveIndex: true })
     }
 
     if (isEditorZoomModifier(event)) {
@@ -147,6 +156,38 @@ export function useEditorInputHandlers(options: UseEditorInputHandlersOptions) {
       }
     }
 
+    if (options.menusPort.atOpen.value) {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault()
+        event.stopPropagation()
+        if (!options.menusPort.visibleAtMacros.value.length) return
+        options.menusPort.atIndex.value = (options.menusPort.atIndex.value + 1) % options.menusPort.visibleAtMacros.value.length
+        return
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault()
+        event.stopPropagation()
+        if (!options.menusPort.visibleAtMacros.value.length) return
+        options.menusPort.atIndex.value = (options.menusPort.atIndex.value - 1 + options.menusPort.visibleAtMacros.value.length) % options.menusPort.visibleAtMacros.value.length
+        return
+      }
+      if (event.key === 'Enter') {
+        event.preventDefault()
+        event.stopPropagation()
+        const macro = options.menusPort.visibleAtMacros.value[options.menusPort.atIndex.value]
+        if (!macro) return
+        options.menusPort.dismissAtMenu()
+        options.menusPort.insertAtMacro(macro)
+        return
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        event.stopPropagation()
+        options.menusPort.dismissAtMenu()
+        return
+      }
+    }
+
     const context = options.editingPort.currentTextSelectionContext()
     if ((event.key === ' ' || event.code === 'Space') && context?.nodeType === 'paragraph') {
       const marker = context.text.trim()
@@ -193,6 +234,7 @@ export function useEditorInputHandlers(options: UseEditorInputHandlersOptions) {
     const path = options.editingPort.currentPath.value
     if (path) options.editingPort.captureCaret(path)
     options.uiPort.syncSlashMenuFromSelection({ preserveIndex: true })
+    options.uiPort.syncAtMenuFromSelection({ preserveIndex: true })
     options.uiPort.updateFormattingToolbar()
     options.uiPort.updateTableToolbar()
   }

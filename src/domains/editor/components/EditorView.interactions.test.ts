@@ -1,5 +1,6 @@
 import { createApp, defineComponent, h, nextTick, ref } from 'vue'
 import { describe, expect, it, vi } from 'vitest'
+import { TextSelection } from '@tiptap/pm/state'
 import type { SaveNoteResult } from '../../../shared/api/apiTypes'
 
 const { mermaidRender } = vi.hoisted(() => ({
@@ -44,6 +45,37 @@ function deferred<T>(): Deferred<T> {
 }
 
 describe('EditorView interactions contract', () => {
+  const rect = () => ({
+    left: 0,
+    top: 0,
+    right: 40,
+    bottom: 16,
+    width: 40,
+    height: 16,
+    x: 0,
+    y: 0,
+    toJSON: () => ({})
+  })
+
+  const rectList = () => [rect()]
+
+  if (!HTMLElement.prototype.scrollIntoView) {
+    HTMLElement.prototype.scrollIntoView = () => {}
+  }
+  if (!HTMLElement.prototype.scrollTo) {
+    HTMLElement.prototype.scrollTo = () => {}
+  }
+  for (const prototype of [Node.prototype, Element.prototype, HTMLElement.prototype, Text.prototype, Range.prototype]) {
+    Object.defineProperty(prototype, 'getClientRects', {
+      configurable: true,
+      value: rectList
+    })
+    Object.defineProperty(prototype, 'getBoundingClientRect', {
+      configurable: true,
+      value: rect
+    })
+  }
+
   it('keeps event contract and supports keyboard flow without crashes', async () => {
     const root = document.createElement('div')
     document.body.appendChild(root)
@@ -191,6 +223,74 @@ describe('EditorView interactions contract', () => {
     holder.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
     holder.dispatchEvent(new KeyboardEvent('keyup', { key: 'Escape', bubbles: true }))
     await flushUi()
+
+    app.unmount()
+    document.body.innerHTML = ''
+  })
+
+  it('opens the @ menu and inserts a macro in the mounted editor', async () => {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+    const editorRef = ref<unknown>(null)
+
+    const app = createApp(defineComponent({
+      setup() {
+        return () =>
+          h(EditorView, {
+            ref: editorRef,
+            path: 'main.md',
+            openPaths: ['main.md'],
+            openFile: async () => 'Draft @title',
+            saveFile: async () => ({ persisted: true }),
+            renameFileFromTitle: async (valuePath: string, title: string) => ({ path: valuePath, title }),
+            loadLinkTargets: async () => ['main.md'],
+            loadLinkHeadings: async () => ['H1'],
+            loadPropertyTypeSchema: async () => ({}),
+            savePropertyTypeSchema: async () => {},
+            openLinkTarget: async () => true,
+            onStatus: () => {},
+            onOutline: () => {},
+            onProperties: () => {},
+            onPathRenamed: () => {}
+          })
+      }
+    }))
+
+    app.mount(root)
+    await flushUi()
+
+    const setupState = (editorRef.value as { $?: { setupState?: Record<string, any> } })?.$?.setupState
+    if (!setupState) throw new Error('Expected EditorView setup state')
+    const editor = setupState.renderedEditorsByPath?.['main.md']
+    if (!editor) throw new Error('Expected mounted main editor')
+    const interactionRuntime = setupState.interactionRuntime as {
+      markAtActivatedByUser: () => void
+      syncAtMenuFromSelection: () => void
+      insertAtMacro: (item: { id: string; replacement: string }) => boolean
+      atOpen: { value: boolean }
+      visibleAtMacros: { value: Array<{ id: string; replacement: string }> }
+    }
+
+    editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, Math.max(1, editor.state.doc.content.size - 1))))
+    editor.view.dom.dispatchEvent(new KeyboardEvent('keydown', { key: '@', bubbles: true, cancelable: true }))
+    interactionRuntime.markAtActivatedByUser()
+    interactionRuntime.syncAtMenuFromSelection()
+    await flushUi()
+
+    expect(interactionRuntime.atOpen.value).toBe(true)
+    expect(interactionRuntime.visibleAtMacros.value.map((item) => item.id)).toContain('title')
+
+    const titleButton = Array.from(document.body.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Title')
+    ) as HTMLButtonElement | undefined
+    if (!titleButton) throw new Error('Expected @ Title macro button')
+
+    titleButton.click()
+    await flushUi()
+
+    const text = editor.state.doc.textBetween(0, editor.state.doc.content.size, '\n', '\0')
+    expect(text).toContain('Draft main')
+    expect(text).not.toContain('@')
 
     app.unmount()
     document.body.innerHTML = ''
