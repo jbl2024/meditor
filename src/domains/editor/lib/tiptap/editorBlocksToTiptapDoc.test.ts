@@ -82,6 +82,35 @@ describe('toTiptapDoc list inline content', () => {
   })
 })
 
+describe('toTiptapDoc inline mark normalization', () => {
+  it('drops bold when code is nested inside bold to avoid invalid mark combinations', () => {
+    const doc = toTiptapDoc([
+      {
+        type: 'paragraph',
+        data: {
+          text: '<strong><code>inline</code></strong>'
+        }
+      }
+    ])
+
+    expect(doc).toEqual({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'text',
+              text: 'inline',
+              marks: [{ type: 'code' }]
+            }
+          ]
+        }
+      ]
+    })
+  })
+})
+
 describe('toTiptapDoc html block', () => {
   it('maps html blocks to htmlBlock nodes', () => {
     const doc = toTiptapDoc([

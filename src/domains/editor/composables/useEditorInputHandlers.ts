@@ -206,7 +206,8 @@ export function useEditorInputHandlers(options: UseEditorInputHandlersOptions) {
 
     const plain = event.clipboardData?.getData('text/plain') ?? ''
     const html = event.clipboardData?.getData('text/html') ?? ''
-    const selected = selectSmartPasteMarkdown(plain, html)
+    const markdown = event.clipboardData?.getData('text/markdown') ?? ''
+    const selected = selectSmartPasteMarkdown(plain, html) ?? selectSmartPasteMarkdown(markdown, html)
     if (!selected) return
     const parsed = markdownToEditorData(selected.markdown)
     if (!parsed.blocks.length) return

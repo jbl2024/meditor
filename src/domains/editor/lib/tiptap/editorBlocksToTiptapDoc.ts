@@ -6,6 +6,26 @@ import { TIPTAP_NODE_TYPES } from './types'
 
 type TiptapNode = JSONContent
 type TableAlign = 'left' | 'center' | 'right' | null
+type TiptapMark = { type: string; attrs?: Record<string, unknown> }
+
+function normalizeMarks(marks: TiptapMark[]): TiptapMark[] {
+  if (!marks.length) return []
+
+  const codeMark = marks.find((mark) => mark.type === 'code')
+  if (codeMark) return [{ type: 'code' }]
+
+  const normalized: TiptapMark[] = []
+  const seen = new Set<string>()
+
+  for (const mark of marks) {
+    const key = `${mark.type}:${JSON.stringify(mark.attrs ?? {})}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    normalized.push(mark)
+  }
+
+  return normalized
+}
 
 function roundPercentagesToHundred(values: number[]): number[] {
   if (!values.length) return []
@@ -82,7 +102,8 @@ function parseInlineNode(node: Node, inheritedMarks: Array<{ type: string; attrs
   if (node.nodeType === Node.TEXT_NODE) {
     const text = node.textContent ?? ''
     if (!text) return []
-    return [{ type: 'text', text, ...(inheritedMarks.length ? { marks: inheritedMarks } : {}) }]
+    const marks = normalizeMarks(inheritedMarks)
+    return [{ type: 'text', text, ...(marks.length ? { marks } : {}) }]
   }
   if (node.nodeType !== Node.ELEMENT_NODE) return []
 
@@ -111,7 +132,7 @@ function parseInlineNode(node: Node, inheritedMarks: Array<{ type: string; attrs
     }
   }
 
-  const marks = [...inheritedMarks, ...marksForElement(element)]
+  const marks = normalizeMarks([...inheritedMarks, ...marksForElement(element)])
   const out: TiptapNode[] = []
   Array.from(element.childNodes).forEach((child) => {
     out.push(...parseInlineNode(child, marks))

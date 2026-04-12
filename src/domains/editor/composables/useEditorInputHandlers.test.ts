@@ -202,6 +202,41 @@ describe('useEditorInputHandlers', () => {
     expect(insertContent).toHaveBeenCalledTimes(1)
   })
 
+  it('converts text/markdown clipboard content when plain text is unavailable', () => {
+    const { handlers, insertContent } = createHandlers({
+      menusPort: {
+        visibleSlashCommands: ref([{ id: 'quote', label: 'Quote', type: 'quote', data: {} }]),
+        slashOpen: ref(false),
+        slashIndex: ref(0),
+        closeSlashMenu: vi.fn(),
+        blockMenuOpen: ref(false),
+        closeBlockMenu: vi.fn(),
+        tableToolbarOpen: ref(false),
+        hideTableToolbar: vi.fn(),
+        inlineFormatToolbar: {
+          linkPopoverOpen: ref(false),
+          cancelLink: vi.fn()
+        }
+      }
+    })
+
+    const event = {
+      clipboardData: {
+        getData: (kind: string) => {
+          if (kind === 'text/markdown') return '# title'
+          return ''
+        }
+      },
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn()
+    } as unknown as ClipboardEvent
+
+    handlers.onEditorPaste(event)
+    expect(insertContent).toHaveBeenCalledTimes(1)
+    expect(event.preventDefault).toHaveBeenCalledTimes(1)
+    expect(event.stopPropagation).toHaveBeenCalledTimes(1)
+  })
+
   it('converts structured html paste to editor json content', () => {
     const { handlers, insertContent } = createHandlers({
       menusPort: {
