@@ -42,6 +42,15 @@ function iconForNode(node: TreeNode) {
 
 const rowRef = ref<HTMLElement | null>(null)
 
+function onRowPointerDown(event: PointerEvent) {
+  if (event.button === 0) return
+
+  // Right/middle clicks should not reach the DnD provider, otherwise the row
+  // can enter drag mode while the context menu is open.
+  event.preventDefault()
+  event.stopPropagation()
+}
+
 makeDraggable(
   rowRef,
   {
@@ -145,6 +154,7 @@ const dndState = computed(() => props.dnd?.rowDropState(
     :data-drop-intent="dndState.intent ?? undefined"
     :data-drop-allowed="dndState.allowed ? 'true' : undefined"
     :data-drop-blocked="dndState.blocked ? 'true' : undefined"
+    @pointerdown="onRowPointerDown"
     @click="emit('click', $event, node)"
     @dblclick="emit('doubleclick', node)"
     @contextmenu.prevent.stop="emit('contextmenu', { event: $event, node })"
