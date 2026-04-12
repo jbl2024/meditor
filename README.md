@@ -57,6 +57,7 @@ The app is not limited to a file tree. It combines an explorer, wikilinks, backl
 - open a local workspace folder and keep a list of recent workspaces;
 - a home launchpad to resume a workspace, open recent notes, and trigger common actions;
 - a workspace setup wizard with starter structures for knowledge bases, journals, and project-oriented workspaces;
+- a new note modal with a workspace template picker sourced from `_templates/`;
 - navigation history, command palette, quick open, and built-in keyboard shortcuts;
 - a multi-pane layout for opening multiple notes, Cosmos, and Second Brain side by side.
 
@@ -65,6 +66,7 @@ The app is not limited to a file tree. It combines an explorer, wikilinks, backl
 - a rich editor built on Tiptap while preserving a Markdown-first workflow;
 - `[[...]]` wikilinks with autocomplete;
 - slash commands `/`;
+- inline `@` macros for inserting the current date, time, note title, or note path;
 - drag handles and block menus;
 - tables with width and alignment support;
 - checklists, quotes, callouts, HTML blocks, and Mermaid;
@@ -77,7 +79,7 @@ The app is not limited to a file tree. It combines an explorer, wikilinks, backl
 - create, rename, duplicate, move, delete, and reveal entries in the system file manager;
 - daily notes with fast access;
 - guided wikilink rewrite flows on rename;
-- local per-note history with snapshot restore;
+- local per-note history with a right-pane snapshot browser and restore flow;
 - heading overview and document navigation;
 - a right panel for backlinks, semantic links, properties, and Echoes.
 
@@ -124,6 +126,7 @@ The app is not limited to a file tree. It combines an explorer, wikilinks, backl
 - a dedicated chat surface for the workspace;
 - persistent sessions;
 - explicit context injection via `@relative/path.md`;
+- grouped Pulse action menus for both text transformation and context analysis;
 - streamed responses;
 - open referenced notes in another pane when appropriate;
 - local LLM provider configuration in `~/.tomosona/conf.json`.
@@ -140,8 +143,9 @@ Currently supported providers:
 
 - an AI transformation layer for reworking text or explicit note context;
 - available from the editor, Second Brain, and Cosmos;
-- actions such as `rewrite`, `condense`, `expand`, `outline`, `brief`, `extract_themes`, and `identify_tensions`;
-- preview-first output before applying changes;
+- available from editor selections or whole-note context, with note-level entrypoints where appropriate;
+- actions such as `format`, `rewrite`, `condense`, `expand`, `outline`, `brief`, `extract_themes`, and `identify_tensions`;
+- preview-first output before applying changes, with copy/apply flows in the UI;
 - flows to replace a selection, insert output, or hand off to Second Brain.
 
 ### Theming and ergonomics

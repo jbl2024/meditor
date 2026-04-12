@@ -69,8 +69,11 @@ Use this as a quick routing table when you need to make a change.
 | Pure shell helpers | `src/app/lib/appShellDocuments.ts`, `src/app/lib/appShellPane.ts`, `src/app/lib/appShellPathMoveEffects.ts` | `src/app/App.vue`, `src/app/composables/useAppShellPaneRuntime.ts`, `src/app/composables/useAppShellCommands.ts` |
 | Workspace entry routing | `src/app/composables/useAppShellWorkspaceRouting.ts` | `src/app/composables/useAppShellWorkspaceLifecycle.ts`, `src/app/composables/useAppShellWorkspaceSetup.ts`, `src/app/composables/useAppShellModals.ts`, `src/app/ARCHITECTURE.md` |
 | Workspace setup wizard | `src/app/components/app/WorkspaceSetupWizardModal.vue` | `src/app/composables/useAppShellWorkspaceSetup.ts`, `src/app/lib/workspaceSetupWizard.ts`, `src/app/ARCHITECTURE.md` |
+| New note modal / template picker | `src/app/components/app/WorkspaceEntryModals.vue` | `src/app/App.vue`, `src/app/lib/newNoteTemplates.ts`, `src/app/composables/useAppShellWorkspaceRouting.ts` |
 | Open note | `src/app/composables/useAppShellOpenFlow.ts` | `src/app/composables/useAppNavigationController.ts`, `src/domains/editor/composables/*`, `src-tauri/src/fs_ops.rs` |
 | Save note | `src/domains/editor/components/EditorView.vue` | `src/domains/editor/composables/useEditorFileLifecycle.ts`, `src/domains/editor/composables/useEditorDocumentRuntime.ts`, `src-tauri/src/editor_sync.rs` |
+| Note history / restore | `src/domains/editor/components/EditorView.vue` | `src/domains/editor/components/editor/EditorNoteHistoryDialog.vue`, `src/shared/api/noteHistoryApi.ts`, `src/app/composables/useWorkspaceMutationEffects.ts` |
+| Editor `@` macro insertion | `src/domains/editor/components/editor/EditorAtMenu.vue` | `src/domains/editor/lib/editorAtMacros.ts`, `src/domains/editor/composables/useEditorInputHandlers.ts`, `src/domains/editor/composables/useEditorChromeRuntime.ts` |
 | Root note persistence | `src/app/composables/useAppNotePersistence.ts` | `src/app/App.vue`, `src/app/composables/useAppWorkspaceController.ts`, `src/shared/api/editorSyncApi.ts` |
 | Root settings / alters sync | `src/app/composables/useAppSettingsWorkflow.ts` | `src/app/App.vue`, `src/app/components/settings/SettingsModal.vue`, `src/shared/api/settingsApi.ts` |
 | Shell keyboard / command routing | `src/app/composables/useAppShellKeyboard.ts` | `src/app/composables/useAppShellCommands.ts`, `src/app/composables/useAppShellPaletteActions.ts`, `src/app/composables/useAppShellModalInteractions.ts` |
@@ -81,6 +84,7 @@ Use this as a quick routing table when you need to make a change.
 | Search / indexing | `src-tauri/src/markdown_index.rs` | `src-tauri/src/search_index.rs`, `src-tauri/src/index_schema.rs`, `src/app/composables/useAppIndexingController.ts` |
 | Cosmos graph behavior | `src/domains/cosmos/components/CosmosView.vue` | `src/domains/cosmos/composables/useCosmosController.ts`, `src-tauri/src/wikilink_graph.rs` |
 | Second Brain chat flow | `src/domains/second-brain/components/SecondBrainView.vue` | `src/domains/second-brain/composables/useSecondBrainViewState.ts`, `src/domains/second-brain/composables/useSecondBrainSessionWorkflow.ts`, `src/domains/second-brain/composables/useSecondBrainConversationRuntime.ts`, `src-tauri/src/second_brain/*` |
+| Pulse actions / transformations | `src/domains/pulse/lib/pulse.ts` | `src/domains/editor/composables/useEditorChromeRuntime.ts`, `src/domains/editor/components/EditorView.vue`, `src/domains/second-brain/composables/useSecondBrainConversationRuntime.ts`, `src/domains/cosmos/components/CosmosSidebarPanel.vue` |
 | Second Brain config / models | `src/app/components/settings/SettingsModal.vue` | `src/shared/api/settingsApi.ts`, `src-tauri/src/second_brain/config.rs`, `src-tauri/src/second_brain/openai_codex.rs` |
 | Alter manager | `src/domains/alters/components/AlterManagerView.vue` | `src/domains/alters/composables/useAlterManager.ts`, `src-tauri/src/alters.rs` |
 | UI primitives / shared shells | `src/shared/components/ui/ARCHITECTURE.md` | `src/shared/components/ui/*`, `src/assets/tailwind.css` |
@@ -191,7 +195,7 @@ Start in:
 
 ### Editor
 
-Use this when the change is about note editing, title handling, overlays, or Tiptap behavior.
+Use this when the change is about note editing, title handling, overlays, `@` macros, note history, or Tiptap behavior.
 
 Start in:
 
@@ -201,7 +205,7 @@ Start in:
 
 ### Second Brain
 
-Use this when the change touches chat sessions, context injection, streamed responses, or prompt composition.
+Use this when the change touches chat sessions, context injection, streamed responses, Pulse presets, or prompt composition.
 
 Start in:
 
@@ -246,6 +250,17 @@ The note-open path usually goes through:
 
 If a bug affects open latency or stale note state, look there first.
 
+### Create a note
+
+The new-note path usually goes through:
+
+- shell entrypoint routing in `src/app/App.vue`
+- the new note modal in `src/app/components/app/WorkspaceEntryModals.vue`
+- the template catalog in `src/app/lib/newNoteTemplates.ts`
+- shell filesystem create flows and workspace refresh logic
+
+If template selection looks wrong, start with the catalog builder and the modal state, not the file creation code.
+
 ### Save a note
 
 The save path usually crosses:
@@ -255,6 +270,17 @@ The save path usually crosses:
 - workspace filesystem sync in the backend
 
 If title-based renames or conflict handling are involved, treat that as a workflow bug, not a UI bug.
+
+### Restore note history
+
+The restore path usually crosses:
+
+- `src/domains/editor/components/EditorView.vue`
+- `src/domains/editor/components/editor/EditorNoteHistoryDialog.vue`
+- `src/shared/api/noteHistoryApi.ts`
+- `src/app/composables/useWorkspaceMutationEffects.ts`
+
+If restored snapshots disappear or move after rename, check the workspace mutation effects first.
 
 ### Change Second Brain behavior
 
