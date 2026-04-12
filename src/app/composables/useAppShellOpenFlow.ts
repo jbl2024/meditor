@@ -77,7 +77,7 @@ export type AppShellOpenFlowWorkspaceDataPort = {
 }
 
 export type AppShellOpenFlowNavigationPort = {
-  openTabWithAutosave: (path: string, options?: { recordHistory?: boolean; targetPaneId?: string; revealInTargetPane?: boolean }) => Promise<boolean>
+  openTabWithAutosave: (path: string, options?: { recordHistory?: boolean; targetPaneId?: string; revealInTargetPane?: boolean; focusFirstContentBlock?: boolean }) => Promise<boolean>
   openDailyNote: (date: string, openPath: (path: string) => Promise<boolean>) => Promise<boolean>
   recordCosmosHistorySnapshot: () => void
 }
@@ -262,10 +262,9 @@ export function useAppShellOpenFlow(options: AppShellOpenFlowOptions) {
       }
     }
 
-    const opened = await options.navigationPort.openTabWithAutosave(path)
+    const opened = await options.navigationPort.openTabWithAutosave(path, { focusFirstContentBlock: true })
     if (!opened) return false
     await nextTick()
-    options.editorPort.editorRef.value?.focusEditor()
     return true
   }
 

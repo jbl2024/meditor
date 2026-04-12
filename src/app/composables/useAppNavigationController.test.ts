@@ -13,6 +13,7 @@ function createController(options: { saveClearsDirty?: boolean } = {}) {
   const setErrorMessage = vi.fn()
   const recordRecentNote = vi.fn()
   const focusEditor = vi.fn()
+  const focusFirstContentBlock = vi.fn()
   const ensureAllFilesLoaded = vi.fn(async () => {
     allWorkspaceFiles.value = ['/vault/a.md']
   })
@@ -39,6 +40,7 @@ function createController(options: { saveClearsDirty?: boolean } = {}) {
       activeFilePath,
       saveActiveDocument,
       focusEditor,
+      focusFirstContentBlock,
       getDocumentStatus: () => ({ dirty: dirty.value, saveError: '' }),
       isMarkdownPath: (path: string) => path.endsWith('.md') || path.endsWith('.markdown')
     },
@@ -109,6 +111,7 @@ function createController(options: { saveClearsDirty?: boolean } = {}) {
     setErrorMessage,
     recordRecentNote,
     focusEditor,
+    focusFirstContentBlock,
     ensureAllFilesLoaded,
     applyCosmosHistorySnapshot,
     openSecondBrainHistorySnapshot,
@@ -227,6 +230,18 @@ describe('useAppNavigationController', () => {
 
     expect(opened).toBe(true)
     expect(focusEditor).toHaveBeenCalledOnce()
+  })
+
+  it('focuses the first content block when requested for a newly opened note', async () => {
+    const { controller, focusFirstContentBlock, focusEditor } = createController()
+
+    const opened = await controller.openTabWithAutosave('/vault/new-note.md', {
+      focusFirstContentBlock: true
+    })
+
+    expect(opened).toBe(true)
+    expect(focusFirstContentBlock).toHaveBeenCalledTimes(1)
+    expect(focusEditor).not.toHaveBeenCalled()
   })
 
   it('loads workspace files before opening a second brain history entry', async () => {

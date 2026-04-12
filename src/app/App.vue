@@ -933,7 +933,7 @@ const workspaceEntries = useAppShellWorkspaceEntries({
     ensureParentFolders,
     readTextFile,
     writeTextFile,
-    openTabWithAutosave: (path) => openTabWithAutosave(path),
+    openTabWithAutosave: (path, options) => openTabWithAutosave(path, options),
     upsertWorkspaceFilePath,
     openDailyNote: (date) => openDailyNote(date, openTabWithAutosave)
   },
@@ -970,13 +970,16 @@ const navigationWorkspacePort = {
   recordRecentNote
 }
 
-  const navigationEditorPort = {
+const navigationEditorPort = {
   activeFilePath,
   saveActiveDocument: async () => {
     await editorRef.value?.saveNow()
   },
   focusEditor: () => {
     editorRef.value?.focusEditor()
+  },
+  focusFirstContentBlock: () => {
+    editorRef.value?.focusFirstContentBlock()
   },
   getDocumentStatus: (path: string) => editorState.getStatus(path),
   isMarkdownPath

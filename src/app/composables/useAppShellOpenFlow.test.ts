@@ -30,6 +30,7 @@ function createHarness() {
   const revealSnippetByPath: Record<string, string> = {}
 
   const focusEditor = vi.fn()
+  const focusFirstContentBlock = vi.fn()
   const revealSnippet = vi.fn(async () => {})
   const revealAnchor = vi.fn(async () => true)
   const resetCosmosView = vi.fn()
@@ -50,6 +51,7 @@ function createHarness() {
 
   const editorRef = ref({
     focusEditor,
+    focusFirstContentBlock,
     revealSnippet,
     revealAnchor,
     resetCosmosView,
@@ -81,7 +83,12 @@ function createHarness() {
   })
   const extractHeadingsFromMarkdown = vi.fn(() => ['Heading'])
 
-  const openTabWithAutosave = vi.fn(async () => true)
+  const openTabWithAutosave = vi.fn(async (_path: string, options?: { focusFirstContentBlock?: boolean }) => {
+    if (options?.focusFirstContentBlock) {
+      focusFirstContentBlock()
+    }
+    return true
+  })
   const openDailyNote = vi.fn(async (date: string, openPath: (path: string) => Promise<boolean>) => {
     return await openPath(dailyNotePath(workingFolderPath.value, date))
   })
@@ -158,6 +165,7 @@ function createHarness() {
     closeQuickOpen,
     resetForAnchor,
     focusEditor,
+    focusFirstContentBlock,
     revealSnippet,
     revealAnchor,
     resetCosmosView,
@@ -208,7 +216,8 @@ describe('useAppShellOpenFlow', () => {
       content: '',
       titleLine: ''
     })
-    expect(harness.openTabWithAutosave).toHaveBeenCalledWith('/vault/missing.md')
+    expect(harness.openTabWithAutosave).toHaveBeenCalledWith('/vault/missing.md', { focusFirstContentBlock: true })
+    expect(harness.focusFirstContentBlock).toHaveBeenCalledTimes(1)
     harness.scope.stop()
   })
 

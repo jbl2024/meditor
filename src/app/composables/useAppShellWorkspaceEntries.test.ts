@@ -21,14 +21,14 @@ function createEntries() {
     parentPrefixForModal: vi.fn((parentPath: string, root: string) => parentPath.replace(`${root}/`, '')),
     parseIsoDateInput: vi.fn((value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null)
   }
-  const fsPort = {
-    listChildren: vi.fn(async () => [{ name: 'notes', is_dir: true }]),
-    pathExists: vi.fn(async () => false),
-    createEntry: vi.fn(async (parent: string, name: string) => `${parent}/${name}`),
-    ensureParentFolders: vi.fn(async () => {}),
-    readTextFile: vi.fn(async (_path: string) => ''),
-    writeTextFile: vi.fn(async () => {}),
-    openTabWithAutosave: vi.fn(async () => true),
+    const fsPort = {
+      listChildren: vi.fn(async () => [{ name: 'notes', is_dir: true }]),
+      pathExists: vi.fn(async () => false),
+      createEntry: vi.fn(async (parent: string, name: string) => `${parent}/${name}`),
+      ensureParentFolders: vi.fn(async () => {}),
+      readTextFile: vi.fn(async (_path: string) => ''),
+      writeTextFile: vi.fn(async () => {}),
+      openTabWithAutosave: vi.fn(async () => true),
     upsertWorkspaceFilePath: vi.fn(),
     openDailyNote: vi.fn(async () => true)
   }
@@ -80,6 +80,7 @@ describe('useAppShellWorkspaceEntries', () => {
     expect(await api.submitNewFileFromModal()).toBe(true)
     expect(fsPort.ensureParentFolders).toHaveBeenCalledWith('/vault/ideas/today.md')
     expect(fsPort.writeTextFile).toHaveBeenCalledWith('/vault/ideas/today.md', '')
+    expect(fsPort.openTabWithAutosave).toHaveBeenCalledWith('/vault/ideas/today.md', { focusFirstContentBlock: true })
     expect(modalPort.closeNewFileModal).toHaveBeenCalled()
     scope.stop()
   })
@@ -98,6 +99,7 @@ describe('useAppShellWorkspaceEntries', () => {
     expect(await api.submitNewFileFromModal()).toBe(true)
     expect(fsPort.readTextFile).toHaveBeenCalledWith('/vault/_templates/meetings/regular.md')
     expect(fsPort.writeTextFile).toHaveBeenCalledWith('/vault/meetings/weekly.md', '# Weekly meeting\n')
+    expect(fsPort.openTabWithAutosave).toHaveBeenCalledWith('/vault/meetings/weekly.md', undefined)
     scope.stop()
   })
 

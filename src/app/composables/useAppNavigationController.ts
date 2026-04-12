@@ -33,6 +33,7 @@ export type NavigationOpenOptions = {
   recordHistory?: boolean
   targetPaneId?: string
   revealInTargetPane?: boolean
+  focusFirstContentBlock?: boolean
 }
 
 /** Minimal shape required from the document status provider used by the shell. */
@@ -61,6 +62,7 @@ export type AppNavigationEditorPort = {
   activeFilePath: Readonly<Ref<string>>
   saveActiveDocument: () => Promise<void>
   focusEditor: () => void
+  focusFirstContentBlock: () => void
   getDocumentStatus: (path: string) => NavigationDocumentStatus
   isMarkdownPath: (path: string) => boolean
 }
@@ -243,7 +245,13 @@ export function useAppNavigationController(options: UseAppNavigationControllerOp
   async function openTabWithAutosave(path: string, navigation: NavigationOpenOptions = {}): Promise<boolean> {
     const target = path.trim()
     if (!target) return false
-    if (!navigation.targetPaneId && editorPort.activeFilePath.value === target && !navigation.revealInTargetPane) return true
+    if (!navigation.targetPaneId && editorPort.activeFilePath.value === target && !navigation.revealInTargetPane) {
+      if (navigation.focusFirstContentBlock) {
+        await nextTick()
+        editorPort.focusFirstContentBlock()
+      }
+      return true
+    }
     const canSwitch = await ensureActiveTabSavedBeforeSwitch(target)
     if (!canSwitch) {
       return false
@@ -259,6 +267,10 @@ export function useAppNavigationController(options: UseAppNavigationControllerOp
     }
     if (navigation.recordHistory !== false) {
       historyPort.documentHistory.record(target)
+    }
+    if (navigation.focusFirstContentBlock) {
+      await nextTick()
+      editorPort.focusFirstContentBlock()
     }
     workspacePort.recordRecentNote(target)
     return true
