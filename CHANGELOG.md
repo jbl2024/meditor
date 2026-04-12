@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.35.3] - 2026-04-12
+
+### Fixed
+- fix(editor): remove unused macro group helper from @ menu (1c2c88d)
+
 ## [0.35.2] - 2026-04-12
 
 ### Added
