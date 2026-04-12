@@ -43,4 +43,41 @@ describe('EditorAtMenu', () => {
     app.unmount()
     document.body.innerHTML = ''
   })
+
+  it('does not render the macro group label in the row', () => {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+
+    const items = [
+      {
+        id: 'today',
+        label: 'Today',
+        group: 'Time',
+        description: 'Insert the current local date',
+        replacement: '2026-04-12',
+        aliases: ['today']
+      }
+    ] satisfies EditorAtMacroEntry[]
+
+    const app = createApp(defineComponent({
+      setup() {
+        return () =>
+          h(EditorAtMenu, {
+            open: true,
+            index: 0,
+            left: 0,
+            top: 0,
+            query: '',
+            items
+          })
+      }
+    }))
+
+    app.mount(root)
+
+    expect(root.querySelector('.editor-at-item__group')).toBeNull()
+
+    app.unmount()
+    document.body.innerHTML = ''
+  })
 })

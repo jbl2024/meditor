@@ -83,12 +83,11 @@ function macroForItem(item: unknown): EditorAtMacroEntry | null {
       @query-change="emit('update:query', $event)"
       @active-index-change="emit('update:index', $event)"
       @select="onSelect"
-    >
+      >
       <template #item="{ item, active }">
         <span class="editor-at-item" :class="{ 'editor-at-item--active': active }">
           <span class="editor-at-item__main">
             <span class="editor-at-item__label">{{ labelForItem(item) }}</span>
-            <span class="editor-at-item__group">{{ macroForItem(item)?.group }}</span>
           </span>
           <span class="editor-at-item__replacement" :title="detailForItem(item)">{{ detailForItem(item) }}</span>
         </span>
@@ -154,7 +153,6 @@ function macroForItem(item: unknown): EditorAtMacroEntry | null {
   font-weight: 500;
 }
 
-.editor-at-item__group,
 .editor-at-item__replacement {
   color: var(--editor-menu-muted);
   font-size: 0.75rem;
