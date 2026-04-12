@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.36.1] - 2026-04-12
+
+### Fixed
+- fix(editor): defer inline toolbar until mouse selection ends (016f07e)
+
 ## [0.36.0] - 2026-04-12
 
 ### Changed
