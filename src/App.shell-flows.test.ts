@@ -299,7 +299,8 @@ describe('App shell flows', () => {
     createButton?.click()
     await flushUi()
 
-    expect(workspaceApi.createEntry).toHaveBeenCalledWith('/vault', 'test-note.md', 'file', 'fail')
+    expect(workspaceApi.writeTextFile).toHaveBeenCalledWith('/vault/test-note.md', '')
+    expect(workspaceApi.createEntry).not.toHaveBeenCalled()
     expect(mounted.root.querySelector('[data-new-file-input="true"]')).toBeNull()
     expect(mounted.root.textContent).toContain('test-note.md')
 
