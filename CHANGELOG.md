@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.35.4] - 2026-04-12
+
+### Fixed
+- fix(journal): nest daily notes by year and month (970dc49)
+
 ## [0.35.3] - 2026-04-12
 
 ### Fixed
