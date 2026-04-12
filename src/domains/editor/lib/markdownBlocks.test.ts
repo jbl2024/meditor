@@ -644,9 +644,9 @@ describe('inline links with surrounding emphasis', () => {
   })
 
   it('renders bold around wikilinks', () => {
-    const html = inlineTextToHtml('**[[journal/2026-02-22.md]]**')
-    expect(html).toContain('<strong><a href="wikilink:journal%2F2026-02-22.md"')
-    expect(html).toContain('>journal/2026-02-22.md</a></strong>')
+    const html = inlineTextToHtml('**[[journal/2026/02/2026-02-22.md]]**')
+    expect(html).toContain('<strong><a href="wikilink:journal%2F2026%2F02%2F2026-02-22.md"')
+    expect(html).toContain('>journal/2026/02/2026-02-22.md</a></strong>')
   })
 
   it('keeps adjacent wikilinks stable inside task items', () => {

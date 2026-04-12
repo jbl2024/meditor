@@ -32,7 +32,7 @@ function createQuickOpenHarness(options: QuickOpenTestOptions = {}) {
     quickOpenDocumentPort: {
       isIsoDate: (value) => /^\d{4}-\d{2}-\d{2}$/.test(value),
       toRelativePath: (path) => path.replace('/vault/', ''),
-      dailyNotePath: (root, date) => `${root}/journal/${date}.md`
+      dailyNotePath: (root, date) => `${root}/journal/${date.slice(0, 4)}/${date.slice(5, 7)}/${date}.md`
     },
     quickOpenPalettePort: {
       paletteActions: ref(options.paletteActions ?? createActions()),
@@ -105,7 +105,7 @@ describe('useAppQuickOpen', () => {
 
   it('returns file results and a daily note candidate', () => {
     const api = createQuickOpenHarness({
-      allWorkspaceFiles: ['/vault/notes/a.md', '/vault/journal/2026-03-06.md']
+      allWorkspaceFiles: ['/vault/notes/a.md', '/vault/journal/2026/03/2026-03-06.md']
     })
 
     api.quickOpenQuery.value = '2026-03-06'
@@ -113,7 +113,7 @@ describe('useAppQuickOpen', () => {
     expect(api.quickOpenResults.value[0]).toEqual({
       kind: 'daily',
       date: '2026-03-06',
-      path: '/vault/journal/2026-03-06.md',
+      path: '/vault/journal/2026/03/2026-03-06.md',
       exists: true,
       label: 'Open daily note 2026-03-06'
     })
@@ -121,7 +121,7 @@ describe('useAppQuickOpen', () => {
 
   it('does not propose a daily note when the query is not an ISO date', () => {
     const api = createQuickOpenHarness({
-      allWorkspaceFiles: ['/vault/journal/2026-03-06.md']
+      allWorkspaceFiles: ['/vault/journal/2026/03/2026-03-06.md']
     })
 
     api.quickOpenQuery.value = '2026-03'
@@ -142,7 +142,7 @@ describe('useAppQuickOpen', () => {
 
   it('places the daily note first and matches existence case-insensitively', () => {
     const api = createQuickOpenHarness({
-      allWorkspaceFiles: ['/vault/notes/2026-03-06-reference.md', '/VAULT/JOURNAL/2026-03-06.MD']
+      allWorkspaceFiles: ['/vault/notes/2026-03-06-reference.md', '/VAULT/JOURNAL/2026/03/2026-03-06.MD']
     })
 
     api.quickOpenQuery.value = '2026-03-06'

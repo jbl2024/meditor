@@ -1139,9 +1139,9 @@ mod tests {
             ("".to_string(), "first".to_string()),
             ("section".to_string(), "second".to_string()),
         ];
-        let contextualized = inject_relative_path_context("journal/2026-02-16.md", chunks);
+        let contextualized = inject_relative_path_context("journal/2026/02/2026-02-16.md", chunks);
         assert_eq!(contextualized.len(), 2);
-        assert_eq!(contextualized[0].1, "journal/2026-02-16.md\nfirst");
+        assert_eq!(contextualized[0].1, "journal/2026/02/2026-02-16.md\nfirst");
         assert_eq!(contextualized[1].1, "second");
     }
 

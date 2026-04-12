@@ -378,9 +378,9 @@ describe('App shell flows', () => {
     Array.from(mounted.root.querySelectorAll('button')).find((item) => item.textContent === 'Open')?.click()
     await flushUi()
 
-    expect(workspaceApi.writeTextFile).toHaveBeenCalledWith('/vault/journal/2026-02-22.md', '')
+    expect(workspaceApi.writeTextFile).toHaveBeenCalledWith('/vault/journal/2026/02/2026-02-22.md', '')
     expect(mounted.root.querySelector('[data-open-date-input="true"]')).toBeNull()
-    expect(mounted.root.textContent).toContain('journal/2026-02-22.md')
+    expect(mounted.root.textContent).toContain('journal/2026/02/2026-02-22.md')
 
     mounted.app.unmount()
   })

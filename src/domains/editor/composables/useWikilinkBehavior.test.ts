@@ -103,4 +103,20 @@ describe('useWikilinkBehavior', () => {
     expect(saveCurrentFile).toHaveBeenCalledWith(false)
     expect(openLinkTarget).toHaveBeenCalledWith('Notes/Destination')
   })
+
+  it('opens ISO date tokens from the caret through the open flow', async () => {
+    const openLinkTarget = vi.fn(async () => true)
+    const { behavior, holderEl } = createBehavior({ openLinkTarget })
+    const editable = document.createElement('div')
+    editable.contentEditable = 'true'
+    const textNode = document.createTextNode('meeting 2026-02-23 plan')
+    editable.appendChild(textNode)
+    holderEl.appendChild(editable)
+    editable.focus()
+    setCollapsedSelection(textNode, 'meeting 2026-02-23'.length)
+
+    await behavior.openLinkedTokenAtCaret()
+
+    expect(openLinkTarget).toHaveBeenCalledWith('2026-02-23')
+  })
 })

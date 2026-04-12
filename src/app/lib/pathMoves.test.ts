@@ -29,18 +29,18 @@ describe('pathMoves', () => {
     expect(expandPathMoves(
       [{ from: '/vault/journal', to: '/vault/archive/journal' }],
       [
-        '/vault/journal/2026-03-06.md',
-        '/vault/journal/2026-03-07.md',
+        '/vault/journal/2026/03/2026-03-06.md',
+        '/vault/journal/2026/03/2026-03-07.md',
         '/vault/features/echoes.md'
       ]
     )).toEqual([
       {
-        from: '/vault/journal/2026-03-06.md',
-        to: '/vault/archive/journal/2026-03-06.md'
+        from: '/vault/journal/2026/03/2026-03-06.md',
+        to: '/vault/archive/journal/2026/03/2026-03-06.md'
       },
       {
-        from: '/vault/journal/2026-03-07.md',
-        to: '/vault/archive/journal/2026-03-07.md'
+        from: '/vault/journal/2026/03/2026-03-07.md',
+        to: '/vault/archive/journal/2026/03/2026-03-07.md'
       }
     ])
   })

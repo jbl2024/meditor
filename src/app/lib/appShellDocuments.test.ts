@@ -29,7 +29,7 @@ describe('appShellDocuments', () => {
   })
 
   it('resolves existing wikilink targets by exact and basename match', () => {
-    const files = ['notes/a.md', 'journal/2026-03-06.md', 'deep/nested/topic.md']
+    const files = ['notes/a.md', 'journal/2026/03/2026-03-06.md', 'deep/nested/topic.md']
     expect(resolveExistingWikilinkPath('notes/a', files)).toBe('notes/a.md')
     expect(resolveExistingWikilinkPath('topic', files)).toBe('deep/nested/topic.md')
   })

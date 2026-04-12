@@ -153,7 +153,7 @@ fn normalize_mention_candidate(raw: &str) -> Option<String> {
     }
 }
 
-/// Extracts markdown mention tokens like `@journal/2026-03-03.md`.
+/// Extracts markdown mention tokens like `@journal/2026/03/2026-03-03.md`.
 pub(super) fn extract_mentioned_markdown_paths(message: &str) -> Vec<String> {
     let mut seen = HashSet::new();
     let mut out = Vec::new();
@@ -195,13 +195,13 @@ mod tests {
     #[test]
     fn extracts_markdown_mentions_and_deduplicates() {
         let mentions = extract_mentioned_markdown_paths(
-            "Use @foo/bar.md and @foo/bar.md plus (@journal/2026-03-03.markdown).",
+            "Use @foo/bar.md and @foo/bar.md plus (@journal/2026/03/2026-03-03.markdown).",
         );
         assert_eq!(
             mentions,
             vec![
                 "foo/bar.md".to_string(),
-                "journal/2026-03-03.markdown".to_string()
+                "journal/2026/03/2026-03-03.markdown".to_string()
             ]
         );
     }

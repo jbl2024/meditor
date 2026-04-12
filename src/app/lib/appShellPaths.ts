@@ -66,10 +66,10 @@ export function parseIsoDateInput(input: string): string | null {
   return `${year}-${normalizeDatePart(month)}-${normalizeDatePart(day)}`
 }
 
-/** Returns the canonical journal path for a daily note inside the workspace. */
-/** Builds the canonical workspace path for a journal daily note. */
+/** Builds the canonical workspace path for a journal daily note under `journal/YYYY/MM/`. */
 export function dailyNotePath(root: string, date: string): string {
-  return `${root}/journal/${date}.md`
+  const [year, month] = date.split('-')
+  return `${root}/journal/${year}/${month}/${date}.md`
 }
 
 /** Normalizes a user-provided relative path while preserving nested segments. */

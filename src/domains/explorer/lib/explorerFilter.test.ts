@@ -35,8 +35,8 @@ describe('filterExplorerRows', () => {
       fileNode('/vault/features/echoes.md')
     ],
     '/vault/journal': [
-      fileNode('/vault/journal/2026-03-12.md'),
-      fileNode('/vault/journal/2026-03-13.md')
+      fileNode('/vault/journal/2026/03/2026-03-12.md'),
+      fileNode('/vault/journal/2026/03/2026-03-13.md')
     ],
     '/vault/Résumés': [
       fileNode('/vault/Résumés/thèmes.md')
@@ -69,7 +69,7 @@ describe('filterExplorerRows', () => {
   it('matches non-contiguous fuzzy queries against names and paths', () => {
     expect(filterExplorerRows('jr13', visibleRows, { rootPath: '/vault', childrenByDir })).toEqual([
       { path: '/vault/journal', depth: 0 },
-      { path: '/vault/journal/2026-03-13.md', depth: 1 }
+      { path: '/vault/journal/2026/03/2026-03-13.md', depth: 1 }
     ])
   })
 
@@ -113,16 +113,16 @@ describe('filterExplorerRows', () => {
   it('includes a matching directory and path-matching children beneath it', () => {
     expect(filterExplorerRows('journal', visibleRows, { rootPath: '/vault', childrenByDir })).toEqual([
       { path: '/vault/journal', depth: 0 },
-      { path: '/vault/journal/2026-03-12.md', depth: 1 },
-      { path: '/vault/journal/2026-03-13.md', depth: 1 }
+      { path: '/vault/journal/2026/03/2026-03-12.md', depth: 1 },
+      { path: '/vault/journal/2026/03/2026-03-13.md', depth: 1 }
     ])
   })
 
   it('includes all matching descendants under a matching directory', () => {
     expect(filterExplorerRows('journal2', visibleRows, { rootPath: '/vault', childrenByDir })).toEqual([
       { path: '/vault/journal', depth: 0 },
-      { path: '/vault/journal/2026-03-12.md', depth: 1 },
-      { path: '/vault/journal/2026-03-13.md', depth: 1 }
+      { path: '/vault/journal/2026/03/2026-03-12.md', depth: 1 },
+      { path: '/vault/journal/2026/03/2026-03-13.md', depth: 1 }
     ])
   })
 
@@ -140,8 +140,8 @@ describe('filterExplorerRows', () => {
   it('preserves row order from the tree traversal', () => {
     expect(filterExplorerRows('2', visibleRows, { rootPath: '/vault', childrenByDir })).toEqual([
       { path: '/vault/journal', depth: 0 },
-      { path: '/vault/journal/2026-03-12.md', depth: 1 },
-      { path: '/vault/journal/2026-03-13.md', depth: 1 }
+      { path: '/vault/journal/2026/03/2026-03-12.md', depth: 1 },
+      { path: '/vault/journal/2026/03/2026-03-13.md', depth: 1 }
     ])
   })
 })

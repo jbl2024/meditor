@@ -36,7 +36,7 @@ function clamp(value: number, min: number, max: number): number {
  *
  * Examples:
  * - label `graph/synapse` => displayLabel `synapse`, folderKey `graph`
- * - path `journal/2026-03-01.md` => displayLabel `2026-03-01`, folderKey `journal`
+ * - path `journal/2026/03/2026-03-01.md` => displayLabel `2026-03-01`, folderKey `journal`
  * - root file `inbox.md` => folderKey `root`
  */
 function deriveNodeLabelParts(node: Pick<WikilinkGraphNode, 'path' | 'label'>): {

@@ -23,15 +23,15 @@ async function flushMicrotasks(times = 4) {
 function createEffects() {
   const workingFolderPath = ref('/vault')
   const allWorkspaceFiles = ref([
-    '/vault/journal/2026-03-06.md',
-    '/vault/journal/2026-03-07.md',
+    '/vault/journal/2026/03/2026-03-06.md',
+    '/vault/journal/2026/03/2026-03-07.md',
     '/vault/notes/a.md'
   ])
   const favoriteItems = ref<FavoriteEntry[]>([
-    { path: '/vault/journal/2026-03-06.md', added_at_ms: 1, exists: true }
+    { path: '/vault/journal/2026/03/2026-03-06.md', added_at_ms: 1, exists: true }
   ])
   const filesystemErrorMessage = ref('')
-  const getImmediatePathCandidates = vi.fn(() => ['/vault/journal/2026-03-06.md', '/vault/notes/a.md'])
+  const getImmediatePathCandidates = vi.fn(() => ['/vault/journal/2026/03/2026-03-06.md', '/vault/notes/a.md'])
   const applyImmediateLocalPathMoves = vi.fn()
   const applyDeferredLocalPathMoves = vi.fn((moves: PathMove[]) => {
     allWorkspaceFiles.value = allWorkspaceFiles.value.map((path) => rewritePathWithMoves(path, moves))
@@ -44,12 +44,12 @@ function createEffects() {
     moved_markdown_files: 2,
     expanded_markdown_moves: [
       {
-        from: '/vault/journal/2026-03-06.md',
-        to: '/vault/archive/journal/2026-03-06.md'
+        from: '/vault/journal/2026/03/2026-03-06.md',
+        to: '/vault/archive/journal/2026/03/2026-03-06.md'
       },
       {
-        from: '/vault/journal/2026-03-07.md',
-        to: '/vault/archive/journal/2026-03-07.md'
+        from: '/vault/journal/2026/03/2026-03-07.md',
+        to: '/vault/archive/journal/2026/03/2026-03-07.md'
       }
       ]
     }))
@@ -131,8 +131,8 @@ describe('useWorkspaceMutationEffects', () => {
       moves,
       [
         {
-          from: '/vault/journal/2026-03-06.md',
-          to: '/vault/archive/journal/2026-03-06.md'
+          from: '/vault/journal/2026/03/2026-03-06.md',
+          to: '/vault/archive/journal/2026/03/2026-03-06.md'
         }
       ]
     )
@@ -140,23 +140,23 @@ describe('useWorkspaceMutationEffects', () => {
       moves,
       [
         {
-          from: '/vault/journal/2026-03-06.md',
-          to: '/vault/archive/journal/2026-03-06.md'
+          from: '/vault/journal/2026/03/2026-03-06.md',
+          to: '/vault/archive/journal/2026/03/2026-03-06.md'
         },
         {
-          from: '/vault/journal/2026-03-07.md',
-          to: '/vault/archive/journal/2026-03-07.md'
+          from: '/vault/journal/2026/03/2026-03-07.md',
+          to: '/vault/archive/journal/2026/03/2026-03-07.md'
         }
       ]
     )
     expect(ctx.moveNoteHistoryEntries).toHaveBeenCalledWith([
       {
-        from: '/vault/journal/2026-03-06.md',
-        to: '/vault/archive/journal/2026-03-06.md'
+        from: '/vault/journal/2026/03/2026-03-06.md',
+        to: '/vault/archive/journal/2026/03/2026-03-06.md'
       },
       {
-        from: '/vault/journal/2026-03-07.md',
-        to: '/vault/archive/journal/2026-03-07.md'
+        from: '/vault/journal/2026/03/2026-03-07.md',
+        to: '/vault/archive/journal/2026/03/2026-03-07.md'
       }
     ])
   })
@@ -267,8 +267,8 @@ describe('useWorkspaceMutationEffects', () => {
 
     expect(ctx.applyImmediateLocalPathMoves).toHaveBeenCalledWith(
       [{ from: '/vault/journal', to: '/vault/archive/journal' }],
-      [{ from: '/vault/journal/2026-03-06.md', to: '/vault/archive/journal/2026-03-06.md' }]
+      [{ from: '/vault/journal/2026/03/2026-03-06.md', to: '/vault/archive/journal/2026/03/2026-03-06.md' }]
     )
-    expect(ctx.allWorkspaceFiles.value).toContain('/vault/archive/journal/2026-03-07.md')
+    expect(ctx.allWorkspaceFiles.value).toContain('/vault/archive/journal/2026/03/2026-03-07.md')
   })
 })

@@ -30,7 +30,7 @@ function createController() {
     created_at_ms: 10,
     updated_at_ms: 20
   }))
-  const pathExists = vi.fn(async (path: string) => path === '/vault/journal/2026-03-06.md')
+  const pathExists = vi.fn(async (path: string) => path === '/vault/journal/2026/03/2026-03-06.md')
   const listChildren = vi.fn(async (path: string) => {
     if (path === '/vault') {
       return [
@@ -47,7 +47,7 @@ function createController() {
     }
     return []
   })
-  const listMarkdownFiles = vi.fn(async () => ['notes/a.md', 'journal/2026-03-06.md'])
+  const listMarkdownFiles = vi.fn(async () => ['notes/a.md', 'journal/2026/03/2026-03-06.md'])
   const readPropertyTypeSchema = vi.fn(async () => ({ mood: 'text' }))
   const writePropertyTypeSchema = vi.fn(async () => {})
   const createEntry = vi.fn(async (parentPath: string, name: string) => `${parentPath}/${name}`)
@@ -90,7 +90,7 @@ function createController() {
       normalizePathKey: (path) => path.replace(/\\/g, '/').toLowerCase(),
       isMarkdownPath: (path) => path.endsWith('.md'),
       isIsoDate: (value) => /^\d{4}-\d{2}-\d{2}$/.test(value),
-      dailyNotePath: (root, date) => `${root}/journal/${date}.md`
+      dailyNotePath: (root, date) => `${root}/journal/${date.slice(0, 4)}/${date.slice(5, 7)}/${date}.md`
     },
     workspaceEffectsPort: {
       enqueueMarkdownReindex,
@@ -186,8 +186,8 @@ describe('useAppWorkspaceController', () => {
     const opened = await controller.openDailyNote('2026-03-07', openPath)
 
     expect(opened).toBe(true)
-    expect(openPath).toHaveBeenCalledWith('/vault/journal/2026-03-07.md')
-    expect(controller.allWorkspaceFiles.value).toContain('/vault/journal/2026-03-07.md')
+    expect(openPath).toHaveBeenCalledWith('/vault/journal/2026/03/2026-03-07.md')
+    expect(controller.allWorkspaceFiles.value).toContain('/vault/journal/2026/03/2026-03-07.md')
   })
 
   it('applies filesystem rename changes to the cached file list and indexing hooks', async () => {
@@ -309,8 +309,10 @@ describe('useAppWorkspaceController', () => {
 
     await controller.openDailyNote('2026-03-07', vi.fn(async () => true))
 
-    expect(createEntry).toHaveBeenCalledTimes(1)
-    expect(createEntry).toHaveBeenCalledWith('/vault', 'journal', 'folder', 'fail')
+    expect(createEntry).toHaveBeenCalledTimes(3)
+    expect(createEntry).toHaveBeenNthCalledWith(1, '/vault', 'journal', 'folder', 'fail')
+    expect(createEntry).toHaveBeenNthCalledWith(2, '/vault/journal', '2026', 'folder', 'fail')
+    expect(createEntry).toHaveBeenNthCalledWith(3, '/vault/journal/2026', '03', 'folder', 'fail')
   })
 
   it('clears active metadata when the active markdown file is removed', () => {
@@ -389,7 +391,7 @@ describe('useAppWorkspaceController', () => {
         normalizePathKey: (path) => path.replace(/\\/g, '/').toLowerCase(),
         isMarkdownPath: (path) => path.endsWith('.md'),
         isIsoDate: (value) => /^\d{4}-\d{2}-\d{2}$/.test(value),
-        dailyNotePath: (root, date) => `${root}/journal/${date}.md`
+        dailyNotePath: (root, date) => `${root}/journal/${date.slice(0, 4)}/${date.slice(5, 7)}/${date}.md`
       },
       workspaceEffectsPort: {
         enqueueMarkdownReindex: state.enqueueMarkdownReindex,
