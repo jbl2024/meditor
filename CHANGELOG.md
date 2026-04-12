@@ -18,6 +18,24 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.35.2] - 2026-04-12
+
+### Added
+- feat(editor): add @ macro insertion flow (80d8fc0)
+- feat(notes): add template picker to new note modal (6035b47)
+
+### Changed
+- docs: refresh README and start guide for current note and pulse flows (a64cf09)
+- test(app): align new note shell flow assertion with current behavior (05ee1f8)
+- style(gutter): increase opacity (788df7d)
+
+### Fixed
+- fix(editor): remove redundant macro group label from @ menu (de479c0)
+- fix(editor): narrow at-menu test fixture type (0d79dcd)
+- fix(editor): focus first empty block on new notes (1b0a33e)
+- fix(editor): handle markdown clipboard pastes (94e0597)
+- fix(explorer): block right-click from starting drag (686145f)
+
 ## [0.35.1] - 2026-04-11
 
 ### Added
