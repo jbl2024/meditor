@@ -2,6 +2,9 @@ import { invoke } from '@tauri-apps/api/core'
 import type {
   AppSettingsView,
   CodexDiscoveredModel,
+  DiscoverEmbeddingModelsPayload,
+  DiscoverLlmModelsPayload,
+  LlmDiscoveredModel,
   SaveAppSettingsPayload,
   WriteAppSettingsResult
 } from './apiTypes'
@@ -10,7 +13,7 @@ import type {
  * Frontend IPC wrappers for application settings and provider discovery.
  */
 
-/** Reads redacted app settings from `~/.tomosona/conf.json`. */
+/** Reads the current app settings from `~/.tomosona/conf.json`. */
 export async function readAppSettings(): Promise<AppSettingsView> {
   return await invoke('read_app_settings')
 }
@@ -23,4 +26,14 @@ export async function writeAppSettings(payload: SaveAppSettingsPayload): Promise
 /** Discovers Codex models available through the configured provider bridge. */
 export async function discoverCodexModels(): Promise<CodexDiscoveredModel[]> {
   return await invoke('discover_codex_models')
+}
+
+/** Discovers models available through an OpenAI-compatible LLM endpoint. */
+export async function discoverLlmModels(payload: DiscoverLlmModelsPayload): Promise<LlmDiscoveredModel[]> {
+  return await invoke('discover_llm_models', { payload })
+}
+
+/** Discovers embedding models available through an OpenAI-compatible endpoint. */
+export async function discoverEmbeddingModels(payload: DiscoverEmbeddingModelsPayload): Promise<LlmDiscoveredModel[]> {
+  return await invoke('discover_embedding_models', { payload })
 }

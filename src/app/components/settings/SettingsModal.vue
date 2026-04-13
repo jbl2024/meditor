@@ -1,17 +1,24 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
+import { EyeIcon, EyeSlashIcon } from '@heroicons/vue/24/outline'
 import UiButton from '../../../shared/components/ui/UiButton.vue'
+import UiIconButton from '../../../shared/components/ui/UiIconButton.vue'
+import UiFilterableDropdown, { type FilterableDropdownItem } from '../../../shared/components/ui/UiFilterableDropdown.vue'
 import UiField from '../../../shared/components/ui/UiField.vue'
 import UiInput from '../../../shared/components/ui/UiInput.vue'
 import UiSelect from '../../../shared/components/ui/UiSelect.vue'
 import {
   readAppSettings,
+  discoverLlmModels as discoverLlmModelsApi,
+  discoverEmbeddingModels as discoverEmbeddingModelsApi,
   writeAppSettings,
   discoverCodexModels as discoverCodexModelsApi
 } from '../../../shared/api/settingsApi'
 import type {
   AppSettingsView,
   CodexDiscoveredModel,
+  DiscoverEmbeddingModelsPayload,
+  LlmDiscoveredModel,
   SaveAppSettingsPayload,
   WriteAppSettingsResult
 } from '../../../shared/api/apiTypes'
@@ -29,32 +36,166 @@ const settingsActiveTab = ref<'llm' | 'embeddings' | 'alters'>('llm')
 const settingsConfigPath = ref('~/.tomosona/conf.json')
 const settingsLlmProviderPreset = ref<'openai' | 'anthropic' | 'codex' | 'custom'>('openai')
 const settingsLlmApiKey = ref('')
-const settingsLlmHasStoredApiKey = ref(false)
+const settingsLlmApiKeyVisible = ref(false)
 const settingsLlmModel = ref('gpt-4.1')
+const settingsLlmTemperature = ref('0.15')
 const settingsLlmBaseUrl = ref('')
 const settingsLlmCustomProvider = ref('')
 const settingsLlmLabel = ref('OpenAI Remote')
 const settingsLlmCodexModels = ref<CodexDiscoveredModel[]>([])
 const settingsLlmCodexModelsLoading = ref(false)
+const settingsLlmAvailableModels = ref<LlmDiscoveredModel[]>([])
+const settingsLlmModelsLoading = ref(false)
+const settingsLlmModelPickerOpen = ref(false)
+const settingsLlmModelPickerQuery = ref('')
+const settingsLlmModelPickerActiveIndex = ref(0)
 const settingsEmbeddingsMode = ref<'internal' | 'external'>('internal')
 const settingsEmbeddingsProvider = ref<'openai'>('openai')
 const settingsEmbeddingsApiKey = ref('')
-const settingsEmbeddingsHasStoredApiKey = ref(false)
+const settingsEmbeddingsApiKeyVisible = ref(false)
 const settingsEmbeddingsModel = ref('text-embedding-3-small')
 const settingsEmbeddingsBaseUrl = ref('')
 const settingsEmbeddingsLabel = ref('OpenAI Embeddings')
+const settingsEmbeddingsAvailableModels = ref<LlmDiscoveredModel[]>([])
+const settingsEmbeddingsModelsLoading = ref(false)
+const settingsEmbeddingsModelPickerOpen = ref(false)
+const settingsEmbeddingsModelPickerQuery = ref('')
+const settingsEmbeddingsModelPickerActiveIndex = ref(0)
 const settingsAlterDefaultMode = ref<'neutral' | 'last_used'>('neutral')
 const settingsAlterShowBadgeInChat = ref(true)
 const settingsAlterDefaultIntensity = ref<'light' | 'balanced' | 'strong'>('balanced')
 const settingsModalError = ref('')
 
+const settingsLlmAvailableModelItems = computed<FilterableDropdownItem[]>(() =>
+  settingsLlmAvailableModels.value.map((item) => ({
+    id: item.id,
+    label: item.display_name,
+    display_name: item.display_name,
+    group: item.group
+  }))
+)
+
+const settingsLlmModelHelp = computed(() => {
+  if (settingsLlmProviderPreset.value === 'codex') {
+    return 'Use the Codex CLI session (~/.codex/auth.json). You can also enter any model ID manually.'
+  }
+  if (settingsLlmAvailableModels.value.length > 0) {
+    return `${settingsLlmAvailableModels.value.length} models loaded from the endpoint.`
+  }
+  return 'Use Test to load models from the configured endpoint.'
+})
+
+const settingsLlmModelPlaceholder = computed(() => {
+  if (settingsLlmProviderPreset.value === 'codex') {
+    return 'gpt-5.2-codex'
+  }
+  if (settingsLlmProviderPreset.value === 'anthropic') {
+    return 'claude-3-7-sonnet-latest'
+  }
+  if (settingsLlmProviderPreset.value === 'custom') {
+    return 'openweight-medium'
+  }
+  return 'gpt-4.1'
+})
+
+const settingsLlmApiKeyPlaceholder = computed(() => {
+  return 'api key'
+})
+
+const settingsEmbeddingsAvailableModelItems = computed<FilterableDropdownItem[]>(() =>
+  settingsEmbeddingsAvailableModels.value.map((item) => ({
+    id: item.id,
+    label: item.display_name,
+    display_name: item.display_name,
+    group: item.group
+  }))
+)
+
+const settingsEmbeddingsModelHelp = computed(() => {
+  if (settingsEmbeddingsAvailableModels.value.length > 0) {
+    return `${settingsEmbeddingsAvailableModels.value.length} embedding models loaded from the endpoint.`
+  }
+  return 'Use Test to load embedding models from the configured endpoint.'
+})
+
+const settingsEmbeddingsModelPlaceholder = computed(() => {
+  return settingsEmbeddingsProvider.value === 'openai'
+    ? 'text-embedding-3-small'
+    : 'text-embedding-3-small'
+})
+
+const settingsEmbeddingsApiKeyPlaceholder = computed(() => {
+  return 'api key'
+})
+
+function isSecretValueProvided(value: string): boolean {
+  return value.trim().length > 0
+}
+
+function secretInputType(visible: boolean): 'text' | 'password' {
+  return visible ? 'text' : 'password'
+}
+
+function formatSettingsError(error: unknown, fallback: string): string {
+  if (typeof error === 'string' && error.trim()) {
+    return error.trim()
+  }
+
+  if (error && typeof error === 'object') {
+    const candidate = error as {
+      message?: unknown
+      cause?: unknown
+      data?: unknown
+      toString?: () => string
+    }
+    if (typeof candidate.message === 'string' && candidate.message.trim()) {
+      return candidate.message.trim()
+    }
+    if (typeof candidate.data === 'string' && candidate.data.trim()) {
+      return candidate.data.trim()
+    }
+    if (candidate.data && typeof candidate.data === 'object') {
+      const nested = candidate.data as { message?: unknown; error?: unknown; detail?: unknown }
+      if (typeof nested.message === 'string' && nested.message.trim()) {
+        return nested.message.trim()
+      }
+      if (typeof nested.error === 'string' && nested.error.trim()) {
+        return nested.error.trim()
+      }
+      if (typeof nested.detail === 'string' && nested.detail.trim()) {
+        return nested.detail.trim()
+      }
+    }
+    if (typeof candidate.cause === 'object' && candidate.cause !== null) {
+      const nested = candidate.cause as { message?: unknown }
+      if (typeof nested.message === 'string' && nested.message.trim()) {
+        return nested.message.trim()
+      }
+    }
+    if (typeof candidate.toString === 'function') {
+      const text = candidate.toString()
+      if (text && text !== '[object Object]') {
+        return text
+      }
+    }
+  }
+
+  return fallback
+}
+
 function applySettingsLlmPreset(provider: 'openai' | 'anthropic' | 'codex' | 'custom') {
   settingsLlmProviderPreset.value = provider
   settingsModalError.value = ''
+  settingsLlmAvailableModels.value = []
+  settingsLlmModelsLoading.value = false
+  settingsLlmModelPickerOpen.value = false
+  settingsLlmModelPickerQuery.value = ''
+  settingsLlmModelPickerActiveIndex.value = 0
   if (provider === 'openai') {
     settingsLlmLabel.value = 'OpenAI Remote'
     settingsLlmCustomProvider.value = 'openai'
     settingsLlmModel.value = 'gpt-4.1'
+    settingsLlmTemperature.value = '0.15'
     settingsLlmBaseUrl.value = ''
     return
   }
@@ -62,6 +203,7 @@ function applySettingsLlmPreset(provider: 'openai' | 'anthropic' | 'codex' | 'cu
     settingsLlmLabel.value = 'Anthropic Claude'
     settingsLlmCustomProvider.value = 'anthropic'
     settingsLlmModel.value = 'claude-3-7-sonnet-latest'
+    settingsLlmTemperature.value = '0.15'
     settingsLlmBaseUrl.value = ''
     return
   }
@@ -69,6 +211,7 @@ function applySettingsLlmPreset(provider: 'openai' | 'anthropic' | 'codex' | 'cu
     settingsLlmLabel.value = 'OpenAI Codex'
     settingsLlmCustomProvider.value = 'openai-codex'
     settingsLlmModel.value = 'gpt-5.2-codex'
+    settingsLlmTemperature.value = '0.15'
     settingsLlmBaseUrl.value = ''
     if (!settingsLlmCodexModels.value.length && !settingsLlmCodexModelsLoading.value) {
       void discoverCodexModels()
@@ -76,8 +219,9 @@ function applySettingsLlmPreset(provider: 'openai' | 'anthropic' | 'codex' | 'cu
     return
   }
   settingsLlmLabel.value = 'Custom LLM'
-  settingsLlmCustomProvider.value = ''
+  settingsLlmCustomProvider.value = 'custom'
   settingsLlmModel.value = ''
+  settingsLlmTemperature.value = '0.15'
   settingsLlmBaseUrl.value = ''
 }
 
@@ -85,9 +229,19 @@ function applySettingsDefaults() {
   settingsActiveTab.value = 'llm'
   settingsConfigPath.value = '~/.tomosona/conf.json'
   settingsLlmApiKey.value = ''
-  settingsLlmHasStoredApiKey.value = false
+  settingsLlmApiKeyVisible.value = false
   settingsLlmCodexModels.value = []
   settingsLlmCodexModelsLoading.value = false
+  settingsLlmAvailableModels.value = []
+  settingsLlmModelsLoading.value = false
+  settingsLlmModelPickerOpen.value = false
+  settingsLlmModelPickerQuery.value = ''
+  settingsLlmModelPickerActiveIndex.value = 0
+  settingsEmbeddingsAvailableModels.value = []
+  settingsEmbeddingsModelsLoading.value = false
+  settingsEmbeddingsModelPickerOpen.value = false
+  settingsEmbeddingsModelPickerQuery.value = ''
+  settingsEmbeddingsModelPickerActiveIndex.value = 0
   applySettingsLlmPreset('openai')
   settingsEmbeddingsMode.value = 'internal'
   settingsEmbeddingsProvider.value = 'openai'
@@ -95,11 +249,61 @@ function applySettingsDefaults() {
   settingsEmbeddingsModel.value = 'text-embedding-3-small'
   settingsEmbeddingsBaseUrl.value = ''
   settingsEmbeddingsApiKey.value = ''
-  settingsEmbeddingsHasStoredApiKey.value = false
+  settingsEmbeddingsApiKeyVisible.value = false
   settingsAlterDefaultMode.value = 'neutral'
   settingsAlterShowBadgeInChat.value = true
   settingsAlterDefaultIntensity.value = 'balanced'
   settingsModalError.value = ''
+}
+
+function currentLlmProvider() {
+  return settingsLlmProviderPreset.value === 'openai'
+    ? 'openai'
+    : settingsLlmProviderPreset.value === 'anthropic'
+      ? 'anthropic'
+      : settingsLlmProviderPreset.value === 'codex'
+        ? 'openai-codex'
+        : settingsLlmCustomProvider.value.trim() || 'custom'
+}
+
+function currentLlmProfileId() {
+  return settingsLlmProviderPreset.value === 'custom'
+    ? 'custom-profile'
+    : settingsLlmProviderPreset.value === 'codex'
+      ? 'openai-codex-profile'
+      : `${currentLlmProvider()}-profile`
+}
+
+function clearLlmModelDiscoveryState() {
+  settingsLlmAvailableModels.value = []
+  settingsLlmModelsLoading.value = false
+  settingsLlmModelPickerOpen.value = false
+  settingsLlmModelPickerQuery.value = ''
+  settingsLlmModelPickerActiveIndex.value = 0
+}
+
+function toggleLlmApiKeyVisibility() {
+  settingsLlmApiKeyVisible.value = !settingsLlmApiKeyVisible.value
+}
+
+function toggleEmbeddingsApiKeyVisibility() {
+  settingsEmbeddingsApiKeyVisible.value = !settingsEmbeddingsApiKeyVisible.value
+}
+
+function clearEmbeddingsModelDiscoveryState() {
+  settingsEmbeddingsAvailableModels.value = []
+  settingsEmbeddingsModelsLoading.value = false
+  settingsEmbeddingsModelPickerOpen.value = false
+  settingsEmbeddingsModelPickerQuery.value = ''
+  settingsEmbeddingsModelPickerActiveIndex.value = 0
+}
+
+function selectDiscoveredLlmModel(item: FilterableDropdownItem) {
+  settingsLlmModel.value = item.id
+}
+
+function selectDiscoveredEmbeddingModel(item: FilterableDropdownItem) {
+  settingsEmbeddingsModel.value = item.id
 }
 
 async function discoverCodexModels() {
@@ -113,9 +317,81 @@ async function discoverCodexModels() {
     }
   } catch (err) {
     settingsLlmCodexModels.value = []
-    settingsModalError.value = err instanceof Error ? err.message : 'Could not discover Codex models.'
+    settingsModalError.value = formatSettingsError(err, 'Could not discover Codex models.')
   } finally {
     settingsLlmCodexModelsLoading.value = false
+  }
+}
+
+function buildLlmModelMatcher(item: FilterableDropdownItem, query: string) {
+  const needle = query.trim().toLowerCase()
+  if (!needle) return true
+  const modelItem = item as FilterableDropdownItem & { display_name?: string }
+  const displayName = typeof modelItem.display_name === 'string'
+    ? modelItem.display_name.toLowerCase()
+    : item.label.toLowerCase()
+  return item.id.toLowerCase().includes(needle) || displayName.includes(needle)
+}
+
+async function discoverSettingsLlmModels() {
+  settingsLlmModelsLoading.value = true
+  settingsModalError.value = ''
+  try {
+    const apiKeyProvided = isSecretValueProvided(settingsLlmApiKey.value)
+    const models = await discoverLlmModelsApi({
+      profile_id: currentLlmProfileId(),
+      provider: currentLlmProvider(),
+      api_key: apiKeyProvided ? settingsLlmApiKey.value.trim() : undefined,
+      preserve_existing_api_key: false,
+      base_url: settingsLlmBaseUrl.value.trim() || undefined
+    })
+    settingsLlmAvailableModels.value = models
+    const selectedIndex = models.findIndex((item) => item.id === settingsLlmModel.value.trim())
+    if (!settingsLlmModel.value.trim() && models.length > 0) {
+      settingsLlmModel.value = models[0]!.id
+    }
+    settingsLlmModelPickerQuery.value = ''
+    settingsLlmModelPickerActiveIndex.value = selectedIndex >= 0 ? selectedIndex : 0
+    settingsLlmModelPickerOpen.value = models.length > 0
+    if (!models.length) {
+      settingsModalError.value = 'Model discovery returned no models.'
+    }
+  } catch (err) {
+    clearLlmModelDiscoveryState()
+    settingsModalError.value = formatSettingsError(err, 'Could not discover models.')
+  } finally {
+    settingsLlmModelsLoading.value = false
+  }
+}
+
+async function discoverSettingsEmbeddingModels() {
+  settingsEmbeddingsModelsLoading.value = true
+  settingsModalError.value = ''
+  try {
+    const apiKeyProvided = isSecretValueProvided(settingsEmbeddingsApiKey.value)
+    const payload: DiscoverEmbeddingModelsPayload = {
+      profile_id: 'emb-openai-profile',
+      api_key: apiKeyProvided ? settingsEmbeddingsApiKey.value.trim() : undefined,
+      preserve_existing_api_key: false,
+      base_url: settingsEmbeddingsBaseUrl.value.trim() || undefined
+    }
+    const models = await discoverEmbeddingModelsApi(payload)
+    settingsEmbeddingsAvailableModels.value = models
+    const selectedIndex = models.findIndex((item) => item.id === settingsEmbeddingsModel.value.trim())
+    if (!settingsEmbeddingsModel.value.trim() && models.length > 0) {
+      settingsEmbeddingsModel.value = models[0]!.id
+    }
+    settingsEmbeddingsModelPickerQuery.value = ''
+    settingsEmbeddingsModelPickerActiveIndex.value = selectedIndex >= 0 ? selectedIndex : 0
+    settingsEmbeddingsModelPickerOpen.value = models.length > 0
+    if (!models.length) {
+      settingsModalError.value = 'Embedding model discovery returned no models.'
+    }
+  } catch (err) {
+    clearEmbeddingsModelDiscoveryState()
+    settingsModalError.value = formatSettingsError(err, 'Could not discover embeddings models.')
+  } finally {
+    settingsEmbeddingsModelsLoading.value = false
   }
 }
 
@@ -134,24 +410,24 @@ function hydrateSettingsFromConfig(view: AppSettingsView) {
     settingsLlmCustomProvider.value = active.provider
     settingsLlmLabel.value = active.label
     settingsLlmModel.value = active.model
+    settingsLlmTemperature.value = String(active.default_temperature ?? 0.15)
     settingsLlmBaseUrl.value = active.base_url ?? ''
-    settingsLlmHasStoredApiKey.value = active.has_api_key
-    settingsLlmApiKey.value = ''
+    settingsLlmApiKey.value = active.api_key
   }
+  clearLlmModelDiscoveryState()
+  clearEmbeddingsModelDiscoveryState()
   settingsEmbeddingsMode.value = view.embeddings.mode
   if (view.embeddings.external) {
     settingsEmbeddingsProvider.value = 'openai'
     settingsEmbeddingsLabel.value = view.embeddings.external.label
     settingsEmbeddingsModel.value = view.embeddings.external.model
     settingsEmbeddingsBaseUrl.value = view.embeddings.external.base_url ?? ''
-    settingsEmbeddingsHasStoredApiKey.value = view.embeddings.external.has_api_key
-    settingsEmbeddingsApiKey.value = ''
+    settingsEmbeddingsApiKey.value = view.embeddings.external.api_key
   } else {
     settingsEmbeddingsProvider.value = 'openai'
     settingsEmbeddingsLabel.value = 'OpenAI Embeddings'
     settingsEmbeddingsModel.value = 'text-embedding-3-small'
     settingsEmbeddingsBaseUrl.value = ''
-    settingsEmbeddingsHasStoredApiKey.value = false
     settingsEmbeddingsApiKey.value = ''
   }
   settingsAlterDefaultMode.value = view.alters.default_mode
@@ -168,23 +444,15 @@ async function initializeSettingsModal() {
       void discoverCodexModels()
     }
   } catch (err) {
-    settingsModalError.value = err instanceof Error ? err.message : 'Could not read settings.'
+    settingsModalError.value = formatSettingsError(err, 'Could not read settings.')
   }
 }
 
 function buildSaveSettingsPayload(): SaveAppSettingsPayload {
-  const llmProvider = settingsLlmProviderPreset.value === 'openai'
-    ? 'openai'
-    : settingsLlmProviderPreset.value === 'anthropic'
-      ? 'anthropic'
-      : settingsLlmProviderPreset.value === 'codex'
-        ? 'openai-codex'
-        : settingsLlmCustomProvider.value.trim()
-  const llmProfileId = settingsLlmProviderPreset.value === 'custom'
-    ? 'custom-profile'
-    : settingsLlmProviderPreset.value === 'codex'
-      ? 'openai-codex-profile'
-      : `${llmProvider}-profile`
+  const llmProvider = currentLlmProvider()
+  const llmProfileId = currentLlmProfileId()
+  const llmApiKeyValue = settingsLlmApiKey.value.trim()
+  const llmApiKeyProvided = isSecretValueProvided(settingsLlmApiKey.value)
   const capabilities = {
     text: true,
     image_input: settingsLlmProviderPreset.value !== 'custom' && settingsLlmProviderPreset.value !== 'codex',
@@ -197,13 +465,12 @@ function buildSaveSettingsPayload(): SaveAppSettingsPayload {
     label: settingsLlmLabel.value.trim(),
     provider: llmProvider,
     model: settingsLlmModel.value.trim(),
-    preserve_existing_api_key: settingsLlmProviderPreset.value !== 'codex'
-      && settingsLlmHasStoredApiKey.value
-      && !settingsLlmApiKey.value.trim(),
+    default_temperature: Number.parseFloat(settingsLlmTemperature.value),
+    preserve_existing_api_key: false,
     capabilities,
     default_mode: 'freestyle',
-    ...(settingsLlmProviderPreset.value !== 'codex' && settingsLlmApiKey.value.trim()
-      ? { api_key: settingsLlmApiKey.value.trim() }
+    ...(settingsLlmProviderPreset.value !== 'codex' && llmApiKeyProvided
+      ? { api_key: llmApiKeyValue }
       : {}),
     ...(settingsLlmProviderPreset.value !== 'codex' && settingsLlmBaseUrl.value.trim()
       ? { base_url: settingsLlmBaseUrl.value.trim() }
@@ -225,13 +492,15 @@ function buildSaveSettingsPayload(): SaveAppSettingsPayload {
     }
   }
   if (settingsEmbeddingsMode.value === 'external') {
+    const embeddingApiKeyValue = settingsEmbeddingsApiKey.value.trim()
+    const embeddingApiKeyProvided = isSecretValueProvided(settingsEmbeddingsApiKey.value)
     payload.embeddings.external = {
       id: 'emb-openai-profile',
       label: settingsEmbeddingsLabel.value.trim() || 'OpenAI Embeddings',
       provider: settingsEmbeddingsProvider.value,
       model: settingsEmbeddingsModel.value.trim(),
-      preserve_existing_api_key: settingsEmbeddingsHasStoredApiKey.value && !settingsEmbeddingsApiKey.value.trim(),
-      ...(settingsEmbeddingsApiKey.value.trim() ? { api_key: settingsEmbeddingsApiKey.value.trim() } : {}),
+      preserve_existing_api_key: false,
+      ...(embeddingApiKeyProvided ? { api_key: embeddingApiKeyValue } : {}),
       ...(settingsEmbeddingsBaseUrl.value.trim() ? { base_url: settingsEmbeddingsBaseUrl.value.trim() } : {})
     }
   }
@@ -247,13 +516,17 @@ async function submitSettingsModal() {
     settingsModalError.value = 'LLM profile label is required.'
     return
   }
-  if (settingsLlmProviderPreset.value === 'custom' && !settingsLlmCustomProvider.value.trim()) {
-    settingsModalError.value = 'Custom LLM provider is required.'
+  const temperature = Number.parseFloat(settingsLlmTemperature.value)
+  if (Number.isNaN(temperature) || temperature < 0 || temperature > 1) {
+    settingsModalError.value = 'LLM temperature must be between 0 and 1.'
+    return
+  }
+  if (settingsLlmProviderPreset.value === 'custom' && !settingsLlmBaseUrl.value.trim()) {
+    settingsModalError.value = 'Base URL is required for Custom LLM.'
     return
   }
   if (
     settingsLlmProviderPreset.value !== 'codex'
-    && !settingsLlmHasStoredApiKey.value
     && !settingsLlmApiKey.value.trim()
   ) {
     settingsModalError.value = 'LLM API key is required.'
@@ -263,7 +536,7 @@ async function submitSettingsModal() {
     settingsModalError.value = 'Embeddings model is required.'
     return
   }
-  if (settingsEmbeddingsMode.value === 'external' && !settingsEmbeddingsHasStoredApiKey.value && !settingsEmbeddingsApiKey.value.trim()) {
+  if (settingsEmbeddingsMode.value === 'external' && !settingsEmbeddingsApiKey.value.trim()) {
     settingsModalError.value = 'Embeddings API key is required for external mode.'
     return
   }
@@ -273,7 +546,7 @@ async function submitSettingsModal() {
     const result = await writeAppSettings(buildSaveSettingsPayload())
     emit('saved', result)
   } catch (err) {
-    settingsModalError.value = err instanceof Error ? err.message : 'Could not save settings.'
+    settingsModalError.value = formatSettingsError(err, 'Could not save settings.')
   }
 }
 
@@ -304,7 +577,7 @@ watch(() => props.visible, async (visible) => {
 </script>
 
 <template>
-  <div v-if="visible" class="modal-overlay" @click.self="emit('cancel')">
+  <div v-if="visible" class="modal-overlay">
     <div
       class="modal settings-modal"
       data-modal="settings"
@@ -365,7 +638,12 @@ watch(() => props.visible, async (visible) => {
                 </template>
               </UiField>
 
-              <UiField v-if="settingsLlmProviderPreset === 'custom'" for-id="settings-llm-custom-provider" label="Custom provider">
+              <UiField
+                v-if="settingsLlmProviderPreset === 'custom'"
+                for-id="settings-llm-custom-provider"
+                label="Provider alias"
+                help="Used as metadata only. The endpoint comes from Base URL."
+              >
                 <template #default="{ describedBy, invalid }">
                   <UiInput
                     id="settings-llm-custom-provider"
@@ -382,32 +660,43 @@ watch(() => props.visible, async (visible) => {
               <UiField
                 for-id="settings-llm-model"
                 label="Model"
-                :help="settingsLlmProviderPreset === 'codex'
-                  ? 'Use the Codex CLI session (~/.codex/auth.json). You can also enter any model ID manually.'
-                  : ''"
+                :help="settingsLlmModelHelp"
               >
                 <template #default="{ describedBy, invalid }">
                   <div class="settings-model-group">
-                    <UiInput
-                      id="settings-llm-model"
-                      v-model="settingsLlmModel"
-                      size="sm"
-                      placeholder="gpt-5.2-codex"
-                      class-name="settings-model-input"
-                      :aria-describedby="describedBy"
-                      :invalid="invalid"
-                      @keydown="onSettingsInputKeydown"
-                    />
-                    <div v-if="settingsLlmProviderPreset === 'codex'" class="settings-model-actions">
-                      <UiButton
+                    <div class="settings-model-row">
+                      <UiInput
+                        id="settings-llm-model"
+                        v-model="settingsLlmModel"
                         size="sm"
-                        variant="ghost"
-                        :loading="settingsLlmCodexModelsLoading"
-                        class-name="settings-discover-btn"
-                        @click="discoverCodexModels"
-                      >
-                        {{ settingsLlmCodexModelsLoading ? 'Discovering...' : 'Discover models' }}
-                      </UiButton>
+                        :placeholder="settingsLlmModelPlaceholder"
+                        class-name="settings-model-input"
+                        :aria-describedby="describedBy"
+                        :invalid="invalid"
+                        @keydown="onSettingsInputKeydown"
+                      />
+                      <div class="settings-model-actions">
+                        <UiButton
+                          v-if="settingsLlmProviderPreset === 'codex'"
+                          size="sm"
+                          variant="ghost"
+                          :loading="settingsLlmCodexModelsLoading"
+                          class-name="settings-discover-btn"
+                          @click="discoverCodexModels"
+                        >
+                          {{ settingsLlmCodexModelsLoading ? 'Discovering...' : 'Discover models' }}
+                        </UiButton>
+                        <UiButton
+                          v-else
+                          size="sm"
+                          variant="ghost"
+                          :loading="settingsLlmModelsLoading"
+                          class-name="settings-discover-btn"
+                          @click="discoverSettingsLlmModels"
+                        >
+                          {{ settingsLlmModelsLoading ? 'Testing...' : 'Test' }}
+                        </UiButton>
+                      </div>
                     </div>
                     <UiField
                       v-if="settingsLlmProviderPreset === 'codex' && settingsLlmCodexModels.length > 0"
@@ -427,7 +716,67 @@ watch(() => props.visible, async (visible) => {
                         </UiSelect>
                       </template>
                     </UiField>
+                    <UiFilterableDropdown
+                      v-if="settingsLlmProviderPreset !== 'codex' && settingsLlmAvailableModels.length > 0"
+                      class="settings-model-picker"
+                      :items="settingsLlmAvailableModelItems"
+                      :model-value="settingsLlmModelPickerOpen"
+                      :query="settingsLlmModelPickerQuery"
+                      :active-index="settingsLlmModelPickerActiveIndex"
+                      :filter-placeholder="'Filter models...'"
+                      :menu-mode="'portal'"
+                      :menu-class="'settings-model-dropdown'"
+                      :matcher="buildLlmModelMatcher"
+                      @open-change="settingsLlmModelPickerOpen = $event"
+                      @query-change="settingsLlmModelPickerQuery = $event"
+                      @active-index-change="settingsLlmModelPickerActiveIndex = $event"
+                      @select="selectDiscoveredLlmModel($event)"
+                    >
+                      <template #trigger="{ toggleMenu, open }">
+                        <UiButton
+                          size="sm"
+                          variant="secondary"
+                          class-name="settings-model-picker-btn"
+                          @click="toggleMenu"
+                        >
+                          {{ open ? 'Close models' : 'Models' }}
+                        </UiButton>
+                      </template>
+                      <template #item="{ item }">
+                        <div class="settings-model-option">
+                          <strong>{{ item.display_name }}</strong>
+                          <span>{{ item.id }}</span>
+                          <em v-if="item.group">{{ item.group }}</em>
+                        </div>
+                      </template>
+                      <template #empty>
+                        <span>No models found</span>
+                      </template>
+                    </UiFilterableDropdown>
                   </div>
+                </template>
+              </UiField>
+
+              <UiField
+                for-id="settings-llm-temperature"
+                label="Default temperature"
+                help="Used when a flow does not set a specific temperature."
+              >
+                <template #default="{ describedBy, invalid }">
+                  <UiInput
+                    id="settings-llm-temperature"
+                    v-model="settingsLlmTemperature"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="1"
+                    inputmode="decimal"
+                    size="sm"
+                    placeholder="0.15"
+                    :aria-describedby="describedBy"
+                    :invalid="invalid"
+                    @keydown="onSettingsInputKeydown"
+                  />
                 </template>
               </UiField>
 
@@ -451,24 +800,36 @@ watch(() => props.visible, async (visible) => {
                 :help="settingsLlmProviderPreset === 'codex' ? 'Codex uses the local CLI session instead of a saved API key.' : ''"
               >
                 <template #default="{ describedBy, invalid }">
-                  <UiInput
-                    id="settings-llm-apikey"
-                    v-model="settingsLlmApiKey"
-                    size="sm"
-                    data-settings-llm-apikey="true"
-                    type="password"
-                    :placeholder="settingsLlmProviderPreset === 'codex'
-                      ? 'not used for Codex'
-                      : settingsLlmHasStoredApiKey
-                        ? 'stored key (leave empty to keep)'
-                        : 'api key'"
-                    :disabled="settingsLlmProviderPreset === 'codex'"
-                    :aria-describedby="describedBy"
-                    :invalid="invalid"
-                    @keydown="onSettingsInputKeydown"
-                  />
-                </template>
-              </UiField>
+                  <div class="settings-secret-row">
+                    <UiInput
+                      id="settings-llm-apikey"
+                      v-model="settingsLlmApiKey"
+                      size="sm"
+                      data-settings-llm-apikey="true"
+                      :type="secretInputType(settingsLlmApiKeyVisible)"
+                      :placeholder="settingsLlmProviderPreset === 'codex'
+                        ? 'not used for Codex'
+                        : settingsLlmApiKeyPlaceholder"
+                      :disabled="settingsLlmProviderPreset === 'codex'"
+                      :aria-describedby="describedBy"
+                      :invalid="invalid"
+                      @keydown="onSettingsInputKeydown"
+                    />
+                    <UiIconButton
+                      v-if="settingsLlmProviderPreset !== 'codex'"
+                      size="sm"
+                      variant="ghost"
+                      :aria-label="settingsLlmApiKeyVisible ? 'Hide API key' : 'Reveal API key'"
+                      :title="settingsLlmApiKeyVisible ? 'Hide API key' : 'Reveal API key'"
+                      class-name="settings-secret-toggle"
+                      @click="toggleLlmApiKeyVisibility"
+                    >
+                      <EyeSlashIcon v-if="settingsLlmApiKeyVisible" />
+                      <EyeIcon v-else />
+                    </UiIconButton>
+                  </div>
+                  </template>
+                </UiField>
             </div>
             <div v-else-if="settingsActiveTab === 'alters'" class="settings-fields">
               <UiField for-id="settings-alter-default-mode" label="Default Alter behavior">
@@ -554,17 +915,70 @@ watch(() => props.visible, async (visible) => {
                   </template>
                 </UiField>
 
-                <UiField for-id="settings-emb-model" label="Model">
+                <UiField for-id="settings-emb-model" label="Model" :help="settingsEmbeddingsModelHelp">
                   <template #default="{ describedBy, invalid }">
-                    <UiInput
-                      id="settings-emb-model"
-                      v-model="settingsEmbeddingsModel"
-                      size="sm"
-                      placeholder="text-embedding-3-small"
-                      :aria-describedby="describedBy"
-                      :invalid="invalid"
-                      @keydown="onSettingsInputKeydown"
-                    />
+                    <div class="settings-model-group">
+                      <div class="settings-model-row">
+                        <UiInput
+                          id="settings-emb-model"
+                          v-model="settingsEmbeddingsModel"
+                          size="sm"
+                          :placeholder="settingsEmbeddingsModelPlaceholder"
+                          class-name="settings-model-input"
+                          :aria-describedby="describedBy"
+                          :invalid="invalid"
+                          @keydown="onSettingsInputKeydown"
+                        />
+                        <div class="settings-model-actions">
+                          <UiButton
+                            size="sm"
+                            variant="ghost"
+                            :loading="settingsEmbeddingsModelsLoading"
+                            class-name="settings-discover-btn"
+                            @click="discoverSettingsEmbeddingModels"
+                          >
+                            {{ settingsEmbeddingsModelsLoading ? 'Testing...' : 'Test' }}
+                          </UiButton>
+                        </div>
+                      </div>
+                      <UiFilterableDropdown
+                        v-if="settingsEmbeddingsAvailableModels.length > 0"
+                        class="settings-model-picker"
+                        :items="settingsEmbeddingsAvailableModelItems"
+                        :model-value="settingsEmbeddingsModelPickerOpen"
+                        :query="settingsEmbeddingsModelPickerQuery"
+                        :active-index="settingsEmbeddingsModelPickerActiveIndex"
+                        :filter-placeholder="'Filter embedding models...'"
+                        :menu-mode="'portal'"
+                        :menu-class="'settings-model-dropdown'"
+                        :matcher="buildLlmModelMatcher"
+                        @open-change="settingsEmbeddingsModelPickerOpen = $event"
+                        @query-change="settingsEmbeddingsModelPickerQuery = $event"
+                        @active-index-change="settingsEmbeddingsModelPickerActiveIndex = $event"
+                        @select="selectDiscoveredEmbeddingModel($event)"
+                      >
+                        <template #trigger="{ toggleMenu, open }">
+                          <UiButton
+                            size="sm"
+                            variant="secondary"
+                            class-name="settings-model-picker-btn"
+                            @click="toggleMenu"
+                          >
+                            {{ open ? 'Close models' : 'Models' }}
+                          </UiButton>
+                        </template>
+                        <template #item="{ item }">
+                          <div class="settings-model-option">
+                            <strong>{{ item.display_name }}</strong>
+                            <span>{{ item.id }}</span>
+                            <em v-if="item.group">{{ item.group }}</em>
+                          </div>
+                        </template>
+                        <template #empty>
+                          <span>No embedding models found</span>
+                        </template>
+                      </UiFilterableDropdown>
+                    </div>
                   </template>
                 </UiField>
 
@@ -585,19 +999,31 @@ watch(() => props.visible, async (visible) => {
                 <UiField
                   for-id="settings-emb-apikey"
                   label="API key"
-                  :help="settingsEmbeddingsHasStoredApiKey ? 'Leave empty to keep the stored key.' : ''"
                 >
                   <template #default="{ describedBy, invalid }">
-                    <UiInput
-                      id="settings-emb-apikey"
-                      v-model="settingsEmbeddingsApiKey"
-                      size="sm"
-                      type="password"
-                      :placeholder="settingsEmbeddingsHasStoredApiKey ? 'stored key (leave empty to keep)' : 'api key'"
-                      :aria-describedby="describedBy"
-                      :invalid="invalid"
-                      @keydown="onSettingsInputKeydown"
-                    />
+                    <div class="settings-secret-row">
+                      <UiInput
+                        id="settings-emb-apikey"
+                        v-model="settingsEmbeddingsApiKey"
+                        size="sm"
+                        :type="secretInputType(settingsEmbeddingsApiKeyVisible)"
+                        :placeholder="settingsEmbeddingsApiKeyPlaceholder"
+                        :aria-describedby="describedBy"
+                        :invalid="invalid"
+                        @keydown="onSettingsInputKeydown"
+                      />
+                      <UiIconButton
+                        size="sm"
+                        variant="ghost"
+                        :aria-label="settingsEmbeddingsApiKeyVisible ? 'Hide API key' : 'Reveal API key'"
+                        :title="settingsEmbeddingsApiKeyVisible ? 'Hide API key' : 'Reveal API key'"
+                        class-name="settings-secret-toggle"
+                        @click="toggleEmbeddingsApiKeyVisibility"
+                      >
+                        <EyeSlashIcon v-if="settingsEmbeddingsApiKeyVisible" />
+                        <EyeIcon v-else />
+                      </UiIconButton>
+                    </div>
                   </template>
                 </UiField>
               </template>
@@ -753,14 +1179,23 @@ watch(() => props.visible, async (visible) => {
   gap: 6px;
 }
 
+.settings-model-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .settings-model-input {
+  flex: 1 1 auto;
   min-width: 0;
 }
 
 .settings-model-actions {
   display: flex;
-  justify-content: flex-start;
-  margin-top: -1px;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .settings-discover-btn {
@@ -768,6 +1203,57 @@ watch(() => props.visible, async (visible) => {
   padding-inline: 0;
   height: auto;
   font-size: 0.74rem;
+}
+
+.settings-model-picker {
+  width: 100%;
+}
+
+.settings-model-picker-btn {
+  white-space: nowrap;
+}
+
+.settings-model-dropdown {
+  width: min(680px, calc(100vw - 48px));
+}
+
+.settings-model-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-model-option strong {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.settings-model-option span {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+
+.settings-model-option em {
+  font-size: 0.68rem;
+  font-style: normal;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.settings-secret-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-secret-row :deep(.ui-input) {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.settings-secret-toggle {
+  flex: 0 0 auto;
 }
 
 .settings-config-path {

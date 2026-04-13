@@ -1,5 +1,9 @@
 use serde::{Deserialize, Serialize};
 
+fn default_temperature() -> f64 {
+    0.15
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ProfileCapabilities {
     #[serde(default = "default_true")]
@@ -21,6 +25,8 @@ pub struct ProviderProfile {
     pub provider: String,
     pub model: String,
     pub api_key: String,
+    #[serde(default = "default_temperature")]
+    pub default_temperature: f64,
     #[serde(default)]
     pub base_url: Option<String>,
     #[serde(default)]
@@ -68,7 +74,36 @@ pub fn validate_config(config: &SecondBrainConfig) -> Result<(), String> {
         if profile.model.trim().is_empty() {
             return Err("profile.model is required.".to_string());
         }
+        if !(0.0..=1.0).contains(&profile.default_temperature) {
+            return Err("profile.default_temperature must be between 0 and 1.".to_string());
+        }
         let provider = profile.provider.trim().to_lowercase();
+        let has_base_url = profile
+            .base_url
+            .as_ref()
+            .map(|value| !value.trim().is_empty())
+            .unwrap_or(false);
+        let is_native_provider = matches!(
+            provider.as_str(),
+            "openai"
+                | "openai_compatible"
+                | "openai-codex"
+                | "anthropic"
+                | "gemini"
+                | "groq"
+                | "xai"
+                | "ollama"
+                | "deepseek"
+                | "cohere"
+                | "fireworks"
+                | "nebius"
+                | "mimo"
+                | "zai"
+                | "bigmodel"
+        );
+        if !is_native_provider && !has_base_url {
+            return Err("profile.base_url is required for custom provider.".to_string());
+        }
         if provider != "openai-codex" && profile.api_key.trim().is_empty() {
             return Err("profile.api_key is required.".to_string());
         }
@@ -112,6 +147,7 @@ mod tests {
                 provider: "openai_compatible".to_string(),
                 model: "gpt-oss".to_string(),
                 api_key: "abc".to_string(),
+                default_temperature: 0.15,
                 base_url: Some("http://localhost:11434/v1".to_string()),
                 default_mode: Some("freestyle".to_string()),
                 capabilities: ProfileCapabilities::default(),
@@ -149,6 +185,7 @@ mod tests {
                 provider: "openai-codex".to_string(),
                 model: "gpt-5.2-codex".to_string(),
                 api_key: "".to_string(),
+                default_temperature: 0.15,
                 base_url: None,
                 default_mode: Some("freestyle".to_string()),
                 capabilities: ProfileCapabilities::default(),
@@ -158,10 +195,25 @@ mod tests {
     }
 
     #[test]
+    fn rejects_invalid_default_temperature() {
+        let mut config = base_config();
+        config.profiles[0].default_temperature = 1.5;
+        assert!(validate_config(&config).is_err());
+    }
+
+    #[test]
     fn requires_api_key_for_non_codex() {
         let mut config = base_config();
         config.profiles[0].provider = "openai".to_string();
         config.profiles[0].api_key = String::new();
+        assert!(validate_config(&config).is_err());
+    }
+
+    #[test]
+    fn requires_base_url_for_custom_provider() {
+        let mut config = base_config();
+        config.profiles[0].provider = "custom".to_string();
+        config.profiles[0].base_url = None;
         assert!(validate_config(&config).is_err());
     }
 }

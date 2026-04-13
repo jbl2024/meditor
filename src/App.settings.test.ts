@@ -25,7 +25,8 @@ const hoisted = vi.hoisted(() => ({
           label: 'OpenAI Remote',
           provider: 'openai',
           model: 'gpt-4.1',
-          has_api_key: true,
+          default_temperature: 0.15,
+          api_key: 'openai-secret',
           base_url: null,
           default_mode: 'freestyle',
           capabilities: {
@@ -44,6 +45,14 @@ const hoisted = vi.hoisted(() => ({
   discoverCodexModels: vi.fn(async () => [
     { id: 'gpt-5.3-codex', display_name: 'GPT-5.3 Codex' },
     { id: 'gpt-5.2-codex', display_name: 'GPT-5.2 Codex' }
+  ]),
+  discoverLlmModels: vi.fn(async () => [
+    { id: 'openweight-medium', display_name: 'Openweight Medium' },
+    { id: 'openweight-small', display_name: 'Openweight Small' }
+  ]),
+  discoverEmbeddingModels: vi.fn(async () => [
+    { id: 'text-embedding-3-small', display_name: 'Text Embedding 3 Small' },
+    { id: 'text-embedding-3-large', display_name: 'Text Embedding 3 Large' }
   ])
 }))
 
@@ -118,7 +127,9 @@ vi.mock('./shared/api/indexApi', () => ({
 vi.mock('./shared/api/settingsApi', () => ({
   readAppSettings: hoisted.readAppSettings,
   writeAppSettings: hoisted.writeAppSettings,
-  discoverCodexModels: hoisted.discoverCodexModels
+  discoverCodexModels: hoisted.discoverCodexModels,
+  discoverLlmModels: hoisted.discoverLlmModels,
+  discoverEmbeddingModels: hoisted.discoverEmbeddingModels
 }))
 
 vi.mock('./shared/api/favoritesApi', () => ({
@@ -264,6 +275,24 @@ describe('App settings modal', () => {
     mounted.app.unmount()
   })
 
+  it('keeps the settings modal open when clicking outside it', async () => {
+    const mounted = mountApp()
+    await flushUi()
+    mounted.root.querySelector<HTMLButtonElement>('button[aria-label="View options"]')?.click()
+    await flushUi()
+    const settingsBtn = Array.from(mounted.root.querySelectorAll('button')).find((item) => item.textContent?.includes('Open Settings'))
+    settingsBtn?.click()
+    await flushUi()
+
+    const overlay = mounted.root.querySelector<HTMLElement>('.modal-overlay')
+    overlay?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushUi()
+
+    expect(mounted.root.querySelector('[data-modal="settings"]')).toBeTruthy()
+    expect(hoisted.writeAppSettings).not.toHaveBeenCalled()
+    mounted.app.unmount()
+  })
+
   it('opens about from overflow menu and shows the current version', async () => {
     const mounted = mountApp()
     await flushUi()
@@ -330,7 +359,7 @@ describe('App settings modal', () => {
     mounted.app.unmount()
   })
 
-  it('requires an explicit custom provider instead of silently saving as openai-compatible', async () => {
+  it('tests custom endpoint models and saves the selected model', async () => {
     const mounted = mountApp()
     await flushUi()
     mounted.root.querySelector<HTMLButtonElement>('button[aria-label="View options"]')?.click()
@@ -346,19 +375,293 @@ describe('App settings modal', () => {
     }
     await flushUi()
 
+    const customProvider = mounted.root.querySelector<HTMLInputElement>('#settings-llm-custom-provider')
+    if (customProvider) {
+      customProvider.value = ''
+      customProvider.dispatchEvent(new Event('input', { bubbles: true }))
+    }
+    const baseUrl = mounted.root.querySelector<HTMLInputElement>('#settings-llm-base-url')
+    if (baseUrl) {
+      baseUrl.value = 'https://albert.api.etalab.gouv.fr/v1/'
+      baseUrl.dispatchEvent(new Event('input', { bubbles: true }))
+    }
+    const apiKey = mounted.root.querySelector<HTMLInputElement>('#settings-llm-apikey')
+    if (apiKey) {
+      apiKey.value = 'albert-key'
+      apiKey.dispatchEvent(new Event('input', { bubbles: true }))
+    }
     const model = mounted.root.querySelector<HTMLInputElement>('#settings-llm-model')
     if (model) {
-      model.value = 'gpt-oss'
+      model.value = ''
       model.dispatchEvent(new Event('input', { bubbles: true }))
     }
+    await flushUi()
+
+    const testBtn = Array.from(mounted.root.querySelectorAll('button')).find((item) => item.textContent === 'Test')
+    testBtn?.click()
+    await flushUi()
+
+    expect(hoisted.discoverLlmModels).toHaveBeenCalledTimes(1)
+    const discoverCall = hoisted.discoverLlmModels.mock.calls[0]
+    expect(discoverCall).toBeDefined()
+    if (!discoverCall) throw new Error('Expected discoverLlmModels to be called')
+    const discoverPayload = (discoverCall as unknown[])[0]
+    if (!discoverPayload || typeof discoverPayload !== 'object') throw new Error('Expected discover payload object')
+    expect((discoverPayload as { provider: string }).provider).toBe('custom')
+    expect((discoverPayload as { profile_id: string }).profile_id).toBe('custom-profile')
+    expect((discoverPayload as { base_url?: string | null }).base_url).toBe('https://albert.api.etalab.gouv.fr/v1/')
+    expect((discoverPayload as { api_key?: string }).api_key).toBe('albert-key')
+
+    const dropdownOptions = Array.from(document.body.querySelectorAll('.ui-filterable-dropdown-option')) as HTMLButtonElement[]
+    expect(dropdownOptions.length).toBeGreaterThan(0)
+    dropdownOptions[0]?.click()
     await flushUi()
 
     const saveBtn = Array.from(mounted.root.querySelectorAll('button')).find((item) => item.textContent === 'Save')
     saveBtn?.click()
     await flushUi()
 
-    expect(hoisted.writeAppSettings).not.toHaveBeenCalled()
-    expect((mounted.root.textContent ?? '').toLowerCase()).toContain('custom llm provider is required')
+    expect(hoisted.writeAppSettings).toHaveBeenCalledTimes(1)
+    const firstCall = hoisted.writeAppSettings.mock.calls[0]
+    expect(firstCall).toBeDefined()
+    if (!firstCall) throw new Error('Expected writeAppSettings to be called')
+    const rawPayload = (firstCall as unknown[])[0]
+    if (!rawPayload || typeof rawPayload !== 'object') throw new Error('Expected payload object')
+    const payload = rawPayload as {
+      llm: {
+        profiles: Array<{
+          provider: string
+          model: string
+          default_temperature: number
+          base_url?: string | null
+        }>
+      }
+    }
+    expect(payload.llm.profiles[0]?.provider).toBe('custom')
+    expect(payload.llm.profiles[0]?.model).toBe('openweight-medium')
+    expect(payload.llm.profiles[0]?.default_temperature).toBe(0.15)
+    expect(payload.llm.profiles[0]?.base_url).toBe('https://albert.api.etalab.gouv.fr/v1/')
+    mounted.app.unmount()
+  })
+
+  it('surfaces detailed model discovery errors', async () => {
+    hoisted.discoverLlmModels.mockRejectedValueOnce({
+      message: 'Model discovery failed for https://albert.api.etalab.gouv.fr/v1/models: HTTP 404 Not Found. Response body: {"detail":"Model not found."}'
+    })
+
+    const mounted = mountApp()
+    await flushUi()
+    mounted.root.querySelector<HTMLButtonElement>('button[aria-label="View options"]')?.click()
+    await flushUi()
+    const settingsBtn = Array.from(mounted.root.querySelectorAll('button')).find((item) => item.textContent?.includes('Open Settings'))
+    settingsBtn?.click()
+    await flushUi()
+
+    const provider = mounted.root.querySelector<HTMLSelectElement>('#settings-llm-provider')
+    if (provider) {
+      provider.value = 'custom'
+      provider.dispatchEvent(new Event('change', { bubbles: true }))
+    }
+    await flushUi()
+
+    const baseUrl = mounted.root.querySelector<HTMLInputElement>('#settings-llm-base-url')
+    if (baseUrl) {
+      baseUrl.value = 'https://albert.api.etalab.gouv.fr/v1/'
+      baseUrl.dispatchEvent(new Event('input', { bubbles: true }))
+    }
+    const apiKey = mounted.root.querySelector<HTMLInputElement>('#settings-llm-apikey')
+    if (apiKey) {
+      apiKey.value = 'albert-key'
+      apiKey.dispatchEvent(new Event('input', { bubbles: true }))
+    }
+    await flushUi()
+
+    const testBtn = Array.from(mounted.root.querySelectorAll('button')).find((item) => item.textContent === 'Test')
+    testBtn?.click()
+    await flushUi()
+
+    expect(mounted.root.textContent).toContain('Model discovery failed for https://albert.api.etalab.gouv.fr/v1/models: HTTP 404 Not Found.')
+    expect(mounted.root.textContent).toContain('Response body:')
+    mounted.app.unmount()
+  })
+
+  it('shows api keys as masked values with a reveal toggle', async () => {
+    const mounted = mountApp()
+    await flushUi()
+    mounted.root.querySelector<HTMLButtonElement>('button[aria-label="View options"]')?.click()
+    await flushUi()
+    const settingsBtn = Array.from(mounted.root.querySelectorAll('button')).find((item) => item.textContent?.includes('Open Settings'))
+    settingsBtn?.click()
+    await flushUi()
+
+    const llmKey = mounted.root.querySelector<HTMLInputElement>('#settings-llm-apikey')
+    expect(llmKey?.getAttribute('type')).toBe('password')
+    expect(llmKey?.value).toBe('openai-secret')
+
+    const revealLlm = Array.from(mounted.root.querySelectorAll('button')).find((item) => item.getAttribute('aria-label') === 'Reveal API key')
+    revealLlm?.click()
+    await flushUi()
+    expect(mounted.root.querySelector<HTMLInputElement>('#settings-llm-apikey')?.getAttribute('type')).toBe('text')
+
+    const embTab = Array.from(mounted.root.querySelectorAll('button')).find((item) => item.textContent === 'Embeddings')
+    embTab?.click()
+    await flushUi()
+    const externalMode = mounted.root.querySelector<HTMLInputElement>('input[type="radio"][value="external"]')
+    externalMode?.click()
+    await flushUi()
+
+    const embKey = mounted.root.querySelector<HTMLInputElement>('#settings-emb-apikey')
+    expect(embKey?.getAttribute('type')).toBe('password')
+    expect(embKey?.value).toBe('')
+    expect(embKey?.getAttribute('placeholder')).toBe('api key')
+    mounted.app.unmount()
+  })
+
+  it('shows stored key markers when api keys already exist', async () => {
+    hoisted.readAppSettings.mockResolvedValue({
+      exists: true,
+      path: '/Users/test/.tomosona/conf.json',
+      llm: {
+        active_profile: 'openai-profile',
+        profiles: [
+          {
+            id: 'openai-profile',
+            label: 'OpenAI Remote',
+            provider: 'openai',
+            model: 'gpt-4.1',
+            default_temperature: 0.15,
+            api_key: 'openai-secret',
+            base_url: null,
+            default_mode: 'freestyle',
+            capabilities: {
+              text: true,
+              image_input: true,
+              audio_input: false,
+              tool_calling: true,
+              streaming: true
+            }
+          }
+        ]
+      },
+      embeddings: {
+        mode: 'external',
+        external: {
+          id: 'emb-openai-profile',
+          label: 'OpenAI Embeddings',
+          provider: 'openai',
+          model: 'text-embedding-3-small',
+          api_key: 'emb-secret',
+          base_url: 'https://albert.api.etalab.gouv.fr/v1/'
+        }
+      },
+      alters: {
+        default_mode: 'neutral',
+        show_badge_in_chat: true,
+        default_influence_intensity: 'balanced'
+      }
+    })
+
+    const mounted = mountApp()
+    await flushUi()
+    mounted.root.querySelector<HTMLButtonElement>('button[aria-label="View options"]')?.click()
+    await flushUi()
+    const settingsBtn = Array.from(mounted.root.querySelectorAll('button')).find((item) => item.textContent?.includes('Open Settings'))
+    settingsBtn?.click()
+    await flushUi()
+
+    const llmKey = mounted.root.querySelector<HTMLInputElement>('#settings-llm-apikey')
+    expect(llmKey?.value).toBe('openai-secret')
+
+    const embTab = Array.from(mounted.root.querySelectorAll('button')).find((item) => item.textContent === 'Embeddings')
+    embTab?.click()
+    await flushUi()
+
+    const externalMode = mounted.root.querySelector<HTMLInputElement>('input[type="radio"][value="external"]')
+    externalMode?.click()
+    await flushUi()
+
+    const embKey = mounted.root.querySelector<HTMLInputElement>('#settings-emb-apikey')
+    expect(embKey?.value).toBe('emb-secret')
+    mounted.app.unmount()
+  })
+
+  it('tests external embeddings models and saves the selected embedding model', async () => {
+    const mounted = mountApp()
+    await flushUi()
+    mounted.root.querySelector<HTMLButtonElement>('button[aria-label="View options"]')?.click()
+    await flushUi()
+    const settingsBtn = Array.from(mounted.root.querySelectorAll('button')).find((item) => item.textContent?.includes('Open Settings'))
+    settingsBtn?.click()
+    await flushUi()
+
+    const embTab = Array.from(mounted.root.querySelectorAll('button')).find((item) => item.textContent === 'Embeddings')
+    embTab?.click()
+    await flushUi()
+
+    const externalMode = mounted.root.querySelector<HTMLInputElement>('input[type="radio"][value="external"]')
+    externalMode?.click()
+    await flushUi()
+
+    const embBaseUrl = mounted.root.querySelector<HTMLInputElement>('#settings-emb-base-url')
+    if (embBaseUrl) {
+      embBaseUrl.value = 'https://albert.api.etalab.gouv.fr/v1/'
+      embBaseUrl.dispatchEvent(new Event('input', { bubbles: true }))
+    }
+    const embKey = mounted.root.querySelector<HTMLInputElement>('#settings-emb-apikey')
+    if (embKey) {
+      embKey.value = 'emb-key'
+      embKey.dispatchEvent(new Event('input', { bubbles: true }))
+    }
+    const embModel = mounted.root.querySelector<HTMLInputElement>('#settings-emb-model')
+    if (embModel) {
+      embModel.value = ''
+      embModel.dispatchEvent(new Event('input', { bubbles: true }))
+    }
+    await flushUi()
+
+    const testBtn = Array.from(mounted.root.querySelectorAll('button')).find((item) => item.textContent === 'Test')
+    testBtn?.click()
+    await flushUi()
+
+    expect(hoisted.discoverEmbeddingModels).toHaveBeenCalledTimes(1)
+    const call = hoisted.discoverEmbeddingModels.mock.calls[0]
+    expect(call).toBeDefined()
+    if (!call) throw new Error('Expected discoverEmbeddingModels to be called')
+    const rawPayload = (call as unknown[])[0]
+    if (!rawPayload || typeof rawPayload !== 'object') throw new Error('Expected embedding discovery payload object')
+    const payload = rawPayload as {
+      profile_id: string
+      api_key?: string
+      base_url?: string | null
+    }
+    expect(payload.profile_id).toBe('emb-openai-profile')
+    expect(payload.api_key).toBe('emb-key')
+    expect(payload.base_url).toBe('https://albert.api.etalab.gouv.fr/v1/')
+
+    const dropdownOptions = Array.from(document.body.querySelectorAll('.ui-filterable-dropdown-option')) as HTMLButtonElement[]
+    expect(dropdownOptions.length).toBeGreaterThan(0)
+    dropdownOptions[1]?.click()
+    await flushUi()
+
+    const saveBtn = Array.from(mounted.root.querySelectorAll('button')).find((item) => item.textContent === 'Save')
+    saveBtn?.click()
+    await flushUi()
+
+    const firstCall = hoisted.writeAppSettings.mock.calls.at(-1)
+    expect(firstCall).toBeDefined()
+    if (!firstCall) throw new Error('Expected writeAppSettings to be called')
+    const savePayload = (firstCall as unknown[])[0]
+    if (!savePayload || typeof savePayload !== 'object') throw new Error('Expected save payload object')
+    const typed = savePayload as {
+      embeddings: {
+        mode: string
+        external?: {
+          model: string
+        }
+      }
+    }
+    expect(typed.embeddings.mode).toBe('external')
+    expect(typed.embeddings.external?.model).toBe('text-embedding-3-large')
     mounted.app.unmount()
   })
 })

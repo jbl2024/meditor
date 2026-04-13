@@ -11,6 +11,7 @@ mod context;
 pub mod draft;
 mod draft_publish;
 mod frontmatter_generation;
+pub mod model_discovery;
 pub mod llm;
 mod message_flow;
 pub mod modes;

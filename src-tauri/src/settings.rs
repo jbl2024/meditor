@@ -1,10 +1,8 @@
 //! Application settings management persisted in `~/.tomosona/conf.json`.
 //!
-//! This module centralizes validation, redaction, and save semantics for:
+//! This module centralizes validation, readback, and save semantics for:
 //! - `llm` provider profiles used by second-brain chat features.
 //! - `embeddings` runtime configuration used by semantic indexing/search.
-//!
-//! API keys are never returned by read commands; consumers receive `has_api_key`.
 
 use std::{fs, path::PathBuf};
 
@@ -14,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::second_brain::config::{
     validate_config as validate_llm_config, ProfileCapabilities, ProviderProfile, SecondBrainConfig,
 };
+use crate::second_brain::model_discovery::{discover_models as discover_compatible_models, DiscoveredModel};
 use crate::{AppError, Result};
 
 const SETTINGS_FILE: &str = "conf.json";
@@ -84,7 +83,8 @@ pub struct LlmProfileView {
     pub label: String,
     pub provider: String,
     pub model: String,
-    pub has_api_key: bool,
+    pub api_key: String,
+    pub default_temperature: f64,
     pub base_url: Option<String>,
     pub default_mode: Option<String>,
     pub capabilities: ProfileCapabilities,
@@ -102,7 +102,7 @@ pub struct EmbeddingProfileView {
     pub label: String,
     pub provider: String,
     pub model: String,
-    pub has_api_key: bool,
+    pub api_key: String,
     pub base_url: Option<String>,
 }
 
@@ -128,6 +128,7 @@ pub struct SaveLlmProfileInput {
     pub provider: String,
     pub model: String,
     pub api_key: Option<String>,
+    pub default_temperature: f64,
     #[serde(default)]
     pub preserve_existing_api_key: bool,
     #[serde(default)]
@@ -169,6 +170,29 @@ pub struct SaveAppSettingsPayload {
     pub llm: SaveLlmConfigInput,
     pub embeddings: SaveEmbeddingsInput,
     pub alters: SaveAltersInput,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct DiscoverLlmModelsInput {
+    pub profile_id: String,
+    pub provider: String,
+    #[serde(default)]
+    pub api_key: Option<String>,
+    #[serde(default)]
+    pub preserve_existing_api_key: bool,
+    #[serde(default)]
+    pub base_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct DiscoverEmbeddingModelsInput {
+    pub profile_id: String,
+    #[serde(default)]
+    pub api_key: Option<String>,
+    #[serde(default)]
+    pub preserve_existing_api_key: bool,
+    #[serde(default)]
+    pub base_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -328,7 +352,7 @@ fn read_settings_file() -> Result<AppSettings> {
     Ok(settings)
 }
 
-fn redact_llm(config: &SecondBrainConfig) -> LlmConfigView {
+fn view_llm(config: &SecondBrainConfig) -> LlmConfigView {
     LlmConfigView {
         active_profile: config.active_profile.clone(),
         profiles: config
@@ -339,7 +363,8 @@ fn redact_llm(config: &SecondBrainConfig) -> LlmConfigView {
                 label: profile.label.clone(),
                 provider: profile.provider.clone(),
                 model: profile.model.clone(),
-                has_api_key: !profile.api_key.trim().is_empty(),
+                api_key: profile.api_key.clone(),
+                default_temperature: profile.default_temperature,
                 base_url: profile.base_url.clone(),
                 default_mode: profile.default_mode.clone(),
                 capabilities: profile.capabilities.clone(),
@@ -348,7 +373,7 @@ fn redact_llm(config: &SecondBrainConfig) -> LlmConfigView {
     }
 }
 
-fn redact_embeddings(settings: &EmbeddingsSettings) -> EmbeddingsSettingsView {
+fn view_embeddings(settings: &EmbeddingsSettings) -> EmbeddingsSettingsView {
     EmbeddingsSettingsView {
         mode: settings.mode.clone(),
         external: settings
@@ -359,7 +384,7 @@ fn redact_embeddings(settings: &EmbeddingsSettings) -> EmbeddingsSettingsView {
                 label: profile.label.clone(),
                 provider: profile.provider.clone(),
                 model: profile.model.clone(),
-                has_api_key: !profile.api_key.trim().is_empty(),
+                api_key: profile.api_key.clone(),
                 base_url: profile.base_url.clone(),
             }),
     }
@@ -431,6 +456,7 @@ fn apply_save_payload(
                 provider: profile.provider.trim().to_string(),
                 model: profile.model.trim().to_string(),
                 api_key,
+                default_temperature: profile.default_temperature,
                 base_url: if provider == "openai-codex" {
                     None
                 } else {
@@ -552,7 +578,7 @@ pub fn read_app_settings() -> Result<AppSettingsView> {
             exists: false,
             path: path.to_string_lossy().to_string(),
             llm: None,
-            embeddings: redact_embeddings(&EmbeddingsSettings::default()),
+            embeddings: view_embeddings(&EmbeddingsSettings::default()),
             alters: AltersSettings::default(),
         });
     }
@@ -560,8 +586,8 @@ pub fn read_app_settings() -> Result<AppSettingsView> {
     Ok(AppSettingsView {
         exists: true,
         path: path.to_string_lossy().to_string(),
-        llm: Some(redact_llm(&settings.llm)),
-        embeddings: redact_embeddings(&settings.embeddings),
+        llm: Some(view_llm(&settings.llm)),
+        embeddings: view_embeddings(&settings.embeddings),
         alters: settings.alters,
     })
 }
@@ -586,6 +612,76 @@ pub fn write_app_settings(payload: SaveAppSettingsPayload) -> Result<WriteAppSet
     })
 }
 
+fn resolve_discovery_api_key(
+    profile_id: &str,
+    input_value: Option<&str>,
+    preserve_existing: bool,
+) -> Result<String> {
+    let existing_api_key = read_settings_file().ok().and_then(|settings| {
+        settings
+            .llm
+            .profiles
+            .iter()
+            .find(|profile| profile.id.trim() == profile_id.trim())
+            .map(|profile| profile.api_key.clone())
+    });
+    resolve_api_key(
+        input_value,
+        preserve_existing,
+        existing_api_key.as_deref(),
+        "LLM profile",
+    )
+}
+
+fn discovery_endpoint(provider: &str, base_url: Option<&str>) -> Result<String> {
+    if let Some(url) = base_url {
+        let trimmed = url.trim();
+        if !trimmed.is_empty() {
+            return Ok(format!("{}/models", trimmed.trim_end_matches('/')));
+        }
+    }
+    if provider.trim().eq_ignore_ascii_case("openai") {
+        return Ok("https://api.openai.com/v1/models".to_string());
+    }
+    Err(AppError::InvalidOperation(
+        "LLM base_url is required to discover models for this provider.".to_string(),
+    ))
+}
+
+#[tauri::command]
+pub async fn discover_llm_models(payload: DiscoverLlmModelsInput) -> Result<Vec<DiscoveredModel>> {
+    if payload.provider.trim().eq_ignore_ascii_case("openai-codex") {
+        return Err(AppError::InvalidOperation(
+            "Use OpenAI Codex model discovery for the Codex provider.".to_string(),
+        ));
+    }
+
+    let endpoint = discovery_endpoint(&payload.provider, payload.base_url.as_deref())?;
+    let api_key = resolve_discovery_api_key(
+        &payload.profile_id,
+        payload.api_key.as_deref(),
+        payload.preserve_existing_api_key,
+    )?;
+    discover_compatible_models(&endpoint, &api_key)
+        .await
+        .map_err(AppError::InvalidOperation)
+}
+
+#[tauri::command]
+pub async fn discover_embedding_models(
+    payload: DiscoverEmbeddingModelsInput,
+) -> Result<Vec<DiscoveredModel>> {
+    let endpoint = discovery_endpoint("openai", payload.base_url.as_deref())?;
+    let api_key = resolve_discovery_api_key(
+        &payload.profile_id,
+        payload.api_key.as_deref(),
+        payload.preserve_existing_api_key,
+    )?;
+    discover_compatible_models(&endpoint, &api_key)
+        .await
+        .map_err(AppError::InvalidOperation)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -597,6 +693,7 @@ mod tests {
             provider: "openai".to_string(),
             model: "gpt-4.1".to_string(),
             api_key: Some("secret".to_string()),
+            default_temperature: 0.15,
             preserve_existing_api_key: false,
             base_url: None,
             default_mode: Some("freestyle".to_string()),
@@ -609,15 +706,16 @@ mod tests {
         let settings = AppSettings {
             llm: SecondBrainConfig {
                 active_profile: "openai-profile".to_string(),
-                profiles: vec![ProviderProfile {
-                    id: "openai-profile".to_string(),
-                    label: "OpenAI".to_string(),
-                    provider: "openai".to_string(),
-                    model: "gpt-4.1".to_string(),
-                    api_key: "k".to_string(),
-                    base_url: None,
-                    default_mode: Some("freestyle".to_string()),
-                    capabilities: ProfileCapabilities::default(),
+            profiles: vec![ProviderProfile {
+                id: "openai-profile".to_string(),
+                label: "OpenAI".to_string(),
+                provider: "openai".to_string(),
+                model: "gpt-4.1".to_string(),
+                api_key: "k".to_string(),
+                default_temperature: 0.15,
+                base_url: None,
+                default_mode: Some("freestyle".to_string()),
+                capabilities: ProfileCapabilities::default(),
                 }],
             },
             embeddings: EmbeddingsSettings {
@@ -698,6 +796,7 @@ mod tests {
                     provider: "openai-codex".to_string(),
                     model: "gpt-5.2-codex".to_string(),
                     api_key: None,
+                    default_temperature: 0.15,
                     preserve_existing_api_key: false,
                     base_url: Some("https://ignored.example".to_string()),
                     default_mode: Some("freestyle".to_string()),

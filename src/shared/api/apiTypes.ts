@@ -169,7 +169,8 @@ export type AppSettingsLlmProfile = {
   label: string
   provider: string
   model: string
-  has_api_key: boolean
+  api_key: string
+  default_temperature: number
   base_url: string | null
   default_mode: string | null
   capabilities: {
@@ -191,7 +192,7 @@ export type AppSettingsEmbeddingProfile = {
   label: string
   provider: string
   model: string
-  has_api_key: boolean
+  api_key: string
   base_url: string | null
 }
 
@@ -225,6 +226,7 @@ export type SaveAppSettingsPayload = {
       provider: string
       model: string
       api_key?: string
+      default_temperature: number
       preserve_existing_api_key: boolean
       base_url?: string | null
       default_mode?: string | null
@@ -265,6 +267,27 @@ export type WriteAppSettingsResult = {
 export type CodexDiscoveredModel = {
   id: string
   display_name: string
+}
+
+export type LlmDiscoveredModel = {
+  id: string
+  display_name: string
+  group?: string | null
+}
+
+export type DiscoverLlmModelsPayload = {
+  profile_id: string
+  provider: string
+  api_key?: string
+  preserve_existing_api_key: boolean
+  base_url?: string | null
+}
+
+export type DiscoverEmbeddingModelsPayload = {
+  profile_id: string
+  api_key?: string
+  preserve_existing_api_key: boolean
+  base_url?: string | null
 }
 
 export type SecondBrainAttachmentMeta = {

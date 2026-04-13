@@ -14,7 +14,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use directories::BaseDirs;
 use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
-use genai::Client;
+use genai::{
+	resolver::{AuthData, Endpoint, ServiceTargetResolver},
+	Client, ServiceTarget,
+};
 use rusqlite::{ffi::sqlite3_auto_extension, params, Connection, OptionalExtension};
 use serde::Serialize;
 use sqlite_vec::sqlite3_vec_init;
@@ -22,7 +25,6 @@ use sqlite_vec::sqlite3_vec_init;
 use crate::settings;
 
 const EMBEDDING_MODEL_NAME: &str = "lightonai/modernbert-embed-large";
-const EXTERNAL_PROVIDER_OPENAI: &str = "openai";
 #[derive(Default)]
 struct SemanticState {
     model: Option<TextEmbedding>,
@@ -227,21 +229,28 @@ fn embed_texts_internal(texts: &[String]) -> Result<Vec<Vec<f32>>, String> {
         .map_err(|_| "Semantic embedding inference failed.".to_string())
 }
 
-fn configure_external_embedding_environment(profile: &settings::EmbeddingProviderProfile) {
-    let provider = profile.provider.trim().to_lowercase();
-    if provider == EXTERNAL_PROVIDER_OPENAI {
-        std::env::set_var("OPENAI_API_KEY", profile.api_key.trim());
-        if let Some(base_url) = &profile.base_url {
-            let trimmed = base_url.trim();
-            if !trimmed.is_empty() {
-                std::env::set_var("OPENAI_BASE_URL", trimmed);
-            } else {
-                std::env::remove_var("OPENAI_BASE_URL");
+fn build_external_embedding_client(profile: &settings::EmbeddingProviderProfile) -> Client {
+    let api_key = profile.api_key.trim().to_string();
+    let base_url = profile
+        .base_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
+
+    let service_target_resolver = ServiceTargetResolver::from_resolver_fn(
+        move |mut service_target: ServiceTarget| -> Result<ServiceTarget, genai::resolver::Error> {
+            service_target.auth = AuthData::from_single(api_key.clone());
+            if let Some(base_url) = &base_url {
+                service_target.endpoint = Endpoint::from_owned(base_url.clone());
             }
-        } else {
-            std::env::remove_var("OPENAI_BASE_URL");
-        }
-    }
+            Ok(service_target)
+        },
+    );
+
+    Client::builder()
+        .with_service_target_resolver(service_target_resolver)
+        .build()
 }
 
 fn external_model_name(profile: &settings::EmbeddingProviderProfile) -> String {
@@ -256,11 +265,10 @@ fn embed_texts_external(
     texts: &[String],
     profile: &settings::EmbeddingProviderProfile,
 ) -> Result<Vec<Vec<f32>>, String> {
-    configure_external_embedding_environment(profile);
     let model = external_model_name(profile);
     let payload = texts.to_vec();
     let response = tauri::async_runtime::block_on(async {
-        let client = Client::default();
+        let client = build_external_embedding_client(profile);
         client.embed_batch(&model, payload, None).await
     })
     .map_err(|_| "Semantic embedding inference failed.".to_string())?;

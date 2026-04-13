@@ -1028,6 +1028,7 @@ mod tests {
                     provider: "openai".to_string(),
                     model: "gpt-oss-20b".to_string(),
                     api_key: "x".to_string(),
+                    default_temperature: 0.15,
                     base_url: None,
                     default_mode: None,
                     capabilities: crate::second_brain::config::ProfileCapabilities {
@@ -1044,6 +1045,7 @@ mod tests {
                     provider: "openai".to_string(),
                     model: "gpt-oss-120b".to_string(),
                     api_key: "x".to_string(),
+                    default_temperature: 0.15,
                     base_url: None,
                     default_mode: None,
                     capabilities: crate::second_brain::config::ProfileCapabilities {
