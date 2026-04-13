@@ -1,6 +1,7 @@
 import { createApp, defineComponent, h, nextTick } from 'vue'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import packageJson from '../package.json'
+import type { AppSettingsView } from './shared/api/apiTypes'
 
 vi.setConfig({ testTimeout: 15000 })
 
@@ -14,7 +15,7 @@ const hoisted = vi.hoisted(() => ({
     tauri_version: '2.10.2'
   })),
   openAppSupportDir: vi.fn(async () => {}),
-  readAppSettings: vi.fn(async () => ({
+  readAppSettings: vi.fn(async (): Promise<AppSettingsView> => ({
     exists: true,
     path: '/Users/test/.tomosona/conf.json',
     llm: {
@@ -39,7 +40,12 @@ const hoisted = vi.hoisted(() => ({
         }
       ]
     },
-    embeddings: { mode: 'internal', external: null }
+    embeddings: { mode: 'internal', external: null },
+    alters: {
+      default_mode: 'neutral',
+      show_badge_in_chat: true,
+      default_influence_intensity: 'balanced'
+    }
   })),
   writeAppSettings: vi.fn(async () => ({ path: '/Users/test/.tomosona/conf.json', embeddings_changed: false })),
   discoverCodexModels: vi.fn(async () => [
@@ -647,7 +653,7 @@ describe('App settings modal', () => {
     saveBtn?.click()
     await flushUi()
 
-    const firstCall = hoisted.writeAppSettings.mock.calls.at(-1)
+    const firstCall = hoisted.writeAppSettings.mock.calls[hoisted.writeAppSettings.mock.calls.length - 1]
     expect(firstCall).toBeDefined()
     if (!firstCall) throw new Error('Expected writeAppSettings to be called')
     const savePayload = (firstCall as unknown[])[0]
