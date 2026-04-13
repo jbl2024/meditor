@@ -18,6 +18,14 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.36.2] - 2026-04-13
+
+### Changed
+- test(settings): fix AppSettingsView mock typing (776aabb)
+
+### Fixed
+- fix(ai): improve settings management (892e38c)
+
 ## [0.36.1] - 2026-04-12
 
 ### Fixed
