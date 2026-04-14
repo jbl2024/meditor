@@ -329,6 +329,47 @@ describe('useEditorInputHandlers', () => {
     expect(event.preventDefault).toHaveBeenCalledTimes(1)
   })
 
+  it('converts standalone image html paste to editor json content', () => {
+    const { handlers, insertContent } = createHandlers({
+      menusPort: {
+        visibleSlashCommands: ref([{ id: 'quote', label: 'Quote', type: 'quote', data: {} }]),
+        visibleAtMacros: ref([]),
+        slashOpen: ref(false),
+        slashIndex: ref(0),
+        atOpen: ref(false),
+        atIndex: ref(0),
+        closeSlashMenu: vi.fn(),
+        closeAtMenu: vi.fn(),
+        dismissAtMenu: vi.fn(),
+        insertAtMacro: vi.fn(() => true),
+        blockMenuOpen: ref(false),
+        closeBlockMenu: vi.fn(),
+        tableToolbarOpen: ref(false),
+        hideTableToolbar: vi.fn(),
+        inlineFormatToolbar: {
+          linkPopoverOpen: ref(false),
+          cancelLink: vi.fn()
+        }
+      }
+    })
+
+    const event = {
+      clipboardData: {
+        getData: (kind: string) =>
+          kind === 'text/html'
+            ? '<img src="/home/jeromeb/src/wiki-technique/docs/gestion_parc/assets/images/Formulaire_GLPI/Pasted image 20260325152608.png" alt="Pasted image 20260325152608.png">'
+            : ''
+      },
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn()
+    } as unknown as ClipboardEvent
+
+    handlers.onEditorPaste(event)
+    expect(insertContent).toHaveBeenCalledTimes(1)
+    expect(event.preventDefault).toHaveBeenCalledTimes(1)
+    expect(event.stopPropagation).toHaveBeenCalledTimes(1)
+  })
+
   it('falls back to native paste when html and plain are low-confidence', () => {
     const { handlers, insertContent } = createHandlers({
       menusPort: {

@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { PencilSquareIcon, ArrowUturnLeftIcon } from '@heroicons/vue/24/outline'
 import { NodeViewWrapper, type Editor } from '@tiptap/vue-3'
+import { readImageDataUrl } from '../../../../../shared/api/workspaceApi'
+import { decodeWorkspacePathSegments, isAbsoluteWorkspacePath } from '../../../../../domains/explorer/lib/workspacePaths'
 import { parseWikilinkTarget } from '../../../lib/wikilinks'
 
 type EmbeddedNotePreview = {
@@ -24,16 +26,115 @@ const props = defineProps<{
 
 const previewHtml = ref('')
 const previewPath = ref('')
+const previewRoot = ref<HTMLDivElement | null>(null)
 const loading = ref(false)
 const restoring = ref(false)
 const error = ref('')
 const requestToken = ref(0)
+let previewHydrationToken = 0
+const LOCAL_IMAGE_PLACEHOLDER_SRC =
+  'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='
 
 const target = computed(() => String(props.node.attrs.target ?? '').trim())
 const label = computed(() => {
   const parsed = parseWikilinkTarget(target.value)
   return parsed.notePath || target.value
 })
+const renderedPreviewHtml = computed(() => rewriteLocalImageSources(previewHtml.value, previewPath.value))
+
+function splitAbsolutePath(path: string): { prefix: string; segments: string[] } | null {
+  const normalized = decodeWorkspacePathSegments(path)
+  if (!normalized || !isAbsoluteWorkspacePath(normalized)) return null
+  if (/^[A-Za-z]:\//.test(normalized)) {
+    return {
+      prefix: normalized.slice(0, 3),
+      segments: normalized.slice(3).split('/').filter(Boolean)
+    }
+  }
+  if (normalized.startsWith('/')) {
+    return {
+      prefix: '/',
+      segments: normalized.slice(1).split('/').filter(Boolean)
+    }
+  }
+  return null
+}
+
+function resolvePreviewImagePath(notePath: string, rawSrc: string): string | null {
+  const src = decodeWorkspacePathSegments(rawSrc)
+  if (!src) return null
+  if (/^(?:https?|data|blob|asset|tauri|file):/i.test(src)) return null
+  if (isAbsoluteWorkspacePath(src)) return src
+
+  const base = splitAbsolutePath(notePath)
+  if (!base || base.segments.length === 0) return null
+  const segments = base.segments.slice(0, -1)
+
+  for (const segment of src.split('/')) {
+    if (!segment || segment === '.') continue
+    if (segment === '..') {
+      if (!segments.length) return null
+      segments.pop()
+      continue
+    }
+    segments.push(segment)
+  }
+
+  return base.prefix === '/'
+    ? `/${segments.join('/')}`
+    : `${base.prefix}${segments.join('/')}`
+}
+
+function rewriteLocalImageSources(html: string, notePath: string): string {
+  if (!html || !html.includes('<img')) return html
+
+  const root = document.createElement('div')
+  root.innerHTML = html
+
+  const images = Array.from(root.querySelectorAll('img'))
+  for (const image of images) {
+    const rawSrc = image.getAttribute('src')?.trim() ?? ''
+    const resolvedPath = resolvePreviewImagePath(notePath, rawSrc)
+    if (!resolvedPath) continue
+    image.setAttribute('data-local-src', resolvedPath)
+    image.setAttribute('src', LOCAL_IMAGE_PLACEHOLDER_SRC)
+  }
+
+  return root.innerHTML
+}
+
+async function hydrateLocalPreviewImages() {
+  const token = ++previewHydrationToken
+  await nextTick()
+  if (token !== previewHydrationToken) return
+
+  const root = previewRoot.value
+  if (!root) return
+
+  const images = Array.from(root.querySelectorAll('img'))
+  for (const image of images) {
+    const rawSrc = image.getAttribute('data-local-src')?.trim() ?? ''
+    const normalizedPath = decodeWorkspacePathSegments(rawSrc)
+    if (!normalizedPath || !isAbsoluteWorkspacePath(normalizedPath)) continue
+
+    try {
+      const dataUrl = await readImageDataUrl(normalizedPath)
+      if (token !== previewHydrationToken) return
+      if (image.isConnected) {
+        image.setAttribute('src', dataUrl)
+        image.removeAttribute('data-local-src')
+      }
+    } catch (error) {
+      console.warn('[editor] note-embed image preview failed', {
+        notePath: previewPath.value,
+        src: rawSrc,
+        normalizedPath,
+        error
+      })
+      // Embedded note previews stay best-effort and fall back to the placeholder.
+    }
+  }
+}
 
 async function refreshPreview() {
   const loader = props.extension.options?.loadEmbeddedNotePreview
@@ -100,8 +201,14 @@ watch(target, () => {
   void refreshPreview()
 }, { immediate: true })
 
+watch([renderedPreviewHtml, previewPath], () => {
+  if (!renderedPreviewHtml.value) return
+  void hydrateLocalPreviewImages()
+}, { immediate: true })
+
 onBeforeUnmount(() => {
   requestToken.value += 1
+  previewHydrationToken += 1
 })
 </script>
 
@@ -140,8 +247,9 @@ onBeforeUnmount(() => {
       </header>
       <div
         v-if="previewHtml"
+        ref="previewRoot"
         class="tomosona-note-embed-preview"
-        v-html="previewHtml"
+        v-html="renderedPreviewHtml"
       />
       <p v-else class="tomosona-note-embed-fallback">
         {{ error || 'Preview unavailable.' }}

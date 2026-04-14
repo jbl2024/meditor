@@ -147,6 +147,8 @@ export function isLikelyMarkdownPaste(plain: string, html: string): boolean {
 
 type SmartPasteSource = 'html' | 'plain'
 
+const STANDALONE_MARKDOWN_IMAGE_RE = /^!\[[^\]\n]*\]\([^)]+\)$/
+
 export function selectSmartPasteMarkdown(
   plain: string,
   html: string
@@ -158,7 +160,9 @@ export function selectSmartPasteMarkdown(
       /(^#{1,6}\s)|(^\s*[-*+]\s)|(^\s*\d+\.\s)|(^>\s)|(^```)|(^\|.*\|)/m.test(normalized) ||
       /\[\[[^\]]+\]\]/.test(normalized) ||
       normalized.includes('\n')
-    if (hasBlockSignals) {
+    // Standalone pasted images (for example a single `<img>` from the clipboard)
+    // should enter the same asset pipeline as block markdown images.
+    if (hasBlockSignals || STANDALONE_MARKDOWN_IMAGE_RE.test(normalized)) {
       return { markdown: htmlMarkdown, source: 'html' }
     }
   }

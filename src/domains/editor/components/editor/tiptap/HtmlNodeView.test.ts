@@ -1,5 +1,14 @@
 import { createApp, defineComponent, h, nextTick, ref } from 'vue'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+
+const hoisted = vi.hoisted(() => ({
+  readImageDataUrl: vi.fn(async () => 'data:image/png;base64,ZmFrZQ==')
+}))
+
+vi.mock('../../../../../shared/api/workspaceApi', () => ({
+  readImageDataUrl: hoisted.readImageDataUrl
+}))
+
 import HtmlNodeView from './HtmlNodeView.vue'
 
 async function flush() {
@@ -83,6 +92,34 @@ describe('HtmlNodeView', () => {
     expect(anchors[0].getAttribute('href')).toBe('wikilink:docs%2Fnote%23Section%202')
     expect(anchors[1].getAttribute('data-wikilink-target')).toBe('docs/alpha')
     expect(anchors[1].textContent).toBe('docs/alpha')
+
+    harness.app.unmount()
+  })
+
+  it('rewrites absolute local image sources in html preview to webview-safe urls', async () => {
+    const harness = mountHarness({
+      initialHtml: '<figure><img src="/home/jeromeb/src/wiki-technique/docs/gestion_parc/assets/images/Formulaire_GLPI/Pasted image 20260325152608.png" alt="Pasted image 20260325152608.png"></figure>'
+    })
+
+    const initialImage = harness.root.querySelector('.tomosona-html-preview img') as HTMLImageElement | null
+    expect(initialImage).toBeTruthy()
+    expect(initialImage?.getAttribute('src')).toBe(
+      'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='
+    )
+    expect(initialImage?.getAttribute('data-local-src')).toBe(
+      '/home/jeromeb/src/wiki-technique/docs/gestion_parc/assets/images/Formulaire_GLPI/Pasted image 20260325152608.png'
+    )
+
+    await flush()
+
+    const image = harness.root.querySelector('.tomosona-html-preview img') as HTMLImageElement | null
+    expect(image).toBeTruthy()
+    expect(image?.getAttribute('src')).toBe(
+      'data:image/png;base64,ZmFrZQ=='
+    )
+    expect(hoisted.readImageDataUrl).toHaveBeenCalledWith(
+      '/home/jeromeb/src/wiki-technique/docs/gestion_parc/assets/images/Formulaire_GLPI/Pasted image 20260325152608.png'
+    )
 
     harness.app.unmount()
   })

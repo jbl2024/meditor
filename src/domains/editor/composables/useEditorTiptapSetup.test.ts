@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { describe, expect, it, vi } from 'vitest'
+
 import { useEditorTiptapSetup } from './useEditorTiptapSetup'
 
 function createSetup(overrides: Partial<Parameters<typeof useEditorTiptapSetup>[0]> = {}) {
@@ -62,6 +63,16 @@ describe('useEditorTiptapSetup', () => {
     expect(editorOptions.editorProps.attributes.lang).toBe('fr')
     expect(typeof editorOptions.editorProps.handleDOMEvents.click).toBe('function')
     expect(typeof editorOptions.editorProps.handleClick).toBe('function')
+  })
+
+  it('resolves asset previews against the current note path', () => {
+    const { setup } = createSetup()
+    const editorOptions = setup.createEditorOptions('/vault/gestion_parc/glpi/current.md') as any
+    const assetExtension = (editorOptions.extensions ?? []).find((extension: { name?: string }) => extension.name === 'assetBlock')
+
+    expect(assetExtension?.options?.resolvePreviewSrc('../../assets/images/kyPZV79XlEaFswpDL5cP47SlAfy25fO6fnN9FEM-TUY%3D.png')).toBe(
+      '/vault/assets/images/kyPZV79XlEaFswpDL5cP47SlAfy25fO6fnN9FEM-TUY=.png'
+    )
   })
 
   it('dispatches update/selection/transaction callbacks', () => {

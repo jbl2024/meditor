@@ -3,7 +3,9 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { NodeViewWrapper } from '@tiptap/vue-3'
 import { NodeSelection } from '@tiptap/pm/state'
 import { common, createLowlight } from 'lowlight'
+import { readImageDataUrl } from '../../../../../shared/api/workspaceApi'
 import { sanitizeHtmlForPreview } from '../../../../../shared/lib/htmlSanitizer'
+import { decodeWorkspacePathSegments, isAbsoluteWorkspacePath } from '../../../../../domains/explorer/lib/workspacePaths'
 import { parseWikilinkTarget } from '../../../lib/wikilinks'
 
 const INDENT = '  '
@@ -31,12 +33,16 @@ const props = defineProps<{
 const sourceTextarea = ref<HTMLTextAreaElement | null>(null)
 const sourcePre = ref<HTMLElement | null>(null)
 const sourceShell = ref<HTMLElement | null>(null)
+const previewRoot = ref<HTMLDivElement | null>(null)
 const showSource = ref(false)
 const sourceEditorHeight = ref('0px')
 let pendingSourceFocusOptions: { placeCaretAtEnd?: boolean; placeCaretInsideTemplate?: boolean } | null = null
+let previewHydrationToken = 0
+const LOCAL_IMAGE_PLACEHOLDER_SRC =
+  'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='
 
 const html = computed(() => String(props.node.attrs.html ?? ''))
-const sanitizedPreview = computed(() => toPreviewHtml(html.value))
+const sanitizedPreview = computed(() => toPreviewHtmlWithImages(html.value))
 const highlightedSource = computed(() => highlightHtmlSource(html.value))
 
 function estimateSourceHeight(value: string): number {
@@ -253,6 +259,71 @@ function toPreviewHtml(value: string): string {
   return root.innerHTML
 }
 
+function isHydratableLocalImageSrc(src: string): boolean {
+  if (!src) return false
+  if (/^(?:https?|data|blob|asset|tauri|file):/i.test(src)) return false
+  const normalizedSrc = decodeWorkspacePathSegments(src)
+  if (!normalizedSrc) return false
+  return isAbsoluteWorkspacePath(normalizedSrc)
+}
+
+function rewriteLocalImageSources(html: string): string {
+  if (!html || !html.includes('<img')) return html
+
+  const root = document.createElement('div')
+  root.innerHTML = html
+
+  const images = Array.from(root.querySelectorAll('img'))
+  for (const image of images) {
+    const rawSrc = image.getAttribute('src')?.trim() ?? ''
+    if (!isHydratableLocalImageSrc(rawSrc)) continue
+    const normalizedSrc = decodeWorkspacePathSegments(rawSrc)
+    if (!normalizedSrc) continue
+    image.setAttribute('data-local-src', normalizedSrc)
+    image.setAttribute('src', LOCAL_IMAGE_PLACEHOLDER_SRC)
+  }
+
+  return root.innerHTML
+}
+
+async function hydrateLocalPreviewImages() {
+  const token = ++previewHydrationToken
+  await nextTick()
+  if (token !== previewHydrationToken) return
+
+  const root = previewRoot.value
+  if (!root) return
+
+  const images = Array.from(root.querySelectorAll('img'))
+  for (const image of images) {
+    const rawSrc = image.getAttribute('data-local-src')?.trim() ?? ''
+    if (!isHydratableLocalImageSrc(rawSrc)) continue
+
+    const normalizedSrc = decodeWorkspacePathSegments(rawSrc)
+    if (!normalizedSrc) continue
+
+    try {
+      const dataUrl = await readImageDataUrl(normalizedSrc)
+      if (token !== previewHydrationToken) return
+      if (image.isConnected) {
+        image.setAttribute('src', dataUrl)
+        image.removeAttribute('data-local-src')
+      }
+    } catch (error) {
+      console.warn('[editor] html-preview image failed', {
+        src: rawSrc,
+        normalizedSrc,
+        error
+      })
+      // Best-effort preview only.
+    }
+  }
+}
+
+function toPreviewHtmlWithImages(value: string): string {
+  return rewriteLocalImageSources(toPreviewHtml(value))
+}
+
 function onInput(event: Event) {
   const value = (event.target as HTMLTextAreaElement | null)?.value ?? ''
   props.updateAttributes({ html: value })
@@ -415,6 +486,11 @@ watch(html, () => {
     syncHighlightedScroll()
   })
 })
+
+watch([sanitizedPreview, showSource], () => {
+  if (showSource.value) return
+  void hydrateLocalPreviewImages()
+}, { immediate: true })
 </script>
 
 <template>
@@ -432,6 +508,7 @@ watch(html, () => {
         </button>
         <div
           v-if="!showSource"
+          ref="previewRoot"
           class="tomosona-html-preview"
           contenteditable="false"
           v-html="sanitizedPreview"

@@ -51,6 +51,35 @@ describe('fromTiptapDoc embed block', () => {
   })
 })
 
+describe('fromTiptapDoc asset block', () => {
+  it('maps assetBlock nodes to asset blocks', () => {
+    const blocks = fromTiptapDoc({
+      type: 'doc',
+      content: [
+        {
+          type: 'assetBlock',
+          attrs: {
+            src: '../../assets/images/Formulaire_GLPI/kyPZV79XlEaFswpDL5cP47SlAfy25fO6fnN9FEM-TUY=.png',
+            alt: 'kyPZV79XlEaFswpDL5cP47SlAfy25fO6fnN9FEM-TUY=.png',
+            title: 'Formulaire GLPI'
+          }
+        }
+      ]
+    })
+
+    expect(blocks).toEqual([
+      {
+        type: 'asset',
+        data: {
+          src: '../../assets/images/Formulaire_GLPI/kyPZV79XlEaFswpDL5cP47SlAfy25fO6fnN9FEM-TUY=.png',
+          alt: 'kyPZV79XlEaFswpDL5cP47SlAfy25fO6fnN9FEM-TUY=.png',
+          title: 'Formulaire GLPI'
+        }
+      }
+    ])
+  })
+})
+
 describe('fromTiptapDoc table metadata', () => {
   it('maps table cell attrs back to table align and widths metadata', () => {
     const blocks = fromTiptapDoc({

@@ -34,6 +34,28 @@ export function normalizeWorkspacePath(path: string): string {
 }
 
 /**
+ * Decodes percent-encoded filesystem path segments without changing path separators.
+ *
+ * Example: `assets/Pasted%20image%20A%3D.png` -> `assets/Pasted image A=.png`.
+ */
+export function decodeWorkspacePathSegments(path: string): string {
+  const normalized = normalizeWorkspacePath(path)
+  if (!normalized) return ''
+
+  return normalized
+    .split('/')
+    .map((segment) => {
+      if (!segment || segment === '.' || segment === '..') return segment
+      try {
+        return decodeURIComponent(segment)
+      } catch {
+        return segment
+      }
+    })
+    .join('/')
+}
+
+/**
  * Returns `true` when the normalized path is absolute.
  *
  * Supported absolute forms are Unix roots (`/vault`) and Windows drive paths

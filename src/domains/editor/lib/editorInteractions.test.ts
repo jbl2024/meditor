@@ -84,6 +84,18 @@ describe('markdown paste detection', () => {
     })
   })
 
+  it('accepts standalone image html as structured paste', () => {
+    const selected = selectSmartPasteMarkdown(
+      '',
+      '<img src="/home/jeromeb/src/wiki-technique/docs/gestion_parc/assets/images/Formulaire_GLPI/Pasted image 20260325152608.png" alt="Pasted image 20260325152608.png">'
+    )
+
+    expect(selected).toEqual({
+      markdown: '![Pasted image 20260325152608.png](/home/jeromeb/src/wiki-technique/docs/gestion_parc/assets/images/Formulaire_GLPI/Pasted image 20260325152608.png)\n',
+      source: 'html'
+    })
+  })
+
   it('returns null when neither html nor plain has markdown signals', () => {
     const selected = selectSmartPasteMarkdown('just text', '<div><strong>Hello</strong></div>')
     expect(selected).toBeNull()

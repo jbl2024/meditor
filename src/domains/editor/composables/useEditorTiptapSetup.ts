@@ -8,6 +8,7 @@ import { Table, TableRow, TableHeader, TableCell } from '@tiptap/extension-table
 import { ListKit } from '@tiptap/extension-list'
 import Placeholder from '@tiptap/extension-placeholder'
 import { CalloutNode } from '../lib/tiptap/extensions/CalloutNode'
+import { AssetNode } from '../lib/tiptap/extensions/AssetNode'
 import { MermaidNode } from '../lib/tiptap/extensions/MermaidNode'
 import { QuoteNode } from '../lib/tiptap/extensions/QuoteNode'
 import { HtmlNode } from '../lib/tiptap/extensions/HtmlNode'
@@ -18,6 +19,7 @@ import { TableCellAlign } from '../lib/tiptap/extensions/TableCellAlign'
 import { EditorFindExtension } from '../lib/tiptap/extensions/EditorFind'
 import { SpellcheckExtension, refreshSpellcheckDecorations } from '../lib/tiptap/extensions/Spellcheck'
 import { adjustHeadingLevelFromTab } from '../lib/editorInteractions'
+import { decodeWorkspacePathSegments, isAbsoluteWorkspacePath, normalizeWorkspacePath } from '../../explorer/lib/workspacePaths'
 import type { SpellcheckLanguage } from '../lib/spellcheck'
 import { WIKILINK_STATE_KEY, type WikilinkCandidate } from '../lib/tiptap/plugins/wikilinkState'
 import { enterWikilinkEditFromNode } from '../lib/tiptap/extensions/wikilinkCommands'
@@ -93,6 +95,56 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
         ? target.parentElement
         : null
     return element?.closest('a') as HTMLAnchorElement | null
+  }
+
+  function splitAbsolutePath(path: string): { prefix: string; segments: string[] } | null {
+    const normalized = normalizeWorkspacePath(path)
+    if (!normalized || !isAbsoluteWorkspacePath(normalized)) return null
+    if (/^[A-Za-z]:\//.test(normalized)) {
+      return {
+        prefix: normalized.slice(0, 3),
+        segments: normalized.slice(3).split('/').filter(Boolean)
+      }
+    }
+    if (normalized.startsWith('/')) {
+      return {
+        prefix: '/',
+        segments: normalized.slice(1).split('/').filter(Boolean)
+      }
+    }
+    return null
+  }
+
+  function resolveRelativeAssetPath(notePath: string, assetPath: string): string | null {
+    const base = splitAbsolutePath(notePath)
+    if (!base) return null
+    const segments = base.segments.slice(0, -1)
+
+    for (const segment of decodeWorkspacePathSegments(assetPath).split('/')) {
+      if (!segment || segment === '.') continue
+      if (segment === '..') {
+        if (!segments.length) return null
+        segments.pop()
+        continue
+      }
+      segments.push(segment)
+    }
+
+    return base.prefix === '/'
+      ? `/${segments.join('/')}`
+      : `${base.prefix}${segments.join('/')}`
+  }
+
+  function resolveAssetPreviewSrc(notePath: string, rawSrc: string): string | null {
+    const src = normalizeWorkspacePath(rawSrc)
+    if (!src) return null
+    if (/^(?:https?|data|blob|asset|tauri):/i.test(src)) return src
+
+    const absolutePath = isAbsoluteWorkspacePath(src)
+      ? decodeWorkspacePathSegments(src)
+      : resolveRelativeAssetPath(notePath, src)
+    if (!absolutePath) return null
+    return absolutePath
   }
 
   function readIsoDateTokenAtPos(view: ProseMirrorEditorView, pos: number): string | null {
@@ -262,6 +314,9 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
         TableCellAlign,
         Placeholder.configure({ placeholder: 'Write here...' }),
         CalloutNode,
+        AssetNode.configure({
+          resolvePreviewSrc: (src: string) => resolveAssetPreviewSrc(path, src)
+        }),
         MermaidNode.configure({
           confirmReplace: options.requestMermaidReplaceConfirm,
           openPreview: options.openMermaidPreview

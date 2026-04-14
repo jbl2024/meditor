@@ -591,6 +591,33 @@ pub fn read_pdf_data_url(path: String) -> Result<String> {
     Ok(format!("data:application/pdf;base64,{encoded}"))
 }
 
+fn image_mime_type_for_path(path: &Path) -> Option<&'static str> {
+    let ext = path.extension()?.to_str()?.to_ascii_lowercase();
+    match ext.as_str() {
+        "png" => Some("image/png"),
+        "jpg" | "jpeg" => Some("image/jpeg"),
+        "gif" => Some("image/gif"),
+        "webp" => Some("image/webp"),
+        "svg" | "svgz" => Some("image/svg+xml"),
+        "bmp" => Some("image/bmp"),
+        "ico" => Some("image/x-icon"),
+        _ => None,
+    }
+}
+
+#[tauri::command]
+pub fn read_image_data_url(path: String) -> Result<String> {
+    let root = active_workspace_root()?;
+    let pb = normalize_existing_path(&path)?;
+    ensure_within_root(&root, &pb)?;
+    let mime = image_mime_type_for_path(&pb).ok_or(AppError::InvalidOperation(
+        "Unsupported image format.".to_string(),
+    ))?;
+    let bytes = fs::read(&pb)?;
+    let encoded = STANDARD.encode(bytes);
+    Ok(format!("data:{mime};base64,{encoded}"))
+}
+
 fn spreadsheet_input_format_for_path(path: &Path) -> Option<&'static str> {
     let ext = path.extension()?.to_str()?.to_ascii_lowercase();
     match ext.as_str() {

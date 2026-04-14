@@ -128,6 +128,12 @@ function lineText(node: ProseNode | null | undefined): string {
       return String(node.attrs.message ?? '')
     case 'mermaidBlock':
       return String(node.attrs.code ?? '')
+    case 'assetBlock': {
+      const alt = String(node.attrs.alt ?? '')
+      const src = String(node.attrs.src ?? '')
+      const title = String(node.attrs.title ?? '')
+      return title ? `![${alt}](${src} "${title}")` : `![${alt}](${src})`
+    }
     case 'htmlBlock':
       return String(node.attrs.html ?? '')
     case 'hardBreak':

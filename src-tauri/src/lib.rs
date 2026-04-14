@@ -40,7 +40,8 @@ use editor_sync::{read_note_snapshot, save_note_buffer};
 use fs_ops::{
     clear_working_folder, copy_entry, create_entry, create_extracted_note, duplicate_entry,
     list_children, list_markdown_files, move_entry, open_external_url, open_path_external,
-    path_exists, read_file_metadata, read_pdf_data_url, read_text_file, rename_entry,
+    path_exists, read_file_metadata, read_image_data_url, read_pdf_data_url, read_text_file,
+    rename_entry,
     render_pandoc_preview_html, render_spreadsheet_preview_html, reveal_in_file_manager,
     select_working_folder, set_working_folder, trash_entry,
     write_text_file,
@@ -397,6 +398,7 @@ pub fn run() {
             path_exists,
             read_text_file,
             read_file_metadata,
+            read_image_data_url,
             read_pdf_data_url,
             render_pandoc_preview_html,
             render_spreadsheet_preview_html,

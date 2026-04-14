@@ -239,6 +239,18 @@ function blockToNode(block: EditorBlock): TiptapNode | null {
       }
     }
 
+    case 'asset': {
+      return {
+        type: TIPTAP_NODE_TYPES.asset,
+        attrs: {
+          src: String(data.src ?? ''),
+          alt: String(data.alt ?? ''),
+          title: String(data.title ?? ''),
+          autoEdit: false
+        }
+      }
+    }
+
     case 'callout': {
       return {
         type: TIPTAP_NODE_TYPES.callout,

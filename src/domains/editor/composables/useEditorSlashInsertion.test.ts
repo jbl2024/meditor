@@ -88,6 +88,35 @@ describe('useEditorSlashInsertion', () => {
     })
   })
 
+  it('inserts asset block payload in auto-edit mode', () => {
+    const chain = createChain()
+    const editor = { chain: vi.fn(() => chain) } as any
+    const insertion = useEditorSlashInsertion({
+      getEditor: () => editor,
+      currentTextSelectionContext: () => ({ text: '/asset', nodeType: 'paragraph', from: 1, to: 7 }),
+      readSlashContext: () => ({ from: 1, to: 7 }),
+      currentHeadings: () => [],
+      slugifyHeading: (heading) => heading.toLowerCase()
+    })
+
+    const ok = insertion.insertBlockFromDescriptor('asset', {
+      src: '../../assets/images/Formulaire_GLPI/image.png',
+      alt: 'image.png'
+    })
+
+    expect(ok).toBe(true)
+    expect(chain.deleteRange).toHaveBeenCalledWith({ from: 1, to: 7 })
+    expect(chain.insertContent).toHaveBeenCalledWith({
+      type: 'assetBlock',
+      attrs: {
+        src: '../../assets/images/Formulaire_GLPI/image.png',
+        alt: 'image.png',
+        title: '',
+        autoEdit: true
+      }
+    })
+  })
+
   it('inserts mermaid block in auto-edit mode', () => {
     const chain = createChain()
     const editor = { chain: vi.fn(() => chain) } as any

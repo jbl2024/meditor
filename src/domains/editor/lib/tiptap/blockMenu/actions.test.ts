@@ -52,6 +52,21 @@ const MermaidBlockNode = Node.create({
   }
 })
 
+const AssetBlockNode = Node.create({
+  name: 'assetBlock',
+  group: 'block',
+  atom: true,
+  addAttributes() {
+    return { src: { default: '' }, alt: { default: '' }, title: { default: '' } }
+  },
+  parseHTML() {
+    return [{ tag: 'figure[data-asset-node="true"]' }]
+  },
+  renderHTML({ node }) {
+    return ['figure', { 'data-asset-node': 'true', 'data-src': String(node.attrs.src ?? ''), 'data-alt': String(node.attrs.alt ?? ''), 'data-title': String(node.attrs.title ?? '') }]
+  }
+})
+
 const HtmlBlockNode = Node.create({
   name: 'htmlBlock',
   group: 'block',
@@ -125,6 +140,7 @@ function createMultiEditor(nodes: JSONContent[]): Editor {
       TableCell,
       QuoteBlockNode,
       CalloutBlockNode,
+      AssetBlockNode,
       MermaidBlockNode,
       HtmlBlockNode,
       WikilinkNode
@@ -171,6 +187,12 @@ function nodeTextWithLineBreaks(node: any): string {
     if (node.type?.name === 'quoteBlock') return String(node.attrs?.text ?? '')
     if (node.type?.name === 'calloutBlock') return String(node.attrs?.message ?? '')
     if (node.type?.name === 'mermaidBlock') return String(node.attrs?.code ?? '')
+    if (node.type?.name === 'assetBlock') {
+      const alt = String(node.attrs?.alt ?? '')
+      const src = String(node.attrs?.src ?? '')
+      const title = String(node.attrs?.title ?? '')
+      return title ? `![${alt}](${src} "${title}")` : `![${alt}](${src})`
+    }
     if (node.type?.name === 'htmlBlock') return String(node.attrs?.html ?? '')
     return String(node.text ?? node.textContent ?? '')
   }
@@ -461,6 +483,18 @@ describe('blockMenu turnInto', () => {
         const converted = editor.state.doc.child(0)
         expect(nodeTextWithLineBreaks(converted), testCase.name).toBe(testCase.expected)
       }
+    })
+
+    it('keeps asset block markdown when converting to paragraph', () => {
+      const editor = createEditor({
+        type: 'assetBlock',
+        attrs: { src: '../../assets/images/Formulaire_GLPI/asset.png', alt: 'asset' }
+      })
+
+      expect(turnInto(editor, createTarget(editor), 'paragraph')).toBe(true)
+      const converted = editor.state.doc.child(0)
+      expect(converted.type.name).toBe('paragraph')
+      expect(nodeTextWithLineBreaks(converted)).toBe('![asset](../../assets/images/Formulaire_GLPI/asset.png)')
     })
   })
 

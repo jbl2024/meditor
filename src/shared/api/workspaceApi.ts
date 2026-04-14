@@ -49,6 +49,11 @@ export async function readTextFile(path: string): Promise<string> {
   return await invoke('read_text_file', { path })
 }
 
+/** Reads an image file and returns a browser-safe data URL. */
+export async function readImageDataUrl(path: string): Promise<string> {
+  return await invoke('read_image_data_url', { path })
+}
+
 /** Reads created/updated timestamps for a workspace file. */
 export async function readFileMetadata(path: string): Promise<FileMetadata> {
   return await invoke('read_file_metadata', { path })

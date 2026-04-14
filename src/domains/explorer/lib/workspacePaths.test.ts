@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  decodeWorkspacePathSegments,
   dedupeWorkspacePaths,
   isAbsoluteWorkspacePath,
   isWorkspacePathOrDescendant,
@@ -23,6 +24,15 @@ describe('workspacePaths', () => {
   it('normalizes Unicode-equivalent paths to NFC', () => {
     expect(normalizeWorkspacePath('Exe\u0301cution/note.md')).toBe('Exécution/note.md')
     expect(toWorkspacePathKey('Syste\u0300me/Plan.md')).toBe('système/plan.md')
+  })
+
+  it('decodes percent-encoded path segments without touching separators', () => {
+    expect(
+      decodeWorkspacePathSegments('../../assets/images/Formulaire_GLPI/kyPZV79XlEaFswpDL5cP47SlAfy25fO6fnN9FEM-TUY%3D.png')
+    ).toBe('../../assets/images/Formulaire_GLPI/kyPZV79XlEaFswpDL5cP47SlAfy25fO6fnN9FEM-TUY=.png')
+    expect(
+      decodeWorkspacePathSegments('/vault/assets/images/Formulaire_GLPI/Pasted%20image%2020260325152608.png')
+    ).toBe('/vault/assets/images/Formulaire_GLPI/Pasted image 20260325152608.png')
   })
 
   it('detects unix and windows absolute paths', () => {

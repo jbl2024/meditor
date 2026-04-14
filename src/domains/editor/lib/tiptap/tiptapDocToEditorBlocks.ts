@@ -241,6 +241,16 @@ function nodeToBlock(node: JSONContent): EditorBlock | null {
         }
       }
 
+    case TIPTAP_NODE_TYPES.asset:
+      return {
+        type: 'asset',
+        data: {
+          src: String(node.attrs?.src ?? ''),
+          alt: String(node.attrs?.alt ?? ''),
+          title: String(node.attrs?.title ?? '')
+        }
+      }
+
     case TIPTAP_NODE_TYPES.html:
       return {
         type: 'html',

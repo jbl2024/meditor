@@ -27,6 +27,8 @@ const HR_RE = /^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/
 const FENCE_START_RE = /^```\s*([^`]*)$/
 const CALLOUT_MARKER_RE = /^\[!([A-Za-z0-9_-]+)\]\s*(.*)$/
 const EMBED_BLOCK_RE = /^!\[\[([^\]\n]+)\]\]$/
+// Detect standalone markdown images, for example: `![Diagram](../../assets/images/flow.png)`.
+const IMAGE_BLOCK_RE = /^!\[([^\]\n]*)\]\(([^)\n]*)\)$/
 const HTML_OPEN_TAG_START_RE = /^\s*<([A-Za-z][\w:-]*)(?:\s[^>]*)?>/
 const HTML_CLOSE_TAG_START_RE = /^\s*<\/([A-Za-z][\w:-]*)\s*>/
 const HTML_COMMENT_RE = /^\s*<!--[\s\S]*?-->\s*$/
@@ -310,6 +312,23 @@ export function sanitizeExternalHref(raw: string): string | null {
   return null
 }
 
+function parseMarkdownImageTarget(raw: string): { src: string; title: string } | null {
+  const value = normalizeMultiline(String(raw ?? '')).trim()
+  if (!value) return { src: '', title: '' }
+
+  if (value.startsWith('<') && value.endsWith('>')) {
+    return { src: value.slice(1, -1).trim(), title: '' }
+  }
+
+  const titleMatch = value.match(/^(.*?)(?:\s+(?:"([^"]*)"|'([^']*)'|\(([^)]*)\)))?$/)
+  if (!titleMatch) return null
+
+  return {
+    src: (titleMatch[1] ?? '').trim(),
+    title: (titleMatch[2] ?? titleMatch[3] ?? titleMatch[4] ?? '').trim()
+  }
+}
+
 function blockTextToHtml(value: string): string {
   return inlineMarkdownToHtml(value).replace(/\n/g, '<br>')
 }
@@ -333,6 +352,13 @@ function elementToMarkdown(node: Node): string {
   if (tag === 's' || tag === 'strike') return `~~${children}~~`
   if (tag === 'u') return `<u>${children}</u>`
   if (tag === 'code') return `\`${children.replace(/`/g, '\\`')}\``
+  if (tag === 'img') {
+    const src = element.getAttribute('src')?.trim() ?? ''
+    const alt = element.getAttribute('alt')?.trim() ?? ''
+    const title = element.getAttribute('title')?.trim() ?? ''
+    if (!src && !alt && !title) return ''
+    return title ? `![${alt}](${src} "${title}")` : `![${alt}](${src})`
+  }
 
   if (tag === 'a') {
     const href = element.getAttribute('href')?.trim() ?? ''
@@ -541,6 +567,11 @@ function nodesToClipboardMarkdownBlocks(nodes: Node[]): string[] {
 
     if (tag === 'pre') {
       pushIfNotEmpty(markdownFromCodeBlock(element))
+      return
+    }
+
+    if (tag === 'img') {
+      pushIfNotEmpty(elementToMarkdown(element))
       return
     }
 
@@ -810,6 +841,7 @@ function isBlockStarter(line: string): boolean {
     HR_RE.test(line) ||
     FENCE_START_RE.test(line) ||
     line.startsWith('>') ||
+    IMAGE_BLOCK_RE.test(line) ||
     ORDERED_LIST_RE.test(line) ||
     UNORDERED_LIST_RE.test(line)
   )
@@ -1153,6 +1185,23 @@ export function markdownToEditorData(markdown: string): EditorDocument {
       }
     }
 
+    const imageMatch = line.match(IMAGE_BLOCK_RE)
+    if (imageMatch) {
+      const imageParts = parseMarkdownImageTarget(imageMatch[2] ?? '')
+      if (imageParts) {
+        blocks.push({
+          type: 'asset',
+          data: {
+            src: imageParts.src,
+            alt: (imageMatch[1] ?? '').trim(),
+            ...(imageParts.title ? { title: imageParts.title } : {})
+          }
+        })
+        i += 1
+        continue
+      }
+    }
+
     if (isRawFallbackStart(line)) {
       const rawLines: string[] = []
       while (i < lines.length && lines[i].trim()) {
@@ -1343,6 +1392,14 @@ function blockToMarkdown(block: EditorBlock): string {
 
     case 'html':
       return normalizeMultiline(String(block.data?.html ?? ''))
+
+    case 'asset': {
+      const src = normalizeMultiline(String(block.data?.src ?? '')).trim()
+      const alt = normalizeMultiline(String(block.data?.alt ?? '')).trim()
+      const title = normalizeMultiline(String(block.data?.title ?? '')).trim()
+      if (!src && !alt && !title) return '![]()'
+      return title ? `![${alt}](${src} "${title}")` : `![${alt}](${src})`
+    }
 
     case 'embed': {
       const target = normalizeMultiline(String(block.data?.target ?? ''))

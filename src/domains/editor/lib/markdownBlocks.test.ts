@@ -74,6 +74,12 @@ describe('clipboardHtmlToMarkdown', () => {
     const markdown = clipboardHtmlToMarkdown(html)
     expect(markdown).toContain('[[graph/neurone.md|Neurone]]')
   })
+
+  it('serializes img tags as markdown images', () => {
+    const html = '<p><img src="../../assets/images/Formulaire_GLPI/preview.png" alt="Preview"></p>'
+    const markdown = clipboardHtmlToMarkdown(html)
+    expect(markdown).toContain('![Preview](../../assets/images/Formulaire_GLPI/preview.png)')
+  })
 })
 
 describe('inline internal markdown links', () => {
@@ -125,6 +131,37 @@ describe('embed markdown blocks', () => {
         ]
       })
     ).toBe('![[notes/alpha]]\n')
+  })
+})
+
+describe('asset markdown blocks', () => {
+  it('parses standalone markdown images as dedicated asset blocks', () => {
+    const parsed = markdownToEditorData('![kyPZV79XlEaFswpDL5cP47SlAfy25fO6fnN9FEM-TUY=.png](../../assets/images/Formulaire_GLPI/kyPZV79XlEaFswpDL5cP47SlAfy25fO6fnN9FEM-TUY%3D.png)')
+    expect(parsed.blocks).toEqual([
+      {
+        type: 'asset',
+        data: {
+          alt: 'kyPZV79XlEaFswpDL5cP47SlAfy25fO6fnN9FEM-TUY=.png',
+          src: '../../assets/images/Formulaire_GLPI/kyPZV79XlEaFswpDL5cP47SlAfy25fO6fnN9FEM-TUY%3D.png'
+        }
+      }
+    ])
+  })
+
+  it('serializes asset blocks back to markdown images', () => {
+    expect(
+      editorDataToMarkdown({
+        blocks: [
+          {
+            type: 'asset',
+            data: {
+              alt: 'kyPZV79XlEaFswpDL5cP47SlAfy25fO6fnN9FEM-TUY=.png',
+              src: '../../assets/images/Formulaire_GLPI/kyPZV79XlEaFswpDL5cP47SlAfy25fO6fnN9FEM-TUY%3D.png'
+            }
+          }
+        ]
+      })
+    ).toBe('![kyPZV79XlEaFswpDL5cP47SlAfy25fO6fnN9FEM-TUY=.png](../../assets/images/Formulaire_GLPI/kyPZV79XlEaFswpDL5cP47SlAfy25fO6fnN9FEM-TUY%3D.png)\n')
   })
 })
 

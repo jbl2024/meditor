@@ -1,0 +1,275 @@
+<script setup lang="ts">
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { NodeViewWrapper } from '@tiptap/vue-3'
+import type { AssetNodeExtensionOptions } from '../../../lib/tiptap/extensions/AssetNode'
+import { readImageDataUrl } from '../../../../../shared/api/workspaceApi'
+import { decodeWorkspacePathSegments, isAbsoluteWorkspacePath } from '../../../../../domains/explorer/lib/workspacePaths'
+
+const DATA_IMAGE_RE = /^data:image\/(?:png|gif|jpe?g|webp|svg\+xml);(?:base64,|charset=[^;,]+,)/i
+
+const props = defineProps<{
+  node: { attrs: { src?: string; alt?: string; title?: string; autoEdit?: boolean } }
+  updateAttributes: (attrs: Record<string, unknown>) => void
+  editor: { isEditable: boolean }
+  extension?: { options?: AssetNodeExtensionOptions }
+}>()
+
+const src = computed(() => String(props.node.attrs.src ?? '').trim())
+const alt = computed(() => String(props.node.attrs.alt ?? ''))
+const title = computed(() => String(props.node.attrs.title ?? ''))
+const autoEdit = computed(() => Boolean(props.node.attrs.autoEdit))
+const srcInputEl = ref<HTMLInputElement | null>(null)
+const previewFailed = ref(false)
+const previewLoading = ref(false)
+const previewSrc = ref<string | null>(null)
+let previewRequestToken = 0
+
+function sanitizeBrowserSafeAssetSrc(raw: string): string | null {
+  const value = String(raw ?? '').trim()
+  if (!value) return null
+  if (/[\u0000-\u001f\u007f]/.test(value)) return null
+  if (value.startsWith('data:')) {
+    return DATA_IMAGE_RE.test(value) ? value : null
+  }
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(value)) {
+    try {
+      const protocol = new URL(value, 'https://tomosona.local').protocol.toLowerCase()
+      return protocol === 'http:' || protocol === 'https:' || protocol === 'blob:' || protocol === 'asset:' || protocol === 'tauri:' ? value : null
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
+const previewCandidate = computed(() => {
+  const resolver = props.extension?.options?.resolvePreviewSrc
+  return String(resolver ? resolver(src.value) ?? '' : src.value).trim()
+})
+
+const remotePreviewSrc = computed(() => sanitizeBrowserSafeAssetSrc(previewCandidate.value))
+const localPreviewPath = computed(() => {
+  if (remotePreviewSrc.value) return null
+  const normalized = decodeWorkspacePathSegments(previewCandidate.value)
+  if (!normalized || !isAbsoluteWorkspacePath(normalized)) return null
+  return normalized
+})
+const previewLabel = computed(() => alt.value || title.value || src.value || 'Asset')
+
+async function refreshPreview() {
+  const token = ++previewRequestToken
+  previewFailed.value = false
+  previewLoading.value = false
+
+  if (remotePreviewSrc.value) {
+    previewSrc.value = remotePreviewSrc.value
+    return
+  }
+
+  previewSrc.value = null
+  const absolutePath = localPreviewPath.value
+  if (!absolutePath) return
+
+  previewLoading.value = true
+  try {
+    const dataUrl = await readImageDataUrl(absolutePath)
+    if (token !== previewRequestToken) return
+    previewSrc.value = sanitizeBrowserSafeAssetSrc(dataUrl)
+    previewFailed.value = !previewSrc.value
+  } catch (error) {
+    if (token !== previewRequestToken) return
+    previewSrc.value = null
+    previewFailed.value = true
+    console.warn('[editor] asset-preview failed', {
+      src: src.value,
+      previewCandidate: previewCandidate.value,
+      absolutePath,
+      error
+    })
+  } finally {
+    if (token === previewRequestToken) {
+      previewLoading.value = false
+    }
+  }
+}
+
+function onInput(key: 'src' | 'alt' | 'title', event: Event) {
+  const input = event.target as HTMLInputElement | null
+  props.updateAttributes({ [key]: input?.value ?? '' })
+}
+
+function focusSrcInput() {
+  const input = srcInputEl.value
+  if (!input) return
+  input.focus({ preventScroll: true })
+  input.setSelectionRange(0, input.value.length)
+}
+
+function scheduleAutoEditFocus() {
+  if (!props.editor.isEditable || !autoEdit.value) return
+  void nextTick().then(() => {
+    const requestRaf = typeof requestAnimationFrame === 'function'
+      ? requestAnimationFrame
+      : (callback: FrameRequestCallback) => window.setTimeout(() => callback(performance.now()), 16)
+    requestRaf(() => {
+      focusSrcInput()
+      props.updateAttributes({ autoEdit: false })
+    })
+  })
+}
+
+watch(autoEdit, () => {
+  scheduleAutoEditFocus()
+}, { immediate: true })
+
+watch(previewCandidate, () => {
+  void refreshPreview()
+}, { immediate: true })
+
+onMounted(() => {
+  scheduleAutoEditFocus()
+})
+</script>
+
+<template>
+  <NodeViewWrapper class="tomosona-asset-node" data-asset-node="true">
+    <div class="tomosona-asset-surface" :class="{ 'is-editable': editor.isEditable }">
+      <div class="tomosona-asset-preview" contenteditable="false">
+        <img
+          v-if="previewSrc && !previewFailed"
+          class="tomosona-asset-image"
+          :src="previewSrc"
+          :alt="alt || 'Asset preview'"
+          :title="title || alt || undefined"
+          @error="previewFailed = true"
+        >
+        <div v-else class="tomosona-asset-placeholder">
+          <span>{{ previewLabel }}</span>
+          <span class="tomosona-asset-placeholder-hint">
+            {{ src ? (previewLoading ? 'Loading preview...' : 'Preview unavailable') : 'Image path required' }}
+          </span>
+        </div>
+      </div>
+
+      <div class="tomosona-asset-fields">
+        <label class="tomosona-asset-field">
+          <span class="tomosona-asset-field-label">Src</span>
+          <input
+            ref="srcInputEl"
+            class="tomosona-asset-input tomosona-asset-src-input"
+            :value="src"
+            :readonly="!editor.isEditable"
+            spellcheck="false"
+            placeholder="Image path"
+            @input="onInput('src', $event)"
+          >
+        </label>
+
+        <label class="tomosona-asset-field">
+          <span class="tomosona-asset-field-label">Alt</span>
+          <input
+            class="tomosona-asset-input tomosona-asset-alt-input"
+            :value="alt"
+            :readonly="!editor.isEditable"
+            spellcheck="false"
+            placeholder="Alt text"
+            @input="onInput('alt', $event)"
+          >
+        </label>
+
+        <label class="tomosona-asset-field">
+          <span class="tomosona-asset-field-label">Title</span>
+          <input
+            class="tomosona-asset-input tomosona-asset-title-input"
+            :value="title"
+            :readonly="!editor.isEditable"
+            spellcheck="false"
+            placeholder="Optional title"
+            @input="onInput('title', $event)"
+          >
+        </label>
+      </div>
+    </div>
+  </NodeViewWrapper>
+</template>
+
+<style scoped>
+.tomosona-asset-node {
+  margin: 0.75rem 0;
+}
+
+.tomosona-asset-surface {
+  border: 1px solid var(--editor-source-border);
+  border-radius: 0.9rem;
+  background: color-mix(in srgb, var(--editor-overlay-panel) 50%, transparent);
+  padding: 0.85rem 0.95rem;
+}
+
+.tomosona-asset-preview {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  min-height: 10rem;
+  overflow: hidden;
+  border-radius: 0.7rem;
+  background: color-mix(in srgb, var(--editor-overlay-panel) 30%, transparent);
+}
+
+.tomosona-asset-image {
+  display: block;
+  max-width: 100%;
+  max-height: 24rem;
+  object-fit: contain;
+}
+
+.tomosona-asset-placeholder {
+  align-items: center;
+  color: var(--editor-source-text);
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  justify-content: center;
+  min-height: 10rem;
+  padding: 1rem;
+  text-align: center;
+}
+
+.tomosona-asset-placeholder-hint {
+  font-size: 0.8rem;
+  opacity: 0.72;
+}
+
+.tomosona-asset-fields {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.85rem;
+}
+
+.tomosona-asset-field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.tomosona-asset-field-label {
+  color: var(--editor-source-text);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.tomosona-asset-input {
+  width: 100%;
+  border: 1px solid var(--editor-source-border);
+  border-radius: 0.6rem;
+  background: var(--editor-menu-bg);
+  color: var(--editor-source-text);
+  padding: 0.55rem 0.7rem;
+}
+
+.tomosona-asset-input::placeholder {
+  color: var(--editor-menu-muted);
+}
+
+.tomosona-asset-input:read-only {
+  opacity: 0.9;
+}
+</style>

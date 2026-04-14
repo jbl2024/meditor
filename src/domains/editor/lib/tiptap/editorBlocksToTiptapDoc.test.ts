@@ -136,6 +136,36 @@ describe('toTiptapDoc html block', () => {
   })
 })
 
+describe('toTiptapDoc asset block', () => {
+  it('maps asset blocks to assetBlock nodes', () => {
+    const doc = toTiptapDoc([
+      {
+        type: 'asset',
+        data: {
+          src: '../../assets/images/Formulaire_GLPI/kyPZV79XlEaFswpDL5cP47SlAfy25fO6fnN9FEM-TUY=.png',
+          alt: 'kyPZV79XlEaFswpDL5cP47SlAfy25fO6fnN9FEM-TUY=.png',
+          title: 'Formulaire GLPI'
+        }
+      }
+    ])
+
+    expect(doc).toEqual({
+      type: 'doc',
+      content: [
+        {
+          type: 'assetBlock',
+          attrs: {
+            src: '../../assets/images/Formulaire_GLPI/kyPZV79XlEaFswpDL5cP47SlAfy25fO6fnN9FEM-TUY=.png',
+            alt: 'kyPZV79XlEaFswpDL5cP47SlAfy25fO6fnN9FEM-TUY=.png',
+            title: 'Formulaire GLPI',
+            autoEdit: false
+          }
+        }
+      ]
+    })
+  })
+})
+
 describe('toTiptapDoc embed block', () => {
   it('maps embedded note blocks to noteEmbedBlock nodes', () => {
     const doc = toTiptapDoc([
