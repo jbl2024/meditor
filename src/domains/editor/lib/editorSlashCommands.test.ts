@@ -12,6 +12,7 @@ describe('EDITOR_SLASH_COMMANDS', () => {
       'table',
       'callout',
       'mermaid',
+      'asset',
       'code',
       'html',
       'quote',
