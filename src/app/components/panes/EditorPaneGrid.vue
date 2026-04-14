@@ -44,6 +44,7 @@ type EditorViewExposed = EditorPaneGridExposed
 const props = defineProps<{
   layout: MultiPaneLayout
   activeDocumentPath: string
+  allWorkspaceFiles?: string[]
   getStatus: (path: string) => FileEditorStatus
   openFile?: (path: string) => Promise<string>
   openExternally?: (path: string) => Promise<void> | void
@@ -344,6 +345,7 @@ onBeforeUnmount(() => {
         :active-tab="paneActiveTab(pane)"
         :open-tabs="pane.openTabs"
         :open-document-paths="paneDocumentPaths(pane)"
+        :all-workspace-files="allWorkspaceFiles"
         :active-document-path="activeDocumentPath"
         :open-externally="openExternally"
         :launchpad="{

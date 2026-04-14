@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { PhotoIcon } from '@heroicons/vue/24/outline'
 import { NodeViewWrapper } from '@tiptap/vue-3'
 import type { AssetNodeExtensionOptions } from '../../../lib/tiptap/extensions/AssetNode'
 import type { AssetPreviewPayload } from '../../../composables/useAssetPreviewDialog'
 import { readImageDataUrl } from '../../../../../shared/api/workspaceApi'
 import { decodeWorkspacePathSegments, isAbsoluteWorkspacePath } from '../../../../../domains/explorer/lib/workspacePaths'
+import UiFilterableDropdown, { type FilterableDropdownItem } from '../../../../../shared/components/ui/UiFilterableDropdown.vue'
+import UiIconButton from '../../../../../shared/components/ui/UiIconButton.vue'
+import type { AssetBrowserDropdownItem } from '../../../lib/tiptap/assetBrowser'
 
 const DATA_IMAGE_RE = /^data:image\/(?:png|gif|jpe?g|webp|svg\+xml);(?:base64,|charset=[^;,]+,)/i
 
@@ -24,6 +28,9 @@ const previewFailed = ref(false)
 const previewLoading = ref(false)
 const previewSrc = ref<string | null>(null)
 const showFields = ref(false)
+const showMediaBrowser = ref(false)
+const mediaBrowserQuery = ref('')
+const mediaBrowserActiveIndex = ref(0)
 let previewRequestToken = 0
 
 function sanitizeBrowserSafeAssetSrc(raw: string): string | null {
@@ -49,6 +56,10 @@ const previewCandidate = computed(() => {
   return String(resolver ? resolver(src.value) ?? '' : src.value).trim()
 })
 
+const mediaItems = computed<AssetBrowserDropdownItem[]>(() =>
+  props.extension?.options?.getAssetBrowserItems?.() ?? []
+)
+
 const remotePreviewSrc = computed(() => sanitizeBrowserSafeAssetSrc(previewCandidate.value))
 const localPreviewPath = computed(() => {
   if (remotePreviewSrc.value) return null
@@ -58,6 +69,48 @@ const localPreviewPath = computed(() => {
 })
 const previewLabel = computed(() => alt.value || title.value || src.value || 'Asset')
 const isEditing = computed(() => props.editor.isEditable && showFields.value)
+
+function normalizeSearchText(value: string): string {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
+
+function mediaMatcher(item: FilterableDropdownItem, query: string): boolean {
+  const normalizedQuery = normalizeSearchText(query)
+  if (!normalizedQuery) return true
+
+  const fields = [
+    item.label,
+    String((item as AssetBrowserDropdownItem).meta ?? ''),
+    String((item as AssetBrowserDropdownItem).path ?? '')
+  ].map(normalizeSearchText)
+
+  return fields.some((field) => field.includes(normalizedQuery))
+}
+
+function mediaItemMeta(item: FilterableDropdownItem): string {
+  return String((item as AssetBrowserDropdownItem).meta ?? '')
+}
+
+function onMediaBrowserOpenChange(open: boolean) {
+  showMediaBrowser.value = open
+  if (open) {
+    mediaBrowserQuery.value = ''
+    mediaBrowserActiveIndex.value = 0
+  }
+}
+
+function onMediaBrowserSelect(item: FilterableDropdownItem) {
+  const path = String((item as AssetBrowserDropdownItem).path ?? '').trim()
+  if (!path) return
+  props.updateAttributes({ src: path })
+  void nextTick().then(() => {
+    focusSrcInput()
+  })
+}
 
 async function refreshPreview() {
   const token = ++previewRequestToken
@@ -217,15 +270,61 @@ onMounted(() => {
       <div v-if="isEditing" class="tomosona-asset-fields">
         <label class="tomosona-asset-field">
           <span class="tomosona-asset-field-label">Src</span>
-          <input
-            ref="srcInputEl"
-            class="tomosona-asset-input tomosona-asset-src-input"
-            :value="src"
-            :readonly="!editor.isEditable"
-            spellcheck="false"
-            placeholder="Image path"
-            @input="onInput('src', $event)"
+          <UiFilterableDropdown
+            class="tomosona-asset-browser"
+            :items="mediaItems"
+            :model-value="showMediaBrowser"
+            :query="mediaBrowserQuery"
+            :active-index="mediaBrowserActiveIndex"
+            :matcher="mediaMatcher"
+            filter-placeholder="Filter media..."
+            :show-filter="true"
+            :auto-focus-on-open="true"
+            :close-on-select="true"
+            menu-mode="portal"
+            menu-class="tomosona-asset-browser-menu"
+            :disabled="!mediaItems.length"
+            :max-height="280"
+            @open-change="onMediaBrowserOpenChange"
+            @query-change="mediaBrowserQuery = $event"
+            @active-index-change="mediaBrowserActiveIndex = $event"
+            @select="onMediaBrowserSelect"
           >
+            <template #trigger="{ toggleMenu }">
+              <div class="tomosona-asset-src-row">
+                <input
+                  ref="srcInputEl"
+                  class="tomosona-asset-input tomosona-asset-src-input"
+                  :value="src"
+                  :readonly="!editor.isEditable"
+                  spellcheck="false"
+                  placeholder="Image path"
+                  @input="onInput('src', $event)"
+                >
+                <UiIconButton
+                  class-name="tomosona-asset-src-browser-btn"
+                  variant="ghost"
+                  size="sm"
+                  :disabled="!mediaItems.length"
+                  aria-label="Browse media"
+                  title="Browse media"
+                  @mousedown.prevent
+                  @click.stop="toggleMenu"
+                >
+                  <PhotoIcon />
+                </UiIconButton>
+              </div>
+            </template>
+            <template #item="{ item, active }">
+              <span class="tomosona-asset-browser-item" :class="{ 'is-active': active }">
+                <span class="tomosona-asset-browser-item-label">{{ item.label }}</span>
+                <span class="tomosona-asset-browser-item-meta">{{ mediaItemMeta(item) }}</span>
+              </span>
+            </template>
+            <template #empty>
+              <span class="tomosona-asset-browser-empty">No media found</span>
+            </template>
+          </UiFilterableDropdown>
         </label>
 
         <label class="tomosona-asset-field">
@@ -356,6 +455,53 @@ onMounted(() => {
   background: var(--editor-menu-bg);
   color: var(--editor-source-text);
   padding: 0.55rem 0.7rem;
+}
+
+.tomosona-asset-src-row {
+  align-items: stretch;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.tomosona-asset-src-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.tomosona-asset-browser {
+  flex: 0 0 auto;
+  position: relative;
+}
+
+.tomosona-asset-browser :deep(.ui-filterable-dropdown-menu) {
+  max-width: min(34rem, calc(100vw - 1.5rem));
+}
+
+.tomosona-asset-browser :deep(.ui-filterable-dropdown-option) {
+  white-space: normal;
+}
+
+.tomosona-asset-browser-item {
+  display: grid;
+  gap: 0.15rem;
+  width: 100%;
+}
+
+.tomosona-asset-browser-item.is-active {
+  font-weight: 600;
+}
+
+.tomosona-asset-browser-item-label {
+  color: var(--editor-menu-text);
+}
+
+.tomosona-asset-browser-item-meta {
+  color: var(--editor-menu-muted);
+  font-size: 0.75rem;
+}
+
+.tomosona-asset-browser-empty {
+  color: var(--editor-menu-muted);
 }
 
 .tomosona-asset-input::placeholder {

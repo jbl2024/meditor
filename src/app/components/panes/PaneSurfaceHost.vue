@@ -25,6 +25,7 @@ const props = defineProps<{
   activeTab: PaneTab | null
   openTabs: PaneTab[]
   openDocumentPaths: string[]
+  allWorkspaceFiles?: string[]
   getStatus: (path: string) => FileEditorStatus
   openFile?: (path: string) => Promise<string>
   openExternally?: (path: string) => Promise<void> | void
@@ -180,6 +181,7 @@ defineExpose<EditorSurfaceExposed>({
     :path="activeTab.path"
     :workspace-path="secondBrain.workspacePath"
     :openPaths="openDocumentPaths"
+    :all-workspace-files="allWorkspaceFiles"
     :openFile="openFile"
     :saveFile="saveFile"
     :readNoteSnapshot="readNoteSnapshot"

@@ -19,6 +19,7 @@ import { TIPTAP_NODE_TYPES } from '../lib/tiptap/types'
 import type { WikilinkCandidate } from '../lib/tiptap/plugins/wikilinkState'
 import type { MermaidPreviewPayload } from './useMermaidPreviewDialog'
 import type { AssetPreviewPayload } from './useAssetPreviewDialog'
+import type { AssetBrowserDropdownItem } from '../lib/tiptap/assetBrowser'
 
 /**
  * Owns interactive editor behavior that depends on the active Tiptap instance:
@@ -80,6 +81,7 @@ export type EditorInteractionRuntimeIoPort = {
   loadEmbeddedNotePreview: (target: string) => Promise<{ path: string; html: string } | null>
   openEmbeddedNote: (target: string) => Promise<void>
   restoreEmbeddedNoteInline: (target: string, editor: Editor, getPos: () => number) => Promise<void>
+  getAssetBrowserItems?: () => AssetBrowserDropdownItem[]
 }
 
 /** Editor-specific callbacks that interaction owns but does not persist itself. */
@@ -286,6 +288,7 @@ export function useEditorInteractionRuntime(options: UseEditorInteractionRuntime
     requestMermaidReplaceConfirm: editorPort.requestMermaidReplaceConfirm,
     openMermaidPreview: editorPort.openMermaidPreview,
     openAssetPreview: editorPort.openAssetPreview,
+    getAssetBrowserItems: ioPort.getAssetBrowserItems ?? (() => []),
     getWikilinkCandidates,
     openLinkTargetWithAutosave,
     loadEmbeddedNotePreview: ioPort.loadEmbeddedNotePreview,

@@ -27,6 +27,7 @@ import { enterWikilinkEditFromNode } from '../lib/tiptap/extensions/wikilinkComm
 import type { RevealAnchorRequest } from './useEditorNavigation'
 import type { MermaidPreviewPayload } from './useMermaidPreviewDialog'
 import type { AssetPreviewPayload } from './useAssetPreviewDialog'
+import type { AssetBrowserDropdownItem } from '../lib/tiptap/assetBrowser'
 
 /**
  * Module: useEditorTiptapSetup
@@ -58,6 +59,7 @@ export type UseEditorTiptapSetupOptions = {
   requestMermaidReplaceConfirm: (payload: { templateLabel: string }) => Promise<boolean>
   openMermaidPreview: (payload: MermaidPreviewPayload) => void
   openAssetPreview: (payload: AssetPreviewPayload) => void
+  getAssetBrowserItems?: () => AssetBrowserDropdownItem[]
   getWikilinkCandidates: (query: string) => Promise<WikilinkCandidate[]>
   openLinkTargetWithAutosave: (target: string) => Promise<void>
   loadEmbeddedNotePreview: (target: string) => Promise<{ path: string; html: string } | null>
@@ -359,7 +361,8 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
         CalloutNode,
         AssetNode.configure({
           resolvePreviewSrc: (src: string) => resolveAssetPreviewSrc(path, src),
-          openPreview: options.openAssetPreview
+          openPreview: options.openAssetPreview,
+          getAssetBrowserItems: options.getAssetBrowserItems
         }),
         MermaidNode.configure({
           confirmReplace: options.requestMermaidReplaceConfirm,

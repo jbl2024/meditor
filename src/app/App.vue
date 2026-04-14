@@ -2007,6 +2007,7 @@ useAppShellKeyboard({
           ref="editorRef"
           :layout="multiPane.layout.value"
           :active-document-path="activeFilePath"
+          :all-workspace-files="allWorkspaceFiles"
           :open-externally="openPathNatively"
           :spellcheck-enabled="spellcheckEnabled"
           :get-status="editorState.getStatus"

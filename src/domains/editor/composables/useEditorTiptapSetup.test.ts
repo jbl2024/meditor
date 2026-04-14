@@ -27,6 +27,7 @@ function createSetup(overrides: Partial<Parameters<typeof useEditorTiptapSetup>[
     requestMermaidReplaceConfirm: vi.fn(async () => true),
     openMermaidPreview: vi.fn(),
     openAssetPreview: vi.fn(),
+    getAssetBrowserItems: vi.fn(() => [{ id: 'asset-media:/vault/assets/preview.png', label: 'preview.png', meta: 'assets/preview.png', path: '/vault/assets/preview.png' }]),
     getWikilinkCandidates: vi.fn(async () => [{ target: 'a.md', exists: true }]),
     openLinkTargetWithAutosave: vi.fn(async () => {}),
     loadEmbeddedNotePreview: vi.fn(async () => null),
@@ -74,6 +75,17 @@ describe('useEditorTiptapSetup', () => {
     expect(assetExtension?.options?.resolvePreviewSrc('../../assets/images/kyPZV79XlEaFswpDL5cP47SlAfy25fO6fnN9FEM-TUY%3D.png')).toBe(
       '/vault/assets/images/kyPZV79XlEaFswpDL5cP47SlAfy25fO6fnN9FEM-TUY=.png'
     )
+  })
+
+  it('passes the media catalog provider to the asset node extension', () => {
+    const { setup, options } = createSetup()
+    const editorOptions = setup.createEditorOptions('/vault/a.md') as any
+    const assetExtension = (editorOptions.extensions ?? []).find((extension: { name?: string }) => extension.name === 'assetBlock')
+
+    expect(assetExtension?.options?.getAssetBrowserItems?.()).toEqual([
+      { id: 'asset-media:/vault/assets/preview.png', label: 'preview.png', meta: 'assets/preview.png', path: '/vault/assets/preview.png' }
+    ])
+    expect(options.getAssetBrowserItems).toHaveBeenCalled()
   })
 
   it('dispatches update/selection/transaction callbacks', () => {

@@ -23,6 +23,7 @@ import { useEditorDocumentRuntime } from '../composables/useEditorDocumentRuntim
 import { useEditorInteractionRuntime } from '../composables/useEditorInteractionRuntime'
 import { useEmbeddedNoteActions } from '../composables/useEmbeddedNoteActions'
 import { getBlockStructureLabel } from '../lib/tiptap/blockMenu/guards'
+import { buildAssetBrowserItems } from '../lib/tiptap/assetBrowser'
 import { parseWikilinkTarget } from '../lib/wikilinks'
 import EditorContextOverlays from './editor/EditorContextOverlays.vue'
 import EditorFindToolbar from './editor/EditorFindToolbar.vue'
@@ -64,6 +65,7 @@ const props = defineProps<{
   path: string
   workspacePath?: string
   openPaths?: string[]
+  allWorkspaceFiles?: string[]
   openFile?: (path: string) => Promise<string>
   saveFile?: (path: string, text: string, options: { explicit: boolean }) => Promise<{ persisted: boolean }>
   readNoteSnapshot?: (path: string) => Promise<ReadNoteSnapshotResult>
@@ -121,8 +123,15 @@ const activeEditor = ref<Editor | null>(null) as Ref<Editor | null>
 const pathRef = computed(() => props.path ?? '')
 const workspacePathRef = computed(() => props.workspacePath ?? '')
 const openPathsRef = computed(() => props.openPaths ?? [])
+const allWorkspaceFilesRef = computed(() => props.allWorkspaceFiles ?? [])
 const currentPathSource = computed(() => props.path?.trim() || '')
 const spellcheckEnabledRef = computed(() => Boolean(props.spellcheckEnabled))
+const assetBrowserItems = computed(() =>
+  buildAssetBrowserItems({
+    workspaceRoot: workspacePathRef.value,
+    allWorkspaceFiles: allWorkspaceFilesRef.value
+  })
+)
 const workspaceSpellcheck = useWorkspaceSpellcheckDictionary({ workspacePath: workspacePathRef })
 
 let chromeRuntime!: ReturnType<typeof useEditorChromeRuntime>
@@ -234,7 +243,8 @@ interactionRuntime = useEditorInteractionRuntime({
       if (!noteTarget) return
       await interactionRuntime.openLinkTargetWithAutosave(noteTarget)
     },
-    restoreEmbeddedNoteInline: embeddedNoteActions.restoreEmbeddedNoteInline
+    restoreEmbeddedNoteInline: embeddedNoteActions.restoreEmbeddedNoteInline,
+    getAssetBrowserItems: () => assetBrowserItems.value
   }
 })
 

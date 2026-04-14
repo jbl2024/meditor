@@ -24,6 +24,7 @@ function mountHarness(options?: {
   initialAlt?: string
   initialTitle?: string
   initialAutoEdit?: boolean
+  mediaItems?: Array<{ id: string; label: string; meta: string; path: string }>
   resolvePreviewSrc?: (src: string) => string | null
   openPreview?: (payload: { src: string; alt: string; title: string; previewSrc: string | null }) => void
 }) {
@@ -51,7 +52,8 @@ function mountHarness(options?: {
         extension: {
           options: {
             resolvePreviewSrc: options?.resolvePreviewSrc,
-            openPreview: options?.openPreview
+            openPreview: options?.openPreview,
+            getAssetBrowserItems: () => options?.mediaItems ?? []
           }
         }
       })
@@ -105,6 +107,57 @@ describe('AssetNodeView', () => {
     expect(harness.updateAttributes).toHaveBeenCalledWith({ alt: 'Updated preview' })
     expect(harness.src.value).toBe('../../assets/images/Formulaire_GLPI/updated.png')
     expect(harness.alt.value).toBe('Updated preview')
+
+    harness.app.unmount()
+  })
+
+  it('opens the media browser from the src row and writes the selected media path', async () => {
+    const harness = mountHarness({
+      initialSrc: '',
+      mediaItems: [
+        { id: 'asset-media:/vault/assets/alpha.png', label: 'alpha.png', meta: 'assets/alpha.png', path: '/vault/assets/alpha.png' },
+        { id: 'asset-media:/vault/assets/bravo.svg', label: 'bravo.svg', meta: 'assets/bravo.svg', path: '/vault/assets/bravo.svg' }
+      ]
+    })
+    await flush()
+
+    const editButton = Array.from(harness.root.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Edit') as HTMLButtonElement
+    editButton.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+    await flush()
+
+    const browseButton = harness.root.querySelector<HTMLButtonElement>('button[aria-label="Browse media"]')
+    expect(browseButton).toBeTruthy()
+    browseButton?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+    browseButton?.click()
+    await flush()
+
+    const menu = document.body.querySelector('.ui-filterable-dropdown-menu')
+    expect(menu).toBeTruthy()
+
+    const firstOption = menu?.querySelector<HTMLButtonElement>('.ui-filterable-dropdown-option')
+    expect(firstOption).toBeTruthy()
+    firstOption?.click()
+    await flush()
+
+    expect(harness.updateAttributes).toHaveBeenCalledWith({ src: '/vault/assets/alpha.png' })
+    expect(harness.src.value).toBe('/vault/assets/alpha.png')
+
+    harness.app.unmount()
+  })
+
+  it('disables the browser button when there are no media items', async () => {
+    const harness = mountHarness({
+      initialSrc: '',
+      mediaItems: []
+    })
+    await flush()
+
+    const editButton = Array.from(harness.root.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Edit') as HTMLButtonElement
+    editButton.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+    await flush()
+
+    const browseButton = harness.root.querySelector<HTMLButtonElement>('button[aria-label="Browse media"]')
+    expect(browseButton?.disabled).toBe(true)
 
     harness.app.unmount()
   })

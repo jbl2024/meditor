@@ -3,10 +3,12 @@ import { VueNodeViewRenderer } from '@tiptap/vue-3'
 import AssetNodeView from '../../../components/editor/tiptap/AssetNodeView.vue'
 import { TIPTAP_NODE_TYPES } from '../types'
 import type { AssetPreviewPayload } from '../../../composables/useAssetPreviewDialog'
+import type { AssetBrowserDropdownItem } from '../assetBrowser'
 
 export type AssetNodeExtensionOptions = {
   resolvePreviewSrc?: (src: string) => string | null
   openPreview?: (payload: AssetPreviewPayload) => void
+  getAssetBrowserItems?: () => AssetBrowserDropdownItem[]
 }
 
 export const AssetNode = Node.create<AssetNodeExtensionOptions>({
@@ -18,7 +20,8 @@ export const AssetNode = Node.create<AssetNodeExtensionOptions>({
 
   addOptions() {
     return {
-      resolvePreviewSrc: (src: string) => src
+      resolvePreviewSrc: (src: string) => src,
+      getAssetBrowserItems: () => []
     }
   },
 
