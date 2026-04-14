@@ -2,6 +2,7 @@
 import { ArrowTopRightOnSquareIcon, DocumentIcon } from '@heroicons/vue/24/outline'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
+  readImageDataUrl,
   readPdfDataUrl,
   renderPandocPreviewHtml,
   renderSpreadsheetPreviewHtml
@@ -26,6 +27,9 @@ const fileExtension = computed(() => {
 
 const isPdfPreview = computed(() => fileExtension.value === 'pdf')
 const placeholderExtension = computed(() => (fileExtension.value || 'file').toUpperCase())
+const isImagePreview = computed(() =>
+  ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'svgz', 'bmp', 'ico'].includes(fileExtension.value)
+)
 const pandocPreviewFormat = computed(() => {
   const supportedFormats: Record<string, string> = {
     docx: 'docx',
@@ -64,6 +68,9 @@ type PreviewThemeSnapshot = {
 const pdfPreviewSrc = ref('')
 const pdfPreviewLoading = ref(false)
 const pdfPreviewError = ref('')
+const imagePreviewSrc = ref('')
+const imagePreviewLoading = ref(false)
+const imagePreviewError = ref('')
 const htmlPreviewRaw = ref('')
 const htmlPreviewLoading = ref(false)
 const htmlPreviewError = ref('')
@@ -399,6 +406,26 @@ async function loadPdfPreview(path: string) {
   }
 }
 
+async function loadImagePreview(path: string) {
+  if (!path || !isImagePreview.value) {
+    imagePreviewSrc.value = ''
+    imagePreviewError.value = ''
+    imagePreviewLoading.value = false
+    return
+  }
+
+  imagePreviewLoading.value = true
+  imagePreviewError.value = ''
+  try {
+    imagePreviewSrc.value = await readImageDataUrl(path)
+  } catch {
+    imagePreviewSrc.value = ''
+    imagePreviewError.value = 'Could not load image preview.'
+  } finally {
+    imagePreviewLoading.value = false
+  }
+}
+
 async function loadHtmlPreview(path: string) {
   if (!path || (!isPandocPreview.value && !isSpreadsheetPreview.value)) {
     htmlPreviewRaw.value = ''
@@ -433,6 +460,7 @@ watch(
   () => props.path,
   (path) => {
     void loadPdfPreview(path)
+    void loadImagePreview(path)
     void loadHtmlPreview(path)
   },
   { immediate: true }
@@ -457,6 +485,7 @@ watch(
 
     <div class="file-inspector-preview-panel">
       <div v-if="pdfPreviewLoading" class="file-inspector-preview-status">Loading PDF preview...</div>
+      <div v-else-if="imagePreviewLoading" class="file-inspector-preview-status">Loading image preview...</div>
       <div v-else-if="htmlPreviewLoading" class="file-inspector-preview-status">Rendering preview...</div>
       <iframe
         v-else-if="isPdfPreview && pdfPreviewSrc"
@@ -464,6 +493,13 @@ watch(
         :src="pdfPreviewSrc"
         :title="`Preview for ${fileName}`"
       />
+      <div v-else-if="isImagePreview && imagePreviewSrc" class="file-inspector-preview-image-stage">
+        <img
+          class="file-inspector-preview-image"
+          :src="imagePreviewSrc"
+          :alt="`Preview for ${fileName}`"
+        >
+      </div>
       <iframe
         v-else-if="isHtmlPreview && htmlPreviewSrc"
         class="file-inspector-preview-frame file-inspector-preview-frame--html"
@@ -475,7 +511,7 @@ watch(
       <div v-else class="file-inspector-preview-stage">
         <div class="file-inspector-preview-stage-bg" aria-hidden="true"></div>
         <div
-          v-if="pdfPreviewError || htmlPreviewError"
+          v-if="pdfPreviewError || imagePreviewError || htmlPreviewError"
           class="file-inspector-preview-empty-state file-inspector-preview-empty-state--error"
         >
           <div class="file-inspector-preview-empty-mark" aria-hidden="true">
@@ -484,7 +520,7 @@ watch(
           </div>
           <div class="file-inspector-preview-empty-copy">
             <h2>Preview unavailable</h2>
-            <p>{{ pdfPreviewError || htmlPreviewError }}</p>
+            <p>{{ pdfPreviewError || imagePreviewError || htmlPreviewError }}</p>
           </div>
         </div>
         <div v-else class="file-inspector-preview-empty-state">
@@ -561,6 +597,29 @@ watch(
   border: 0;
   border-radius: 0;
   background: var(--surface-bg);
+}
+
+.file-inspector-preview-image-stage {
+  display: grid;
+  place-items: center;
+  min-height: 100%;
+  padding: 1rem;
+  overflow: auto;
+  background:
+    radial-gradient(circle at top left, color-mix(in srgb, var(--accent) 12%, transparent), transparent 42%),
+    radial-gradient(circle at bottom right, color-mix(in srgb, var(--text-soft) 8%, transparent), transparent 38%),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-bg) 98%, white), var(--surface-bg));
+}
+
+.file-inspector-preview-image {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  box-shadow:
+    0 18px 48px color-mix(in srgb, var(--shadow-color, #000) 14%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  background: color-mix(in srgb, var(--surface-bg) 88%, white);
 }
 
 .file-inspector-preview-stage {

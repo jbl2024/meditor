@@ -2,6 +2,10 @@ import { createApp, defineComponent, h, nextTick } from 'vue'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const hoisted = vi.hoisted(() => ({
+  readImageDataUrl: vi.fn(async (path: string) => {
+    const mime = path.endsWith('.svg') ? 'image/svg+xml' : 'image/png'
+    return `data:${mime};base64,${btoa(path)}`
+  }),
   readPdfDataUrl: vi.fn(async (path: string) => `data:application/pdf;base64,${btoa(path)}`),
   renderPandocPreviewHtml: vi.fn(async (path: string) => `<html><body><main>${path}</main></body></html>`),
   renderSpreadsheetPreviewHtml: vi.fn(async (path: string) => `<html><body><section>${path}</section></body></html>`)
@@ -11,6 +15,7 @@ const previewIframeCsp =
   "default-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; font-src 'self' data:; media-src data:"
 
 vi.mock('../../../shared/api/workspaceApi', () => ({
+  readImageDataUrl: hoisted.readImageDataUrl,
   readPdfDataUrl: hoisted.readPdfDataUrl,
   renderPandocPreviewHtml: hoisted.renderPandocPreviewHtml,
   renderSpreadsheetPreviewHtml: hoisted.renderSpreadsheetPreviewHtml
@@ -52,6 +57,7 @@ describe('FileInspectorPaneSurface', () => {
     document.documentElement.style.removeProperty('--editor-body-text')
     document.documentElement.style.removeProperty('--editor-link')
     document.documentElement.style.removeProperty('--editor-code-bg')
+    hoisted.readImageDataUrl.mockClear()
     hoisted.readPdfDataUrl.mockClear()
     hoisted.renderPandocPreviewHtml.mockClear()
     hoisted.renderSpreadsheetPreviewHtml.mockClear()
@@ -88,6 +94,31 @@ describe('FileInspectorPaneSurface', () => {
       `data:application/pdf;base64,${btoa('/vault/assets/report.pdf')}`
     )
     expect(hoisted.readPdfDataUrl).toHaveBeenCalledWith('/vault/assets/report.pdf')
+
+    mounted.app.unmount()
+  })
+
+  it('renders image files in the native browser viewer', async () => {
+    const mounted = mountInspector('/vault/assets/photo.png')
+    await flushUi()
+
+    const image = mounted.root.querySelector<HTMLImageElement>('img')
+    expect(image).toBeTruthy()
+    expect(image?.getAttribute('src')).toBe(`data:image/png;base64,${btoa('/vault/assets/photo.png')}`)
+    expect(image?.getAttribute('alt')).toBe('Preview for photo.png')
+    expect(hoisted.readImageDataUrl).toHaveBeenCalledWith('/vault/assets/photo.png')
+
+    mounted.app.unmount()
+  })
+
+  it('renders svg files in the native browser viewer', async () => {
+    const mounted = mountInspector('/vault/assets/logo.svg')
+    await flushUi()
+
+    const image = mounted.root.querySelector<HTMLImageElement>('img')
+    expect(image).toBeTruthy()
+    expect(image?.getAttribute('src')).toBe(`data:image/svg+xml;base64,${btoa('/vault/assets/logo.svg')}`)
+    expect(hoisted.readImageDataUrl).toHaveBeenCalledWith('/vault/assets/logo.svg')
 
     mounted.app.unmount()
   })
