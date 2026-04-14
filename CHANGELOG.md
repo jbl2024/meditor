@@ -18,6 +18,20 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.37.0] - 2026-04-14
+
+### Added
+- feat(editor): add asset edit toggle and preview modal (dc3165b)
+- feat(editor): add dedicated asset image blocks (d4c4ab2)
+
+### Changed
+- test(editor): include asset slash command in ordering spec (4f946da)
+
+### Fixed
+- fix(editor): resolve bare note links from current directory (f7c8e66)
+- fix(file-inspector): preview image files inline (9a39a43)
+- fix(editor): support relative markdown links (0505466)
+
 ## [0.36.2] - 2026-04-13
 
 ### Changed
