@@ -91,6 +91,12 @@ describe('inline internal markdown links', () => {
     expect(inlineTextToHtml('[Install](./install_pc.md)')).toBe('<a href="./install_pc.md">Install</a>')
   })
 
+  it('renders relative note links without markdown extensions as local anchors', () => {
+    expect(inlineTextToHtml('[Créer un formulaire GLPI](creer_formulaire_glpi)')).toBe(
+      '<a href="creer_formulaire_glpi">Créer un formulaire GLPI</a>'
+    )
+  })
+
   it('parses internal fragment links into editor html blocks', () => {
     const parsed = markdownToEditorData('- [Resume](#1-resume-executif)')
     expect(parsed.blocks).toHaveLength(1)
@@ -101,6 +107,23 @@ describe('inline internal markdown links', () => {
         items: [
           {
             content: '<a href="#1-resume-executif">Resume</a>',
+            items: []
+          }
+        ]
+      }
+    })
+  })
+
+  it('round-trips bare relative note links through editor markdown blocks', () => {
+    const parsed = markdownToEditorData('- [Créer un formulaire GLPI](creer_formulaire_glpi)')
+    expect(parsed.blocks).toHaveLength(1)
+    expect(parsed.blocks[0]).toEqual({
+      type: 'list',
+      data: {
+        style: 'unordered',
+        items: [
+          {
+            content: '<a href="creer_formulaire_glpi">Créer un formulaire GLPI</a>',
             items: []
           }
         ]

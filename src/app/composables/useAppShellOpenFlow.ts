@@ -6,6 +6,7 @@ import { parseWikilinkTarget, type WikilinkAnchor } from '../../domains/editor/l
 import { type HeadingNode } from '../../domains/editor/composables/useEditorState'
 import type { QuickOpenResult } from './useAppQuickOpen'
 import type { SidebarMode } from './useWorkspaceState'
+import { isAbsoluteWorkspacePath, normalizeWorkspacePath } from '../../domains/explorer/lib/workspacePaths'
 
 type VirtualDoc = {
   content: string
@@ -109,6 +110,60 @@ function resolvedNoteNavigationFallback(previousNonCosmosMode: Ref<SidebarMode>)
   const current = previousNonCosmosMode.value
   if (current === 'search' || current === 'favorites' || current === 'explorer') return current
   return 'explorer'
+}
+
+function splitWorkspacePath(path: string): { prefix: string; segments: string[] } | null {
+  const normalized = normalizeWorkspacePath(path)
+  if (!normalized) return null
+  if (/^[A-Za-z]:\//.test(normalized)) {
+    return {
+      prefix: normalized.slice(0, 3),
+      segments: normalized.slice(3).split('/').filter(Boolean)
+    }
+  }
+  if (normalized.startsWith('/')) {
+    return {
+      prefix: '/',
+      segments: normalized.slice(1).split('/').filter(Boolean)
+    }
+  }
+  return {
+    prefix: '',
+    segments: normalized.split('/').filter(Boolean)
+  }
+}
+
+function workspaceDirectoryPath(path: string): string | null {
+  const base = splitWorkspacePath(path)
+  if (!base) return null
+  const segments = base.segments.slice(0, -1)
+  return base.prefix === '/'
+    ? `/${segments.join('/')}`
+    : base.prefix
+      ? `${base.prefix}${segments.join('/')}`
+      : segments.join('/')
+}
+
+function resolveRelativeWorkspacePath(basePath: string, relativePath: string): string | null {
+  const base = splitWorkspacePath(basePath)
+  if (!base) return null
+
+  const segments = base.segments.slice()
+  for (const segment of normalizeWorkspacePath(relativePath).split('/')) {
+    if (!segment || segment === '.') continue
+    if (segment === '..') {
+      if (!segments.length) return null
+      segments.pop()
+      continue
+    }
+    segments.push(segment)
+  }
+
+  return base.prefix === '/'
+    ? `/${segments.join('/')}`
+    : base.prefix
+      ? `${base.prefix}${segments.join('/')}`
+      : segments.join('/')
 }
 
 /**
@@ -273,34 +328,45 @@ export function useAppShellOpenFlow(options: AppShellOpenFlowOptions) {
     if (!root) return false
     const parsed = parseWikilinkTarget(target)
     const anchor = parsed.anchor
-    const normalized = options.dataPort.sanitizeRelativePath(parsed.notePath)
+    const rawTarget = normalizeWorkspacePath(parsed.notePath).trim()
     const revealAnchor = async () => {
       if (!anchor) return true
       await nextTick()
       return await options.editorPort.editorRef.value?.revealAnchor(anchor) ?? false
     }
 
-    if (!normalized) {
+    if (!rawTarget) {
       if (!anchor || !options.editorPort.activeFilePath.value) return false
       return await revealAnchor()
     }
 
-    if (normalized.split('/').some((segment) => segment === '.' || segment === '..')) {
-      options.workspacePort.errorMessage.value = 'Invalid link target.'
-      return false
-    }
-
-    if (options.dataPort.isIsoDate(normalized)) {
-      const opened = await options.navigationPort.openDailyNote(normalized, options.navigationPort.openTabWithAutosave)
+    if (options.dataPort.isIsoDate(rawTarget)) {
+      const opened = await options.navigationPort.openDailyNote(rawTarget, options.navigationPort.openTabWithAutosave)
       if (!opened) return false
       return await revealAnchor()
     }
 
+    const targetPath = isAbsoluteWorkspacePath(rawTarget)
+      ? rawTarget
+      : resolveRelativeWorkspacePath(
+          isAbsoluteWorkspacePath(options.editorPort.activeFilePath.value)
+            ? workspaceDirectoryPath(options.editorPort.activeFilePath.value) ?? root
+            : root,
+          rawTarget
+        )
+
+    if (!targetPath) {
+      options.workspacePort.errorMessage.value = 'Invalid link target.'
+      return false
+    }
+
     const markdownFiles = await options.dataPort.loadWikilinkTargets()
-    const existing = options.dataPort.resolveExistingWikilinkPath(normalized, markdownFiles)
+    const existing = options.dataPort.resolveExistingWikilinkPath(targetPath, markdownFiles)
 
     if (existing) {
-      const opened = await options.navigationPort.openTabWithAutosave(`${root}/${existing}`)
+      const opened = await options.navigationPort.openTabWithAutosave(
+        isAbsoluteWorkspacePath(existing) ? existing : `${root}/${existing}`
+      )
       if (!opened) return false
       const revealed = await revealAnchor()
       if (!anchor || !revealed) {
@@ -309,9 +375,8 @@ export function useAppShellOpenFlow(options: AppShellOpenFlowOptions) {
       return true
     }
 
-    const withExtension = /\.(md|markdown)$/i.test(normalized) ? normalized : `${normalized}.md`
-    const fullPath = `${root}/${withExtension}`
-    const opened = await openOrPrepareMarkdown(fullPath, '')
+    const withExtension = /\.(md|markdown)$/i.test(targetPath) ? targetPath : `${targetPath}.md`
+    const opened = await openOrPrepareMarkdown(withExtension, '')
     if (!opened) return false
     if (!anchor) return true
     return await revealAnchor()

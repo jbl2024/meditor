@@ -321,7 +321,7 @@ export function sanitizeExternalHref(raw: string): string | null {
 }
 
 /**
- * Parses a relative markdown file link such as `./install_pc.md#intro`.
+ * Parses a relative markdown note link such as `./install_pc.md#intro` or `creer_formulaire_glpi`.
  */
 export function parseRelativeMarkdownHref(raw: string): { path: string; fragment: string } | null {
   const value = String(raw ?? '').trim()
@@ -335,7 +335,7 @@ export function parseRelativeMarkdownHref(raw: string): { path: string; fragment
   const fragment = (hashIndex >= 0 ? value.slice(hashIndex + 1) : '').trim()
   if (!path) return null
   if (path.startsWith('/') || /^[A-Za-z]:[\\/]/.test(path)) return null
-  if (!/\.(md|markdown)$/i.test(path)) return null
+  if (/\.[^./\\]+$/i.test(path) && !/\.(md|markdown)$/i.test(path)) return null
 
   return { path, fragment }
 }

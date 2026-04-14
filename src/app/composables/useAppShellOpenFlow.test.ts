@@ -212,12 +212,28 @@ describe('useAppShellOpenFlow', () => {
 
     await expect(harness.api.openWikilinkTarget('missing.md')).resolves.toBe(true)
 
-    expect(harness.virtualDocs.value['/vault/missing.md']).toEqual({
+    expect(harness.pathExists).toHaveBeenCalledWith('/vault/missing.md')
+    expect(harness.openTabWithAutosave).toHaveBeenCalledWith('/vault/missing.md', { focusFirstContentBlock: true })
+    expect(harness.focusFirstContentBlock).toHaveBeenCalledTimes(1)
+    harness.scope.stop()
+  })
+
+  it('resolves bare relative wikilink targets against the current note directory and adds md when missing', async () => {
+    const harness = createHarness()
+    harness.activeFilePath.value = '/vault/notes/current.md'
+    harness.loadWikilinkTargets.mockResolvedValue([])
+    harness.resolveExistingWikilinkPath.mockReturnValue(null)
+    harness.pathExists.mockResolvedValue(false)
+
+    await expect(harness.api.openWikilinkTarget('creer_formulaire_glpi')).resolves.toBe(true)
+
+    expect(harness.virtualDocs.value['/vault/notes/creer_formulaire_glpi.md']).toEqual({
       content: '',
       titleLine: ''
     })
-    expect(harness.openTabWithAutosave).toHaveBeenCalledWith('/vault/missing.md', { focusFirstContentBlock: true })
-    expect(harness.focusFirstContentBlock).toHaveBeenCalledTimes(1)
+    expect(harness.openTabWithAutosave).toHaveBeenCalledWith('/vault/notes/creer_formulaire_glpi.md', {
+      focusFirstContentBlock: true
+    })
     harness.scope.stop()
   })
 
