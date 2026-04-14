@@ -25,6 +25,7 @@ import { WIKILINK_STATE_KEY, type WikilinkCandidate } from '../lib/tiptap/plugin
 import { enterWikilinkEditFromNode } from '../lib/tiptap/extensions/wikilinkCommands'
 import type { RevealAnchorRequest } from './useEditorNavigation'
 import type { MermaidPreviewPayload } from './useMermaidPreviewDialog'
+import type { AssetPreviewPayload } from './useAssetPreviewDialog'
 
 /**
  * Module: useEditorTiptapSetup
@@ -55,6 +56,7 @@ export type UseEditorTiptapSetupOptions = {
   onEditorDocChanged: (path: string) => void
   requestMermaidReplaceConfirm: (payload: { templateLabel: string }) => Promise<boolean>
   openMermaidPreview: (payload: MermaidPreviewPayload) => void
+  openAssetPreview: (payload: AssetPreviewPayload) => void
   getWikilinkCandidates: (query: string) => Promise<WikilinkCandidate[]>
   openLinkTargetWithAutosave: (target: string) => Promise<void>
   loadEmbeddedNotePreview: (target: string) => Promise<{ path: string; html: string } | null>
@@ -315,7 +317,8 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
         Placeholder.configure({ placeholder: 'Write here...' }),
         CalloutNode,
         AssetNode.configure({
-          resolvePreviewSrc: (src: string) => resolveAssetPreviewSrc(path, src)
+          resolvePreviewSrc: (src: string) => resolveAssetPreviewSrc(path, src),
+          openPreview: options.openAssetPreview
         }),
         MermaidNode.configure({
           confirmReplace: options.requestMermaidReplaceConfirm,

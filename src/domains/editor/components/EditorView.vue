@@ -30,6 +30,7 @@ import EditorInlineFormatToolbar from './editor/EditorInlineFormatToolbar.vue'
 import EditorLargeDocOverlay from './editor/EditorLargeDocOverlay.vue'
 import EditorAtOverlay from './editor/EditorAtOverlay.vue'
 import EditorMermaidPreviewDialog from './editor/EditorMermaidPreviewDialog.vue'
+import EditorAssetPreviewDialog from './editor/EditorAssetPreviewDialog.vue'
 import EditorMermaidReplaceDialog from './editor/EditorMermaidReplaceDialog.vue'
 import EditorPropertiesPanel from './editor/EditorPropertiesPanel.vue'
 import EditorNoteHistoryDialog from './editor/EditorNoteHistoryDialog.vue'
@@ -193,7 +194,8 @@ interactionRuntime = useEditorInteractionRuntime({
   interactionEditorPort: {
     emitOutline,
     requestMermaidReplaceConfirm: chromeRuntime.dialogsAndLifecycle.requestMermaidReplaceConfirm,
-    openMermaidPreview: chromeRuntime.dialogsAndLifecycle.openMermaidPreview
+    openMermaidPreview: chromeRuntime.dialogsAndLifecycle.openMermaidPreview,
+    openAssetPreview: chromeRuntime.dialogsAndLifecycle.openAssetPreview
   },
   interactionChromePort: {
     menus: {
@@ -494,6 +496,10 @@ const {
   mermaidPreviewDialog,
   closeMermaidPreview,
   exportMermaidSvg
+} = dialogsAndLifecycle
+const {
+  assetPreviewDialog,
+  closeAssetPreview
 } = dialogsAndLifecycle
 const {
   slashOpen,
@@ -1106,6 +1112,14 @@ defineExpose({
       :export-error="mermaidPreviewDialog.exportError"
       @close="closeMermaidPreview()"
       @export-svg="exportMermaidSvg($event)"
+    />
+    <EditorAssetPreviewDialog
+      :visible="assetPreviewDialog.visible"
+      :src="assetPreviewDialog.src"
+      :alt="assetPreviewDialog.alt"
+      :title="assetPreviewDialog.title"
+      :preview-src="assetPreviewDialog.previewSrc"
+      @close="closeAssetPreview()"
     />
   </div>
 </template>

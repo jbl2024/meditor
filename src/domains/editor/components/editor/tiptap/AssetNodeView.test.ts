@@ -25,6 +25,7 @@ function mountHarness(options?: {
   initialTitle?: string
   initialAutoEdit?: boolean
   resolvePreviewSrc?: (src: string) => string | null
+  openPreview?: (payload: { src: string; alt: string; title: string; previewSrc: string | null }) => void
 }) {
   const root = document.createElement('div')
   document.body.appendChild(root)
@@ -49,7 +50,8 @@ function mountHarness(options?: {
         editor: { isEditable: editable },
         extension: {
           options: {
-            resolvePreviewSrc: options?.resolvePreviewSrc
+            resolvePreviewSrc: options?.resolvePreviewSrc,
+            openPreview: options?.openPreview
           }
         }
       })
@@ -85,6 +87,10 @@ describe('AssetNodeView', () => {
     })
     await flush()
 
+    const editButton = Array.from(harness.root.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Edit') as HTMLButtonElement
+    editButton.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+    await flush()
+
     const srcInput = harness.root.querySelector('.tomosona-asset-src-input') as HTMLInputElement
     srcInput.value = '../../assets/images/Formulaire_GLPI/updated.png'
     srcInput.dispatchEvent(new Event('input', { bubbles: true }))
@@ -99,6 +105,30 @@ describe('AssetNodeView', () => {
     expect(harness.updateAttributes).toHaveBeenCalledWith({ alt: 'Updated preview' })
     expect(harness.src.value).toBe('../../assets/images/Formulaire_GLPI/updated.png')
     expect(harness.alt.value).toBe('Updated preview')
+
+    harness.app.unmount()
+  })
+
+  it('emits a preview payload when the preview is clicked', async () => {
+    const openPreview = vi.fn()
+    const harness = mountHarness({
+      initialSrc: '../../assets/images/Formulaire_GLPI/preview.png',
+      initialAlt: 'Preview',
+      resolvePreviewSrc: () => '/vault/assets/images/Formulaire_GLPI/preview.png',
+      openPreview
+    })
+    await flush()
+
+    const preview = harness.root.querySelector('.tomosona-asset-preview') as HTMLDivElement
+    preview.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+    await flush()
+
+    expect(openPreview).toHaveBeenCalledWith(expect.objectContaining({
+      src: '../../assets/images/Formulaire_GLPI/preview.png',
+      alt: 'Preview',
+      title: '',
+      previewSrc: 'data:image/png;base64,ZmFrZQ=='
+    }))
 
     harness.app.unmount()
   })

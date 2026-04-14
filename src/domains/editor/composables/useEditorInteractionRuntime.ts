@@ -18,6 +18,7 @@ import { normalizeBlockId, normalizeHeadingAnchor, slugifyHeading } from '../lib
 import { TIPTAP_NODE_TYPES } from '../lib/tiptap/types'
 import type { WikilinkCandidate } from '../lib/tiptap/plugins/wikilinkState'
 import type { MermaidPreviewPayload } from './useMermaidPreviewDialog'
+import type { AssetPreviewPayload } from './useAssetPreviewDialog'
 
 /**
  * Owns interactive editor behavior that depends on the active Tiptap instance:
@@ -86,6 +87,7 @@ export type EditorInteractionRuntimeEditorPort = {
   emitOutline: (payload: EditorHeadingNode[]) => void
   requestMermaidReplaceConfirm: (payload: { templateLabel: string }) => Promise<boolean>
   openMermaidPreview: (payload: MermaidPreviewPayload) => void
+  openAssetPreview: (payload: AssetPreviewPayload) => void
 }
 
 /**
@@ -283,6 +285,7 @@ export function useEditorInteractionRuntime(options: UseEditorInteractionRuntime
     onEditorDocChanged: (path) => documentPort.onEditorDocChanged(path),
     requestMermaidReplaceConfirm: editorPort.requestMermaidReplaceConfirm,
     openMermaidPreview: editorPort.openMermaidPreview,
+    openAssetPreview: editorPort.openAssetPreview,
     getWikilinkCandidates,
     openLinkTargetWithAutosave,
     loadEmbeddedNotePreview: ioPort.loadEmbeddedNotePreview,

@@ -29,6 +29,7 @@ import { useEditorLayoutMetrics } from './useEditorLayoutMetrics'
 import { useEditorZoom } from './useEditorZoom'
 import { useEditorContentFocus } from './useEditorContentFocus'
 import { useMermaidPreviewDialog } from './useMermaidPreviewDialog'
+import { useAssetPreviewDialog } from './useAssetPreviewDialog'
 import { useMermaidReplaceDialog } from './useMermaidReplaceDialog'
 import { usePulseTransformation } from '../../pulse/composables/usePulseTransformation'
 import { PULSE_ACTIONS_BY_SOURCE } from '../../pulse/lib/pulse'
@@ -565,6 +566,11 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     exportMermaidSvg,
     exportMermaidPng
   } = useMermaidPreviewDialog()
+  const {
+    assetPreviewDialog,
+    openAssetPreview,
+    closeAssetPreview
+  } = useAssetPreviewDialog()
 
   function updateFormattingToolbar() {
     inlineFormatToolbar.updateFormattingToolbar()
@@ -883,6 +889,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     resetDragHandleState()
     resetTransientCaches()
     closeMermaidPreview()
+    closeAssetPreview()
   }
 
   const documentEvents = {
@@ -940,6 +947,11 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
       }
       if (event.key === 'Escape' && mermaidPreviewDialog.value.visible) {
         closeMermaidPreview()
+        return
+      }
+      if (event.key === 'Escape' && assetPreviewDialog.value.visible) {
+        closeAssetPreview()
+        return
       }
     }
   }
@@ -1200,9 +1212,12 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     pulseSelectionRange,
     mermaidReplaceDialog,
     mermaidPreviewDialog,
+    assetPreviewDialog,
     requestMermaidReplaceConfirm,
     openMermaidPreview,
     closeMermaidPreview,
+    openAssetPreview,
+    closeAssetPreview,
     exportMermaidSvg,
     exportMermaidPng,
     pulsePanelStyle,
@@ -1332,10 +1347,13 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   const dialogsAndLifecycle = {
     mermaidReplaceDialog: pulseAndDialogs.mermaidReplaceDialog,
     mermaidPreviewDialog: pulseAndDialogs.mermaidPreviewDialog,
+    assetPreviewDialog: pulseAndDialogs.assetPreviewDialog,
     resolveMermaidReplaceDialog,
     requestMermaidReplaceConfirm: pulseAndDialogs.requestMermaidReplaceConfirm,
     openMermaidPreview: pulseAndDialogs.openMermaidPreview,
     closeMermaidPreview: pulseAndDialogs.closeMermaidPreview,
+    openAssetPreview: pulseAndDialogs.openAssetPreview,
+    closeAssetPreview: pulseAndDialogs.closeAssetPreview,
     exportMermaidSvg: pulseAndDialogs.exportMermaidSvg,
     exportMermaidPng: pulseAndDialogs.exportMermaidPng,
     resetTransientUiState,

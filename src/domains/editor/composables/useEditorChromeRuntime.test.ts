@@ -367,6 +367,12 @@ describe('useEditorChromeRuntime', () => {
       code: 'graph TD\nA-->B',
       templateId: 'flowchart'
     })
+    runtime.dialogsAndLifecycle.openAssetPreview({
+      src: 'assets/image.png',
+      alt: 'Preview',
+      title: 'Image',
+      previewSrc: 'data:image/png;base64,ZmFrZQ=='
+    })
     await flushUi()
 
     runtime.dialogsAndLifecycle.resetTransientUiState()
@@ -378,6 +384,7 @@ describe('useEditorChromeRuntime', () => {
     expect(runtime.blockAndTable.blockGutterTarget.value).toBeNull()
     expect(runtime.toolbars.findToolbar.open.value).toBe(false)
     expect(runtime.dialogsAndLifecycle.mermaidPreviewDialog.value.visible).toBe(false)
+    expect(runtime.dialogsAndLifecycle.assetPreviewDialog.value.visible).toBe(false)
   })
 
   it('onHolderKeydown opens find on Cmd/Ctrl+F and otherwise delegates to editor input', async () => {

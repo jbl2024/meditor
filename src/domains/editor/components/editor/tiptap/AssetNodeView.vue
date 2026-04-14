@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { NodeViewWrapper } from '@tiptap/vue-3'
 import type { AssetNodeExtensionOptions } from '../../../lib/tiptap/extensions/AssetNode'
+import type { AssetPreviewPayload } from '../../../composables/useAssetPreviewDialog'
 import { readImageDataUrl } from '../../../../../shared/api/workspaceApi'
 import { decodeWorkspacePathSegments, isAbsoluteWorkspacePath } from '../../../../../domains/explorer/lib/workspacePaths'
 
@@ -22,6 +23,7 @@ const srcInputEl = ref<HTMLInputElement | null>(null)
 const previewFailed = ref(false)
 const previewLoading = ref(false)
 const previewSrc = ref<string | null>(null)
+const showFields = ref(false)
 let previewRequestToken = 0
 
 function sanitizeBrowserSafeAssetSrc(raw: string): string | null {
@@ -55,6 +57,7 @@ const localPreviewPath = computed(() => {
   return normalized
 })
 const previewLabel = computed(() => alt.value || title.value || src.value || 'Asset')
+const isEditing = computed(() => props.editor.isEditable && showFields.value)
 
 async function refreshPreview() {
   const token = ++previewRequestToken
@@ -105,13 +108,56 @@ function focusSrcInput() {
   input.setSelectionRange(0, input.value.length)
 }
 
+function requestAnimationFrameLike(callback: FrameRequestCallback) {
+  if (typeof requestAnimationFrame === 'function') return requestAnimationFrame(callback)
+  return window.setTimeout(() => callback(performance.now()), 16)
+}
+
+function openEditor() {
+  if (!props.editor.isEditable) return
+  showFields.value = true
+  void nextTick().then(() => {
+    requestAnimationFrameLike(() => {
+      focusSrcInput()
+    })
+  })
+}
+
+function closeEditor() {
+  showFields.value = false
+}
+
+function toggleEditor(event?: MouseEvent) {
+  if (event) {
+    event.preventDefault()
+    event.stopPropagation()
+  }
+  if (showFields.value) {
+    closeEditor()
+    return
+  }
+  openEditor()
+}
+
+function openZoomPreview(event?: MouseEvent) {
+  if (event) {
+    event.preventDefault()
+    event.stopPropagation()
+  }
+  const payload: AssetPreviewPayload = {
+    src: src.value,
+    alt: alt.value,
+    title: title.value,
+    previewSrc: previewSrc.value
+  }
+  props.extension?.options?.openPreview?.(payload)
+}
+
 function scheduleAutoEditFocus() {
   if (!props.editor.isEditable || !autoEdit.value) return
   void nextTick().then(() => {
-    const requestRaf = typeof requestAnimationFrame === 'function'
-      ? requestAnimationFrame
-      : (callback: FrameRequestCallback) => window.setTimeout(() => callback(performance.now()), 16)
-    requestRaf(() => {
+    requestAnimationFrameLike(() => {
+      showFields.value = true
       focusSrcInput()
       props.updateAttributes({ autoEdit: false })
     })
@@ -132,9 +178,26 @@ onMounted(() => {
 </script>
 
 <template>
-  <NodeViewWrapper class="tomosona-asset-node" data-asset-node="true">
+  <NodeViewWrapper class="tomosona-asset-node" :class="{ 'is-editing': isEditing }" data-asset-node="true">
     <div class="tomosona-asset-surface" :class="{ 'is-editable': editor.isEditable }">
-      <div class="tomosona-asset-preview" contenteditable="false">
+      <div class="tomosona-asset-header" contenteditable="false">
+        <div class="tomosona-asset-actions">
+          <button
+            v-if="editor.isEditable"
+            type="button"
+            class="tomosona-asset-edit-btn"
+            @mousedown.stop.prevent="toggleEditor($event)"
+          >
+            {{ showFields ? 'Done' : 'Edit' }}
+          </button>
+        </div>
+      </div>
+      <div
+        class="tomosona-asset-preview"
+        contenteditable="false"
+        :class="{ 'is-clickable': Boolean(props.extension?.options?.openPreview) }"
+        @mousedown.stop.prevent="openZoomPreview($event)"
+      >
         <img
           v-if="previewSrc && !previewFailed"
           class="tomosona-asset-image"
@@ -151,7 +214,7 @@ onMounted(() => {
         </div>
       </div>
 
-      <div class="tomosona-asset-fields">
+      <div v-if="isEditing" class="tomosona-asset-fields">
         <label class="tomosona-asset-field">
           <span class="tomosona-asset-field-label">Src</span>
           <input
@@ -205,6 +268,24 @@ onMounted(() => {
   padding: 0.85rem 0.95rem;
 }
 
+.tomosona-asset-header {
+  align-items: center;
+  display: flex;
+  gap: 0.7rem;
+  justify-content: space-between;
+  margin-bottom: 0.6rem;
+}
+
+.tomosona-asset-actions {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+  visibility: hidden;
+}
+
 .tomosona-asset-preview {
   align-items: center;
   display: flex;
@@ -213,6 +294,18 @@ onMounted(() => {
   overflow: hidden;
   border-radius: 0.7rem;
   background: color-mix(in srgb, var(--editor-overlay-panel) 30%, transparent);
+}
+
+.tomosona-asset-preview.is-clickable {
+  cursor: zoom-in;
+}
+
+.tomosona-asset-node:hover .tomosona-asset-actions,
+.tomosona-asset-node.is-editing .tomosona-asset-actions,
+.tomosona-asset-node:focus-within .tomosona-asset-actions {
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
 }
 
 .tomosona-asset-image {
@@ -271,5 +364,29 @@ onMounted(() => {
 
 .tomosona-asset-input:read-only {
   opacity: 0.9;
+}
+
+.tomosona-asset-edit-btn,
+.tomosona-asset-edit-btn {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+.tomosona-asset-edit-btn:hover {
+  background: var(--color-bg-hover);
+}
+
+.tomosona-asset-node:not(.is-editing) .tomosona-asset-fields {
+  max-height: 0;
+  min-height: 0;
+  margin-top: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
 }
 </style>
