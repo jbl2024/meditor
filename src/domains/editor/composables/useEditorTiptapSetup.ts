@@ -20,6 +20,7 @@ import { EditorFindExtension } from '../lib/tiptap/extensions/EditorFind'
 import { SpellcheckExtension, refreshSpellcheckDecorations } from '../lib/tiptap/extensions/Spellcheck'
 import { adjustHeadingLevelFromTab } from '../lib/editorInteractions'
 import { decodeWorkspacePathSegments, isAbsoluteWorkspacePath, normalizeWorkspacePath } from '../../explorer/lib/workspacePaths'
+import { parseRelativeMarkdownHref } from '../lib/markdownBlocks'
 import type { SpellcheckLanguage } from '../lib/spellcheck'
 import { WIKILINK_STATE_KEY, type WikilinkCandidate } from '../lib/tiptap/plugins/wikilinkState'
 import { enterWikilinkEditFromNode } from '../lib/tiptap/extensions/wikilinkCommands'
@@ -99,9 +100,9 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
     return element?.closest('a') as HTMLAnchorElement | null
   }
 
-  function splitAbsolutePath(path: string): { prefix: string; segments: string[] } | null {
+  function splitPath(path: string): { prefix: string; segments: string[] } | null {
     const normalized = normalizeWorkspacePath(path)
-    if (!normalized || !isAbsoluteWorkspacePath(normalized)) return null
+    if (!normalized) return null
     if (/^[A-Za-z]:\//.test(normalized)) {
       return {
         prefix: normalized.slice(0, 3),
@@ -114,11 +115,14 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
         segments: normalized.slice(1).split('/').filter(Boolean)
       }
     }
-    return null
+    return {
+      prefix: '',
+      segments: normalized.split('/').filter(Boolean)
+    }
   }
 
   function resolveRelativeAssetPath(notePath: string, assetPath: string): string | null {
-    const base = splitAbsolutePath(notePath)
+    const base = splitPath(notePath)
     if (!base) return null
     const segments = base.segments.slice(0, -1)
 
@@ -135,6 +139,30 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
     return base.prefix === '/'
       ? `/${segments.join('/')}`
       : `${base.prefix}${segments.join('/')}`
+  }
+
+  function resolveRelativeMarkdownTarget(notePath: string, href: string): string | null {
+    const parsed = parseRelativeMarkdownHref(href)
+    if (!parsed) return null
+    const base = splitPath(notePath)
+    if (!base) return null
+
+    const segments = base.segments.slice(0, -1)
+    const relativePath = decodeWorkspacePathSegments(parsed.path)
+    for (const segment of relativePath.split('/')) {
+      if (!segment || segment === '.') continue
+      if (segment === '..') {
+        if (!segments.length) return null
+        segments.pop()
+        continue
+      }
+      segments.push(segment)
+    }
+
+    const resolvedPath = base.prefix === '/'
+      ? `/${segments.join('/')}`
+      : `${base.prefix}${segments.join('/')}`
+    return parsed.fragment ? `${resolvedPath}#${parsed.fragment}` : resolvedPath
   }
 
   function resolveAssetPreviewSrc(notePath: string, rawSrc: string): string | null {
@@ -271,6 +299,19 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
       event.preventDefault()
       event.stopPropagation()
       void options.revealAnchor(internalAnchor)
+      return true
+    }
+
+    const markdownTarget = resolveRelativeMarkdownTarget(path, href)
+    if (markdownTarget) {
+      if (modifierPressed) {
+        event.preventDefault()
+        event.stopPropagation()
+        return openLinkPopoverFromAnchorSelection(view, path, anchor, anchorPos)
+      }
+      event.preventDefault()
+      event.stopPropagation()
+      void options.openLinkTargetWithAutosave(markdownTarget)
       return true
     }
 

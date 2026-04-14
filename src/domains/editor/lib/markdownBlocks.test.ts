@@ -87,6 +87,10 @@ describe('inline internal markdown links', () => {
     expect(inlineTextToHtml('[Resume](#1-resume-executif)')).toBe('<a href="#1-resume-executif">Resume</a>')
   })
 
+  it('renders relative markdown file links as local anchors', () => {
+    expect(inlineTextToHtml('[Install](./install_pc.md)')).toBe('<a href="./install_pc.md">Install</a>')
+  })
+
   it('parses internal fragment links into editor html blocks', () => {
     const parsed = markdownToEditorData('- [Resume](#1-resume-executif)')
     expect(parsed.blocks).toHaveLength(1)

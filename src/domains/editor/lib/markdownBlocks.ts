@@ -257,6 +257,7 @@ function inlineMarkdownToHtml(value: string): string {
       }
       const internalHref = href.trim().startsWith('#') && href.trim().length > 1 ? href.trim() : ''
       const safeHref = sanitizeExternalHref(href)
+      const relativeMarkdownHref = parseRelativeMarkdownHref(href)
       if (internalHref) {
         const token = `\u0000MDLINK${tokens.length}\u0000`
         tokens.push(`<a href="${escapeHtml(internalHref)}">${parseInlineSegment(text)}</a>`)
@@ -264,6 +265,13 @@ function inlineMarkdownToHtml(value: string): string {
       } else if (safeHref) {
         const token = `\u0000MDLINK${tokens.length}\u0000`
         tokens.push(`<a href="${escapeHtml(safeHref)}" target="_blank" rel="noopener noreferrer">${parseInlineSegment(text)}</a>`)
+        expanded += token
+      } else if (relativeMarkdownHref) {
+        const token = `\u0000MDLINK${tokens.length}\u0000`
+        const relativeHref = relativeMarkdownHref.fragment
+          ? `${relativeMarkdownHref.path}#${relativeMarkdownHref.fragment}`
+          : relativeMarkdownHref.path
+        tokens.push(`<a href="${escapeHtml(relativeHref)}">${parseInlineSegment(text)}</a>`)
         expanded += token
       } else {
         expanded += full
@@ -310,6 +318,26 @@ export function sanitizeExternalHref(raw: string): string | null {
   }
 
   return null
+}
+
+/**
+ * Parses a relative markdown file link such as `./install_pc.md#intro`.
+ */
+export function parseRelativeMarkdownHref(raw: string): { path: string; fragment: string } | null {
+  const value = String(raw ?? '').trim()
+  if (!value) return null
+  if (/[\u0000-\u001f\u007f]/.test(value)) return null
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(value)) return null
+  if (value.startsWith('#')) return null
+
+  const hashIndex = value.indexOf('#')
+  const path = (hashIndex >= 0 ? value.slice(0, hashIndex) : value).trim()
+  const fragment = (hashIndex >= 0 ? value.slice(hashIndex + 1) : '').trim()
+  if (!path) return null
+  if (path.startsWith('/') || /^[A-Za-z]:[\\/]/.test(path)) return null
+  if (!/\.(md|markdown)$/i.test(path)) return null
+
+  return { path, fragment }
 }
 
 function parseMarkdownImageTarget(raw: string): { src: string; title: string } | null {

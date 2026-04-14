@@ -181,6 +181,29 @@ describe('useEditorTiptapSetup', () => {
     expect(options.inlineFormatToolbar.openLinkPopover).not.toHaveBeenCalled()
   })
 
+  it('opens relative markdown file links inside the app', () => {
+    const openLinkTargetWithAutosave = vi.fn(async () => {})
+    const { setup } = createSetup({ openLinkTargetWithAutosave })
+    const editorOptions = setup.createEditorOptions('docs/current.md') as any
+
+    const view = {
+      state: { doc: { content: { size: 100 } } }
+    } as any
+
+    const relativeAnchor = document.createElement('a')
+    relativeAnchor.setAttribute('href', './install_pc.md')
+    const click = editorOptions.editorProps.handleClick(view, 3, {
+      target: relativeAnchor,
+      metaKey: false,
+      ctrlKey: false,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn()
+    })
+
+    expect(click).toBe(true)
+    expect(openLinkTargetWithAutosave).toHaveBeenCalledWith('docs/install_pc.md')
+  })
+
   it('reveals internal anchor links on plain click', () => {
     const revealAnchor = vi.fn(async () => true)
     const { setup } = createSetup({ revealAnchor })
