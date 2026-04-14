@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.37.1] - 2026-04-14
+
+### Added
+- feat(editor): add media browser for asset sources (ef2d396)
+
 ## [0.37.0] - 2026-04-14
 
 ### Added
