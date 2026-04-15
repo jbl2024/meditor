@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.37.3] - 2026-04-15
+
+### Fixed
+- fix(editor): hide gutter badge when split panes are too narrow (dc916d7)
+
 ## [0.37.2] - 2026-04-15
 
 ### Added
