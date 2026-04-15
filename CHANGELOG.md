@@ -18,6 +18,15 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.37.2] - 2026-04-15
+
+### Added
+- feat(tabs): add tab context menu and middle-click close (c574eae)
+
+### Fixed
+- fix(tabs): make context menu keyboard navigation independent from focus (2435880)
+- fix(tabs): prevent text selection on context click (bd01148)
+
 ## [0.37.1] - 2026-04-14
 
 ### Added
