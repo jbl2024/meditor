@@ -118,4 +118,67 @@ describe('EditorPaneTabs', () => {
 
     mounted.app.unmount()
   })
+
+  it('supports keyboard navigation in the tab context menu', async () => {
+    const mounted = mountTabs({
+      id: 'pane-1',
+      activeTabId: 'doc-2',
+      openTabs: [
+        { id: 'doc-1', type: 'document', path: '/vault/a.md', pinned: false },
+        { id: 'doc-2', type: 'document', path: '/vault/b.md', pinned: false },
+        { id: 'doc-3', type: 'document', path: '/vault/c.md', pinned: false }
+      ],
+      activePath: '/vault/b.md'
+    })
+
+    const tab = mounted.root.querySelectorAll<HTMLElement>('.pane-tab-item')[1]
+    tab?.dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2, clientX: 180, clientY: 72 })
+    )
+    await nextTick()
+
+    const menuItems = Array.from(mounted.root.querySelectorAll<HTMLButtonElement>('.pane-tab-menu .ui-menu-item'))
+    document.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowDown' }))
+    await nextTick()
+    expect(document.activeElement).toBe(menuItems[0])
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowDown' }))
+    await nextTick()
+    expect(document.activeElement).toBe(menuItems[1])
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }))
+    await nextTick()
+
+    expect(mounted.events).toContain('close-others:doc-2')
+    expect(mounted.root.querySelector('.pane-tab-menu')).toBeNull()
+
+    mounted.app.unmount()
+  })
+
+  it('focuses the last enabled item on ArrowUp when the context menu has no focused item', async () => {
+    const mounted = mountTabs({
+      id: 'pane-1',
+      activeTabId: 'doc-1',
+      openTabs: [
+        { id: 'doc-1', type: 'document', path: '/vault/a.md', pinned: false },
+        { id: 'doc-2', type: 'document', path: '/vault/b.md', pinned: false }
+      ],
+      activePath: '/vault/a.md'
+    })
+
+    const tab = mounted.root.querySelectorAll<HTMLElement>('.pane-tab-item')[0]
+    tab?.dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2, clientX: 180, clientY: 72 })
+    )
+    await nextTick()
+
+    const menuItems = Array.from(mounted.root.querySelectorAll<HTMLButtonElement>('.pane-tab-menu .ui-menu-item'))
+    const enabledItems = menuItems.filter((item) => !item.disabled)
+    document.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowUp' }))
+    await nextTick()
+
+    expect(document.activeElement).toBe(enabledItems[enabledItems.length - 1])
+
+    mounted.app.unmount()
+  })
 })

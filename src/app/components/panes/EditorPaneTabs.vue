@@ -10,7 +10,6 @@ import {
 } from '../../lib/appShellSurfaceIcons'
 import UiMenu from '../../../shared/components/ui/UiMenu.vue'
 import UiMenuList from '../../../shared/components/ui/UiMenuList.vue'
-import UiSeparator from '../../../shared/components/ui/UiSeparator.vue'
 
 /**
  * Module: EditorPaneTabs
@@ -60,6 +59,8 @@ const tabs = computed(() => props.pane.openTabs.map((tab) => {
 const contextMenuTabId = ref('')
 const contextMenuPosition = ref({ x: 0, y: 0 })
 const wrapRef = ref<HTMLElement | null>(null)
+const contextMenuItemRefs = ref<Array<HTMLButtonElement | null>>([])
+const contextMenuActiveIndex = ref<number | null>(null)
 
 const contextMenuTabIndex = computed(() => tabs.value.findIndex((tab) => tab.id === contextMenuTabId.value))
 const contextMenuOpen = computed(() => contextMenuTabId.value !== '')
@@ -74,6 +75,28 @@ const contextMenuStyle = computed(() => ({
   top: `${contextMenuPosition.value.y}px`,
   zIndex: 60
 }))
+const contextMenuItems = computed(() => [
+  {
+    action: 'tab-close' as const,
+    label: 'Close',
+    disabled: false
+  },
+  {
+    action: 'tab-close-others' as const,
+    label: 'Close Others',
+    disabled: false
+  },
+  {
+    action: 'tab-close-left' as const,
+    label: 'Close Tabs to the Left',
+    disabled: !canCloseTabsLeft.value
+  },
+  {
+    action: 'tab-close-right' as const,
+    label: 'Close Tabs to the Right',
+    disabled: !canCloseTabsRight.value
+  }
+])
 
 function fileName(path: string): string {
   const normalized = path.replace(/\\/g, '/')
@@ -102,12 +125,15 @@ function tabIcon(tab: PaneTab) {
 
 function closeContextMenu() {
   contextMenuTabId.value = ''
+  contextMenuItemRefs.value = []
+  contextMenuActiveIndex.value = null
 }
 
 function openContextMenu(tabId: string, event: MouseEvent) {
   emit('pane-focus', { paneId: props.pane.id })
   contextMenuTabId.value = tabId
   contextMenuPosition.value = { x: event.clientX, y: event.clientY }
+  contextMenuActiveIndex.value = null
 }
 
 function emitContextMenuAction(action: 'tab-close' | 'tab-close-others' | 'tab-close-left' | 'tab-close-right') {
@@ -148,19 +174,78 @@ function onDocumentPointerDown(event: PointerEvent) {
   closeContextMenu()
 }
 
+function setContextMenuItemRef(el: HTMLButtonElement | null, index: number) {
+  contextMenuItemRefs.value[index] = el
+}
+
+function enabledContextMenuIndices(): number[] {
+  return contextMenuItems.value.flatMap((item, index) => item.disabled ? [] : [index])
+}
+
+function setActiveContextMenuIndex(index: number | null) {
+  contextMenuActiveIndex.value = index
+  if (index === null) return
+  contextMenuItemRefs.value[index]?.focus()
+}
+
+function moveContextMenuFocus(direction: 'next' | 'previous') {
+  const enabledIndices = enabledContextMenuIndices()
+  if (!enabledIndices.length) return
+
+  if (contextMenuActiveIndex.value === null || !enabledIndices.includes(contextMenuActiveIndex.value)) {
+    setActiveContextMenuIndex(direction === 'next' ? enabledIndices[0] : enabledIndices[enabledIndices.length - 1])
+    return
+  }
+
+  const currentEnabledIndex = enabledIndices.indexOf(contextMenuActiveIndex.value)
+  const step = direction === 'next' ? 1 : -1
+  const nextEnabledIndex = (currentEnabledIndex + step + enabledIndices.length) % enabledIndices.length
+  setActiveContextMenuIndex(enabledIndices[nextEnabledIndex] ?? null)
+}
+
+function activateActiveContextMenuItem() {
+  const activeIndex = contextMenuActiveIndex.value
+  if (activeIndex === null) return
+  const activeItem = contextMenuItems.value[activeIndex]
+  if (!activeItem || activeItem.disabled) return
+  emitContextMenuAction(activeItem.action)
+}
+
 function onDocumentKeydown(event: KeyboardEvent) {
-  if (event.key !== 'Escape') return
-  closeContextMenu()
+  if (!contextMenuOpen.value) return
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    event.stopPropagation()
+    closeContextMenu()
+    return
+  }
+  if (event.key === 'ArrowDown') {
+    event.preventDefault()
+    event.stopPropagation()
+    moveContextMenuFocus('next')
+    return
+  }
+  if (event.key === 'ArrowUp') {
+    event.preventDefault()
+    event.stopPropagation()
+    moveContextMenuFocus('previous')
+    return
+  }
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault()
+    event.stopPropagation()
+    activateActiveContextMenuItem()
+  }
 }
 
 onMounted(() => {
   document.addEventListener('pointerdown', onDocumentPointerDown)
-  document.addEventListener('keydown', onDocumentKeydown)
+  document.addEventListener('keydown', onDocumentKeydown, true)
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', onDocumentPointerDown)
-  document.removeEventListener('keydown', onDocumentKeydown)
+  document.removeEventListener('keydown', onDocumentKeydown, true)
 })
 </script>
 
@@ -227,30 +312,18 @@ onBeforeUnmount(() => {
     </div>
     <UiMenu v-if="contextMenuOpen" class-name="pane-tab-menu" :style="contextMenuStyle">
       <UiMenuList>
-        <button type="button" class="ui-menu-item pane-tab-menu-item" @click="emitContextMenuAction('tab-close')">
-          Close
-        </button>
-        <button type="button" class="ui-menu-item pane-tab-menu-item" @click="emitContextMenuAction('tab-close-others')">
-          Close Others
-        </button>
-      </UiMenuList>
-      <UiSeparator class="pane-tab-menu-divider" />
-      <UiMenuList>
         <button
+          v-for="(item, index) in contextMenuItems"
+          :key="item.action"
           type="button"
           class="ui-menu-item pane-tab-menu-item"
-          :disabled="!canCloseTabsLeft"
-          @click="emitContextMenuAction('tab-close-left')"
+          :ref="(el) => setContextMenuItemRef(el as HTMLButtonElement | null, index)"
+          :disabled="item.disabled"
+          :data-active="contextMenuActiveIndex === index ? 'true' : undefined"
+          @mouseenter="setActiveContextMenuIndex(item.disabled ? null : index)"
+          @click="emitContextMenuAction(item.action)"
         >
-          Close Tabs to the Left
-        </button>
-        <button
-          type="button"
-          class="ui-menu-item pane-tab-menu-item"
-          :disabled="!canCloseTabsRight"
-          @click="emitContextMenuAction('tab-close-right')"
-        >
-          Close Tabs to the Right
+          {{ item.label }}
         </button>
       </UiMenuList>
     </UiMenu>
@@ -383,7 +456,4 @@ onBeforeUnmount(() => {
   justify-content: flex-start;
 }
 
-.pane-tab-menu-divider {
-  margin: 4px 0;
-}
 </style>
