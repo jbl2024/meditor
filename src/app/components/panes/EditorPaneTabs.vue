@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { DocumentIcon, HomeIcon } from '@heroicons/vue/24/outline'
 import type { PaneState, PaneTab } from '../../composables/useMultiPaneWorkspaceState'
 import {
@@ -8,6 +8,18 @@ import {
   COSMOS_SURFACE_ICON,
   SECOND_BRAIN_SURFACE_ICON
 } from '../../lib/appShellSurfaceIcons'
+import UiMenu from '../../../shared/components/ui/UiMenu.vue'
+import UiMenuList from '../../../shared/components/ui/UiMenuList.vue'
+import UiSeparator from '../../../shared/components/ui/UiSeparator.vue'
+
+/**
+ * Module: EditorPaneTabs
+ *
+ * Purpose:
+ * - Render the tab strip for a pane and own the local tab context menu.
+ * - Keep pointer gestures and menu positioning close to the tab UI, while the
+ *   shell still owns the actual tab state mutations.
+ */
 
 export type FileEditorStatus = {
   dirty: boolean
@@ -26,6 +38,8 @@ const emit = defineEmits<{
   'tab-click': [payload: { paneId: string; tabId: string }]
   'tab-close': [payload: { paneId: string; tabId: string }]
   'tab-close-others': [payload: { paneId: string; tabId: string }]
+  'tab-close-left': [payload: { paneId: string; tabId: string }]
+  'tab-close-right': [payload: { paneId: string; tabId: string }]
   'tab-close-all': [payload: { paneId: string }]
   'request-move-tab': [payload: { paneId: string; direction: 'next' | 'previous' }]
 }>()
@@ -41,6 +55,24 @@ const tabs = computed(() => props.pane.openTabs.map((tab) => {
     dirty: status.dirty,
     saving: status.saving
   }
+}))
+
+const contextMenuTabId = ref('')
+const contextMenuPosition = ref({ x: 0, y: 0 })
+const wrapRef = ref<HTMLElement | null>(null)
+
+const contextMenuTabIndex = computed(() => tabs.value.findIndex((tab) => tab.id === contextMenuTabId.value))
+const contextMenuOpen = computed(() => contextMenuTabId.value !== '')
+const canCloseTabsLeft = computed(() => contextMenuTabIndex.value > 0)
+const canCloseTabsRight = computed(() => {
+  const index = contextMenuTabIndex.value
+  return index >= 0 && index < tabs.value.length - 1
+})
+const contextMenuStyle = computed(() => ({
+  position: 'fixed',
+  left: `${contextMenuPosition.value.x}px`,
+  top: `${contextMenuPosition.value.y}px`,
+  zIndex: 60
 }))
 
 function fileName(path: string): string {
@@ -67,10 +99,73 @@ function tabIcon(tab: PaneTab) {
   if (tab.type === 'alters') return ALTERS_SURFACE_ICON
   return null
 }
+
+function closeContextMenu() {
+  contextMenuTabId.value = ''
+}
+
+function openContextMenu(tabId: string, event: MouseEvent) {
+  emit('pane-focus', { paneId: props.pane.id })
+  contextMenuTabId.value = tabId
+  contextMenuPosition.value = { x: event.clientX, y: event.clientY }
+}
+
+function emitContextMenuAction(action: 'tab-close' | 'tab-close-others' | 'tab-close-left' | 'tab-close-right') {
+  const tabId = contextMenuTabId.value
+  if (!tabId) return
+  closeContextMenu()
+  if (action === 'tab-close') {
+    emit('tab-close', { paneId: props.pane.id, tabId })
+    return
+  }
+  if (action === 'tab-close-others') {
+    emit('tab-close-others', { paneId: props.pane.id, tabId })
+    return
+  }
+  if (action === 'tab-close-left') {
+    emit('tab-close-left', { paneId: props.pane.id, tabId })
+    return
+  }
+  emit('tab-close-right', { paneId: props.pane.id, tabId })
+}
+
+function selectTab(tabId: string) {
+  closeContextMenu()
+  emit('tab-click', { paneId: props.pane.id, tabId })
+}
+
+function onTabAuxClick(tabId: string, event: MouseEvent) {
+  if (event.button !== 1) return
+  event.preventDefault()
+  closeContextMenu()
+  emit('tab-close', { paneId: props.pane.id, tabId })
+}
+
+function onDocumentPointerDown(event: PointerEvent) {
+  if (!contextMenuOpen.value) return
+  const target = event.target as Node | null
+  if (target && wrapRef.value?.contains(target)) return
+  closeContextMenu()
+}
+
+function onDocumentKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Escape') return
+  closeContextMenu()
+}
+
+onMounted(() => {
+  document.addEventListener('pointerdown', onDocumentPointerDown)
+  document.addEventListener('keydown', onDocumentKeydown)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', onDocumentPointerDown)
+  document.removeEventListener('keydown', onDocumentKeydown)
+})
 </script>
 
 <template>
-  <div class="pane-tabs" @mousedown="emit('pane-focus', { paneId: pane.id })">
+  <div ref="wrapRef" class="pane-tabs" @mousedown="emit('pane-focus', { paneId: pane.id })">
     <div class="pane-tabs-scroll">
       <div
         v-for="tab in tabs"
@@ -82,9 +177,11 @@ function tabIcon(tab: PaneTab) {
           active: pane.activeTabId === tab.id,
           'active-pane': pane.activeTabId === tab.id && isActivePane
         }"
-        @click="emit('tab-click', { paneId: pane.id, tabId: tab.id })"
-        @keydown.enter.prevent="emit('tab-click', { paneId: pane.id, tabId: tab.id })"
-        @keydown.space.prevent="emit('tab-click', { paneId: pane.id, tabId: tab.id })"
+        @click="selectTab(tab.id)"
+        @contextmenu.prevent="openContextMenu(tab.id, $event)"
+        @auxclick.stop="onTabAuxClick(tab.id, $event)"
+        @keydown.enter.prevent="selectTab(tab.id)"
+        @keydown.space.prevent="selectTab(tab.id)"
       >
         <span v-if="tab.type === 'home'" class="pane-tab-icon pane-tab-icon--hero">
           <HomeIcon />
@@ -128,6 +225,35 @@ function tabIcon(tab: PaneTab) {
         A
       </button>
     </div>
+    <UiMenu v-if="contextMenuOpen" class-name="pane-tab-menu" :style="contextMenuStyle">
+      <UiMenuList>
+        <button type="button" class="ui-menu-item pane-tab-menu-item" @click="emitContextMenuAction('tab-close')">
+          Close
+        </button>
+        <button type="button" class="ui-menu-item pane-tab-menu-item" @click="emitContextMenuAction('tab-close-others')">
+          Close Others
+        </button>
+      </UiMenuList>
+      <UiSeparator class="pane-tab-menu-divider" />
+      <UiMenuList>
+        <button
+          type="button"
+          class="ui-menu-item pane-tab-menu-item"
+          :disabled="!canCloseTabsLeft"
+          @click="emitContextMenuAction('tab-close-left')"
+        >
+          Close Tabs to the Left
+        </button>
+        <button
+          type="button"
+          class="ui-menu-item pane-tab-menu-item"
+          :disabled="!canCloseTabsRight"
+          @click="emitContextMenuAction('tab-close-right')"
+        >
+          Close Tabs to the Right
+        </button>
+      </UiMenuList>
+    </UiMenu>
   </div>
 </template>
 
@@ -243,5 +369,17 @@ function tabIcon(tab: PaneTab) {
   color: var(--tabbar-empty);
   padding: 0.32rem 0.56rem;
   font-size: 0.76rem;
+}
+
+.pane-tab-menu {
+  min-width: 220px;
+}
+
+.pane-tab-menu-item {
+  justify-content: flex-start;
+}
+
+.pane-tab-menu-divider {
+  margin: 4px 0;
 }
 </style>

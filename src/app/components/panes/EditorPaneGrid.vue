@@ -73,6 +73,8 @@ const emit = defineEmits<{
   'pane-tab-click': [payload: { paneId: string; tabId: string }]
   'pane-tab-close': [payload: { paneId: string; tabId: string }]
   'pane-tab-close-others': [payload: { paneId: string; tabId: string }]
+  'pane-tab-close-left': [payload: { paneId: string; tabId: string }]
+  'pane-tab-close-right': [payload: { paneId: string; tabId: string }]
   'pane-tab-close-all': [payload: { paneId: string }]
   'pane-request-move-tab': [payload: { paneId: string; direction: 'next' | 'previous' }]
   status: [payload: { path: string; dirty: boolean; saving: boolean; saveError: string }]
@@ -335,6 +337,8 @@ onBeforeUnmount(() => {
         @tab-click="emit('pane-tab-click', $event)"
         @tab-close="emit('pane-tab-close', $event)"
         @tab-close-others="emit('pane-tab-close-others', $event)"
+        @tab-close-left="emit('pane-tab-close-left', $event)"
+        @tab-close-right="emit('pane-tab-close-right', $event)"
         @tab-close-all="emit('pane-tab-close-all', $event)"
         @request-move-tab="emit('pane-request-move-tab', $event)"
       />

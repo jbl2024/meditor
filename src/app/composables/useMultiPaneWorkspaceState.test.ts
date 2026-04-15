@@ -50,6 +50,43 @@ describe('useMultiPaneWorkspaceState', () => {
     expect(store.findPaneContainingSurface('alter-exploration')).toBe('pane-1')
   })
 
+  it('closes tabs to the left of the requested tab and activates the clicked tab when needed', () => {
+    const store = useMultiPaneWorkspaceState()
+    store.openDocumentInPane('/vault/a.md')
+    store.openDocumentInPane('/vault/b.md')
+    store.openDocumentInPane('/vault/c.md')
+    store.openDocumentInPane('/vault/d.md')
+    store.setActiveTabInPane('pane-1', 'doc:/vault/a.md')
+
+    const removed = store.closeTabsLeftInPane('pane-1', 'doc:/vault/c.md')
+
+    expect(removed).toEqual(['/vault/a.md', '/vault/b.md'])
+    expect(store.layout.value.panesById['pane-1'].openTabs.map((tab) => tab.id)).toEqual([
+      'doc:/vault/c.md',
+      'doc:/vault/d.md'
+    ])
+    expect(store.layout.value.panesById['pane-1'].activeTabId).toBe('doc:/vault/c.md')
+    expect(store.getActiveDocumentPath()).toBe('/vault/c.md')
+  })
+
+  it('closes tabs to the right of the requested tab and falls back to the clicked tab when the active tab is removed', () => {
+    const store = useMultiPaneWorkspaceState()
+    store.openDocumentInPane('/vault/a.md')
+    store.openDocumentInPane('/vault/b.md')
+    store.openDocumentInPane('/vault/c.md')
+    store.openDocumentInPane('/vault/d.md')
+
+    const removed = store.closeTabsRightInPane('pane-1', 'doc:/vault/b.md')
+
+    expect(removed).toEqual(['/vault/c.md', '/vault/d.md'])
+    expect(store.layout.value.panesById['pane-1'].openTabs.map((tab) => tab.id)).toEqual([
+      'doc:/vault/a.md',
+      'doc:/vault/b.md'
+    ])
+    expect(store.layout.value.panesById['pane-1'].activeTabId).toBe('doc:/vault/b.md')
+    expect(store.getActiveDocumentPath()).toBe('/vault/b.md')
+  })
+
   it('supports split and max 4 panes', () => {
     const store = useMultiPaneWorkspaceState()
     const p2 = store.splitPane('pane-1', 'row')

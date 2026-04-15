@@ -161,6 +161,51 @@ function hasTabPath(tab: PaneTab): tab is Extract<PaneTab, { path: string }> {
   return 'path' in tab
 }
 
+function clearTabRangeAfterMutation(
+  pane: PaneState,
+  nextTabs: PaneTab[],
+  activeTabId: string
+): PaneState {
+  return {
+    ...pane,
+    openTabs: nextTabs,
+    activeTabId,
+    activePath: documentPathForTabId(nextTabs, activeTabId)
+  }
+}
+
+function closeTabsRelativeToTab(
+  layoutState: MultiPaneLayout,
+  paneId: PaneId,
+  tabId: string,
+  direction: 'left' | 'right'
+): { nextLayout: MultiPaneLayout; removedDocumentPaths: string[] } {
+  const pane = layoutState.panesById[paneId]
+  if (!pane) return { nextLayout: layoutState, removedDocumentPaths: [] }
+
+  const tabIndex = pane.openTabs.findIndex((tab) => tab.id === tabId)
+  if (tabIndex < 0) return { nextLayout: layoutState, removedDocumentPaths: [] }
+
+  const nextTabs = pane.openTabs.filter((_, index) => direction === 'left' ? index >= tabIndex : index <= tabIndex)
+  const removedTabs = pane.openTabs.filter((_, index) => direction === 'left' ? index < tabIndex : index > tabIndex)
+  const removedDocumentPaths = removedTabs.flatMap((tab) =>
+    tab.type === 'document' || tab.type === 'file-inspector' ? [tab.path] : []
+  )
+  const activeTabId = tabId
+
+  return {
+    nextLayout: {
+      ...layoutState,
+      activePaneId: paneId,
+      panesById: {
+        ...layoutState.panesById,
+        [paneId]: clearTabRangeAfterMutation(pane, nextTabs, activeTabId)
+      }
+    },
+    removedDocumentPaths
+  }
+}
+
 export function hydrateLayout(payload: unknown): MultiPaneLayout | null {
   if (!payload || typeof payload !== 'object') return null
 
@@ -523,11 +568,15 @@ export function useMultiPaneWorkspaceState(initial: MultiPaneLayout = createInit
     }
   }
 
-  function closeOtherTabsInPane(paneId: PaneId, tabId: string) {
+  function closeOtherTabsInPane(paneId: PaneId, tabId: string): string[] {
     const pane = layout.value.panesById[paneId]
-    if (!pane) return
+    if (!pane) return []
     const active = pane.openTabs.find((tab) => tab.id === tabId)
-    if (!active) return
+    if (!active) return []
+
+    const removedDocumentPaths = pane.openTabs
+      .filter((tab) => tab.id !== tabId)
+      .flatMap((tab) => (tab.type === 'document' || tab.type === 'file-inspector' ? [tab.path] : []))
 
     layout.value = {
       ...layout.value,
@@ -542,6 +591,22 @@ export function useMultiPaneWorkspaceState(initial: MultiPaneLayout = createInit
       },
       activePaneId: paneId
     }
+
+    return removedDocumentPaths
+  }
+
+  /** Closes every tab to the left of the requested tab and keeps the tab itself. */
+  function closeTabsLeftInPane(paneId: PaneId, tabId: string): string[] {
+    const next = closeTabsRelativeToTab(layout.value, paneId, tabId, 'left')
+    layout.value = next.nextLayout
+    return next.removedDocumentPaths
+  }
+
+  /** Closes every tab to the right of the requested tab and keeps the tab itself. */
+  function closeTabsRightInPane(paneId: PaneId, tabId: string): string[] {
+    const next = closeTabsRelativeToTab(layout.value, paneId, tabId, 'right')
+    layout.value = next.nextLayout
+    return next.removedDocumentPaths
   }
 
   function closeAllTabsInPane(paneId: PaneId) {
@@ -885,6 +950,8 @@ export function useMultiPaneWorkspaceState(initial: MultiPaneLayout = createInit
     findPaneContainingSurface,
     closeTabInPane,
     closeOtherTabsInPane,
+    closeTabsLeftInPane,
+    closeTabsRightInPane,
     closeAllTabsInPane,
     closeAllTabsAndResetLayout,
     splitPane,

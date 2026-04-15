@@ -29,7 +29,9 @@ type MultiPanePort = {
   setActivePane: (paneId: string) => void
   setActiveTabInPane: (paneId: string, tabId: string) => void
   closeTabInPane: (paneId: string, tabId: string) => void
-  closeOtherTabsInPane: (paneId: string, tabId: string) => void
+  closeOtherTabsInPane: (paneId: string, tabId: string) => string[]
+  closeTabsLeftInPane: (paneId: string, tabId: string) => string[]
+  closeTabsRightInPane: (paneId: string, tabId: string) => string[]
   closeAllTabsInPane: (paneId: string) => void
   getActiveTab: () => { type: string; path?: string } | null
   getActiveDocumentPath: (paneId?: string) => string | null
@@ -131,7 +133,18 @@ export function useAppShellPaneRuntime(options: Options) {
   }
 
   function onPaneTabCloseOthers(payload: { paneId: string; tabId: string }) {
-    options.multiPane.closeOtherTabsInPane(payload.paneId, payload.tabId)
+    const removedPaths = options.multiPane.closeOtherTabsInPane(payload.paneId, payload.tabId)
+    clearEditorStatusForPaths(removedPaths, (path) => options.editorState.clearStatus(path))
+  }
+
+  function onPaneTabCloseLeft(payload: { paneId: string; tabId: string }) {
+    const removedPaths = options.multiPane.closeTabsLeftInPane(payload.paneId, payload.tabId)
+    clearEditorStatusForPaths(removedPaths, (path) => options.editorState.clearStatus(path))
+  }
+
+  function onPaneTabCloseRight(payload: { paneId: string; tabId: string }) {
+    const removedPaths = options.multiPane.closeTabsRightInPane(payload.paneId, payload.tabId)
+    clearEditorStatusForPaths(removedPaths, (path) => options.editorState.clearStatus(path))
   }
 
   function onPaneTabCloseAll(payload: { paneId: string }) {
@@ -266,6 +279,8 @@ export function useAppShellPaneRuntime(options: Options) {
     onPaneTabClick,
     onPaneTabClose,
     onPaneTabCloseOthers,
+    onPaneTabCloseLeft,
+    onPaneTabCloseRight,
     onPaneTabCloseAll,
     closeActiveTab,
     onEditorStatus,

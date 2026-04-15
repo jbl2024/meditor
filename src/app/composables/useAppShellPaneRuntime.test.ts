@@ -17,7 +17,9 @@ describe('useAppShellPaneRuntime', () => {
     const setActivePane = vi.fn()
     const setActiveTabInPane = vi.fn()
     const closeTabInPane = vi.fn()
-    const closeOtherTabsInPane = vi.fn()
+    const closeOtherTabsInPane = vi.fn(() => ['/vault/doc-other.md'])
+    const closeTabsLeftInPane = vi.fn(() => ['/vault/doc-left.md'])
+    const closeTabsRightInPane = vi.fn(() => ['/vault/doc-right.md'])
     const closeAllTabsInPane = vi.fn()
     const setSidebarMode = vi.fn()
     const toggleSidebar = vi.fn()
@@ -53,6 +55,8 @@ describe('useAppShellPaneRuntime', () => {
         setActiveTabInPane,
         closeTabInPane,
         closeOtherTabsInPane,
+        closeTabsLeftInPane,
+        closeTabsRightInPane,
         closeAllTabsInPane,
         getActiveTab: () => ({ type: 'document', path: '/vault/doc-1.md' }),
         getActiveDocumentPath: () => '/vault/doc-1.md'
@@ -110,6 +114,15 @@ describe('useAppShellPaneRuntime', () => {
 
     api.onPaneTabCloseOthers({ paneId: 'pane-1', tabId: 'doc-1' })
     expect(closeOtherTabsInPane).toHaveBeenCalledWith('pane-1', 'doc-1')
+    expect(clearStatus).toHaveBeenCalledWith('/vault/doc-other.md')
+
+    api.onPaneTabCloseLeft({ paneId: 'pane-1', tabId: 'doc-1' })
+    expect(closeTabsLeftInPane).toHaveBeenCalledWith('pane-1', 'doc-1')
+    expect(clearStatus).toHaveBeenCalledWith('/vault/doc-left.md')
+
+    api.onPaneTabCloseRight({ paneId: 'pane-1', tabId: 'doc-1' })
+    expect(closeTabsRightInPane).toHaveBeenCalledWith('pane-1', 'doc-1')
+    expect(clearStatus).toHaveBeenCalledWith('/vault/doc-right.md')
 
     api.onPaneTabCloseAll({ paneId: 'pane-1' })
     expect(closeAllTabsInPane).toHaveBeenCalledWith('pane-1')
@@ -171,7 +184,9 @@ describe('useAppShellPaneRuntime', () => {
         setActivePane: vi.fn(),
         setActiveTabInPane: vi.fn(),
         closeTabInPane: vi.fn(),
-        closeOtherTabsInPane: vi.fn(),
+        closeOtherTabsInPane: vi.fn(() => []),
+        closeTabsLeftInPane: vi.fn(() => []),
+        closeTabsRightInPane: vi.fn(() => []),
         closeAllTabsInPane: vi.fn(),
         getActiveTab: () => null,
         getActiveDocumentPath: () => null

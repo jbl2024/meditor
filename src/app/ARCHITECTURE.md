@@ -42,6 +42,7 @@
   - `AppShellChromeSurface`
   - `AppShellWorkspaceSurface`
   - `AppShellOverlays`
+  - `EditorPaneTabs` owns tab-strip rendering plus local menu/gesture state, while shell handlers own tab mutation.
 
 ## Shell Composables
 - `useAppModalController`: modal selector derivation, focus restore, tab trapping.

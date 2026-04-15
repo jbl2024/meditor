@@ -1165,6 +1165,8 @@ const {
   onPaneTabClick,
   onPaneTabClose,
   onPaneTabCloseOthers,
+  onPaneTabCloseLeft,
+  onPaneTabCloseRight,
   onPaneTabCloseAll,
   closeActiveTab,
   onEditorStatus,
@@ -2027,6 +2029,8 @@ useAppShellKeyboard({
           @pane-tab-click="void onPaneTabClick($event)"
           @pane-tab-close="onPaneTabClose($event)"
           @pane-tab-close-others="onPaneTabCloseOthers($event)"
+          @pane-tab-close-left="onPaneTabCloseLeft($event)"
+          @pane-tab-close-right="onPaneTabCloseRight($event)"
           @pane-tab-close-all="onPaneTabCloseAll($event)"
           @pane-request-move-tab="multiPane.moveActiveTabToAdjacentPane($event.direction)"
           @open-note="void openNoteFromSecondBrain($event)"
