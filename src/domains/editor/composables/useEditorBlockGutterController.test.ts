@@ -148,6 +148,46 @@ describe('useEditorBlockGutterController', () => {
     expect(controller.anchorRect.value?.left).toBe(64) // 80 - 20 + 4
   })
 
+  it('pins the gutter inside a narrow split pane instead of letting it clip left', () => {
+    const harness = createEditorHarness()
+    Object.defineProperty(harness.holder.value, 'clientWidth', {
+      configurable: true,
+      value: 180
+    })
+
+    const controller = useEditorBlockGutterController({
+      getEditor: () => harness.editor,
+      holder: harness.holder,
+      titleEditorFocused: harness.titleEditorFocused
+    })
+
+    controller.syncSelectionTarget()
+
+    expect(controller.resolveToolbarPlacement(180)).toEqual({
+      left: 12,
+      top: 100
+    })
+    expect(controller.shouldShowToolbarLabel(64)).toBe(false)
+  })
+
+  it('keeps the block type badge when the pane has enough room', () => {
+    const harness = createEditorHarness()
+    Object.defineProperty(harness.holder.value, 'clientWidth', {
+      configurable: true,
+      value: 420
+    })
+
+    const controller = useEditorBlockGutterController({
+      getEditor: () => harness.editor,
+      holder: harness.holder,
+      titleEditorFocused: harness.titleEditorFocused
+    })
+
+    controller.syncSelectionTarget()
+
+    expect(controller.shouldShowToolbarLabel(120)).toBe(true)
+  })
+
   it('pins a stable menu target while the live selection keeps moving', () => {
     const harness = createEditorHarness()
     const controller = useEditorBlockGutterController({

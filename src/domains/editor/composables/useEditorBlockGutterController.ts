@@ -17,6 +17,13 @@ export function useEditorBlockGutterController(options: {
   holder: Ref<HTMLDivElement | null>
   titleEditorFocused: Ref<boolean>
 }) {
+  const gutterGapPx = 8
+  const gutterButtonSizePx = 28
+  const gutterControlGapPx = 6
+  const gutterLabelWidthPx = 44
+  const gutterCompactWidthPx = gutterButtonSizePx * 2 + gutterControlGapPx
+  const gutterFallbackWidthPx = gutterCompactWidthPx + gutterGapPx
+  const gutterControlsWithLabelWidthPx = gutterCompactWidthPx + gutterControlGapPx + gutterLabelWidthPx
   const target = ref<BlockMenuTarget | null>(null)
   const selectionTargets = ref<BlockMenuTarget[]>([])
   const menuTarget = ref<BlockMenuTarget | null>(null)
@@ -95,6 +102,49 @@ export function useEditorBlockGutterController(options: {
     }
   }
 
+  /**
+   * Resolves a pane-safe gutter placement from the current anchor rectangle.
+   *
+   * When a pane is too narrow for the gutter to sit fully to the left of the
+   * active block, the placement pins the control to the visible pane edge
+   * instead of letting it clip into the split boundary.
+   */
+  function resolveToolbarPlacement(toolbarWidthPx?: number): { left: number; top: number } | null {
+    const holder = options.holder.value
+    const anchor = anchorRect.value
+    if (!holder || !anchor) return null
+
+    const width = Math.max(gutterFallbackWidthPx, toolbarWidthPx ?? 0)
+    const holderScrollLeft = holder.scrollLeft
+    const holderClientWidth = holder.clientWidth
+    const minLeft = holderScrollLeft + gutterGapPx
+    const maxLeft = holderScrollLeft + holderClientWidth - width - gutterGapPx
+    const preferredLeft = anchor.left - width - gutterGapPx
+    const left = maxLeft >= minLeft
+      ? Math.min(Math.max(preferredLeft, minLeft), maxLeft)
+      : minLeft
+
+    return {
+      left,
+      top: anchor.top
+    }
+  }
+
+  /**
+   * Returns whether the block-type badge can be shown without forcing the
+   * gutter controls out of the left gutter in a narrow pane.
+   */
+  function shouldShowToolbarLabel(availableGutterWidthPx?: number): boolean {
+    const holder = options.holder.value
+    if (!holder) return false
+
+    const resolvedAvailableWidth =
+      typeof availableGutterWidthPx === 'number' && Number.isFinite(availableGutterWidthPx) && availableGutterWidthPx > 0
+        ? availableGutterWidthPx
+        : holder.clientWidth
+    return resolvedAvailableWidth >= gutterControlsWithLabelWidthPx
+  }
+
   function openMenu() {
     if (!target.value) return null
     menuTarget.value = target.value
@@ -134,6 +184,8 @@ export function useEditorBlockGutterController(options: {
     syncContentFocus,
     syncSelectionTarget,
     syncAnchor,
+    resolveToolbarPlacement,
+    shouldShowToolbarLabel,
     openMenu,
     closeMenu,
     clear

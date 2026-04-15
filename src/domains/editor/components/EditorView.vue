@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, type Ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
 import { Editor, EditorContent } from '@tiptap/vue-3'
 import { Bars3Icon } from '@heroicons/vue/24/outline'
 import { createExtractedNote, openExternalUrl } from '../../../shared/api/workspaceApi'
@@ -118,7 +118,51 @@ function emitExternalReload(payload: { path: string }) {
 
 const holder = ref<HTMLDivElement | null>(null)
 const contentShell = ref<HTMLDivElement | null>(null)
+const blockGutterEl = ref<HTMLDivElement | null>(null)
 const pulsePanelWrap = ref<HTMLDivElement | null>(null)
+const blockGutterWidth = ref(72)
+let blockGutterResizeObserver: ResizeObserver | null = null
+
+function syncBlockGutterWidth() {
+  const width = blockGutterEl.value?.getBoundingClientRect().width ?? 0
+  if (width > 0) {
+    blockGutterWidth.value = width
+  }
+}
+
+onMounted(() => {
+  syncBlockGutterWidth()
+})
+
+onBeforeUnmount(() => {
+  blockGutterResizeObserver?.disconnect()
+  blockGutterResizeObserver = null
+})
+
+watch(
+  blockGutterEl,
+  (element, _previous, onCleanup) => {
+    blockGutterResizeObserver?.disconnect()
+    blockGutterResizeObserver = null
+
+    if (!element) return
+
+    syncBlockGutterWidth()
+
+    if (typeof ResizeObserver === 'undefined') return
+
+    blockGutterResizeObserver = new ResizeObserver(() => {
+      syncBlockGutterWidth()
+    })
+    blockGutterResizeObserver.observe(element)
+
+    onCleanup(() => {
+      blockGutterResizeObserver?.disconnect()
+      blockGutterResizeObserver = null
+    })
+  },
+  { flush: 'post' }
+)
 const activeEditor = ref<Editor | null>(null) as Ref<Editor | null>
 const pathRef = computed(() => props.path ?? '')
 const workspacePathRef = computed(() => props.workspacePath ?? '')
@@ -415,7 +459,6 @@ const {
   tableToolbarViewportTop,
   tableToolbarViewportMaxHeight,
   blockGutterActiveTarget,
-  blockGutterAnchorRect,
   blockGutterVisible,
   blockGutterMenuOpen,
   blockMenuOpen,
@@ -446,11 +489,12 @@ const {
 } = blockAndTable
 const activeBlockStructureLabel = computed(() => getBlockStructureLabel(blockGutterActiveTarget.value))
 const blockGutterToolbarStyle = computed(() => {
-  const anchor = blockGutterAnchorRect.value
-  if (!anchor) return {}
+  const placement = chromeRuntime.blockAndTable.resolveBlockGutterToolbarPlacement(blockGutterWidth.value)
+  if (!placement) return {}
   return {
-    left: `${anchor.left}px`,
-    top: `${anchor.top}px`
+    left: `${placement.left}px`,
+    top: `${placement.top}px`,
+    transform: 'translateY(-50%)'
   }
 })
 
@@ -461,6 +505,8 @@ const {
   resetEditorZoom,
   gutterHitboxStyle
 } = layout
+const availableGutterWidth = computed(() => Number.parseFloat(gutterHitboxStyle.value.width || '0') || 0)
+const showBlockStructureLabel = computed(() => chromeRuntime.blockAndTable.shouldShowBlockGutterLabel(availableGutterWidth.value))
 watch(
   [renderedEditor, blockGutterActiveTarget],
   () => {
@@ -878,13 +924,14 @@ defineExpose({
           </div>
           <div
           v-if="blockGutterVisible"
+          ref="blockGutterEl"
           class="tomosona-block-gutter"
           :data-menu-open="blockGutterMenuOpen ? 'true' : 'false'"
           :style="blockGutterToolbarStyle"
-        >
+          >
             <div class="tomosona-block-controls">
               <span
-                v-if="activeBlockStructureLabel"
+                v-if="showBlockStructureLabel && activeBlockStructureLabel"
                 class="tomosona-block-structure-label"
                 :title="blockGutterActiveTarget?.nodeType ?? ''"
                 aria-hidden="true"
@@ -937,7 +984,7 @@ defineExpose({
             @select-block-action="onBlockMenuSelect($event)"
             @open-pulse="openPulseForSelection"
             @copy-as="void onInlineToolbarCopyAs($event)"
-            @measure="inlineFormatToolbar.setToolbarHeight($event)"
+            @measure="inlineFormatToolbar.setToolbarSize($event)"
             @apply-link="inlineFormatToolbar.applyLink"
             @unlink="inlineFormatToolbar.unlinkLink"
             @cancel-link="inlineFormatToolbar.cancelLink"

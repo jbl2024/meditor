@@ -86,6 +86,7 @@ describe('useInlineFormatToolbar', () => {
       scrollLeft: 10,
       scrollTop: 5,
       clientHeight: 400,
+      clientWidth: 400,
       getBoundingClientRect: () => ({ left: 50, top: 20 } as DOMRect)
     } as HTMLElement)
     const { editor } = createFakeEditor()
@@ -107,6 +108,7 @@ describe('useInlineFormatToolbar', () => {
       scrollLeft: 0,
       scrollTop: 0,
       clientHeight: 120,
+      clientWidth: 320,
       getBoundingClientRect: () => ({ left: 0, top: 0 } as DOMRect)
     } as HTMLElement)
     const { editor } = createFakeEditor()
@@ -121,6 +123,28 @@ describe('useInlineFormatToolbar', () => {
 
     expect(toolbar.formatToolbarOpen.value).toBe(true)
     expect(toolbar.formatToolbarTop.value).toBe(70)
+  })
+
+  it('clamps the toolbar inside a narrow split pane instead of crossing the boundary', () => {
+    const holder = ref<HTMLElement | null>({
+      scrollLeft: 10,
+      scrollTop: 0,
+      clientHeight: 120,
+      clientWidth: 180,
+      getBoundingClientRect: () => ({ left: 50, top: 20 } as DOMRect)
+    } as HTMLElement)
+    const { editor } = createFakeEditor()
+    const toolbar = useInlineFormatToolbar({
+      holder,
+      getEditor: () => editor,
+      sanitizeHref: (raw) => raw
+    })
+
+    toolbar.setToolbarSize({ height: 44, width: 180 })
+    toolbar.updateFormattingToolbar()
+
+    expect(toolbar.formatToolbarOpen.value).toBe(true)
+    expect(toolbar.formatToolbarLeft.value - 90).toBe(18)
   })
 
   it('waits for mouse selection to finish before opening the toolbar', () => {

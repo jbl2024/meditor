@@ -329,7 +329,20 @@ describe('EditorView interactions contract', () => {
 
     const setupState = (editorRef.value as { $?: { setupState?: Record<string, any> } })?.$?.setupState
     if (!setupState) throw new Error('Expected EditorView setup state')
+    const holder = root.querySelector('.editor-holder') as HTMLElement
+    Object.defineProperty(holder, 'clientWidth', {
+      configurable: true,
+      value: 400
+    })
     const blockAndTable = setupState.chromeRuntime.blockAndTable
+    const layout = setupState.chromeRuntime.layout
+    layout.gutterHitboxStyle.value = {
+      position: 'absolute',
+      top: '0',
+      left: '0px',
+      bottom: '0',
+      width: '240px'
+    }
     blockAndTable.blockGutterAnchorRect.value = { left: 16, top: 20, width: 40, height: 16 }
     blockAndTable.blockGutterContentFocused.value = true
 
@@ -421,6 +434,109 @@ describe('EditorView interactions contract', () => {
 
       expect(document.body.querySelector('.tomosona-block-menu')).toBeTruthy()
       expect(root.querySelector('.tomosona-block-gutter')).toBeTruthy()
+    } finally {
+      app.unmount()
+      document.body.innerHTML = ''
+    }
+  })
+
+  it('renders editor chrome inside a narrow split-style pane', async () => {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+    const editorRef = ref<unknown>(null)
+
+    const app = createApp(defineComponent({
+      setup() {
+        return () =>
+          h(EditorView, {
+            ref: editorRef,
+            path: 'a.md',
+            openPaths: ['a.md'],
+            openFile: async () => '# Title\n\nBody',
+            saveFile: async () => ({ persisted: true }),
+            renameFileFromTitle: async (valuePath: string, title: string) => ({ path: valuePath, title }),
+            loadLinkTargets: async () => ['a.md'],
+            loadLinkHeadings: async () => ['H1'],
+            loadPropertyTypeSchema: async () => ({}),
+            savePropertyTypeSchema: async () => {},
+            openLinkTarget: async () => true,
+            onStatus: () => {},
+            onOutline: () => {},
+            onProperties: () => {},
+            onPathRenamed: () => {}
+          })
+      }
+    }))
+
+    app.mount(root)
+    try {
+      await flushUi()
+
+      const setupState = (editorRef.value as { $?: { setupState?: Record<string, any> } })?.$?.setupState
+      if (!setupState) throw new Error('Expected EditorView setup state')
+
+      const holder = root.querySelector('.editor-holder') as HTMLElement
+      Object.defineProperty(holder, 'clientWidth', {
+        configurable: true,
+        value: 180
+      })
+      Object.defineProperty(holder, 'scrollLeft', {
+        configurable: true,
+        value: 0
+      })
+
+      const chromeRuntime = setupState.chromeRuntime as {
+        toolbars: {
+          inlineFormatToolbar: {
+            formatToolbarOpen: { value: boolean }
+            formatToolbarLeft: { value: number }
+            formatToolbarTop: { value: number }
+          }
+        }
+        blockAndTable: {
+          blockGutterAnchorRect: { value: { left: number; top: number; width: number; height: number } | null }
+          blockGutterContentFocused: { value: boolean }
+          blockGutterTarget: { value: unknown | null }
+          blockMenuTarget: { value: unknown | null }
+        }
+        layout: {
+          gutterHitboxStyle: { value: { position: string; top: string; left: string; bottom: string; width: string } }
+        }
+      }
+      chromeRuntime.layout.gutterHitboxStyle.value = {
+        position: 'absolute',
+        top: '0',
+        left: '0px',
+        bottom: '0',
+        width: '64px'
+      }
+
+      const blockTarget = {
+        pos: 1,
+        nodeType: 'paragraph',
+        nodeSize: 4,
+        canDelete: true,
+        canConvert: true,
+        text: 'Body',
+        attrs: {}
+      }
+
+      chromeRuntime.toolbars.inlineFormatToolbar.formatToolbarOpen.value = true
+      chromeRuntime.toolbars.inlineFormatToolbar.formatToolbarLeft.value = 90
+      chromeRuntime.toolbars.inlineFormatToolbar.formatToolbarTop.value = 52
+      chromeRuntime.blockAndTable.blockGutterAnchorRect.value = { left: 16, top: 20, width: 40, height: 16 }
+      chromeRuntime.blockAndTable.blockGutterContentFocused.value = true
+      chromeRuntime.blockAndTable.blockGutterTarget.value = blockTarget
+      chromeRuntime.blockAndTable.blockMenuTarget.value = blockTarget
+      await flushUi()
+
+      const gutterToolbar = root.querySelector('.tomosona-block-gutter') as HTMLElement
+      expect(gutterToolbar).toBeTruthy()
+      expect(root.querySelector('.tomosona-block-structure-label')).toBeFalsy()
+      expect(chromeRuntime.toolbars.inlineFormatToolbar.formatToolbarLeft.value).toBeGreaterThanOrEqual(0)
+      expect(chromeRuntime.toolbars.inlineFormatToolbar.formatToolbarLeft.value).toBeLessThanOrEqual(180)
+      expect(Number.parseFloat(gutterToolbar.style.left)).toBeGreaterThanOrEqual(0)
+      expect(Number.parseFloat(gutterToolbar.style.left)).toBeLessThanOrEqual(180)
     } finally {
       app.unmount()
       document.body.innerHTML = ''

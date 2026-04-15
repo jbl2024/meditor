@@ -45,6 +45,7 @@ export function useInlineFormatToolbar(options: UseInlineFormatToolbarOptions) {
   const formatToolbarLeft = ref(0)
   const formatToolbarTop = ref(0)
   const toolbarHeight = ref(44)
+  const toolbarWidth = ref(0)
   const pointerSelectionActive = ref(false)
   const linkPopoverOpen = ref(false)
   const linkValue = ref('')
@@ -139,6 +140,7 @@ export function useInlineFormatToolbar(options: UseInlineFormatToolbarOptions) {
     const holderRect = holderEl.getBoundingClientRect()
     const centerX = (start.left + end.right) / 2
     const measuredToolbarHeight = Math.max(0, toolbarHeight.value || 44)
+    const measuredToolbarWidth = Math.max(0, toolbarWidth.value || 0)
     const viewportPadding = 8
     const selectionTop = Math.min(start.top, end.top) - holderRect.top + holderEl.scrollTop
     const selectionBottom = Math.max(start.bottom, end.bottom) - holderRect.top + holderEl.scrollTop
@@ -156,7 +158,12 @@ export function useInlineFormatToolbar(options: UseInlineFormatToolbarOptions) {
         : Math.max(viewportTop, viewportBottom - measuredToolbarHeight)
     }
 
-    formatToolbarLeft.value = centerX - holderRect.left + holderEl.scrollLeft
+    const rawLeft = centerX - holderRect.left + holderEl.scrollLeft - measuredToolbarWidth / 2
+    const minLeft = holderEl.scrollLeft + viewportPadding
+    const maxLeft = holderEl.scrollLeft + holderEl.clientWidth - measuredToolbarWidth - viewportPadding
+    const clampedLeft = maxLeft >= minLeft ? Math.min(Math.max(rawLeft, minLeft), maxLeft) : minLeft
+
+    formatToolbarLeft.value = clampedLeft + measuredToolbarWidth / 2
     formatToolbarTop.value = renderedTop + measuredToolbarHeight
     formatToolbarOpen.value = true
   }
@@ -167,6 +174,22 @@ export function useInlineFormatToolbar(options: UseInlineFormatToolbarOptions) {
    */
   function setToolbarHeight(height: number) {
     toolbarHeight.value = Math.max(0, height)
+  }
+
+  /**
+   * Records the current rendered toolbar size so positioning can stay inside
+   * the active pane even when the toolbar is wider than the split pane.
+   */
+  function setToolbarSize(size: { height?: number; width?: number }) {
+    if (typeof size.height === 'number') {
+      toolbarHeight.value = Math.max(0, size.height)
+    }
+    if (typeof size.width === 'number') {
+      toolbarWidth.value = Math.max(0, size.width)
+    }
+    if (formatToolbarOpen.value) {
+      updateFormattingToolbar()
+    }
   }
 
   /**
@@ -324,6 +347,7 @@ export function useInlineFormatToolbar(options: UseInlineFormatToolbarOptions) {
     unlinkLink,
     cancelLink,
     setToolbarHeight,
+    setToolbarSize,
     dismissToolbar
   }
 }

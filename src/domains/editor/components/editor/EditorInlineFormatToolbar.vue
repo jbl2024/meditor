@@ -45,7 +45,7 @@ const emit = defineEmits<{
   'apply-link': []
   unlink: []
   'cancel-link': []
-  'measure': [height: number]
+  'measure': [{ height: number; width: number }]
   'update:linkValue': [value: string]
 }>()
 
@@ -60,7 +60,11 @@ const blockMenuIndex = ref(0)
 let toolbarResizeObserver: ResizeObserver | null = null
 
 function reportToolbarHeight() {
-  emit('measure', toolbarEl.value?.getBoundingClientRect().height ?? 0)
+  const rect = toolbarEl.value?.getBoundingClientRect()
+  emit('measure', {
+    height: rect?.height ?? 0,
+    width: rect?.width ?? 0
+  })
 }
 
 watch(
@@ -80,7 +84,7 @@ watch(
     if (!open) {
       copyMenuOpen.value = false
       blockMenuOpen.value = false
-      emit('measure', 0)
+      emit('measure', { height: 0, width: 0 })
       return
     }
     void nextTick(() => {

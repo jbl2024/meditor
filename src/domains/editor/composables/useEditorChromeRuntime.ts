@@ -1275,6 +1275,8 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     onBlockMenuSelect: blockAndTableControls.onBlockMenuSelect,
     onBlockHandleSelectionUpdate: blockAndTableControls.blockGutter.syncSelectionTarget,
     syncBlockGutterAnchor: blockAndTableControls.blockGutter.syncAnchor,
+    resolveBlockGutterToolbarPlacement: blockAndTableControls.blockGutter.resolveToolbarPlacement,
+    shouldShowBlockGutterLabel: blockAndTableControls.blockGutter.shouldShowToolbarLabel,
     tableToolbarTriggerVisible: blockAndTableControls.tableControls.tableToolbarTriggerVisible,
     tableAddTopVisible: blockAndTableControls.tableControls.tableAddTopVisible,
     tableAddBottomVisible: blockAndTableControls.tableControls.tableAddBottomVisible,
