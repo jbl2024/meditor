@@ -265,6 +265,8 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid var(--tabbar-border);
   background: var(--tabbar-bg);
   font-size: 0.84rem;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .pane-tabs-scroll {
@@ -286,6 +288,8 @@ onBeforeUnmount(() => {
   color: var(--tabbar-tab-text);
   cursor: pointer;
   position: relative;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .pane-tab-item::after {
