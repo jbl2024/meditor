@@ -216,6 +216,30 @@ describe('useEditorTiptapSetup', () => {
     expect(openLinkTargetWithAutosave).toHaveBeenCalledWith('docs/install_pc.md')
   })
 
+  it('opens relative markdown links without a leading dot as internal targets', () => {
+    const openLinkTargetWithAutosave = vi.fn(async () => {})
+    const { setup } = createSetup({ openLinkTargetWithAutosave })
+    const editorOptions = setup.createEditorOptions('docs/current.md') as any
+
+    const view = {
+      state: { doc: { content: { size: 100 } } }
+    } as any
+
+    const relativeAnchor = document.createElement('a')
+    relativeAnchor.setAttribute('href', 'mattermost/index.md')
+
+    const click = editorOptions.editorProps.handleClick(view, 3, {
+      target: relativeAnchor,
+      metaKey: false,
+      ctrlKey: false,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn()
+    })
+
+    expect(click).toBe(true)
+    expect(openLinkTargetWithAutosave).toHaveBeenCalledWith('docs/mattermost/index.md')
+  })
+
   it('opens bare relative note links inside the app', () => {
     const openLinkTargetWithAutosave = vi.fn(async () => {})
     const { setup } = createSetup({ openLinkTargetWithAutosave })

@@ -271,7 +271,7 @@ function inlineMarkdownToHtml(value: string): string {
         const relativeHref = relativeMarkdownHref.fragment
           ? `${relativeMarkdownHref.path}#${relativeMarkdownHref.fragment}`
           : relativeMarkdownHref.path
-        tokens.push(`<a href="${escapeHtml(relativeHref)}">${parseInlineSegment(text)}</a>`)
+        tokens.push(`<a href="${escapeHtml(relativeHref)}" data-markdown-target="${escapeHtml(relativeHref)}">${parseInlineSegment(text)}</a>`)
         expanded += token
       } else {
         expanded += full

@@ -176,4 +176,31 @@ describe('fromTiptapDoc internal links', () => {
       }
     ])
   })
+
+  it('keeps relative markdown links as internal anchors with markdown targets', () => {
+    const blocks = fromTiptapDoc({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'text',
+              text: 'Mattermost',
+              marks: [{ type: 'link', attrs: { href: 'mattermost/index.md' } }]
+            }
+          ]
+        }
+      ]
+    })
+
+    expect(blocks).toEqual([
+      {
+        type: 'paragraph',
+        data: {
+          text: '<a href="mattermost/index.md" data-markdown-target="mattermost/index.md">Mattermost</a>'
+        }
+      }
+    ])
+  })
 })

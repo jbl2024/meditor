@@ -1,6 +1,7 @@
 import type { JSONContent } from '@tiptap/vue-3'
 import type { EditorBlock } from '../markdownBlocks'
 import { normalizeCalloutKind } from '../callouts'
+import { parseRelativeMarkdownHref } from '../markdownBlocks'
 import { TIPTAP_NODE_TYPES } from './types'
 type TableAlign = 'left' | 'center' | 'right' | null
 
@@ -88,6 +89,10 @@ function serializeTextWithMarks(node: JSONContent): string {
         const href = String(mark.attrs?.href ?? '').trim()
         if (href.startsWith('#')) {
           return `<a href="${escapeHtml(href)}">${acc}</a>`
+        }
+        const relativeMarkdownHref = parseRelativeMarkdownHref(href)
+        if (relativeMarkdownHref) {
+          return `<a href="${escapeHtml(href)}" data-markdown-target="${escapeHtml(href)}">${acc}</a>`
         }
         return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${acc}</a>`
       }

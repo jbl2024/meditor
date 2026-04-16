@@ -28,10 +28,26 @@ describe('appShellDocuments', () => {
     ).toEqual(['Hello', 'Alias', 'Code'])
   })
 
-  it('resolves existing wikilink targets by exact and basename match', () => {
-    const files = ['notes/a.md', 'journal/2026/03/2026-03-06.md', 'deep/nested/topic.md']
+  it('resolves existing wikilink targets by exact, index, and basename match', () => {
+    const files = [
+      'notes/a.md',
+      'journal/2026/03/2026-03-06.md',
+      'deep/nested/topic.md',
+      'notes/tools/index.md',
+      'notes/tools.md'
+    ]
     expect(resolveExistingWikilinkPath('notes/a', files)).toBe('notes/a.md')
     expect(resolveExistingWikilinkPath('topic', files)).toBe('deep/nested/topic.md')
+    expect(resolveExistingWikilinkPath('notes/tools', files)).toBe('notes/tools.md')
+  })
+
+  it('prefers a directory index when the exact markdown file is missing', () => {
+    const files = ['notes/tools/index.md']
+    expect(resolveExistingWikilinkPath('notes/tools', files)).toBe('notes/tools/index.md')
+  })
+
+  it('returns null when neither the file nor its index exists', () => {
+    expect(resolveExistingWikilinkPath('notes/tools', [])).toBeNull()
   })
 
   it('derives a modal prefix from a workspace parent path', () => {

@@ -102,6 +102,10 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
     return element?.closest('a') as HTMLAnchorElement | null
   }
 
+  function markdownTargetFromAnchor(anchor: HTMLAnchorElement): string {
+    return (anchor.getAttribute('data-markdown-target') ?? '').trim()
+  }
+
   function splitPath(path: string): { prefix: string; segments: string[] } | null {
     const normalized = normalizeWorkspacePath(path)
     if (!normalized) return null
@@ -263,6 +267,19 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
     const modifierPressed = event.metaKey || event.ctrlKey
     const anchorPos = pos >= 0 ? pos : resolveAnchorPos(view, anchor)
 
+    const markdownTarget = markdownTargetFromAnchor(anchor)
+    if (markdownTarget) {
+      if (modifierPressed) {
+        event.preventDefault()
+        event.stopPropagation()
+        return openLinkPopoverFromAnchorSelection(view, path, anchor, anchorPos)
+      }
+      event.preventDefault()
+      event.stopPropagation()
+      void options.openLinkTargetWithAutosave(markdownTarget)
+      return true
+    }
+
     const wikilinkTarget = (
       anchor.getAttribute('data-target') ??
       anchor.getAttribute('data-wikilink-target') ??
@@ -304,8 +321,8 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
       return true
     }
 
-    const markdownTarget = resolveRelativeMarkdownTarget(path, href)
-    if (markdownTarget) {
+    const resolvedMarkdownTarget = resolveRelativeMarkdownTarget(path, href)
+    if (resolvedMarkdownTarget) {
       if (modifierPressed) {
         event.preventDefault()
         event.stopPropagation()
@@ -313,7 +330,7 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
       }
       event.preventDefault()
       event.stopPropagation()
-      void options.openLinkTargetWithAutosave(markdownTarget)
+      void options.openLinkTargetWithAutosave(resolvedMarkdownTarget)
       return true
     }
 
@@ -345,7 +362,19 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
           link: false
         }),
         Link.configure({
-          openOnClick: false
+          openOnClick: false,
+          HTMLAttributes: {
+            target: null,
+            rel: null,
+            class: null
+          },
+          isAllowedUri: (url, ctx) => {
+            const value = String(url ?? '').trim()
+            if (!value) return false
+            if (parseInternalAnchorHref(value)) return true
+            if (parseRelativeMarkdownHref(value)) return true
+            return ctx.defaultValidate(value)
+          }
         }),
         ListKit.configure({
           taskItem: {

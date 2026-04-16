@@ -6,7 +6,7 @@ import { parseWikilinkTarget, type WikilinkAnchor } from '../../domains/editor/l
 import { type HeadingNode } from '../../domains/editor/composables/useEditorState'
 import type { QuickOpenResult } from './useAppQuickOpen'
 import type { SidebarMode } from './useWorkspaceState'
-import { isAbsoluteWorkspacePath, normalizeWorkspacePath } from '../../domains/explorer/lib/workspacePaths'
+import { isAbsoluteWorkspacePath, normalizeWorkspacePath, toWorkspaceRelativePath } from '../../domains/explorer/lib/workspacePaths'
 
 type VirtualDoc = {
   content: string
@@ -164,6 +164,21 @@ function resolveRelativeWorkspacePath(basePath: string, relativePath: string): s
     : base.prefix
       ? `${base.prefix}${segments.join('/')}`
       : segments.join('/')
+}
+
+function findExistingMarkdownTarget(
+  targetPath: string,
+  root: string,
+  markdownFiles: string[],
+  resolveExistingWikilinkPath: (target: string, markdownFiles: string[]) => string | null
+): string | null {
+  const exact = resolveExistingWikilinkPath(targetPath, markdownFiles)
+  if (exact) return exact
+
+  if (!isAbsoluteWorkspacePath(targetPath)) return null
+  const relativeTarget = toWorkspaceRelativePath(root, targetPath)
+  if (!relativeTarget || relativeTarget === targetPath) return null
+  return resolveExistingWikilinkPath(relativeTarget, markdownFiles)
 }
 
 /**
@@ -361,7 +376,12 @@ export function useAppShellOpenFlow(options: AppShellOpenFlowOptions) {
     }
 
     const markdownFiles = await options.dataPort.loadWikilinkTargets()
-    const existing = options.dataPort.resolveExistingWikilinkPath(targetPath, markdownFiles)
+    const existing = findExistingMarkdownTarget(
+      targetPath,
+      root,
+      markdownFiles,
+      options.dataPort.resolveExistingWikilinkPath
+    )
 
     if (existing) {
       const opened = await options.navigationPort.openTabWithAutosave(

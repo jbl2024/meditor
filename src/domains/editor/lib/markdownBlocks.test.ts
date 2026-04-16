@@ -88,12 +88,18 @@ describe('inline internal markdown links', () => {
   })
 
   it('renders relative markdown file links as local anchors', () => {
-    expect(inlineTextToHtml('[Install](./install_pc.md)')).toBe('<a href="./install_pc.md">Install</a>')
+    expect(inlineTextToHtml('[Install](./install_pc.md)')).toBe('<a href="./install_pc.md" data-markdown-target="./install_pc.md">Install</a>')
   })
 
   it('renders relative note links without markdown extensions as local anchors', () => {
     expect(inlineTextToHtml('[Créer un formulaire GLPI](creer_formulaire_glpi)')).toBe(
-      '<a href="creer_formulaire_glpi">Créer un formulaire GLPI</a>'
+      '<a href="creer_formulaire_glpi" data-markdown-target="creer_formulaire_glpi">Créer un formulaire GLPI</a>'
+    )
+  })
+
+  it('renders markdown file links without a leading dot as local anchors too', () => {
+    expect(inlineTextToHtml('[Mattermost](mattermost/index.md)')).toBe(
+      '<a href="mattermost/index.md" data-markdown-target="mattermost/index.md">Mattermost</a>'
     )
   })
 
@@ -123,7 +129,7 @@ describe('inline internal markdown links', () => {
         style: 'unordered',
         items: [
           {
-            content: '<a href="creer_formulaire_glpi">Créer un formulaire GLPI</a>',
+            content: '<a href="creer_formulaire_glpi" data-markdown-target="creer_formulaire_glpi">Créer un formulaire GLPI</a>',
             items: []
           }
         ]

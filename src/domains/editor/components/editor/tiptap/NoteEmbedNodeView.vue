@@ -238,6 +238,15 @@ function onPreviewClick(event: MouseEvent) {
   const anchor = findPreviewAnchor(event.target)
   if (!anchor) return
 
+  const markdownTarget = anchor.getAttribute('data-markdown-target')?.trim() ?? ''
+  if (markdownTarget) {
+    if (event.metaKey || event.ctrlKey) return
+    event.preventDefault()
+    event.stopPropagation()
+    void props.extension.options?.openLinkTarget?.(markdownTarget)
+    return
+  }
+
   const href = anchor.getAttribute('href')?.trim() ?? ''
   if (!href) return
 
@@ -246,9 +255,9 @@ function onPreviewClick(event: MouseEvent) {
   event.preventDefault()
   event.stopPropagation()
 
-  const markdownTarget = resolvePreviewMarkdownPath(previewPath.value, href)
-  if (markdownTarget) {
-    void props.extension.options?.openLinkTarget?.(markdownTarget)
+  const resolvedMarkdownTarget = resolvePreviewMarkdownPath(previewPath.value, href)
+  if (resolvedMarkdownTarget) {
+    void props.extension.options?.openLinkTarget?.(resolvedMarkdownTarget)
     return
   }
 

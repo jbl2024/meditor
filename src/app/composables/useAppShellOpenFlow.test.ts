@@ -70,16 +70,27 @@ function createHarness() {
   const isIsoDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value)
   const sanitizeRelativePath = (value: string) => value.trim().replace(/\\/g, '/')
   const resolveExistingWikilinkPath = vi.fn((target: string, markdownFiles: string[]) => {
-    const normalizedTarget = target.replace(/^\.\//, '')
-    const match = markdownFiles.find((candidate) =>
-      candidate === `${workingFolderPath.value}/${normalizedTarget}` ||
-      candidate === normalizedTarget ||
-      candidate.endsWith(`/${normalizedTarget}`)
-    )
-    if (!match) return null
-    return match.startsWith(`${workingFolderPath.value}/`)
-      ? match.slice(workingFolderPath.value.length + 1)
-      : match
+    const normalizedTarget = target.replace(/^\.\//, '').replace(/\.(md|markdown)$/i, '').toLowerCase()
+    const exact = markdownFiles.find((candidate) => candidate.replace(/\.(md|markdown)$/i, '').toLowerCase() === normalizedTarget)
+    if (exact) return exact
+
+    const indexMatch = markdownFiles.find((candidate) => candidate.replace(/\.(md|markdown)$/i, '').toLowerCase() === `${normalizedTarget}/index`)
+    if (indexMatch) return indexMatch
+
+    const basenameMatches = markdownFiles.filter((candidate) => {
+      const normalized = candidate.replace(/\.(md|markdown)$/i, '').toLowerCase()
+      const stem = normalized.split('/').pop() ?? normalized
+      return stem === normalizedTarget
+    })
+    if (basenameMatches.length === 1) return basenameMatches[0]
+
+    const suffixMatches = markdownFiles.filter((candidate) => {
+      const normalized = candidate.replace(/\.(md|markdown)$/i, '').toLowerCase()
+      return normalized.endsWith(`/${normalizedTarget}`)
+    })
+    if (suffixMatches.length === 1) return suffixMatches[0]
+
+    return null
   })
   const extractHeadingsFromMarkdown = vi.fn(() => ['Heading'])
 
@@ -233,6 +244,104 @@ describe('useAppShellOpenFlow', () => {
     })
     expect(harness.openTabWithAutosave).toHaveBeenCalledWith('/vault/notes/creer_formulaire_glpi.md', {
       focusFirstContentBlock: true
+    })
+    harness.scope.stop()
+  })
+
+  it('prefers tools.md over tools/index.md when both exist', async () => {
+    const harness = createHarness()
+    harness.activeFilePath.value = '/vault/notes/current.md'
+    harness.loadWikilinkTargets.mockResolvedValue([
+      '/vault/notes/tools/index.md',
+      '/vault/notes/tools.md'
+    ])
+
+    await expect(harness.api.openWikilinkTarget('tools')).resolves.toBe(true)
+
+    expect(harness.resolveExistingWikilinkPath).toHaveBeenCalledWith(
+      '/vault/notes/tools',
+      ['/vault/notes/tools/index.md', '/vault/notes/tools.md']
+    )
+    expect(harness.openTabWithAutosave).toHaveBeenCalledWith('/vault/notes/tools.md')
+    expect(harness.virtualDocs.value['/vault/notes/tools.md']).toBeUndefined()
+    harness.scope.stop()
+  })
+
+  it('opens tools/index.md when the direct markdown file is missing', async () => {
+    const harness = createHarness()
+    harness.activeFilePath.value = '/vault/notes/current.md'
+    harness.loadWikilinkTargets.mockResolvedValue(['/vault/notes/tools/index.md'])
+
+    await expect(harness.api.openWikilinkTarget('tools')).resolves.toBe(true)
+
+    expect(harness.resolveExistingWikilinkPath).toHaveBeenCalledWith(
+      '/vault/notes/tools',
+      ['/vault/notes/tools/index.md']
+    )
+    expect(harness.openTabWithAutosave).toHaveBeenCalledWith('/vault/notes/tools/index.md')
+    expect(harness.virtualDocs.value['/vault/notes/tools.md']).toBeUndefined()
+    harness.scope.stop()
+  })
+
+  it('opens tools/index.md for a relative ./tools target when workspace markdown files are relative', async () => {
+    const harness = createHarness()
+    harness.activeFilePath.value = '/vault/notes/current.md'
+    harness.loadWikilinkTargets.mockResolvedValue(['notes/tools/index.md'])
+
+    await expect(harness.api.openWikilinkTarget('./tools')).resolves.toBe(true)
+
+    expect(harness.resolveExistingWikilinkPath).toHaveBeenNthCalledWith(
+      1,
+      '/vault/notes/tools',
+      ['notes/tools/index.md']
+    )
+    expect(harness.resolveExistingWikilinkPath).toHaveBeenNthCalledWith(
+      2,
+      'notes/tools',
+      ['notes/tools/index.md']
+    )
+    expect(harness.openTabWithAutosave).toHaveBeenCalledWith('/vault/notes/tools/index.md')
+    expect(harness.virtualDocs.value['/vault/notes/tools.md']).toBeUndefined()
+    harness.scope.stop()
+  })
+
+  it('opens tools/index.md for a bare tools target when workspace markdown files are relative', async () => {
+    const harness = createHarness()
+    harness.activeFilePath.value = '/vault/notes/current.md'
+    harness.loadWikilinkTargets.mockResolvedValue(['notes/tools/index.md'])
+
+    await expect(harness.api.openWikilinkTarget('tools')).resolves.toBe(true)
+
+    expect(harness.resolveExistingWikilinkPath).toHaveBeenNthCalledWith(
+      1,
+      '/vault/notes/tools',
+      ['notes/tools/index.md']
+    )
+    expect(harness.resolveExistingWikilinkPath).toHaveBeenNthCalledWith(
+      2,
+      'notes/tools',
+      ['notes/tools/index.md']
+    )
+    expect(harness.openTabWithAutosave).toHaveBeenCalledWith('/vault/notes/tools/index.md')
+    expect(harness.virtualDocs.value['/vault/notes/tools.md']).toBeUndefined()
+    harness.scope.stop()
+  })
+
+  it('creates tools.md when neither tools.md nor tools/index.md exists', async () => {
+    const harness = createHarness()
+    harness.activeFilePath.value = '/vault/notes/current.md'
+    harness.loadWikilinkTargets.mockResolvedValue([])
+    harness.resolveExistingWikilinkPath.mockReturnValue(null)
+    harness.pathExists.mockResolvedValue(false)
+
+    await expect(harness.api.openWikilinkTarget('tools')).resolves.toBe(true)
+
+    expect(harness.openTabWithAutosave).toHaveBeenCalledWith('/vault/notes/tools.md', {
+      focusFirstContentBlock: true
+    })
+    expect(harness.virtualDocs.value['/vault/notes/tools.md']).toEqual({
+      content: '',
+      titleLine: ''
     })
     harness.scope.stop()
   })
