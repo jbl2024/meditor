@@ -14,6 +14,7 @@ import type {
   SecondBrainSessionSummary
 } from '../../../shared/api/apiTypes'
 import { fetchAlterList } from '../../alters/lib/altersApi'
+import { useAlterCatalogSync } from '../../alters/composables/useAlterCatalogSync'
 import { useEchoesPack } from '../../echoes/composables/useEchoesPack'
 import type { EchoesItem } from '../../echoes/lib/echoes'
 import {
@@ -79,6 +80,7 @@ export function useSecondBrainSessionWorkflow(options: UseSecondBrainSessionWork
   const selectedEchoesContextPath = ref('')
 
   const alterSettings = computed<AppSettingsAlters>(() => options.settings.value ?? DEFAULT_ALTER_SETTINGS)
+  const alterCatalogSync = useAlterCatalogSync()
 
   /**
    * Converts a workspace path to a display-friendly relative path.
@@ -348,6 +350,13 @@ export function useSecondBrainSessionWorkflow(options: UseSecondBrainSessionWork
       availableAlters.value = []
     }
   }
+
+  watch(
+    () => alterCatalogSync.revision.value,
+    () => {
+      void refreshAlterList()
+    }
+  )
 
   /**
    * Persists the selected Alter for the active session.

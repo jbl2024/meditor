@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type {
   AlterPayload,
   AlterRevisionPayload,
@@ -21,6 +21,7 @@ import {
   previewWorkspaceAlter,
   updateWorkspaceAlter
 } from '../lib/altersApi'
+import { useAlterCatalogSync } from './useAlterCatalogSync'
 
 /**
  * Alters manager workflow state for list/detail/wizard operations.
@@ -72,6 +73,7 @@ export function useAlterManager() {
   const wizardStep = ref(0)
   const wizardMode = ref<'create' | 'edit'>('create')
   const draft = ref<CreateAlterPayload>(createAlterDraft())
+  const alterCatalogSync = useAlterCatalogSync()
 
   const hasActiveAlter = computed(() => Boolean(activeAlter.value))
 
@@ -167,6 +169,7 @@ export function useAlterManager() {
       }
       wizardOpen.value = false
       await refreshList(result.id)
+      alterCatalogSync.bump()
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Could not save Alter.'
     } finally {
@@ -189,6 +192,7 @@ export function useAlterManager() {
       const created = await createWorkspaceAlter(generatedDraft)
       wizardOpen.value = false
       await refreshList(created.id)
+      alterCatalogSync.bump()
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Could not generate Alter.'
     } finally {
@@ -200,17 +204,26 @@ export function useAlterManager() {
     if (!activeAlter.value) return
     const duplicated = await duplicateWorkspaceAlter(activeAlter.value.id)
     await refreshList(duplicated.id)
+    alterCatalogSync.bump()
   }
 
   async function deleteActiveAlter() {
     if (!activeAlter.value) return
     await deleteWorkspaceAlter(activeAlter.value.id)
     await refreshList()
+    alterCatalogSync.bump()
   }
 
   async function openRevision(revisionId: string) {
     previewRevision.value = await fetchAlterRevision(revisionId)
   }
+
+  watch(
+    () => alterCatalogSync.revision.value,
+    () => {
+      void refreshList()
+    }
+  )
 
   return {
     list,
