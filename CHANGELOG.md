@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.37.5] - 2026-04-16
+
+### Fixed
+- fix(alters): refresh alter lists across shared views (ab4d204)
+
 ## [0.37.4] - 2026-04-16
 
 ### Fixed
