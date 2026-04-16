@@ -13,6 +13,8 @@ export type NoteEmbedExtensionOptions = {
   loadEmbeddedNotePreview?: (target: string) => Promise<EmbeddedNotePreview | null>
   openEmbeddedNote?: (target: string) => Promise<void>
   restoreEmbeddedNoteInline?: (target: string, editor: Editor, getPos: () => number) => Promise<void>
+  openLinkTarget?: (target: string) => Promise<void>
+  openExternalUrl?: (value: string) => Promise<void>
 }
 
 export const NoteEmbedNode = Node.create<NoteEmbedExtensionOptions>({
@@ -26,7 +28,9 @@ export const NoteEmbedNode = Node.create<NoteEmbedExtensionOptions>({
     return {
       loadEmbeddedNotePreview: async () => null,
       openEmbeddedNote: async () => {},
-      restoreEmbeddedNoteInline: async () => {}
+      restoreEmbeddedNoteInline: async () => {},
+      openLinkTarget: async () => {},
+      openExternalUrl: async () => {}
     }
   },
 

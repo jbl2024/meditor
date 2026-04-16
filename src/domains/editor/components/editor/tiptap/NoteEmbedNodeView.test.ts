@@ -40,6 +40,8 @@ function mountHarness(options?: {
 
   const target = ref(options?.target ?? 'notes/current.md')
   const loadEmbeddedNotePreview = vi.fn(async () => options?.preview ?? null)
+  const openLinkTarget = vi.fn(async () => {})
+  const openEmbeddedNote = vi.fn(async () => {})
 
   const Harness = defineComponent({
     setup() {
@@ -49,7 +51,8 @@ function mountHarness(options?: {
         extension: {
           options: {
             loadEmbeddedNotePreview,
-            openEmbeddedNote: vi.fn(async () => {}),
+            openEmbeddedNote,
+            openLinkTarget,
             restoreEmbeddedNoteInline: vi.fn(async () => {})
           }
         }
@@ -62,7 +65,7 @@ function mountHarness(options?: {
   app.provide('decorationClasses', ref(''))
   app.mount(root)
 
-  return { app, root, loadEmbeddedNotePreview }
+  return { app, root, loadEmbeddedNotePreview, openLinkTarget, openEmbeddedNote }
 }
 
 describe('NoteEmbedNodeView', () => {
@@ -101,6 +104,26 @@ describe('NoteEmbedNodeView', () => {
     expect(hoisted.readImageDataUrl).toHaveBeenCalledWith(
       '/vault/assets/images/Formulaire_GLPI/Pasted image 20260325152608.png'
     )
+
+    harness.app.unmount()
+  })
+
+  it('opens relative markdown links inside embedded previews from the preview path', async () => {
+    const harness = mountHarness({
+      preview: {
+        path: '/vault/notes/projects/current.md',
+        html: '<p><a href="mattermost/index.md">Mattermost</a></p>'
+      }
+    })
+    await flush()
+
+    const link = harness.root.querySelector('.tomosona-note-embed-preview a') as HTMLAnchorElement | null
+    expect(link).toBeTruthy()
+    link?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    await flush()
+
+    expect(harness.openLinkTarget).toHaveBeenCalledWith('/vault/notes/projects/mattermost/index.md')
+    expect(harness.openEmbeddedNote).not.toHaveBeenCalled()
 
     harness.app.unmount()
   })

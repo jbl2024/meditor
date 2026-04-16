@@ -373,7 +373,9 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
         NoteEmbedNode.configure({
           loadEmbeddedNotePreview: options.loadEmbeddedNotePreview,
           openEmbeddedNote: options.openEmbeddedNote,
-          restoreEmbeddedNoteInline: options.restoreEmbeddedNoteInline
+          restoreEmbeddedNoteInline: options.restoreEmbeddedNoteInline,
+          openLinkTarget: (target: string) => options.openLinkTargetWithAutosave(target),
+          openExternalUrl: (value: string) => options.openExternalUrl(value)
         }),
         CodeBlockNode,
         SpellcheckExtension.configure({

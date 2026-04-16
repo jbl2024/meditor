@@ -4,6 +4,7 @@ import { PencilSquareIcon, ArrowUturnLeftIcon } from '@heroicons/vue/24/outline'
 import { NodeViewWrapper, type Editor } from '@tiptap/vue-3'
 import { readImageDataUrl } from '../../../../../shared/api/workspaceApi'
 import { decodeWorkspacePathSegments, isAbsoluteWorkspacePath } from '../../../../../domains/explorer/lib/workspacePaths'
+import { parseRelativeMarkdownHref } from '../../../lib/markdownBlocks'
 import { parseWikilinkTarget } from '../../../lib/wikilinks'
 
 type EmbeddedNotePreview = {
@@ -15,14 +16,16 @@ const props = defineProps<{
   node: { attrs: { target?: string } }
   editor: Editor
   getPos?: () => number
-  extension: {
-    options?: {
-      loadEmbeddedNotePreview?: (target: string) => Promise<EmbeddedNotePreview | null>
-      openEmbeddedNote?: (target: string) => Promise<void>
-      restoreEmbeddedNoteInline?: (target: string, editor: Editor, getPos: () => number) => Promise<void>
+    extension: {
+      options?: {
+        loadEmbeddedNotePreview?: (target: string) => Promise<EmbeddedNotePreview | null>
+        openEmbeddedNote?: (target: string) => Promise<void>
+        restoreEmbeddedNoteInline?: (target: string, editor: Editor, getPos: () => number) => Promise<void>
+        openLinkTarget?: (target: string) => Promise<void>
+        openExternalUrl?: (value: string) => Promise<void>
+      }
     }
-  }
-}>()
+  }>()
 
 const previewHtml = ref('')
 const previewPath = ref('')
@@ -83,6 +86,31 @@ function resolvePreviewImagePath(notePath: string, rawSrc: string): string | nul
   return base.prefix === '/'
     ? `/${segments.join('/')}`
     : `${base.prefix}${segments.join('/')}`
+}
+
+function resolvePreviewMarkdownPath(notePath: string, href: string): string | null {
+  const parsed = parseRelativeMarkdownHref(href)
+  if (!parsed) return null
+
+  const base = splitAbsolutePath(notePath)
+  if (!base || base.segments.length === 0) return null
+  const segments = base.segments.slice(0, -1)
+  const relativePath = decodeWorkspacePathSegments(parsed.path)
+
+  for (const segment of relativePath.split('/')) {
+    if (!segment || segment === '.') continue
+    if (segment === '..') {
+      if (!segments.length) return null
+      segments.pop()
+      continue
+    }
+    segments.push(segment)
+  }
+
+  const resolvedPath = base.prefix === '/'
+    ? `/${segments.join('/')}`
+    : `${base.prefix}${segments.join('/')}`
+  return parsed.fragment ? `${resolvedPath}#${parsed.fragment}` : resolvedPath
 }
 
 function rewriteLocalImageSources(html: string, notePath: string): string {
@@ -197,6 +225,39 @@ async function restoreTargetInline() {
   }
 }
 
+function findPreviewAnchor(target: EventTarget | null): HTMLAnchorElement | null {
+  const element = target instanceof Element
+    ? target
+    : target instanceof Node
+      ? target.parentElement
+      : null
+  return element?.closest('a') as HTMLAnchorElement | null
+}
+
+function onPreviewClick(event: MouseEvent) {
+  const anchor = findPreviewAnchor(event.target)
+  if (!anchor) return
+
+  const href = anchor.getAttribute('href')?.trim() ?? ''
+  if (!href) return
+
+  if (event.metaKey || event.ctrlKey) return
+
+  event.preventDefault()
+  event.stopPropagation()
+
+  const markdownTarget = resolvePreviewMarkdownPath(previewPath.value, href)
+  if (markdownTarget) {
+    void props.extension.options?.openLinkTarget?.(markdownTarget)
+    return
+  }
+
+  const safeExternalHref = href.trim()
+  if (/^(?:https?|mailto:)/i.test(safeExternalHref)) {
+    void props.extension.options?.openExternalUrl?.(safeExternalHref)
+  }
+}
+
 watch(target, () => {
   void refreshPreview()
 }, { immediate: true })
@@ -250,6 +311,7 @@ onBeforeUnmount(() => {
         ref="previewRoot"
         class="tomosona-note-embed-preview"
         v-html="renderedPreviewHtml"
+        @click="onPreviewClick"
       />
       <p v-else class="tomosona-note-embed-fallback">
         {{ error || 'Preview unavailable.' }}
