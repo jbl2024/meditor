@@ -18,6 +18,12 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.37.4] - 2026-04-16
+
+### Fixed
+- fix(shell): resolve relative markdown index targets from workspace file list (f336c76)
+- fix(editor): open relative markdown links in embedded previews (c7b9f64)
+
 ## [0.37.3] - 2026-04-15
 
 ### Fixed
