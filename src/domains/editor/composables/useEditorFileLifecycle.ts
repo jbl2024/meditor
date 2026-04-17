@@ -255,6 +255,26 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
     })
   }
 
+  /**
+   * Empty notes still need a real paragraph so the editor has a stable focus target.
+   *
+   * This keeps saved markdown empty while ensuring newly opened notes do not render
+   * as a blank doc with nothing to focus.
+   */
+  function toLoadedTiptapDoc(blocks: EditorBlock[]) {
+    const doc = toTiptapDoc(blocks)
+    if (Array.isArray(doc.content) && doc.content.length > 0) return doc
+    return {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: []
+        }
+      ]
+    }
+  }
+
   function showLoadingOverlay(body: string, stageLabel: string, progressPercent: number, indeterminate = false) {
     if (!uiPort.ui.isLoadingLargeDocument.value) {
       uiPort.ui.isLoadingLargeDocument.value = true
@@ -336,7 +356,7 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
 
         sessionPort.setSuppressOnChange(true)
         try {
-          session.editor.commands.setContent(toTiptapDoc(parsed.blocks as EditorBlock[]), { emitUpdate: false })
+          session.editor.commands.setContent(toLoadedTiptapDoc(parsed.blocks as EditorBlock[]), { emitUpdate: false })
         } finally {
           sessionPort.setSuppressOnChange(false)
         }

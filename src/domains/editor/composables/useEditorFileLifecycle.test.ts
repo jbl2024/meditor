@@ -199,6 +199,28 @@ describe('useEditorFileLifecycle', () => {
     expect(options.sessionPort.setSuppressOnChange).not.toHaveBeenCalled()
   })
 
+  it('loads empty notes with a leading editable paragraph so focus has a target', async () => {
+    const { options, sessions } = createOptions({
+      ioPort: { openFile: vi.fn(async () => '') } as Partial<EditorFileLifecycleIoPort>
+    })
+
+    const lifecycle = useEditorFileLifecycle(options)
+    await lifecycle.loadCurrentFile('a.md', { requestId: 1 })
+
+    expect(sessions['a.md'].editor.commands.setContent).toHaveBeenCalledWith(
+      {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: []
+          }
+        ]
+      },
+      { emitUpdate: false }
+    )
+  })
+
   it('renames path state before persisting when title-triggered rename occurs', async () => {
     const { options, sessions } = createOptions({
       ioPort: {
