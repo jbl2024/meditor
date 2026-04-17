@@ -18,6 +18,19 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.38.0] - 2026-04-17
+
+### Added
+- feat(editor): open generic text files in source mode (ee92186)
+- feat(editor): add CodeMirror source mode (2c1859e)
+
+### Changed
+- chore(release): prepare v0.37.7 (5448b94)
+
+### Fixed
+- fix(editor): keep empty new notes focusable (6821690)
+- fix(editor): make top-level toc adapt to sparse headings (e729e88)
+
 ## [0.37.7] - 2026-04-17
 
 ### Fixed
