@@ -13,20 +13,97 @@ const WINDOWS_RESERVED_NAME_RE = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i
 const FORBIDDEN_FILE_CHARS_RE = /[<>:"/\\|?*\u0000-\u001f]/g
 const FORBIDDEN_FILE_NAME_CHARS_RE = /[<>:"\\|?*\u0000-\u001f]/
 const MAX_FILE_STEM_LENGTH = 120
-const SOURCE_TEXT_EXTENSIONS = new Set([
-  '.txt',
-  '.text',
-  '.json',
-  '.yaml',
-  '.yml',
-  '.toml',
-  '.ini',
-  '.cfg',
-  '.conf',
+const BINARY_FILE_EXTENSIONS = new Set([
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.gif',
+  '.webp',
+  '.bmp',
+  '.ico',
+  '.tif',
+  '.tiff',
+  '.avif',
+  '.heic',
+  '.heif',
+  '.svgz',
+  '.pdf',
+  '.doc',
+  '.docx',
+  '.xls',
+  '.xlsx',
+  '.ppt',
+  '.pptx',
+  '.odt',
+  '.ods',
+  '.odp',
+  '.epub',
+  '.zip',
+  '.tar',
+  '.gz',
+  '.bz2',
+  '.xz',
+  '.7z',
+  '.rar',
+  '.jar',
+  '.apk',
+  '.exe',
+  '.dll',
+  '.so',
+  '.dylib',
+  '.bin',
+  '.iso',
+  '.woff',
+  '.woff2',
+  '.ttf',
+  '.otf',
+  '.eot',
+  '.mp3',
+  '.wav',
+  '.flac',
+  '.aac',
+  '.ogg',
+  '.m4a',
+  '.mp4',
+  '.mkv',
+  '.mov',
+  '.avi',
+  '.webm'
+])
+const SOURCE_FILE_NAMES = new Set([
+  'dockerfile',
+  'makefile',
+  'gnumakefile',
+  'cmakelists.txt',
+  'procfile',
+  'readme',
+  'readme.md',
+  'readme.markdown',
+  'license',
+  'copying',
+  'changelog',
+  'authors',
+  'contributors',
+  '.gitignore',
+  '.gitattributes',
+  '.editorconfig',
+  '.npmignore',
+  '.npmrc',
+  '.yarnrc',
+  '.dockerignore',
   '.env',
-  '.csv',
-  '.tsv',
-  '.xml'
+  '.env.example',
+  'justfile',
+  'brewfile',
+  'rakefile',
+  'gemfile',
+  'podfile',
+  'cargo.lock',
+  'package.json',
+  'tsconfig.json',
+  'tsconfig.node.json',
+  'vite.config.ts',
+  'eslint.config.js'
 ])
 
 /** Returns the human-readable note title derived from a markdown file path. */
@@ -44,10 +121,14 @@ export function markdownExtensionFromPath(path: string): string {
 
 /** Returns true when a file should default to raw text editing. */
 export function isSourceTextPath(path: string): boolean {
-  const name = fileName(path)
+  const name = fileName(path).trim().toLowerCase()
+  if (!name) return false
+  if (isMarkdownPath(name)) return false
+  if (SOURCE_FILE_NAMES.has(name)) return true
+
   const match = name.match(/\.[^.]+$/)
-  if (!match) return false
-  return SOURCE_TEXT_EXTENSIONS.has(match[0].toLowerCase())
+  if (!match) return true
+  return !BINARY_FILE_EXTENSIONS.has(match[0])
 }
 
 /** Returns the default editor surface for a path. */
@@ -58,8 +139,9 @@ export function editorSurfaceModeForPath(path: string): 'rich' | 'source' {
 /** Returns a short label describing the source editor file type. */
 export function sourceEditorLanguageLabelForPath(path: string): string {
   const name = fileName(path)
+  const lower = name.toLowerCase()
   const ext = (name.match(/\.[^.]+$/)?.[0] ?? '').toLowerCase()
-  if (!ext) return 'text'
+  if (!ext) return SOURCE_FILE_NAMES.has(lower) ? lower : 'text'
   if (ext === '.md' || ext === '.markdown') return 'markdown'
   return ext.slice(1)
 }

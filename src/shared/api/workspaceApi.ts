@@ -49,6 +49,11 @@ export async function readTextFile(path: string): Promise<string> {
   return await invoke('read_text_file', { path })
 }
 
+/** Returns true when the file contents look like text rather than binary. */
+export async function isTextFile(path: string): Promise<boolean> {
+  return await invoke('is_text_file', { path })
+}
+
 /** Reads an image file and returns a browser-safe data URL. */
 export async function readImageDataUrl(path: string): Promise<string> {
   return await invoke('read_image_data_url', { path })

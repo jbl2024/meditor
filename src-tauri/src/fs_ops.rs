@@ -2,6 +2,7 @@
 use std::os::windows::fs::MetadataExt;
 use std::{
     env, fs,
+    io::Read,
     path::{Path, PathBuf},
     process::Command,
     time::{SystemTime, UNIX_EPOCH},
@@ -582,6 +583,21 @@ pub fn read_text_file(path: String) -> Result<String> {
 }
 
 #[tauri::command]
+pub fn is_text_file(path: String) -> Result<bool> {
+    let root = active_workspace_root()?;
+    let pb = normalize_existing_path(&path)?;
+    ensure_within_root(&root, &pb)?;
+    if pb.is_dir() || binary_file_extension_for_path(&pb) {
+        return Ok(false);
+    }
+
+    let mut file = fs::File::open(&pb)?;
+    let mut buffer = Vec::with_capacity(8192);
+    file.by_ref().take(8192).read_to_end(&mut buffer)?;
+    Ok(looks_like_text(&buffer))
+}
+
+#[tauri::command]
 pub fn read_pdf_data_url(path: String) -> Result<String> {
     let root = active_workspace_root()?;
     let pb = normalize_existing_path(&path)?;
@@ -603,6 +619,80 @@ fn image_mime_type_for_path(path: &Path) -> Option<&'static str> {
         "ico" => Some("image/x-icon"),
         _ => None,
     }
+}
+
+fn binary_file_extension_for_path(path: &Path) -> bool {
+    let Some(ext) = path.extension().and_then(|value| value.to_str()) else {
+        return false;
+    };
+    matches!(
+        ext.to_ascii_lowercase().as_str(),
+        "png"
+            | "jpg"
+            | "jpeg"
+            | "gif"
+            | "webp"
+            | "bmp"
+            | "ico"
+            | "tif"
+            | "tiff"
+            | "avif"
+            | "heic"
+            | "heif"
+            | "svgz"
+            | "pdf"
+            | "doc"
+            | "docx"
+            | "xls"
+            | "xlsx"
+            | "ppt"
+            | "pptx"
+            | "odt"
+            | "ods"
+            | "odp"
+            | "epub"
+            | "zip"
+            | "tar"
+            | "gz"
+            | "bz2"
+            | "xz"
+            | "7z"
+            | "rar"
+            | "jar"
+            | "apk"
+            | "exe"
+            | "dll"
+            | "so"
+            | "dylib"
+            | "bin"
+            | "iso"
+            | "woff"
+            | "woff2"
+            | "ttf"
+            | "otf"
+            | "eot"
+            | "mp3"
+            | "wav"
+            | "flac"
+            | "aac"
+            | "ogg"
+            | "m4a"
+            | "mp4"
+            | "mkv"
+            | "mov"
+            | "avi"
+            | "webm"
+    )
+}
+
+fn looks_like_text(bytes: &[u8]) -> bool {
+    if bytes.is_empty() {
+        return true;
+    }
+    if bytes.contains(&0) {
+        return false;
+    }
+    std::str::from_utf8(bytes).is_ok()
 }
 
 #[tauri::command]
@@ -1853,7 +1943,7 @@ mod tests {
 
     use super::{
         copy_entry, create_entry, create_extracted_note, duplicate_entry, list_children,
-        list_markdown_files, move_entry, open_external_url, open_path_external,
+        is_text_file, list_markdown_files, move_entry, open_external_url, open_path_external,
         pandoc_input_format_for_path, read_pdf_data_url, read_text_file, rename_entry,
         preview_srcdoc_csp_meta, render_spreadsheet_sheet_html, reveal_in_file_manager,
         sanitize_external_url, spreadsheet_column_label, trash_entry, ConflictStrategy, EntryKind,
@@ -2022,6 +2112,20 @@ mod tests {
 
         let copied_content = read_text_file(duplicated).expect("read duplicated");
         assert_eq!(copied_content, "hello");
+        fs::remove_dir_all(dir).expect("cleanup");
+    }
+
+    #[test]
+    fn is_text_file_detects_text_and_binary_samples() {
+        let dir = make_temp_dir();
+        let _guard = activate_workspace(&dir);
+        let text_path = dir.join("script.ts");
+        let binary_path = dir.join("image.png");
+        fs::write(&text_path, "const value = 1;\n").expect("write text");
+        fs::write(&binary_path, [0, 159, 146, 150]).expect("write binary");
+
+        assert!(is_text_file(text_path.to_string_lossy().to_string()).expect("text"));
+        assert!(!is_text_file(binary_path.to_string_lossy().to_string()).expect("binary"));
         fs::remove_dir_all(dir).expect("cleanup");
     }
 

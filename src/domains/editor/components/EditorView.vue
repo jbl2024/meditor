@@ -462,8 +462,7 @@ watch(
   }
 )
 
-watch(isSourceSurface, async (next) => {
-  const path = currentPath.value
+watch([currentPath, isSourceSurface], async ([path, next]) => {
   if (!path) return
   if (next) {
     const requestId = sourceRuntime.nextRequestId()
@@ -476,7 +475,7 @@ watch(isSourceSurface, async (next) => {
   documentRuntime.ensureSession(path)
   documentRuntime.setActiveSession(path)
   await documentRuntime.loadCurrentFile(path, { forceReload: true, requestId })
-})
+}, { immediate: true })
 
 function onSpellcheckMenuEl(element: HTMLDivElement | null) {
   spellcheckFloatingEl.value = element

@@ -15,6 +15,7 @@ vi.mock('../../../shared/api/workspaceApi', () => ({
   moveEntry: vi.fn(),
   openPathExternal: vi.fn(),
   pathExists: vi.fn(async () => true),
+  isTextFile: vi.fn(async (path: string) => /\.(txt|text|md|markdown|ts|tsx|js|jsx|vue|css|scss|sass|less|cpp|c|h|hpp|rs|py|go|java|kt|sh|bash|zsh|fish|desktop)$/i.test(path) || !/\.(png|jpe?g|gif|webp|bmp|ico|pdf|zip|tar|gz|bz2|xz|7z|rar|docx?|xlsx?|pptx?|odt|ods|odp|epub|mp3|wav|flac|aac|ogg|m4a|mp4|mkv|mov|avi|webm|exe|dll|so|dylib|bin|iso|woff2?|ttf|otf|eot)$/i.test(path)),
   renameEntry: vi.fn(),
   revealInFileManager: vi.fn(),
   trashEntry: vi.fn()
@@ -256,6 +257,62 @@ describe('ExplorerTree', () => {
 
     expect(openPathExternal).toHaveBeenCalledWith('/vault/photo.png')
     expect(mounted.events).toEqual([])
+
+    mounted.app.unmount()
+  })
+
+  it('opens editable text files in-app on double click', async () => {
+    vi.mocked(openPathExternal).mockClear()
+    listChildren.mockImplementation(async (dirPath: string) => {
+      if (dirPath === '/vault') {
+        return [
+          {
+            name: 'test.txt',
+            path: '/vault/test.txt',
+            is_dir: false,
+            is_markdown: false,
+            has_children: false
+          }
+        ]
+      }
+      return []
+    })
+
+    const mounted = await mountHarness('/vault/test.txt')
+    const row = mounted.root.querySelector('[data-explorer-path="/vault/test.txt"]') as HTMLElement
+    row.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }))
+    await nextTick()
+
+    expect(openPathExternal).not.toHaveBeenCalled()
+    expect(mounted.events).toEqual(['open:/vault/test.txt'])
+
+    mounted.app.unmount()
+  })
+
+  it('opens generic source files in-app on double click', async () => {
+    vi.mocked(openPathExternal).mockClear()
+    listChildren.mockImplementation(async (dirPath: string) => {
+      if (dirPath === '/vault') {
+        return [
+          {
+            name: 'main.ts',
+            path: '/vault/main.ts',
+            is_dir: false,
+            is_markdown: false,
+            has_children: false
+          }
+        ]
+      }
+      return []
+    })
+
+    const mounted = await mountHarness('/vault/main.ts')
+    const row = mounted.root.querySelector('[data-explorer-path="/vault/main.ts"]') as HTMLElement
+    row.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }))
+    await nextTick()
+
+    expect(openPathExternal).not.toHaveBeenCalled()
+    expect(mounted.events).toEqual(['open:/vault/main.ts'])
 
     mounted.app.unmount()
   })

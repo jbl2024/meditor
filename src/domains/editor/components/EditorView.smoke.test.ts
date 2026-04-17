@@ -1,5 +1,5 @@
 import { createApp, defineComponent, h, nextTick, ref } from 'vue'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import EditorView from './EditorView.vue'
 
 async function flushUi() {
@@ -91,6 +91,47 @@ describe('EditorView smoke wiring', () => {
     expect(root.querySelector('.ProseMirror .editor-title-field')).toBeFalsy()
     expect(root.querySelector('.editor-holder .properties-panel')).toBeTruthy()
     expect(root.querySelector('.editor-shell > .properties-panel')).toBeFalsy()
+
+    app.unmount()
+  })
+
+  it('loads source files on initial mount without waiting for a mode switch', async () => {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+
+    const openFile = vi.fn(async (path: string) => {
+      if (path === 'src/main.ts') return 'import { createApp } from "vue"\ncreateApp({})'
+      return ''
+    })
+
+    const Harness = defineComponent({
+      setup() {
+        return () =>
+          h(EditorView, {
+            path: 'src/main.ts',
+            openPaths: ['src/main.ts'],
+            openFile,
+            saveFile: async () => ({ persisted: true }),
+            renameFileFromTitle: async (path: string, title: string) => ({ path, title }),
+            loadLinkTargets: async () => [],
+            loadLinkHeadings: async () => [],
+            loadPropertyTypeSchema: async () => ({}),
+            savePropertyTypeSchema: async () => {},
+            openLinkTarget: async () => false,
+            onStatus: () => {},
+            onOutline: () => {},
+            onProperties: () => {},
+            onPathRenamed: () => {}
+          })
+      }
+    })
+
+    const app = createApp(Harness)
+    app.mount(root)
+    await flushUi()
+
+    expect(openFile).toHaveBeenCalledWith('src/main.ts')
+    expect(root.querySelector('.cm-content')?.textContent ?? '').toContain('createApp({})')
 
     app.unmount()
   })

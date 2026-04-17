@@ -65,6 +65,7 @@ export type AppNavigationEditorPort = {
   focusFirstContentBlock: () => void
   getDocumentStatus: (path: string) => NavigationDocumentStatus
   isMarkdownPath: (path: string) => boolean
+  isTextFile: (path: string) => Promise<boolean>
 }
 
 /** Pane layout and surface routing used by shell navigation flows. */
@@ -245,7 +246,14 @@ export function useAppNavigationController(options: UseAppNavigationControllerOp
   async function openTabWithAutosave(path: string, navigation: NavigationOpenOptions = {}): Promise<boolean> {
     const target = path.trim()
     if (!target) return false
-    if (!navigation.targetPaneId && editorPort.activeFilePath.value === target && !navigation.revealInTargetPane) {
+    const activeTab = panePort.getActiveTab()
+    const activeIsDocument = activeTab?.type === 'document'
+    if (
+      !navigation.targetPaneId &&
+      activeIsDocument &&
+      editorPort.activeFilePath.value === target &&
+      !navigation.revealInTargetPane
+    ) {
       if (navigation.focusFirstContentBlock) {
         await nextTick()
         editorPort.focusFirstContentBlock()
@@ -256,7 +264,8 @@ export function useAppNavigationController(options: UseAppNavigationControllerOp
     if (!canSwitch) {
       return false
     }
-    if (options.editorPort.isMarkdownPath(target)) {
+    const sourcePath = options.editorPort.isMarkdownPath(target) || await options.editorPort.isTextFile(target)
+    if (sourcePath) {
       if (navigation.revealInTargetPane) {
         panePort.revealDocumentInPane(target, navigation.targetPaneId)
       } else {

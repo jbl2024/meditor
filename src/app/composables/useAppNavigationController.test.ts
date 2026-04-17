@@ -3,8 +3,8 @@ import { describe, expect, it, vi, afterEach } from 'vitest'
 import { useDocumentHistory } from '../../domains/editor/composables/useDocumentHistory'
 import { useAppNavigationController } from './useAppNavigationController'
 
-function createController(options: { saveClearsDirty?: boolean } = {}) {
-  const activeFilePath = ref('/vault/a.md')
+function createController(options: { saveClearsDirty?: boolean; activeFilePath?: string } = {}) {
+  const activeFilePath = ref(options.activeFilePath ?? '/vault/a.md')
   const allWorkspaceFiles = ref<string[]>([])
   const dirty = ref(false)
   const activePaneId = ref('pane-a')
@@ -42,7 +42,9 @@ function createController(options: { saveClearsDirty?: boolean } = {}) {
       focusEditor,
       focusFirstContentBlock,
       getDocumentStatus: () => ({ dirty: dirty.value, saveError: '' }),
-      isMarkdownPath: (path: string) => path.endsWith('.md') || path.endsWith('.markdown')
+      isMarkdownPath: (path: string) => path.endsWith('.md') || path.endsWith('.markdown'),
+      isTextFile: async (path: string) =>
+        /\.(txt|text|json|yaml|yml|toml|ini|cfg|conf|env|csv|tsv|xml|ts|tsx|js|jsx|vue|css|scss|sass|less|cpp|c|h|hpp|rs|py|go|java|kt|sh|bash|zsh|fish|desktop|ini|cmake|makefile|dockerfile)$/i.test(path) || !/\.(png|jpe?g|gif|webp|bmp|ico|pdf|zip|tar|gz|bz2|xz|7z|rar|docx?|xlsx?|pptx?|odt|ods|odp|epub|mp3|wav|flac|aac|ogg|m4a|mp4|mkv|mov|avi|webm|exe|dll|so|dylib|bin|iso|woff2?|ttf|otf|eot)$/i.test(path)
     },
     panePort: {
       getActiveTab: () => ({ type: activeTabType }),
@@ -148,6 +150,35 @@ describe('useAppNavigationController', () => {
     expect(openedInspector).toBe(true)
     expect(opened).toEqual([{ path: '/vault/image.png', paneId: undefined, reveal: false }])
     expect(recordRecentNote).toHaveBeenCalledWith('/vault/image.png')
+  })
+
+  it('opens source text files in document tabs', async () => {
+    const { controller, opened, recordRecentNote } = createController()
+
+    const openedDocument = await controller.openTabWithAutosave('/vault/test.txt')
+
+    expect(openedDocument).toBe(true)
+    expect(opened).toEqual([{ path: '/vault/test.txt', paneId: undefined, reveal: false }])
+    expect(recordRecentNote).toHaveBeenCalledWith('/vault/test.txt')
+  })
+
+  it('switches an inspector tab to a document tab for editable text files already active in the pane', async () => {
+    const { controller, opened, setActiveTabType } = createController({ activeFilePath: '/vault/test.txt' })
+
+    setActiveTabType('file-inspector')
+    const openedDocument = await controller.openTabWithAutosave('/vault/test.txt')
+
+    expect(openedDocument).toBe(true)
+    expect(opened).toEqual([{ path: '/vault/test.txt', paneId: undefined, reveal: false }])
+  })
+
+  it('opens generic source files as document tabs', async () => {
+    const { controller, opened } = createController({ activeFilePath: '/vault/other.md' })
+
+    const openedDocument = await controller.openTabWithAutosave('/vault/app.ts')
+
+    expect(openedDocument).toBe(true)
+    expect(opened).toEqual([{ path: '/vault/app.ts', paneId: undefined, reveal: false }])
   })
 
   it('records a debounced cosmos history snapshot', () => {

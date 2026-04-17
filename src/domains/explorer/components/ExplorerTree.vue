@@ -18,6 +18,7 @@ import { useExplorerKeyboard } from '../composables/useExplorerKeyboard'
 import { useExplorerOperations } from '../composables/useExplorerOperations'
 import { useExplorerTreeState } from '../composables/useExplorerTreeState'
 import { filterExplorerRows } from '../lib/explorerFilter'
+import { isTextFile } from '../../../shared/api/workspaceApi'
 
 const props = defineProps<{
   folderPath: string
@@ -244,13 +245,13 @@ function handleRowClick(event: MouseEvent, node: TreeNode) {
   }
 }
 
-function handleDoubleClick(node: TreeNode) {
+async function handleDoubleClick(node: TreeNode) {
   if (dnd.shouldSuppressPointerInteraction()) {
     return
   }
 
   if (node.is_dir) return
-  if (node.is_markdown) {
+  if (node.is_markdown || await isTextFile(node.path)) {
     emit('open', node.path)
   } else {
     void openPathExternal(node.path)

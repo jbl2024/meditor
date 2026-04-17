@@ -19,6 +19,7 @@ import {
   revealInFileManager,
   setWorkingFolder,
   selectWorkingFolder,
+  isTextFile,
   writeTextFile,
 } from '../shared/api/workspaceApi'
 import { convertMarkdownToDocx } from '../shared/api/docxConversionApi'
@@ -986,7 +987,8 @@ const navigationEditorPort = {
     editorRef.value?.focusFirstContentBlock()
   },
   getDocumentStatus: (path: string) => editorState.getStatus(path),
-  isMarkdownPath
+  isMarkdownPath,
+  isTextFile: async (path: string) => await isTextFile(path)
 }
 
 const navigationPanePort = {
@@ -2021,7 +2023,12 @@ useAppShellKeyboard({
           :layout="multiPane.layout.value"
           :active-document-path="activeFilePath"
           :all-workspace-files="allWorkspaceFiles"
+          :open-file="readTextFile"
           :open-externally="openPathNatively"
+          :save-file="async (path, text) => {
+            await writeTextFile(path, text)
+            return { persisted: true }
+          }"
           :spellcheck-enabled="spellcheckEnabled"
           :get-status="editorState.getStatus"
           :readNoteSnapshot="readNoteSnapshot"

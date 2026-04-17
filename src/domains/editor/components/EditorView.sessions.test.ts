@@ -61,6 +61,11 @@ function editorText(root: HTMLElement): string {
   return (activePane?.querySelector('.ProseMirror')?.textContent ?? '')
 }
 
+function sourceEditorText(root: HTMLElement): string {
+  const activePane = root.querySelector('.editor-session-pane[data-active="true"]')
+  return (activePane?.querySelector('.tomosona-source-editor .cm-content')?.textContent ?? '')
+}
+
 function titleText(root: HTMLElement): string {
   return (root.querySelector('.editor-title-field')?.textContent ?? '').trim()
 }
@@ -111,7 +116,33 @@ describe('EditorView per-document sessions', () => {
 
     expect(openFile).toHaveBeenCalledWith('a.md')
     expect(openFile).toHaveBeenCalledWith('b.md')
-    expect(openFile.mock.calls.filter(([path]) => path === 'a.md')).toHaveLength(1)
+    expect(openFile.mock.calls.filter(([path]) => path === 'a.md')).toHaveLength(2)
+
+    mounted.app.unmount()
+  })
+
+  it('reloads source text when switching between source files', async () => {
+    const controls: HarnessControls = {
+      path: ref('src/App.vue'),
+      openPaths: ref(['src/App.vue', 'src/main.ts'])
+    }
+
+    const openFile = vi.fn(async (path: string) => {
+      if (path === 'src/App.vue') return '<template>\n  <div>App</div>\n</template>'
+      if (path === 'src/main.ts') return 'import { createApp } from "vue"\ncreateApp({})'
+      return ''
+    })
+
+    const mounted = mountHarness({ controls, openFile })
+    await flushEditorUi()
+
+    expect(sourceEditorText(mounted.root)).toContain('<div>App</div>')
+
+    controls.path.value = 'src/main.ts'
+    await flushEditorUi()
+
+    expect(openFile).toHaveBeenCalledWith('src/main.ts')
+    expect(sourceEditorText(mounted.root)).toContain('createApp({})')
 
     mounted.app.unmount()
   })

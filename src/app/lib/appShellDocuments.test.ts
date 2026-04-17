@@ -22,10 +22,21 @@ describe('appShellDocuments', () => {
   it('classifies source text files and editor surfaces by extension', () => {
     expect(isSourceTextPath('/vault/note.txt')).toBe(true)
     expect(isSourceTextPath('/vault/note.md')).toBe(false)
+    expect(isSourceTextPath('/vault/app.ts')).toBe(true)
+    expect(isSourceTextPath('/vault/App.vue')).toBe(true)
+    expect(isSourceTextPath('/vault/style.css')).toBe(true)
+    expect(isSourceTextPath('/vault/main.cpp')).toBe(true)
+    expect(isSourceTextPath('/vault/something.desktop')).toBe(true)
+    expect(isSourceTextPath('/vault/Dockerfile')).toBe(true)
+    expect(isSourceTextPath('/vault/Makefile')).toBe(true)
+    expect(isSourceTextPath('/vault/README')).toBe(true)
+    expect(isSourceTextPath('/vault/image.png')).toBe(false)
+    expect(isSourceTextPath('/vault/archive.zip')).toBe(false)
     expect(editorSurfaceModeForPath('/vault/note.md')).toBe('rich')
     expect(editorSurfaceModeForPath('/vault/note.txt')).toBe('source')
     expect(sourceEditorLanguageLabelForPath('/vault/config.toml')).toBe('toml')
     expect(sourceEditorLanguageLabelForPath('/vault/note.md')).toBe('markdown')
+    expect(sourceEditorLanguageLabelForPath('/vault/Dockerfile')).toBe('dockerfile')
   })
 
   it('sanitizes titles and validates entry names', () => {
