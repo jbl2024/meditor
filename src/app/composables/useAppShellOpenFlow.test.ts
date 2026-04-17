@@ -229,7 +229,7 @@ describe('useAppShellOpenFlow', () => {
     harness.scope.stop()
   })
 
-  it('resolves bare relative wikilink targets against the current note directory and adds md when missing', async () => {
+  it('resolves bare wikilink targets against the current note directory and adds md when missing', async () => {
     const harness = createHarness()
     harness.activeFilePath.value = '/vault/notes/current.md'
     harness.loadWikilinkTargets.mockResolvedValue([])
@@ -324,6 +324,23 @@ describe('useAppShellOpenFlow', () => {
     )
     expect(harness.openTabWithAutosave).toHaveBeenCalledWith('/vault/notes/tools/index.md')
     expect(harness.virtualDocs.value['/vault/notes/tools.md']).toBeUndefined()
+    harness.scope.stop()
+  })
+
+  it('opens a workspace-root wikilink path with a folder and markdown extension', async () => {
+    const harness = createHarness()
+    harness.activeFilePath.value = '/vault/notes/current.md'
+    harness.loadWikilinkTargets.mockResolvedValue(['Projets/Supervision.md'])
+
+    await expect(harness.api.openWikilinkTarget('Projets/Supervision.md')).resolves.toBe(true)
+
+    expect(harness.resolveExistingWikilinkPath).toHaveBeenNthCalledWith(
+      1,
+      '/vault/Projets/Supervision.md',
+      ['Projets/Supervision.md']
+    )
+    expect(harness.openTabWithAutosave).toHaveBeenCalledWith('/vault/Projets/Supervision.md')
+    expect(harness.virtualDocs.value['/vault/Projets/Supervision.md']).toBeUndefined()
     harness.scope.stop()
   })
 

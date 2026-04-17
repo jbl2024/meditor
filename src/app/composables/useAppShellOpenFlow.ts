@@ -344,6 +344,9 @@ export function useAppShellOpenFlow(options: AppShellOpenFlowOptions) {
     const parsed = parseWikilinkTarget(target)
     const anchor = parsed.anchor
     const rawTarget = normalizeWorkspacePath(parsed.notePath).trim()
+    const currentDirectory = isAbsoluteWorkspacePath(options.editorPort.activeFilePath.value)
+      ? workspaceDirectoryPath(options.editorPort.activeFilePath.value) ?? root
+      : root
     const revealAnchor = async () => {
       if (!anchor) return true
       await nextTick()
@@ -361,14 +364,14 @@ export function useAppShellOpenFlow(options: AppShellOpenFlowOptions) {
       return await revealAnchor()
     }
 
+    const shouldResolveFromRoot =
+      !rawTarget.startsWith('./') &&
+      !rawTarget.startsWith('../') &&
+      (rawTarget.includes('/') || rawTarget.includes('\\') || /\.(md|markdown)$/i.test(rawTarget))
+
     const targetPath = isAbsoluteWorkspacePath(rawTarget)
       ? rawTarget
-      : resolveRelativeWorkspacePath(
-          isAbsoluteWorkspacePath(options.editorPort.activeFilePath.value)
-            ? workspaceDirectoryPath(options.editorPort.activeFilePath.value) ?? root
-            : root,
-          rawTarget
-        )
+      : resolveRelativeWorkspacePath(shouldResolveFromRoot ? root : currentDirectory, rawTarget)
 
     if (!targetPath) {
       options.workspacePort.errorMessage.value = 'Invalid link target.'
