@@ -40,6 +40,9 @@ export type UseEditorSlashInsertionOptions = {
 export function useEditorSlashInsertion(options: UseEditorSlashInsertionOptions) {
   /**
    * Builds a static TOC from the headings currently present in the note.
+   * The regular variant respects the requested maximum level, while the
+   * top-level variant uses a small heuristic to fall back to deeper headings
+   * when H1 is sparse.
    * V1 intentionally inserts regular content only; it does not create a live block.
    */
   function createTocAnchorLink(heading: string): JSONContent {
@@ -51,6 +54,39 @@ export function useEditorSlashInsertion(options: UseEditorSlashInsertionOptions)
         ? [{ type: 'link', attrs: { href: `#${slug}` } }]
         : []
     }
+  }
+
+  function normalizeTocHeadings() {
+    return options.currentHeadings()
+      .map((heading) => ({ level: heading.level, text: String(heading.text ?? '').trim() }))
+      .filter((heading): heading is { level: 1 | 2 | 3; text: string } => Boolean(heading.text))
+  }
+
+  /**
+   * Chooses a useful top-level depth from the current outline.
+   * Example: prefer H1 when there are at least two H1s; otherwise fall back to H2.
+   */
+  function resolveSmartTocLevel(headings: Array<{ level: 1 | 2 | 3; text: string }>): 1 | 2 | 3 {
+    const counts: Record<1 | 2 | 3, number> = { 1: 0, 2: 0, 3: 0 }
+    for (const heading of headings) {
+      if (heading.level >= 1 && heading.level <= 3) {
+        counts[heading.level] += 1
+      }
+    }
+
+    if (counts[1] >= 2) return 1
+    if (counts[2] >= 2) return 2
+    if (counts[3] >= 2) return 3
+
+    let bestLevel: 1 | 2 | 3 = 1
+    let bestCount = counts[1]
+    for (const level of [2, 3] as const) {
+      if (counts[level] > bestCount) {
+        bestLevel = level
+        bestCount = counts[level]
+      }
+    }
+    return bestLevel
   }
 
   function createTocListItem(heading: { level: 1 | 2 | 3; text: string }) {
@@ -66,13 +102,11 @@ export function useEditorSlashInsertion(options: UseEditorSlashInsertionOptions)
   }
 
   function createTocContent(maxLevel = 3): JSONContent {
-    const headings = options.currentHeadings()
-      .map((heading) => ({ level: heading.level, text: String(heading.text ?? '').trim() }))
-      .filter((heading): heading is { level: 1 | 2 | 3; text: string } =>
-        Boolean(heading.text) && heading.level <= maxLevel
-      )
+    const headings = normalizeTocHeadings()
+    const effectiveMaxLevel = maxLevel <= 1 ? resolveSmartTocLevel(headings) : maxLevel
+    const filteredHeadings = headings.filter((heading) => heading.level <= effectiveMaxLevel)
 
-    if (!headings.length) {
+    if (!filteredHeadings.length) {
       return {
         type: 'bulletList',
         content: [{ type: 'listItem', content: [{ type: 'paragraph', content: [] }] }]
@@ -82,7 +116,7 @@ export function useEditorSlashInsertion(options: UseEditorSlashInsertionOptions)
     const root: JSONContent[] = []
     const stack: Array<{ level: number; item: JSONContent | null; items: JSONContent[] }> = [{ level: 0, item: null, items: root }]
 
-    for (const heading of headings) {
+    for (const heading of filteredHeadings) {
       while (stack.length > 1 && stack[stack.length - 1]!.level >= heading.level) {
         stack.pop()
       }

@@ -21,6 +21,7 @@
 - Wikilink overlay state machine: `useEditorWikilinkOverlayState`
 - Wikilink target/headings cache and resolve: `useEditorWikilinkDataSource`
 - Slash descriptor insertion mapping: `useEditorSlashInsertion`
+  The `toc-top-level` variant stays heuristic-driven here so sparse H1-only notes can fall back to deeper headings without changing the regular `/toc` behavior.
 - Inline `@` macro trigger/insertion: `useEditorAtMenu`
 - Block gutter target/anchor/menu pinning: `useEditorBlockGutterController`
 - Header title state and rename sync: `useEditorTitleState`

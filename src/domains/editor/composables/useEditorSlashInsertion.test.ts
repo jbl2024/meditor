@@ -226,7 +226,7 @@ describe('useEditorSlashInsertion', () => {
     })
   })
 
-  it('can insert an h1-only table of contents variant', () => {
+  it('keeps an h1-focused table of contents when there are enough top-level headings', () => {
     const chain = createChain()
     const editor = { chain: vi.fn(() => chain) } as any
     const insertion = useEditorSlashInsertion({
@@ -235,8 +235,8 @@ describe('useEditorSlashInsertion', () => {
       readSlashContext: () => ({ from: 6, to: 10 }),
       currentHeadings: () => [
         { level: 1 as const, text: 'Intro' },
-        { level: 2 as const, text: 'Architecture' },
-        { level: 1 as const, text: 'Appendix' }
+        { level: 1 as const, text: 'Appendix' },
+        { level: 2 as const, text: 'Architecture' }
       ],
       slugifyHeading: (heading) => heading.toLowerCase()
     })
@@ -262,6 +262,63 @@ describe('useEditorSlashInsertion', () => {
             {
               type: 'paragraph',
               content: [{ type: 'text', text: 'Appendix', marks: [{ type: 'link', attrs: { href: '#appendix' } }] }]
+            }
+          ]
+        }
+      ]
+    })
+  })
+
+  it('falls back to h2 headings when h1 is sparse', () => {
+    const chain = createChain()
+    const editor = { chain: vi.fn(() => chain) } as any
+    const insertion = useEditorSlashInsertion({
+      getEditor: () => editor,
+      currentTextSelectionContext: () => ({ text: '/toc', nodeType: 'paragraph', from: 6, to: 10 }),
+      readSlashContext: () => ({ from: 6, to: 10 }),
+      currentHeadings: () => [
+        { level: 1 as const, text: 'Intro' },
+        { level: 2 as const, text: 'Architecture' },
+        { level: 2 as const, text: 'Roadmap' }
+      ],
+      slugifyHeading: (heading) => heading.toLowerCase()
+    })
+
+    const ok = insertion.insertBlockFromDescriptor('toc', { maxLevel: 1 })
+
+    expect(ok).toBe(true)
+    expect(chain.insertContent).toHaveBeenCalledWith({
+      type: 'bulletList',
+      content: [
+        {
+          type: 'listItem',
+          content: [
+            {
+              type: 'paragraph',
+              content: [{ type: 'text', text: 'Intro', marks: [{ type: 'link', attrs: { href: '#intro' } }] }]
+            },
+            {
+              type: 'bulletList',
+              content: [
+                {
+                  type: 'listItem',
+                  content: [
+                    {
+                      type: 'paragraph',
+                      content: [{ type: 'text', text: 'Architecture', marks: [{ type: 'link', attrs: { href: '#architecture' } }] }]
+                    }
+                  ]
+                },
+                {
+                  type: 'listItem',
+                  content: [
+                    {
+                      type: 'paragraph',
+                      content: [{ type: 'text', text: 'Roadmap', marks: [{ type: 'link', attrs: { href: '#roadmap' } }] }]
+                    }
+                  ]
+                }
+              ]
             }
           ]
         }
