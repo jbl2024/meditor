@@ -193,6 +193,86 @@ describe('useEditorTiptapSetup', () => {
     expect(options.inlineFormatToolbar.openLinkPopover).not.toHaveBeenCalled()
   })
 
+  it('routes wikilink, markdown, and external anchors through the correct handler precedence', async () => {
+    const openLinkTargetWithAutosave = vi.fn(async () => {})
+    const openExternalUrl = vi.fn(async () => {})
+    const revealAnchor = vi.fn(async () => true)
+    const { setup } = createSetup({ openLinkTargetWithAutosave, openExternalUrl, revealAnchor })
+    const editorOptions = setup.createEditorOptions('docs/current.md') as any
+
+    const view = {
+      state: { doc: { content: { size: 100 } } },
+      posAtDOM: vi.fn(() => 10)
+    } as any
+
+    const cases = [
+      {
+        name: 'wikilink target',
+        anchor: () => {
+          const element = document.createElement('a')
+          element.setAttribute('data-target', 'folder/note.md')
+          element.setAttribute('href', 'https://example.com')
+          return element
+        },
+        expected: () => expect(openLinkTargetWithAutosave).toHaveBeenCalledWith('folder/note.md')
+      },
+      {
+        name: 'markdown target marker',
+        anchor: () => {
+          const element = document.createElement('a')
+          element.setAttribute('data-markdown-target', 'mattermost/index.md')
+          element.setAttribute('href', 'https://example.com')
+          return element
+        },
+        expected: () => expect(openLinkTargetWithAutosave).toHaveBeenCalledWith('mattermost/index.md')
+      },
+      {
+        name: 'plain markdown href',
+        anchor: () => {
+          const element = document.createElement('a')
+          element.setAttribute('href', 'mattermost/index.md')
+          return element
+        },
+        expected: () => expect(openLinkTargetWithAutosave).toHaveBeenCalledWith('docs/mattermost/index.md')
+      },
+      {
+        name: 'external url',
+        anchor: () => {
+          const element = document.createElement('a')
+          element.setAttribute('href', 'https://example.com')
+          return element
+        },
+        expected: () => expect(openExternalUrl).toHaveBeenCalledWith('https://example.com')
+      },
+      {
+        name: 'internal anchor',
+        anchor: () => {
+          const element = document.createElement('a')
+          element.setAttribute('href', '#section')
+          return element
+        },
+        expected: () => expect(revealAnchor).toHaveBeenCalledWith({ heading: 'section' })
+      }
+    ] as const
+
+    for (const testCase of cases) {
+      openLinkTargetWithAutosave.mockClear()
+      openExternalUrl.mockClear()
+      revealAnchor.mockClear()
+
+      const click = editorOptions.editorProps.handleClick(view, 3, {
+        target: testCase.anchor(),
+        metaKey: false,
+        ctrlKey: false,
+        preventDefault: vi.fn(),
+        stopPropagation: vi.fn()
+      })
+
+      expect(click).toBe(true)
+      testCase.expected()
+    }
+  })
+
   it('opens relative markdown file links inside the app', () => {
     const openLinkTargetWithAutosave = vi.fn(async () => {})
     const { setup } = createSetup({ openLinkTargetWithAutosave })

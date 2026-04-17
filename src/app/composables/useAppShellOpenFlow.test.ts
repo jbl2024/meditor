@@ -197,6 +197,71 @@ describe('useAppShellOpenFlow', () => {
     vi.clearAllMocks()
   })
 
+  it('covers representative wikilink resolution paths exhaustively', async () => {
+    type Scenario = {
+      target: string
+      activeFilePath: string
+      markdownFiles: string[]
+      expectedPath: string
+      expectedOptions?: { focusFirstContentBlock: true }
+      virtualDoc?: { content: string; titleLine: string }
+    }
+
+    const scenarios: Scenario[] = [
+      {
+        target: 'creer_formulaire_glpi',
+        activeFilePath: '/vault/notes/current.md',
+        markdownFiles: [],
+        expectedPath: '/vault/notes/creer_formulaire_glpi.md',
+        expectedOptions: { focusFirstContentBlock: true as const },
+        virtualDoc: { content: '', titleLine: '' }
+      },
+      {
+        target: 'tools',
+        activeFilePath: '/vault/notes/current.md',
+        markdownFiles: ['/vault/notes/tools/index.md'],
+        expectedPath: '/vault/notes/tools/index.md'
+      },
+      {
+        target: './tools',
+        activeFilePath: '/vault/notes/current.md',
+        markdownFiles: ['notes/tools/index.md'],
+        expectedPath: '/vault/notes/tools/index.md'
+      },
+      {
+        target: 'Projets/Supervision.md',
+        activeFilePath: '/vault/notes/current.md',
+        markdownFiles: ['Projets/Supervision.md'],
+        expectedPath: '/vault/Projets/Supervision.md'
+      }
+    ]
+
+    for (const scenario of scenarios) {
+      const harness = createHarness()
+      harness.activeFilePath.value = scenario.activeFilePath
+      harness.loadWikilinkTargets.mockResolvedValue([...scenario.markdownFiles])
+      harness.resolveExistingWikilinkPath.mockClear()
+      harness.pathExists.mockResolvedValue(false)
+
+      await expect(harness.api.openWikilinkTarget(scenario.target)).resolves.toBe(true)
+
+      if (scenario.expectedOptions) {
+        expect(harness.openTabWithAutosave).toHaveBeenCalledWith(
+          scenario.expectedPath,
+          scenario.expectedOptions
+        )
+      } else {
+        expect(harness.openTabWithAutosave).toHaveBeenCalledWith(scenario.expectedPath)
+      }
+      if (scenario.virtualDoc) {
+        expect(harness.virtualDocs.value[scenario.expectedPath]).toEqual(scenario.virtualDoc)
+      } else {
+        expect(harness.virtualDocs.value[scenario.expectedPath]).toBeUndefined()
+      }
+      harness.scope.stop()
+    }
+  })
+
   it('opens an existing quick-open file and focuses the editor', async () => {
     const harness = createHarness()
 
