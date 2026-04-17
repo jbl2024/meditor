@@ -18,6 +18,14 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.37.6] - 2026-04-17
+
+### Changed
+- test(editor): add exhaustive link routing and wikilink resolution coverage (da3cc5a)
+
+### Fixed
+- fix(shell): resolve path-like wikilinks from workspace root (7608b93)
+
 ## [0.37.5] - 2026-04-16
 
 ### Fixed
