@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.37.7] - 2026-04-17
+
+### Fixed
+- fix(editor): make top-level toc adapt to sparse headings (e729e88)
+
 ## [0.37.6] - 2026-04-17
 
 ### Changed
