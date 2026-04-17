@@ -16,6 +16,7 @@ export type UseEditorFilesystemSyncOptions = {
   getSession: (path: string) => DocumentSession | null
   listPaths: () => string[]
   currentPath: () => string
+  isSourceMode?: (path: string) => boolean
   renameSessionPath: (from: string, to: string) => void
   moveLifecyclePathState: (from: string, to: string) => void
   moveFrontmatterPathState: (from: string, to: string) => void
@@ -49,6 +50,7 @@ export function useEditorFilesystemSync(options: UseEditorFilesystemSyncOptions)
   }
 
   async function reloadCleanSession(path: string) {
+    if (options.isSourceMode?.(path)) return
     const session = options.getSession(path)
     if (!session) return
     const requestId = options.nextRequestId()
@@ -77,6 +79,9 @@ export function useEditorFilesystemSync(options: UseEditorFilesystemSyncOptions)
       }
 
       if (change.kind === 'renamed' && change.old_path && change.new_path && openPaths.has(change.old_path)) {
+        if (options.isSourceMode?.(change.old_path) || options.isSourceMode?.(change.new_path)) {
+          continue
+        }
         logEditorSync('fs:apply_rename', { change })
         options.renameSessionPath(change.old_path, change.new_path)
         options.moveLifecyclePathState(change.old_path, change.new_path)
@@ -86,7 +91,7 @@ export function useEditorFilesystemSync(options: UseEditorFilesystemSyncOptions)
       }
 
       const path = change.path?.trim()
-      if (!path || !openPaths.has(path) || change.is_dir) continue
+      if (!path || !openPaths.has(path) || change.is_dir || options.isSourceMode?.(path)) continue
       if (options.shouldIgnoreOwnSaveWatcherChange?.(path)) {
         logEditorSync('fs:ignore_path_change', { change })
         continue

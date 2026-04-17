@@ -148,6 +148,7 @@ export type UseEditorFileLifecycleOptions = {
   uiPort: EditorFileLifecycleUiPort
   ioPort: EditorFileLifecycleIoPort
   requestPort: EditorFileLifecycleRequestPort
+  isSourceMode?: (path: string) => boolean
   /**
    * Optional hook that waits for async heavy node rendering to settle.
    */
@@ -297,6 +298,7 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
    */
   async function loadCurrentFile(path: string, loadOptions?: { forceReload?: boolean; requestId?: number }) {
     if (!path) return
+    if (options.isSourceMode?.(path)) return
     await documentPort.ensurePropertySchemaLoaded()
     if (typeof loadOptions?.requestId === 'number' && !requestPort.isCurrentRequest(loadOptions.requestId)) {
       return
@@ -469,6 +471,7 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
     const initialPath = sessionPort.currentPath.value
     const initialSession = sessionPort.getSession(initialPath)
     if (!initialPath || !editor || !initialSession || initialSession.saving) return
+    if (options.isSourceMode?.(initialPath)) return
 
     let savePath = initialPath
     if (manual) {

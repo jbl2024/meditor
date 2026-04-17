@@ -98,6 +98,8 @@ type EditorSurfaceExposed = {
   focusFirstContentBlock: () => void
   openNoteHistory: () => Promise<void>
   openPulseForNote: () => void
+  isSourceSurface: () => boolean
+  setMarkdownSourceSurfaceEnabled: (enabled: boolean) => Promise<void>
   revealSnippet: (snippet: string) => Promise<void>
   revealOutlineHeading: (index: number) => Promise<void>
   revealAnchor: (anchor: WikilinkAnchor) => Promise<boolean>
@@ -162,6 +164,8 @@ defineExpose<EditorSurfaceExposed>({
   focusFirstContentBlock: () => withEditor((editor) => editor.focusFirstContentBlock(), undefined),
   openNoteHistory: async () => await withEditor((editor) => editor.openNoteHistory(), Promise.resolve()),
   openPulseForNote: () => withEditor((editor) => editor.openPulseForNote(), undefined),
+  isSourceSurface: () => withEditor((editor) => editor.isSourceSurface(), false),
+  setMarkdownSourceSurfaceEnabled: async (enabled: boolean) => await withEditor((editor) => editor.setMarkdownSourceSurfaceEnabled(enabled), Promise.resolve()),
   revealSnippet: async (snippet: string) => await withEditor((editor) => editor.revealSnippet(snippet), Promise.resolve()),
   revealOutlineHeading: async (index: number) => await withEditor((editor) => editor.revealOutlineHeading(index), Promise.resolve()),
   revealAnchor: async (anchor: WikilinkAnchor) => await withEditor((editor) => editor.revealAnchor(anchor), Promise.resolve(false)),

@@ -2,6 +2,8 @@
 
 `markdownBlocks.ts` is the lightweight bridge between raw markdown and the EditorJS-style block model used by the editor runtime.
 
+The bridge only applies to the rich markdown surface. Raw-text source mode bypasses this parser/serializer loop and saves the file content verbatim.
+
 ## Pipeline
 
 - `markdownToEditorData` parses markdown into normalized blocks.

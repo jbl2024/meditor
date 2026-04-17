@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
+  editorSurfaceModeForPath,
   extractHeadingsFromMarkdown,
   hasForbiddenEntryNameChars,
   isReservedEntryName,
+  isSourceTextPath,
   markdownExtensionFromPath,
   noteTitleFromPath,
   parentPrefixForModal,
+  sourceEditorLanguageLabelForPath,
   resolveExistingWikilinkPath,
   sanitizeTitleForFileName
 } from './appShellDocuments'
@@ -14,6 +17,15 @@ describe('appShellDocuments', () => {
   it('derives note titles and markdown extensions from paths', () => {
     expect(noteTitleFromPath('/vault/notes/Hello.md')).toBe('Hello')
     expect(markdownExtensionFromPath('/vault/notes/Hello.markdown')).toBe('.markdown')
+  })
+
+  it('classifies source text files and editor surfaces by extension', () => {
+    expect(isSourceTextPath('/vault/note.txt')).toBe(true)
+    expect(isSourceTextPath('/vault/note.md')).toBe(false)
+    expect(editorSurfaceModeForPath('/vault/note.md')).toBe('rich')
+    expect(editorSurfaceModeForPath('/vault/note.txt')).toBe('source')
+    expect(sourceEditorLanguageLabelForPath('/vault/config.toml')).toBe('toml')
+    expect(sourceEditorLanguageLabelForPath('/vault/note.md')).toBe('markdown')
   })
 
   it('sanitizes titles and validates entry names', () => {

@@ -1,5 +1,5 @@
 import { normalizeWorkspacePath, toWorkspaceRelativePath } from '../../domains/explorer/lib/workspacePaths'
-import { fileName } from './appShellPaths'
+import { fileName, isMarkdownPath } from './appShellPaths'
 
 /**
  * Module: appShellDocuments
@@ -13,6 +13,21 @@ const WINDOWS_RESERVED_NAME_RE = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i
 const FORBIDDEN_FILE_CHARS_RE = /[<>:"/\\|?*\u0000-\u001f]/g
 const FORBIDDEN_FILE_NAME_CHARS_RE = /[<>:"\\|?*\u0000-\u001f]/
 const MAX_FILE_STEM_LENGTH = 120
+const SOURCE_TEXT_EXTENSIONS = new Set([
+  '.txt',
+  '.text',
+  '.json',
+  '.yaml',
+  '.yml',
+  '.toml',
+  '.ini',
+  '.cfg',
+  '.conf',
+  '.env',
+  '.csv',
+  '.tsv',
+  '.xml'
+])
 
 /** Returns the human-readable note title derived from a markdown file path. */
 export function noteTitleFromPath(path: string): string {
@@ -25,6 +40,28 @@ export function markdownExtensionFromPath(path: string): string {
   const name = fileName(path)
   const match = name.match(/\.(md|markdown)$/i)
   return match ? match[0] : '.md'
+}
+
+/** Returns true when a file should default to raw text editing. */
+export function isSourceTextPath(path: string): boolean {
+  const name = fileName(path)
+  const match = name.match(/\.[^.]+$/)
+  if (!match) return false
+  return SOURCE_TEXT_EXTENSIONS.has(match[0].toLowerCase())
+}
+
+/** Returns the default editor surface for a path. */
+export function editorSurfaceModeForPath(path: string): 'rich' | 'source' {
+  return isMarkdownPath(path) ? 'rich' : 'source'
+}
+
+/** Returns a short label describing the source editor file type. */
+export function sourceEditorLanguageLabelForPath(path: string): string {
+  const name = fileName(path)
+  const ext = (name.match(/\.[^.]+$/)?.[0] ?? '').toLowerCase()
+  if (!ext) return 'text'
+  if (ext === '.md' || ext === '.markdown') return 'markdown'
+  return ext.slice(1)
 }
 
 /** Sanitizes a note title into a cross-platform filename-safe stem. */

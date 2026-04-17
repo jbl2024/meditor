@@ -296,6 +296,10 @@ const paneCount = computed(() => Object.keys(multiPane.layout.value.panesById).l
 const activeFilePath = computed(() => multiPane.getActiveDocumentPath())
 const activeStatus = computed(() => editorState.getStatus(activeFilePath.value))
 const activeNoteTitle = computed(() => activeFilePath.value ? noteTitleFromPath(activeFilePath.value) : 'No active note')
+const activeNoteSourceToggleLabel = computed(() => {
+  if (!activeFilePath.value || !isMarkdownPath(activeFilePath.value)) return ''
+  return editorRef.value?.isActiveEditorSourceSurface?.() ? 'Switch to rich editor' : 'Open raw text'
+})
 const echoesEnabled = ref(true)
 const activeStateLabel = computed(() => (
   activeStatus.value.saving
@@ -1361,6 +1365,11 @@ const shellModalInteractions = useAppShellModalInteractions({
   applyTheme,
   applyThemePreview
 })
+
+async function toggleActiveNoteSourceMode() {
+  if (!activeFilePath.value || !isMarkdownPath(activeFilePath.value)) return
+  await editorRef.value?.setActiveMarkdownSourceMode?.(!editorRef.value?.isActiveEditorSourceSurface?.())
+}
 const {
   runQuickOpenAction,
   onQuickOpenEnter,
@@ -1929,6 +1938,7 @@ useAppShellKeyboard({
       :active-file-path="activeFilePath"
       :active-note-title="activeNoteTitle"
       :active-state-label="activeStateLabel"
+      :active-note-source-toggle-label="activeNoteSourceToggleLabel"
       :backlink-count="backlinkCount"
       :semantic-link-count="semanticLinkCount"
       :active-note-in-context="activeNoteInContext"
@@ -1983,6 +1993,7 @@ useAppShellKeyboard({
       @open-search-result="onSearchResultOpen"
       @resize-start="beginResize"
       @toggle-favorite="void toggleActiveNoteFavoriteFromRightPane()"
+      @active-note-toggle-source-mode="void toggleActiveNoteSourceMode()"
       @active-note-add-to-context="toggleActiveNoteInConstitutedContext()"
       @active-note-remove-from-context="toggleActiveNoteInConstitutedContext()"
       @active-note-open-cosmos="void openNoteInCosmosFromPalette()"

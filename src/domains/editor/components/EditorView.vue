@@ -37,12 +37,17 @@ import EditorPropertiesPanel from './editor/EditorPropertiesPanel.vue'
 import EditorNoteHistoryDialog from './editor/EditorNoteHistoryDialog.vue'
 import EditorSpellcheckMenu from './editor/EditorSpellcheckMenu.vue'
 import EditorSlashOverlay from './editor/EditorSlashOverlay.vue'
+import SourceEditorPane from './editor/SourceEditorPane.vue'
 import EditorTableEdgeControls from './editor/EditorTableEdgeControls.vue'
 import EditorTitleField from './editor/EditorTitleField.vue'
 import EditorWikilinkOverlay from './editor/EditorWikilinkOverlay.vue'
 import PulsePanel from '../../pulse/components/PulsePanel.vue'
 import './editor/EditorViewContent.css'
 import { useWorkspaceSpellcheckDictionary } from '../composables/useWorkspaceSpellcheckDictionary'
+import { sourceEditorLanguageLabelForPath } from '../../../app/lib/appShellDocuments'
+import { isMarkdownPath } from '../../../app/lib/appShellPaths'
+import { useEditorSourceMode } from '../composables/useEditorSourceMode'
+import { useSourceEditorRuntime } from '../composables/useSourceEditorRuntime'
 
 type HeadingNode = { text: string; level: number; id?: string }
 type CorePropertyOption = { key: string; label?: string; description?: string }
@@ -97,6 +102,7 @@ function emitStatus(payload: { path: string; dirty: boolean; saving: boolean; sa
 }
 
 function emitPathRenamed(payload: { from: string; to: string; manual: boolean }) {
+  sourceMode.movePath(payload.from, payload.to)
   emit('path-renamed', payload)
 }
 
@@ -169,6 +175,7 @@ const workspacePathRef = computed(() => props.workspacePath ?? '')
 const openPathsRef = computed(() => props.openPaths ?? [])
 const allWorkspaceFilesRef = computed(() => props.allWorkspaceFiles ?? [])
 const currentPathSource = computed(() => props.path?.trim() || '')
+const sourceMode = useEditorSourceMode(currentPathSource)
 const spellcheckEnabledRef = computed(() => Boolean(props.spellcheckEnabled))
 const assetBrowserItems = computed(() =>
   buildAssetBrowserItems({
@@ -181,6 +188,7 @@ const workspaceSpellcheck = useWorkspaceSpellcheckDictionary({ workspacePath: wo
 let chromeRuntime!: ReturnType<typeof useEditorChromeRuntime>
 let interactionRuntime!: ReturnType<typeof useEditorInteractionRuntime>
 let documentRuntime!: ReturnType<typeof useEditorDocumentRuntime>
+let sourceRuntime!: ReturnType<typeof useSourceEditorRuntime>
 const embeddedNoteActions = useEmbeddedNoteActions({
   workspacePath: workspacePathRef,
   readNoteSnapshot: props.readNoteSnapshot,
@@ -196,7 +204,7 @@ chromeRuntime = useEditorChromeRuntime({
     currentPath: currentPathSource,
     getCurrentPath: () => currentPathSource.value,
     getEditor: () => activeEditor.value,
-    getSession: (path) => getSession(path)
+    getSession: (path) => getDocumentSession(path)
   },
   chromeInteractionPort: {
     menus: {
@@ -231,13 +239,26 @@ chromeRuntime = useEditorChromeRuntime({
   }
 })
 
+sourceRuntime = useSourceEditorRuntime({
+  path: currentPathSource,
+  openPaths: openPathsRef,
+  openFile: props.openFile,
+  readNoteSnapshot: props.readNoteSnapshot,
+  saveFile: props.saveFile,
+  saveNoteBuffer: props.saveNoteBuffer,
+  emitStatus: emitStatus,
+  emitOutline,
+  isSourceMode: (path) => sourceMode.isSourceMode(path),
+  isEditingTitle: () => false
+})
+
 interactionRuntime = useEditorInteractionRuntime({
   interactionDocumentPort: {
     currentPath: currentPathSource,
     currentTitle: computed(() => documentRuntime?.currentTitle.value ?? ''),
     holder,
     activeEditor,
-    getSession: (path) => getSession(path),
+    getSession: (path) => getDocumentSession(path),
     getSpellcheckLanguage: (path) => documentRuntime?.getSpellcheckLanguage(path) ?? 'en',
     spellcheckEnabled: spellcheckEnabledRef,
     isSpellcheckWordIgnored: (_path, word) => workspaceSpellcheck.isIgnoredWord(word) || chromeRuntime.spellcheck.isSessionIgnoredWord(word),
@@ -347,21 +368,28 @@ documentRuntime = useEditorDocumentRuntime({
       syncWikilinkUiFromPluginState: interactionRuntime.syncWikilinkUiFromPluginState
     }
   },
+  isSourceMode: (path: string) => sourceMode.isSourceMode(path),
   waitForHeavyRenderIdle,
   hasPendingHeavyRender,
   captureHeavyRenderEpoch
 })
+
+void EditorMermaidPreviewDialog
+void EditorAssetPreviewDialog
+void EditorMermaidReplaceDialog
+void EditorNoteHistoryDialog
 
 const currentPath = documentRuntime.currentPath
 const currentTitle = documentRuntime.currentTitle
 const renderPaths = documentRuntime.renderPaths
 const renderedEditorsByPath = documentRuntime.renderedEditorsByPath
 const isActiveMountedPath = documentRuntime.isActiveMountedPath
+const isSourceSurface = computed(() => Boolean(currentPath.value && sourceMode.isSourceMode(currentPath.value)))
+const isMarkdownNote = computed(() => Boolean(currentPath.value && isMarkdownPath(currentPath.value)))
 const { loading, toolbars, blockAndTable, layout, pulse, dialogsAndLifecycle } = chromeRuntime
 const getZoom = layout.getZoom
 const onTitleInput = documentRuntime.onTitleInput
 const onTitleCommit = documentRuntime.onTitleCommit
-const focusEditor = layout.focusEditor
 // Kept as local bindings so Pulse contract tests can reach them through setupState
 // without reintroducing a broader public API on the component itself.
 const setPulseInstruction = pulse.setPulseInstruction
@@ -433,6 +461,22 @@ watch(
     interactionRuntime?.refreshSpellcheckForPath(path)
   }
 )
+
+watch(isSourceSurface, async (next) => {
+  const path = currentPath.value
+  if (!path) return
+  if (next) {
+    const requestId = sourceRuntime.nextRequestId()
+    sourceRuntime.ensureSession(path)
+    sourceRuntime.setActiveSession(path)
+    await sourceRuntime.loadCurrentFile(path, { forceReload: true, requestId })
+    return
+  }
+  const requestId = documentRuntime.nextRequestId()
+  documentRuntime.ensureSession(path)
+  documentRuntime.setActiveSession(path)
+  await documentRuntime.loadCurrentFile(path, { forceReload: true, requestId })
+})
 
 function onSpellcheckMenuEl(element: HTMLDivElement | null) {
   spellcheckFloatingEl.value = element
@@ -553,10 +597,17 @@ const {
   closeMermaidPreview,
   exportMermaidSvg
 } = dialogsAndLifecycle
+void mermaidReplaceDialog
+void resolveMermaidReplaceDialog
+void mermaidPreviewDialog
+void closeMermaidPreview
+void exportMermaidSvg
 const {
   assetPreviewDialog,
   closeAssetPreview
 } = dialogsAndLifecycle
+void assetPreviewDialog
+void closeAssetPreview
 const {
   slashOpen,
   slashIndex,
@@ -588,12 +639,33 @@ const {
   revealAnchor
 } = interactionRuntime
 
-function getSession(path: string): DocumentSession | null {
+function getSession(path: string) {
+  if (sourceMode.isSourceMode(path)) {
+    return sourceRuntime?.getSession(path) ?? null
+  }
+  return documentRuntime?.getSession(path) ?? null
+}
+
+function getDocumentSession(path: string) {
   return documentRuntime?.getSession(path) ?? null
 }
 
 function focusFirstContentBlock() {
+  if (isSourceSurface.value) {
+    const sourceEditor = holder.value?.querySelector('.tomosona-source-editor .cm-content') as HTMLElement | null
+    sourceEditor?.focus()
+    return
+  }
   layout.focusFirstEditableBlock()
+}
+
+function focusEditor() {
+  if (isSourceSurface.value) {
+    const sourceEditor = holder.value?.querySelector('.tomosona-source-editor .cm-content') as HTMLElement | null
+    sourceEditor?.focus()
+    return
+  }
+  layout.focusEditor()
 }
 
 const activeSession = computed(() => currentPath.value ? getSession(currentPath.value) : null)
@@ -690,7 +762,7 @@ async function loadNoteHistorySnapshot(path: string, snapshotId: string, request
 
 async function openNoteHistory() {
   const path = currentPath.value
-  if (!path) return
+  if (!path || isSourceSurface.value) return
 
   const requestToken = beginNoteHistoryRequest()
   resetNoteHistoryState()
@@ -755,6 +827,10 @@ async function restoreSelectedNoteHistorySnapshot() {
   }
 }
 
+void noteHistoryOpen
+void selectNoteHistorySnapshot
+void restoreSelectedNoteHistorySnapshot
+
 function closeNoteHistory() {
   beginNoteHistoryRequest()
   noteHistoryOpen.value = false
@@ -767,6 +843,13 @@ watch(currentPath, () => {
 
 async function onLoadDiskVersion() {
   if (!currentPath.value) return
+  if (isSourceSurface.value) {
+    const requestId = sourceRuntime.nextRequestId()
+    sourceRuntime.ensureSession(currentPath.value)
+    sourceRuntime.setActiveSession(currentPath.value)
+    await sourceRuntime.loadCurrentFile(currentPath.value, { forceReload: true, requestId })
+    return
+  }
   const requestId = documentRuntime.nextRequestId()
   documentRuntime.ensureSession(currentPath.value)
   documentRuntime.setActiveSession(currentPath.value)
@@ -774,24 +857,66 @@ async function onLoadDiskVersion() {
 }
 
 async function onOverwriteWithMyVersion() {
+  if (isSourceSurface.value) {
+    await sourceRuntime.saveCurrentFile(true, { force: true })
+    return
+  }
   await documentRuntime.saveCurrentFile(true, { force: true })
+}
+
+function applySourceModePathMoves(changes: WorkspaceFsChange[]) {
+  for (const change of changes) {
+    if (change.kind !== 'renamed') continue
+    const from = change.old_path?.trim() ?? ''
+    const to = change.new_path?.trim() ?? ''
+    if (!from || !to) continue
+    sourceMode.movePath(from, to)
+  }
+}
+
+async function setMarkdownSourceSurfaceEnabled(enabled: boolean) {
+  const path = currentPath.value
+  if (!path || !isMarkdownNote.value || enabled === isSourceSurface.value) return
+
+  if (isSourceSurface.value) {
+    await sourceRuntime.saveCurrentFile(true)
+  } else {
+    await documentRuntime.saveCurrentFile(true)
+  }
+
+  sourceMode.setMarkdownSourceMode(currentPath.value || path, enabled)
 }
 
 defineExpose({
   saveNow: async () => {
+    if (isSourceSurface.value) {
+      await sourceRuntime.saveCurrentFile(true)
+      return
+    }
     await documentRuntime.saveCurrentFile(true)
   },
   reloadCurrent: async () => {
     if (!currentPath.value) return
+    if (isSourceSurface.value) {
+      const requestId = sourceRuntime.nextRequestId()
+      sourceRuntime.ensureSession(currentPath.value)
+      sourceRuntime.setActiveSession(currentPath.value)
+      await sourceRuntime.loadCurrentFile(currentPath.value, { forceReload: true, requestId })
+      return
+    }
     const requestId = documentRuntime.nextRequestId()
     documentRuntime.ensureSession(currentPath.value)
     documentRuntime.setActiveSession(currentPath.value)
     await documentRuntime.loadCurrentFile(currentPath.value, { forceReload: true, requestId })
   },
   applyWorkspaceFsChanges: async (changes: WorkspaceFsChange[]) => {
-    await documentRuntime.applyWorkspaceFsChanges(changes)
+    applySourceModePathMoves(changes)
+    await Promise.all([
+      documentRuntime.applyWorkspaceFsChanges(changes),
+      sourceRuntime.applyWorkspaceFsChanges(changes)
+    ])
   },
-  focusEditor: layout.focusEditor,
+  focusEditor,
   focusFirstContentBlock,
   openNoteHistory: () => openNoteHistory(),
   revealSnippet,
@@ -807,7 +932,9 @@ defineExpose({
   pulseSourceText: pulse.pulseSourceText,
   pulseSelectionRange: pulse.pulseSelectionRange,
   openPulseForNote: pulse.openPulseForNote,
-  setPulseInstruction: pulse.setPulseInstruction
+  setPulseInstruction: pulse.setPulseInstruction,
+  setMarkdownSourceSurfaceEnabled,
+  isSourceSurface: () => isSourceSurface.value
 })
 </script>
 
@@ -857,6 +984,7 @@ defineExpose({
         <div
         ref="holder"
         class="editor-holder relative h-full min-h-0 overflow-y-auto px-8 py-6"
+        :class="{ 'editor-holder--source': isSourceSurface }"
         :style="editorZoomStyle"
         @mousemove="onEditorMouseMove"
         @mouseleave="onEditorMouseLeave"
@@ -864,45 +992,47 @@ defineExpose({
       >
           <div ref="contentShell" class="editor-content-shell">
             <div class="editor-header-shell">
-              <EditorTitleField
-                :key="currentPath"
-                :model-value="currentTitle"
-                :saving="Boolean(currentPath && getSession(currentPath)?.saving)"
-                @update:model-value="onTitleInput"
-                @commit="onTitleCommit"
-                @focus="titleEditorFocused = true"
-                @blur="titleEditorFocused = false"
-                @focus-body-request="void focusFirstContentBlock()"
-              />
-              <EditorPropertiesPanel
-                :expanded="propertiesExpanded(path)"
-                :has-properties="structuredPropertyKeys.length > 0 || activeParseErrors.length > 0"
-                :mode="propertyEditorMode"
-                :can-use-structured-properties="canUseStructuredProperties"
-                :structured-property-fields="structuredPropertyFields"
-                :structured-property-keys="structuredPropertyKeys"
-                :active-raw-yaml="activeRawYaml"
-                :active-parse-errors="activeParseErrors"
-                :core-property-options="CORE_PROPERTY_OPTIONS"
-                :property-key-suggestions="propertyKeySuggestions"
-                :property-suggestions-for-field="propertySuggestionsForField"
-                :effective-type-for-field="effectiveTypeForField"
-                :is-property-type-locked="isPropertyTypeLocked"
-                :generation-pending="propertyGenerationLoading"
-                :generation-target-index="propertyGenerationTargetIndex"
-                @toggle-visibility="togglePropertiesVisibility"
-                @set-mode="propertyEditorMode = $event"
-                @property-key-input="void onPropertyKeyInput($event.index, $event.value)"
-                @property-type-change="void onPropertyTypeChange($event.index, $event.value)"
-                @property-value-input="onPropertyValueInput($event.index, $event.value)"
-                @property-checkbox-input="onPropertyCheckboxInput($event.index, $event.checked)"
-                @property-tokens-change="onPropertyTokensChange($event.index, $event.tokens)"
-                @remove-property="removePropertyField($event)"
-                @add-property="addPropertyField($event)"
-                @raw-yaml-input="onRawYamlInput($event)"
-                @auto-generate="void generateAutoProperties()"
-                @sparkle-property="void generatePropertyValue($event)"
-              />
+              <template v-if="!isSourceSurface">
+                <EditorTitleField
+                  :key="currentPath"
+                  :model-value="currentTitle"
+                  :saving="Boolean(currentPath && getSession(currentPath)?.saving)"
+                  @update:model-value="onTitleInput"
+                  @commit="onTitleCommit"
+                  @focus="titleEditorFocused = true"
+                  @blur="titleEditorFocused = false"
+                  @focus-body-request="void focusFirstContentBlock()"
+                />
+                <EditorPropertiesPanel
+                  :expanded="propertiesExpanded(path)"
+                  :has-properties="structuredPropertyKeys.length > 0 || activeParseErrors.length > 0"
+                  :mode="propertyEditorMode"
+                  :can-use-structured-properties="canUseStructuredProperties"
+                  :structured-property-fields="structuredPropertyFields"
+                  :structured-property-keys="structuredPropertyKeys"
+                  :active-raw-yaml="activeRawYaml"
+                  :active-parse-errors="activeParseErrors"
+                  :core-property-options="CORE_PROPERTY_OPTIONS"
+                  :property-key-suggestions="propertyKeySuggestions"
+                  :property-suggestions-for-field="propertySuggestionsForField"
+                  :effective-type-for-field="effectiveTypeForField"
+                  :is-property-type-locked="isPropertyTypeLocked"
+                  :generation-pending="propertyGenerationLoading"
+                  :generation-target-index="propertyGenerationTargetIndex"
+                  @toggle-visibility="togglePropertiesVisibility"
+                  @set-mode="propertyEditorMode = $event"
+                  @property-key-input="void onPropertyKeyInput($event.index, $event.value)"
+                  @property-type-change="void onPropertyTypeChange($event.index, $event.value)"
+                  @property-value-input="onPropertyValueInput($event.index, $event.value)"
+                  @property-checkbox-input="onPropertyCheckboxInput($event.index, $event.checked)"
+                  @property-tokens-change="onPropertyTokensChange($event.index, $event.tokens)"
+                  @remove-property="removePropertyField($event)"
+                  @add-property="addPropertyField($event)"
+                  @raw-yaml-input="onRawYamlInput($event)"
+                  @auto-generate="void generateAutoProperties()"
+                  @sparkle-property="void generatePropertyValue($event)"
+                />
+              </template>
             </div>
             <div
               v-for="sessionPath in renderPaths"
@@ -915,13 +1045,25 @@ defineExpose({
               :inert="isActiveMountedPath(sessionPath) ? undefined : true"
               v-show="isActiveMountedPath(sessionPath)"
             >
-              <EditorContent
-                v-if="renderedEditorsByPath[sessionPath]"
-                :key="`editor-content:${sessionPath}`"
-                :editor="renderedEditorsByPath[sessionPath]!"
-              />
+              <template v-if="isSourceSurface">
+                <SourceEditorPane
+                  v-if="sourceRuntime.getSession(sessionPath)"
+                  :key="`source-editor-content:${sessionPath}`"
+                  :model-value="sourceRuntime.getSession(sessionPath)?.text ?? ''"
+                  :language-label="sourceEditorLanguageLabelForPath(sessionPath)"
+                  @update:model-value="sourceRuntime.setText(sessionPath, $event)"
+                />
+              </template>
+              <template v-else>
+                <EditorContent
+                  v-if="renderedEditorsByPath[sessionPath]"
+                  :key="`editor-content:${sessionPath}`"
+                  :editor="renderedEditorsByPath[sessionPath]!"
+                />
+              </template>
             </div>
           </div>
+          <div v-if="!isSourceSurface" class="editor-rich-chrome">
           <div
           v-if="blockGutterVisible"
           ref="blockGutterEl"
@@ -1135,6 +1277,7 @@ defineExpose({
           @next="findToolbar.nextMatch()"
           @close="findToolbar.closeToolbar({ focusEditor: true })"
         />
+          </div>
       </div>
     </div>
 
@@ -1197,8 +1340,33 @@ defineExpose({
   overscroll-behavior: contain;
 }
 
+.editor-holder--source {
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+.editor-holder--source .editor-content-shell {
+  max-width: none;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.editor-holder--source .editor-session-pane {
+  min-height: 100%;
+  height: 100%;
+}
+
+.editor-holder--source .tomosona-source-editor {
+  height: 100%;
+}
+
 .editor-header-shell {
   margin: 0;
+}
+
+.editor-session-pane {
+  min-height: 100%;
 }
 
 .editor-pulse-panel-wrap {

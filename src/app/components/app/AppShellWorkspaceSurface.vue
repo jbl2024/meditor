@@ -46,6 +46,7 @@ defineProps<{
   activeFilePath: string
   activeNoteTitle: string
   activeStateLabel: string
+  activeNoteSourceToggleLabel?: string
   backlinkCount: number
   semanticLinkCount: number
   activeNoteInContext: boolean
@@ -142,6 +143,7 @@ const emit = defineEmits<{
   launchpadQuickStart: [kind: 'today' | 'second-brain' | 'cosmos' | 'command-palette' | 'alters']
   toggleFavorite: []
   activeNoteOpenHistory: []
+  activeNoteToggleSourceMode: []
   activeNoteAddToContext: []
   activeNoteRemoveFromContext: []
   activeNoteOpenCosmos: []
@@ -241,6 +243,7 @@ defineExpose<AppShellWorkspaceSurfaceExposed>({
           :active-note-path="activeFilePath"
           :active-note-title="activeNoteTitle"
           :active-state-label="activeStateLabel"
+          :active-note-source-toggle-label="activeNoteSourceToggleLabel"
           :backlink-count="backlinkCount"
           :semantic-link-count="semanticLinkCount"
           :active-note-in-context="activeNoteInContext"
@@ -268,6 +271,7 @@ defineExpose<AppShellWorkspaceSurfaceExposed>({
           :to-relative-path="toRelativePath"
           @toggle-favorite="emit('toggleFavorite')"
           @open-note-history="emit('activeNoteOpenHistory')"
+          @active-note-toggle-source-mode="emit('activeNoteToggleSourceMode')"
           @active-note-add-to-context="emit('activeNoteAddToContext')"
           @active-note-remove-from-context="emit('activeNoteRemoveFromContext')"
           @active-note-open-cosmos="emit('activeNoteOpenCosmos')"

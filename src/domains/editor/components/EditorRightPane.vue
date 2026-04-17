@@ -30,6 +30,7 @@ const props = defineProps<{
   activeNotePath: string
   activeNoteTitle: string
   activeStateLabel: string
+  activeNoteSourceToggleLabel?: string
   backlinkCount: number
   semanticLinkCount: number
   activeNoteInContext: boolean
@@ -61,6 +62,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'toggle-favorite': []
   'open-note-history': []
+  'active-note-toggle-source-mode': []
   'active-note-add-to-context': []
   'active-note-remove-from-context': []
   'active-note-open-cosmos': []
@@ -173,6 +175,16 @@ watch(
         @click="emit('active-note-open-pulse')"
       >
         Pulse note
+      </UiButton>
+      <UiButton
+        v-if="props.activeNoteSourceToggleLabel"
+        variant="ghost"
+        size="sm"
+        class-name="secondary-note-btn"
+        :disabled="!props.activeNotePath"
+        @click="emit('active-note-toggle-source-mode')"
+      >
+        {{ props.activeNoteSourceToggleLabel }}
       </UiButton>
     </section>
 

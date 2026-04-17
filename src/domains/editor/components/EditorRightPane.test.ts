@@ -10,6 +10,7 @@ describe('EditorRightPane', () => {
     const onBacklinkOpen = vi.fn()
     const onToggleFavorite = vi.fn()
     const onOpenNoteHistory = vi.fn()
+    const onActiveNoteToggleSourceMode = vi.fn()
     const onActiveNoteAddToContext = vi.fn()
     const onActiveNoteRemoveFromContext = vi.fn()
     const onActiveNoteOpenCosmos = vi.fn()
@@ -33,6 +34,7 @@ describe('EditorRightPane', () => {
           activeNotePath: '/wk/notes/a.md',
           activeNoteTitle: 'A',
           activeStateLabel: 'saved',
+          activeNoteSourceToggleLabel: 'Open raw text',
           backlinkCount: 1,
           semanticLinkCount: 2,
           activeNoteInContext: false,
@@ -68,6 +70,7 @@ describe('EditorRightPane', () => {
           toRelativePath: (path: string) => path.replace('/wk/', ''),
           onToggleFavorite,
           onOpenNoteHistory,
+          onActiveNoteToggleSourceMode,
           onOutlineClick,
           onBacklinkOpen,
           onActiveNoteAddToContext,
@@ -113,13 +116,16 @@ describe('EditorRightPane', () => {
     ;(root.querySelector('.history-toggle-btn') as HTMLButtonElement).click()
     expect(onOpenNoteHistory).toHaveBeenCalledTimes(1)
 
+    const noteButtons = Array.from(root.querySelectorAll('.secondary-note-btn')) as HTMLButtonElement[]
+    noteButtons[0].click()
+    expect(onActiveNoteOpenCosmos).toHaveBeenCalledTimes(1)
+    noteButtons[1].click()
+    expect(onActiveNoteOpenPulse).toHaveBeenCalledTimes(1)
+    noteButtons[2].click()
+    expect(onActiveNoteToggleSourceMode).toHaveBeenCalledTimes(1)
+
     ;(root.querySelector('.primary-context-btn') as HTMLButtonElement).click()
     expect(onActiveNoteAddToContext).toHaveBeenCalledTimes(1)
-    ;(root.querySelector('.secondary-note-btn') as HTMLButtonElement).click()
-    expect(onActiveNoteOpenCosmos).toHaveBeenCalledTimes(1)
-    const secondaryButtons = Array.from(root.querySelectorAll('.secondary-note-btn')) as HTMLButtonElement[]
-    secondaryButtons[1].click()
-    expect(onActiveNoteOpenPulse).toHaveBeenCalledTimes(1)
 
     const echoesButtons = Array.from(root.querySelectorAll('.echoes-action-btn')) as HTMLButtonElement[]
     echoesButtons[0].click()
@@ -188,6 +194,7 @@ describe('EditorRightPane', () => {
           activeNotePath: '/wk/notes/a.md',
           activeNoteTitle: 'A',
           activeStateLabel: 'saved',
+          activeNoteSourceToggleLabel: '',
           backlinkCount: 0,
           semanticLinkCount: 0,
           activeNoteInContext: true,

@@ -28,6 +28,8 @@ export type EditorPaneGridExposed = {
   focusFirstContentBlock: () => void
   openNoteHistory: () => Promise<void>
   openPulseForNote: () => void
+  isActiveEditorSourceSurface: () => boolean
+  setActiveMarkdownSourceMode: (enabled: boolean) => Promise<void>
   revealSnippet: (snippet: string) => Promise<void>
   revealOutlineHeading: (index: number) => Promise<void>
   revealAnchor: (anchor: WikilinkAnchor) => Promise<boolean>
@@ -39,7 +41,26 @@ export type EditorPaneGridExposed = {
   focusCosmosNodeById: (nodeId: string) => boolean
 }
 
-type EditorViewExposed = EditorPaneGridExposed
+type EditorViewExposed = {
+  saveNow: () => Promise<void>
+  reloadCurrent: () => Promise<void>
+  applyWorkspaceFsChanges: (changes: WorkspaceFsChange[]) => Promise<void>
+  focusEditor: () => void
+  focusFirstContentBlock: () => void
+  openNoteHistory: () => Promise<void>
+  openPulseForNote: () => void
+  revealSnippet: (snippet: string) => Promise<void>
+  revealOutlineHeading: (index: number) => Promise<void>
+  revealAnchor: (anchor: WikilinkAnchor) => Promise<boolean>
+  zoomIn: () => number
+  zoomOut: () => number
+  resetZoom: () => number
+  getZoom: () => number
+  resetCosmosView: () => void
+  focusCosmosNodeById: (nodeId: string) => boolean
+  isSourceSurface: () => boolean
+  setMarkdownSourceSurfaceEnabled: (enabled: boolean) => Promise<void>
+}
 
 const props = defineProps<{
   layout: MultiPaneLayout
@@ -253,6 +274,14 @@ function openPulseForNote() {
   ensureCall((editor) => editor.openPulseForNote(), undefined)
 }
 
+function isActiveEditorSourceSurface(): boolean {
+  return Boolean(activeEditor()?.isSourceSurface?.())
+}
+
+async function setActiveMarkdownSourceMode(enabled: boolean) {
+  await ensureCall((editor) => editor.setMarkdownSourceSurfaceEnabled(enabled), Promise.resolve())
+}
+
 async function revealSnippet(snippet: string) {
   await ensureCall((editor) => editor.revealSnippet(snippet), Promise.resolve())
 }
@@ -297,6 +326,8 @@ defineExpose<EditorPaneGridExposed>({
   focusFirstContentBlock,
   openNoteHistory,
   openPulseForNote,
+  isActiveEditorSourceSurface,
+  setActiveMarkdownSourceMode,
   revealSnippet,
   revealOutlineHeading,
   revealAnchor,

@@ -90,6 +90,7 @@ export type UseEditorDocumentRuntimeOptions = {
   documentOutputPort: EditorDocumentRuntimeEmitPort
   documentSessionPort: EditorDocumentRuntimeSessionPort
   documentUiPort: EditorDocumentRuntimeUiPort
+  isSourceMode?: (path: string) => boolean
   waitForHeavyRenderIdle?: WaitForHeavyRenderIdle
   hasPendingHeavyRender?: HasPendingHeavyRender
   captureHeavyRenderEpoch?: CaptureHeavyRenderEpoch
@@ -388,6 +389,7 @@ export function useEditorDocumentRuntime(options: UseEditorDocumentRuntimeOption
     requestPort: {
       isCurrentRequest: (requestId) => lifecycle.isCurrentRequest(requestId)
     },
+    isSourceMode: options.isSourceMode,
     waitForHeavyRenderIdle: options.waitForHeavyRenderIdle,
     hasPendingHeavyRender: options.hasPendingHeavyRender,
     captureHeavyRenderEpoch: options.captureHeavyRenderEpoch
@@ -461,6 +463,7 @@ export function useEditorDocumentRuntime(options: UseEditorDocumentRuntimeOption
     nextRequestId: sessionState.nextRequestId,
     loadCurrentFile,
     emitExternalReload: (payload) => output.emitExternalReload(payload),
+    isSourceMode: options.isSourceMode,
     shouldIgnoreOwnSaveWatcherChange: (path) => fileLifecycle.shouldIgnoreWatcherChangeForPath(path)
   })
 

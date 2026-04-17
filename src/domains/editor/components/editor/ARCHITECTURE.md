@@ -4,6 +4,8 @@
 - Shell composition/orchestration boundary: `EditorView.vue`
 - Document/session runtime: `useEditorDocumentRuntime`
   Internal organization should stay in a few local zones (`sessionState`, `documentPersistence`, `titleAndProperties`) rather than more public runtime layers.
+- Raw-text session/runtime: `useSourceEditorRuntime`
+  Internal organization should stay in a few local zones (`sessionState`, `textPersistence`, `conflictAndAutosave`) rather than more public runtime layers.
 - Interaction runtime (Tiptap/slash/wikilink/caret): `useEditorInteractionRuntime`
   Internal organization should stay in a few local flow zones (`slashAndInsertion`, `wikilinkFlow`, `caretAndOutline`, `editorInputAndNavigation`) rather than more public runtime layers.
   Selection extraction into linked notes also belongs here: the toolbar only emits the intent, while the runtime validates block-complete selections, creates the note, and replaces the selection with a note embed block.
@@ -33,11 +35,15 @@
 - Path/open-path watchers + mount lifecycle: `useEditorPathWatchers`
 - Gutter hitbox/layout metrics + line counting: `useEditorLayoutMetrics`
 - Mounted multi-instance session list for in-memory tab switching: `useEditorMountedSessions`
+- Source-mode preference store: `useEditorSourceMode`
+- Raw-text session store: `useTextEditorSessions`
+- Raw-text session status bridge: `useTextEditorSessionStatus`
 - Slash overlay rendering: `EditorSlashOverlay.vue`
 - Wikilink overlay rendering: `EditorWikilinkOverlay.vue`
 - Embedded note preview rendering: `NoteEmbedNodeView.vue`
 - Block + table overlays rendering: `EditorContextOverlays.vue`
 - Note history restore modal: `EditorNoteHistoryDialog.vue`
+- Source/raw-text surface rendering: `SourceEditorPane.vue`
 
 ## Invariants
 - `EditorView.vue` stays a shell; it wires runtimes and template, but does not own editor workflows directly.
@@ -51,6 +57,9 @@
 - `useEditorWikilinkOverlayState` should be initialized before binding tiptap callbacks that invoke it.
 - Editor content rendering is multi-instance and path-scoped; only active path is visible/interactable.
 - Title and properties are owned by the Vue header; the TipTap body owns only persisted note content.
+- Source mode owns raw file text exactly as loaded, including non-markdown text files and markdown files explicitly switched to source editing.
+- Rich markdown mode and source mode must not both mutate the same path at the same time; the shell chooses one surface per path.
+- Markdown source mode is a path preference stored separately from the note content so switching back to rich mode preserves the user's choice.
 - AI-assisted property generation stays inside the frontmatter runtime and updates the same property state used by manual edits.
 - Loading overlays for complex docs should remain visible until `waitForHeavyRenderIdle` settles after `setContent`.
 - Overlay trigger is not size-only: heavy markdown complexity and runtime pending render signals can escalate loading UI for below-threshold files.
@@ -58,6 +67,7 @@
 ## Anti-patterns
 - Re-introducing editor orchestration directly in `EditorView.vue`.
 - Duplicated behavior in both `EditorView` and composables.
+- Trying to render rich markdown and source editor chrome for the same path at once.
 - No-op event forwarding (for example `@event="() => {}"`).
 - Side effects inside `computed` functions.
 - Monolithic input-handler signatures that mix unrelated feature concerns.
