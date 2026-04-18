@@ -34,7 +34,7 @@ describe('EditorRightPane', () => {
           activeNotePath: '/wk/notes/a.md',
           activeNoteTitle: 'A',
           activeStateLabel: 'saved',
-          activeNoteSourceToggleLabel: 'Open raw text',
+          activeNoteSourceToggleLabel: 'Edit raw text',
           backlinkCount: 1,
           semanticLinkCount: 2,
           activeNoteInContext: false,
@@ -93,8 +93,6 @@ describe('EditorRightPane', () => {
     }))
 
     app.mount(root)
-    expect(root.textContent).toContain('1 backlinks')
-    expect(root.textContent).toContain('2 semantic links')
     const sectionTitles = Array.from(root.querySelectorAll('.section-title')).map((el) => el.textContent?.trim())
     expect(sectionTitles.slice(0, 6)).toEqual([
       'Active Note',
@@ -104,28 +102,38 @@ describe('EditorRightPane', () => {
       'Outline',
       'Semantic Links'
     ])
-    expect(root.querySelectorAll('.section-toggle')).toHaveLength(5)
+    expect(root.querySelectorAll('.section-toggle')).toHaveLength(6)
     expect(root.querySelector('.favorite-toggle-btn--active')).toBeTruthy()
     expect(root.textContent).toContain('Reason on This Context')
     expect(root.textContent).toContain('Explore in Cosmos')
-    expect(root.textContent).toContain('Pulse note')
+    expect(root.textContent).toContain('Pulse')
+    expect(root.textContent).toContain('Edit raw text')
     expect(root.textContent).toContain('Transform with Pulse')
 
     ;(root.querySelector('.favorite-toggle-btn') as HTMLButtonElement).click()
     expect(onToggleFavorite).toHaveBeenCalledTimes(1)
-    ;(root.querySelector('.history-toggle-btn') as HTMLButtonElement).click()
-    expect(onOpenNoteHistory).toHaveBeenCalledTimes(1)
 
     const noteButtons = Array.from(root.querySelectorAll('.secondary-note-btn')) as HTMLButtonElement[]
     noteButtons[0].click()
     expect(onActiveNoteOpenCosmos).toHaveBeenCalledTimes(1)
     noteButtons[1].click()
     expect(onActiveNoteOpenPulse).toHaveBeenCalledTimes(1)
-    noteButtons[2].click()
+
+    const utilityButtons = Array.from(root.querySelectorAll('.utility-note-btn')) as HTMLButtonElement[]
+    utilityButtons[0].click()
+    expect(onOpenNoteHistory).toHaveBeenCalledTimes(1)
+    utilityButtons[1].click()
     expect(onActiveNoteToggleSourceMode).toHaveBeenCalledTimes(1)
 
     ;(root.querySelector('.primary-context-btn') as HTMLButtonElement).click()
     expect(onActiveNoteAddToContext).toHaveBeenCalledTimes(1)
+
+    ;(root.querySelector('.active-note-section-toggle') as HTMLButtonElement).click()
+    await nextTick()
+    expect(root.querySelector('.favorite-toggle-btn')).toBeNull()
+    expect(root.querySelector('.primary-context-btn')).toBeNull()
+    expect(root.querySelectorAll('.secondary-note-btn')).toHaveLength(0)
+    expect(root.querySelectorAll('.utility-note-btn')).toHaveLength(0)
 
     const echoesButtons = Array.from(root.querySelectorAll('.echoes-action-btn')) as HTMLButtonElement[]
     echoesButtons[0].click()
@@ -159,9 +167,9 @@ describe('EditorRightPane', () => {
     expect(onContextOpenPulse).toHaveBeenCalledTimes(1)
 
     const toggles = Array.from(root.querySelectorAll('.section-toggle')) as HTMLButtonElement[]
-    toggles[0].click()
     toggles[1].click()
     toggles[2].click()
+    toggles[3].click()
     await nextTick()
 
     const outlineButton = Array.from(root.querySelectorAll('.pane-item')).find((item) =>

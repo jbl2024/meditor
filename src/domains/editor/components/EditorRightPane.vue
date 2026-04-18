@@ -89,6 +89,7 @@ const semanticExpanded = ref(false)
 const backlinksExpanded = ref(false)
 const metadataExpanded = ref(false)
 const propertiesExpanded = ref(false)
+const activeNoteExpanded = ref(true)
 const hasEchoesContent = computed(() => props.echoesItems.length > 0 && !props.echoesLoading && !props.echoesError)
 const hasLocalContext = computed(() => props.localContextItems.length > 0)
 const hasPinnedContext = computed(() => props.pinnedContextItems.length > 0)
@@ -106,38 +107,66 @@ watch(
 <template>
   <aside class="right-pane" :style="{ width: `${props.width}px` }">
     <section class="pane-card pane-toolbar">
-      <div class="pane-toolbar-row">
-      <div class="pane-toolbar-copy">
+      <button type="button" class="section-toggle active-note-section-toggle" @click="activeNoteExpanded = !activeNoteExpanded">
         <h3 class="section-title pane-toolbar-title">Active Note</h3>
-        <p class="pane-toolbar-note-title">{{ props.activeNoteTitle || 'No active note' }}</p>
-        <p class="pane-toolbar-meta">
-          {{ props.activeStateLabel }}
-            <template v-if="props.activeNotePath">
-              <span>· {{ props.backlinkCount }} backlinks</span>
-              <span>· {{ props.semanticLinkCount }} semantic links</span>
-            </template>
-          </p>
+        <ChevronRightIcon class="section-toggle-chevron" :class="{ expanded: activeNoteExpanded }" />
+      </button>
+      <template v-if="activeNoteExpanded">
+        <div class="pane-toolbar-header">
+          <p class="pane-toolbar-note-title">{{ props.activeNoteTitle || 'No active note' }}</p>
         </div>
         <div class="pane-toolbar-actions">
           <UiButton
             variant="ghost"
             size="sm"
-            :class-name="[
-              'favorite-toggle-btn',
-              props.isFavorite ? 'favorite-toggle-btn--active' : ''
-            ].filter(Boolean).join(' ')"
+            :class-name="`favorite-toggle-btn ${props.isFavorite ? 'favorite-toggle-btn--active' : ''}`"
             :disabled="!props.canToggleFavorite"
-            :title="props.isFavorite ? 'Remove from Favorites' : 'Add to Favorites'"
-            :aria-label="props.isFavorite ? 'Remove from Favorites' : 'Add to Favorites'"
+            :title="props.isFavorite ? 'Remove from favorites' : 'Add to favorites'"
+            :aria-label="props.isFavorite ? 'Remove from favorites' : 'Add to favorites'"
             @click="emit('toggle-favorite')"
           >
             <StarSolidIcon v-if="props.isFavorite" />
             <StarOutlineIcon v-else />
+            {{ props.isFavorite ? 'Remove from favorites' : 'Add to favorites' }}
           </UiButton>
           <UiButton
             variant="ghost"
             size="sm"
-            class-name="history-toggle-btn"
+            class-name="primary-context-btn"
+            :disabled="!props.activeNotePath"
+            @click="props.activeNoteInContext ? emit('active-note-remove-from-context') : emit('active-note-add-to-context')"
+          >
+            <span class="menu-row-spacer" aria-hidden="true"></span>
+            {{ props.activeNoteInContext ? 'Remove from Context' : 'Add to Context' }}
+          </UiButton>
+
+          <UiButton
+            variant="ghost"
+            size="sm"
+            class-name="secondary-note-btn"
+            :disabled="!props.activeNotePath"
+            @click="emit('active-note-open-cosmos')"
+          >
+            <span class="menu-row-spacer" aria-hidden="true"></span>
+            Explore in Cosmos
+          </UiButton>
+          <UiButton
+            variant="ghost"
+            size="sm"
+            class-name="secondary-note-btn"
+            :disabled="!props.activeNotePath"
+            @click="emit('active-note-open-pulse')"
+          >
+            <span class="menu-row-spacer" aria-hidden="true"></span>
+            Pulse
+          </UiButton>
+
+          <div class="pane-toolbar-divider" aria-hidden="true"></div>
+
+          <UiButton
+            variant="ghost"
+            size="sm"
+            class-name="history-toggle-btn utility-note-btn"
             :disabled="!props.activeNotePath"
             title="Open Note History"
             aria-label="Open Note History"
@@ -146,46 +175,20 @@ watch(
             <ClockIcon />
             History
           </UiButton>
-        </div>
-      </div>
 
-      <UiButton
-        variant="secondary"
-        size="sm"
-        class-name="primary-context-btn"
-        :disabled="!props.activeNotePath"
-        @click="props.activeNoteInContext ? emit('active-note-remove-from-context') : emit('active-note-add-to-context')"
-      >
-        {{ props.activeNoteInContext ? 'Remove from Context' : 'Add to Context' }}
-      </UiButton>
-      <UiButton
-        variant="ghost"
-        size="sm"
-        class-name="secondary-note-btn"
-        :disabled="!props.activeNotePath"
-        @click="emit('active-note-open-cosmos')"
-      >
-        Open in Cosmos
-      </UiButton>
-      <UiButton
-        variant="ghost"
-        size="sm"
-        class-name="secondary-note-btn"
-        :disabled="!props.activeNotePath"
-        @click="emit('active-note-open-pulse')"
-      >
-        Pulse note
-      </UiButton>
-      <UiButton
-        v-if="props.activeNoteSourceToggleLabel"
-        variant="ghost"
-        size="sm"
-        class-name="secondary-note-btn"
-        :disabled="!props.activeNotePath"
-        @click="emit('active-note-toggle-source-mode')"
-      >
-        {{ props.activeNoteSourceToggleLabel }}
-      </UiButton>
+          <UiButton
+            v-if="props.activeNoteSourceToggleLabel"
+            variant="ghost"
+            size="sm"
+            class-name="utility-note-btn tertiary-note-btn"
+            :disabled="!props.activeNotePath"
+            @click="emit('active-note-toggle-source-mode')"
+          >
+            <span class="menu-row-spacer" aria-hidden="true"></span>
+            {{ props.activeNoteSourceToggleLabel }}
+          </UiButton>
+        </div>
+      </template>
     </section>
 
     <EditorEchoesPanel
@@ -460,33 +463,13 @@ watch(
 }
 
 .pane-toolbar {
-  padding: 10px;
+  padding: 10px 10px 9px;
 }
 
-.pane-toolbar-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.pane-toolbar-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
-  flex: 0 0 auto;
-}
-
-.pane-toolbar-copy {
-  min-width: 0;
+.pane-toolbar-header {
   display: flex;
   flex-direction: column;
   gap: 2px;
-}
-
-.pane-toolbar-title {
-  margin-bottom: 0;
 }
 
 .pane-toolbar-note-title {
@@ -494,12 +477,14 @@ watch(
   font-size: 16px;
   font-weight: 700;
   color: var(--right-pane-text);
+  line-height: 1.2;
 }
 
-.pane-toolbar-meta {
-  margin: 0;
-  font-size: 12px;
-  color: var(--right-pane-text);
+.pane-toolbar-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 8px;
 }
 
 .section-title {
@@ -512,6 +497,10 @@ watch(
 }
 
 .favorite-toggle-btn {
+  justify-content: flex-start;
+  width: 100%;
+  padding-inline: 0.45rem;
+  text-align: left;
   color: var(--right-pane-text-soft);
 }
 
@@ -524,12 +513,22 @@ watch(
   height: 0.8rem;
 }
 
-.history-toggle-btn {
-  min-width: 0;
-  padding-inline: 0.5rem;
+.menu-row-spacer {
+  display: inline-block;
+  width: 14px;
+  flex: 0 0 14px;
 }
 
-.history-toggle-btn :deep(svg) {
+.history-toggle-btn {
+  min-width: 0;
+  justify-content: flex-start;
+  width: 100%;
+  padding-inline: 0.45rem;
+  text-align: left;
+}
+
+.history-toggle-btn :deep(svg),
+.utility-note-btn :deep(svg) {
   width: 14px;
   height: 14px;
 }
@@ -537,12 +536,53 @@ watch(
 .primary-context-btn,
 .context-primary-cta {
   width: 100%;
-  margin-top: 10px;
+  margin-top: 0;
+  justify-content: flex-start;
+  padding-inline: 0.45rem;
+  text-align: left;
 }
 
 .secondary-note-btn {
   width: 100%;
-  margin-top: 8px;
+  margin-top: 0;
+  justify-content: flex-start;
+  padding-inline: 0.45rem;
+  text-align: left;
+}
+
+.pane-toolbar-divider {
+  height: 1px;
+  margin: 2px 0 1px;
+  background: color-mix(in srgb, var(--right-pane-border) 24%, transparent);
+}
+
+.utility-note-btn {
+  justify-content: flex-start;
+  width: 100%;
+  margin-top: 0;
+  padding-inline: 0.45rem;
+  text-align: left;
+  color: var(--right-pane-text-dim);
+}
+
+.favorite-toggle-btn :deep(.ui-button),
+.primary-context-btn :deep(.ui-button),
+.secondary-note-btn :deep(.ui-button),
+.history-toggle-btn :deep(.ui-button),
+.utility-note-btn :deep(.ui-button) {
+  min-height: 1.85rem;
+  height: 1.85rem;
+  padding-inline: 0.45rem;
+}
+
+.tertiary-note-btn {
+  align-self: flex-start;
+}
+
+.tertiary-note-btn:hover,
+.tertiary-note-btn:focus-visible {
+  color: var(--right-pane-text);
+  background: transparent;
 }
 
 .context-card {

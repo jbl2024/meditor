@@ -299,7 +299,7 @@ const activeStatus = computed(() => editorState.getStatus(activeFilePath.value))
 const activeNoteTitle = computed(() => activeFilePath.value ? noteTitleFromPath(activeFilePath.value) : 'No active note')
 const activeNoteSourceToggleLabel = computed(() => {
   if (!activeFilePath.value || !isMarkdownPath(activeFilePath.value)) return ''
-  return editorRef.value?.isActiveEditorSourceSurface?.() ? 'Switch to rich editor' : 'Open raw text'
+  return editorRef.value?.isActiveEditorSourceSurface?.() ? 'Switch to rich editor' : 'Edit raw text'
 })
 const echoesEnabled = ref(true)
 const activeStateLabel = computed(() => (
