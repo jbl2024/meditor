@@ -587,7 +587,7 @@ describe('robust list parsing', () => {
     })
   })
 
-  it('stops the list on a blank line before a sibling item', () => {
+  it('merges adjacent lists of the same style across a blank line', () => {
     const markdown = `
 - first
 
@@ -595,15 +595,21 @@ describe('robust list parsing', () => {
 `.trim()
 
     const parsed = markdownToEditorData(markdown)
-    expect(parsed.blocks).toHaveLength(2)
+    expect(parsed.blocks).toHaveLength(1)
     expect(parsed.blocks[0]).toEqual({
       type: 'list',
-      data: { style: 'unordered', items: [{ content: 'first', items: [] }] }
+      data: {
+        style: 'unordered',
+        items: [
+          { content: 'first', items: [] },
+          { content: 'second', items: [] }
+        ]
+      }
     })
-    expect(parsed.blocks[1]).toEqual({
-      type: 'list',
-      data: { style: 'unordered', items: [{ content: 'second', items: [] }] }
-    })
+
+    const output = editorDataToMarkdown(parsed)
+    expect(output.trim()).toBe('- first\n- second')
+    expect(markdownToEditorData(output).blocks).toHaveLength(1)
   })
 
   it('normalizes unicode newlines and indentation spaces in lists', () => {

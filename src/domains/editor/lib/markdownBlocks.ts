@@ -1021,6 +1021,34 @@ function parseRichList(lines: string[], start: number, style: ListStyle): { item
   return { items, next: i }
 }
 
+function mergeAdjacentListBlocks(blocks: EditorBlock[]): EditorBlock[] {
+  const merged: EditorBlock[] = []
+
+  for (const block of blocks) {
+    const previous = merged[merged.length - 1]
+    const currentStyle = block.type === 'list' ? String(block.data?.style ?? '') : ''
+    const previousStyle = previous?.type === 'list' ? String(previous.data?.style ?? '') : ''
+
+    if (
+      block.type === 'list' &&
+      previous?.type === 'list' &&
+      currentStyle === previousStyle &&
+      Array.isArray(previous.data?.items) &&
+      Array.isArray(block.data?.items)
+    ) {
+      previous.data = {
+        ...previous.data,
+        items: [...(previous.data.items as RichListItem[]), ...(block.data.items as RichListItem[])]
+      }
+      continue
+    }
+
+    merged.push(block)
+  }
+
+  return merged
+}
+
 /**
  * Parses markdown into the small EditorJS block vocabulary used by the app.
  *
@@ -1256,7 +1284,7 @@ export function markdownToEditorData(markdown: string): EditorDocument {
     blocks.push({ type: 'paragraph', data: { text: blockTextToHtml(paragraphLines.join('\n')) } })
   }
 
-  return { time: Date.now(), blocks, version: '2.0.0' }
+  return { time: Date.now(), blocks: mergeAdjacentListBlocks(blocks), version: '2.0.0' }
 }
 
 function normalizeParagraphMarkdown(value: unknown): string {
