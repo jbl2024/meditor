@@ -18,6 +18,15 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.38.2] - 2026-04-18
+
+### Changed
+- refactor(editor): remove first-block focus helpers (c4ef715)
+
+### Fixed
+- fix(editor): normalize adjacent markdown lists on load (065eaba)
+- fix(editor): keep tab navigation inside list items (6febfea)
+
 ## [0.38.1] - 2026-04-18
 
 ### Added
