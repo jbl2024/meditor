@@ -1,4 +1,4 @@
-import { nextTick, ref, type Ref } from 'vue'
+import { ref, type Ref } from 'vue'
 import type { DocumentHistoryEntry } from '../../domains/editor/composables/useDocumentHistory'
 
 /**
@@ -33,7 +33,6 @@ export type NavigationOpenOptions = {
   recordHistory?: boolean
   targetPaneId?: string
   revealInTargetPane?: boolean
-  focusFirstContentBlock?: boolean
 }
 
 /** Minimal shape required from the document status provider used by the shell. */
@@ -57,12 +56,11 @@ export type AppNavigationWorkspacePort = {
   recordRecentNote: (path: string) => void
 }
 
-/** Editor-specific state used to enforce autosave and restore focus. */
+/** Editor-specific state used to enforce autosave and route focus intents. */
 export type AppNavigationEditorPort = {
   activeFilePath: Readonly<Ref<string>>
   saveActiveDocument: () => Promise<void>
   focusEditor: () => void
-  focusFirstContentBlock: () => void
   getDocumentStatus: (path: string) => NavigationDocumentStatus
   isMarkdownPath: (path: string) => boolean
   isTextFile: (path: string) => Promise<boolean>
@@ -254,10 +252,6 @@ export function useAppNavigationController(options: UseAppNavigationControllerOp
       editorPort.activeFilePath.value === target &&
       !navigation.revealInTargetPane
     ) {
-      if (navigation.focusFirstContentBlock) {
-        await nextTick()
-        editorPort.focusFirstContentBlock()
-      }
       return true
     }
     const canSwitch = await ensureActiveTabSavedBeforeSwitch(target)
@@ -276,10 +270,6 @@ export function useAppNavigationController(options: UseAppNavigationControllerOp
     }
     if (navigation.recordHistory !== false) {
       historyPort.documentHistory.record(target)
-    }
-    if (navigation.focusFirstContentBlock) {
-      await nextTick()
-      editorPort.focusFirstContentBlock()
     }
     workspacePort.recordRecentNote(target)
     return true
@@ -341,8 +331,6 @@ export function useAppNavigationController(options: UseAppNavigationControllerOp
 
     const opened = await openTabWithAutosave(entry.path, { recordHistory: false })
     if (!opened) return false
-    await nextTick()
-    editorPort.focusEditor()
     return true
   }
 

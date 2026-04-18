@@ -98,7 +98,6 @@ function createOptions(overrides: UseEditorFileLifecycleOverrides = {}) {
     }),
     moveLifecyclePathState: vi.fn(),
     setSuppressOnChange: vi.fn(),
-    restoreCaret: vi.fn(() => false),
     setDirty: vi.fn(),
     setSaving: vi.fn(),
     setSaveError: vi.fn()
@@ -366,35 +365,6 @@ describe('useEditorFileLifecycle', () => {
     vi.useRealTimers()
   })
 
-  it('does not force focus-to-end when no caret snapshot exists', async () => {
-    const focusSpy = vi.fn()
-    const { options } = createOptions({
-      sessionPort: {
-        restoreCaret: vi.fn(() => false),
-        getEditor: () => ({ commands: { focus: focusSpy } } as any)
-      } as Partial<EditorFileLifecycleSessionPort>
-    })
-
-    const lifecycle = useEditorFileLifecycle(options)
-    await lifecycle.loadCurrentFile('a.md', { requestId: 1 })
-
-    expect(focusSpy).not.toHaveBeenCalled()
-    expect(options.sessionPort.restoreCaret).toHaveBeenCalledWith('a.md')
-  })
-
-  it('does not initialize first-character caret when persisted caret restore succeeds', async () => {
-    const { options } = createOptions({
-      sessionPort: {
-        restoreCaret: vi.fn(() => true)
-      } as Partial<EditorFileLifecycleSessionPort>
-    })
-
-    const lifecycle = useEditorFileLifecycle(options)
-    await lifecycle.loadCurrentFile('a.md', { requestId: 1 })
-
-    expect(options.sessionPort.restoreCaret).toHaveBeenCalledWith('a.md')
-  })
-
   it('waits for heavy async render idle before hiding large-doc overlay', async () => {
     vi.useFakeTimers()
     const waitDeferred = deferred<boolean>()
@@ -560,7 +530,6 @@ describe('useEditorFileLifecycle', () => {
     await lifecycle.loadCurrentFile('a.md', { requestId: 1 })
 
     expect(options.ioPort.openFile).not.toHaveBeenCalled()
-    expect(options.sessionPort.restoreCaret).not.toHaveBeenCalled()
     expect(options.uiPort.clearAutosaveTimer).not.toHaveBeenCalled()
     expect(options.uiPort.resetTransientUiState).not.toHaveBeenCalled()
     expect(options.uiPort.emitOutlineSoon).toHaveBeenCalledWith('a.md')

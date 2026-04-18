@@ -23,15 +23,14 @@ function createSession(path: string): DocumentSession {
 }
 
 describe('useEditorCaretOutline', () => {
-  it('captures and restores clamped caret selection', () => {
+  it('captures caret selection and keeps the snapshot available for outline flows', () => {
     const session = createSession('notes/a.md')
-    const setTextSelection = vi.fn()
     const editor = {
       state: {
         selection: { from: 2, to: 8 },
         doc: { content: { size: 6 } }
       },
-      commands: { setTextSelection }
+      commands: {}
     }
 
     const controls = useEditorCaretOutline({
@@ -44,10 +43,6 @@ describe('useEditorCaretOutline', () => {
 
     controls.captureCaret(session.path)
     expect(session.caret).toEqual({ kind: 'pm-selection', from: 2, to: 8 })
-
-    const restored = controls.restoreCaret(session.path)
-    expect(restored).toBe(true)
-    expect(setTextSelection).toHaveBeenCalledWith({ from: 2, to: 6 })
   })
 
   it('debounces outline emits and drops stale path transitions', () => {

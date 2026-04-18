@@ -25,7 +25,6 @@ export type EditorPaneGridExposed = {
   reloadCurrent: () => Promise<void>
   applyWorkspaceFsChanges: (changes: WorkspaceFsChange[]) => Promise<void>
   focusEditor: () => void
-  focusFirstContentBlock: () => void
   openNoteHistory: () => Promise<void>
   openPulseForNote: () => void
   isActiveEditorSourceSurface: () => boolean
@@ -46,7 +45,6 @@ type EditorViewExposed = {
   reloadCurrent: () => Promise<void>
   applyWorkspaceFsChanges: (changes: WorkspaceFsChange[]) => Promise<void>
   focusEditor: () => void
-  focusFirstContentBlock: () => void
   openNoteHistory: () => Promise<void>
   openPulseForNote: () => void
   revealSnippet: (snippet: string) => Promise<void>
@@ -230,7 +228,12 @@ function onResizerPointerUp() {
 }
 
 function setEditorRef(paneId: string, instance: unknown) {
-  editorRefs[paneId] = (instance as EditorViewExposed | null) ?? null
+  const next = (instance as EditorViewExposed | null) ?? null
+  if (!next) {
+    delete editorRefs[paneId]
+    return
+  }
+  editorRefs[paneId] = next
 }
 
 function activeEditor(): EditorViewExposed | null {
@@ -260,10 +263,6 @@ async function applyWorkspaceFsChanges(changes: WorkspaceFsChange[]) {
 
 function focusEditor() {
   ensureCall((editor) => editor.focusEditor(), undefined)
-}
-
-function focusFirstContentBlock() {
-  ensureCall((editor) => editor.focusFirstContentBlock(), undefined)
 }
 
 async function openNoteHistory() {
@@ -323,7 +322,6 @@ defineExpose<EditorPaneGridExposed>({
   reloadCurrent,
   applyWorkspaceFsChanges,
   focusEditor,
-  focusFirstContentBlock,
   openNoteHistory,
   openPulseForNote,
   isActiveEditorSourceSurface,

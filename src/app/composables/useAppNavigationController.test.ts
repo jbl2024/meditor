@@ -3,17 +3,25 @@ import { describe, expect, it, vi, afterEach } from 'vitest'
 import { useDocumentHistory } from '../../domains/editor/composables/useDocumentHistory'
 import { useAppNavigationController } from './useAppNavigationController'
 
-function createController(options: { saveClearsDirty?: boolean; activeFilePath?: string } = {}) {
+function createController(options: {
+  saveClearsDirty?: boolean
+  activeFilePath?: string
+  openDocumentPathsByPane?: Record<string, string[]>
+  activeTabType?: string
+} = {}) {
   const activeFilePath = ref(options.activeFilePath ?? '/vault/a.md')
   const allWorkspaceFiles = ref<string[]>([])
   const dirty = ref(false)
   const activePaneId = ref('pane-a')
   const opened: Array<{ path: string; paneId?: string; reveal: boolean }> = []
-  let activeTabType = 'document'
+  let activeTabType = options.activeTabType ?? 'document'
+  const documentPathsByPane = options.openDocumentPathsByPane ?? {
+    'pane-a': ['/vault/a.md', '/vault/b.md'],
+    'pane-b': ['/vault/c.md']
+  }
   const setErrorMessage = vi.fn()
   const recordRecentNote = vi.fn()
   const focusEditor = vi.fn()
-  const focusFirstContentBlock = vi.fn()
   const ensureAllFilesLoaded = vi.fn(async () => {
     allWorkspaceFiles.value = ['/vault/a.md']
   })
@@ -40,7 +48,6 @@ function createController(options: { saveClearsDirty?: boolean; activeFilePath?:
       activeFilePath,
       saveActiveDocument,
       focusEditor,
-      focusFirstContentBlock,
       getDocumentStatus: () => ({ dirty: dirty.value, saveError: '' }),
       isMarkdownPath: (path: string) => path.endsWith('.md') || path.endsWith('.markdown'),
       isTextFile: async (path: string) =>
@@ -51,19 +58,28 @@ function createController(options: { saveClearsDirty?: boolean; activeFilePath?:
       getActiveDocumentPath: () => activeFilePath.value,
       getActivePaneId: () => activePaneId.value,
       getPaneOrder: () => ['pane-a', 'pane-b'],
-      getDocumentPathsForPane: (paneId) => (paneId === 'pane-a' ? ['/vault/a.md', '/vault/b.md'] : ['/vault/c.md']),
+      getDocumentPathsForPane: (paneId) => documentPathsByPane[paneId] ?? [],
       openPathInPane: (path, paneId) => {
         opened.push({ path, paneId, reveal: false })
+        if (paneId) {
+          activePaneId.value = paneId
+        }
         activeFilePath.value = path
         activeTabType = 'document'
       },
       openInspectorInPane: (path, paneId) => {
         opened.push({ path, paneId, reveal: false })
+        if (paneId) {
+          activePaneId.value = paneId
+        }
         activeFilePath.value = path
         activeTabType = 'file-inspector'
       },
       revealDocumentInPane: (path, paneId) => {
         opened.push({ path, paneId, reveal: true })
+        if (paneId) {
+          activePaneId.value = paneId
+        }
         activeFilePath.value = path
         activeTabType = 'document'
       },
@@ -113,7 +129,6 @@ function createController(options: { saveClearsDirty?: boolean; activeFilePath?:
     setErrorMessage,
     recordRecentNote,
     focusEditor,
-    focusFirstContentBlock,
     ensureAllFilesLoaded,
     applyCosmosHistorySnapshot,
     openSecondBrainHistorySnapshot,
@@ -260,18 +275,6 @@ describe('useAppNavigationController', () => {
     const opened = await controller.goBackInHistory()
 
     expect(opened).toBe(true)
-    expect(focusEditor).toHaveBeenCalledOnce()
-  })
-
-  it('focuses the first content block when requested for a newly opened note', async () => {
-    const { controller, focusFirstContentBlock, focusEditor } = createController()
-
-    const opened = await controller.openTabWithAutosave('/vault/new-note.md', {
-      focusFirstContentBlock: true
-    })
-
-    expect(opened).toBe(true)
-    expect(focusFirstContentBlock).toHaveBeenCalledTimes(1)
     expect(focusEditor).not.toHaveBeenCalled()
   })
 

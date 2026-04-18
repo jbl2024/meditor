@@ -39,27 +39,6 @@ export function useEditorCaret(options: UseEditorCaretOptions) {
     return range.toString().length
   }
 
-  function resolveTextPosition(root: HTMLElement, offset: number): { node: Text; offset: number } | null {
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
-    let remaining = Math.max(0, offset)
-    let current = walker.nextNode() as Text | null
-
-    while (current) {
-      const length = current.data.length
-      if (remaining <= length) {
-        return { node: current, offset: remaining }
-      }
-      remaining -= length
-      current = walker.nextNode() as Text | null
-    }
-
-    if (!root.lastChild || root.lastChild.nodeType !== Node.TEXT_NODE) {
-      root.appendChild(document.createTextNode(''))
-    }
-    const tail = root.lastChild as Text
-    return { node: tail, offset: tail.data.length }
-  }
-
   /** Supported editable input controls where `selectionStart` is reliable. */
   function isTextEntryElement(element: HTMLElement): element is HTMLTextAreaElement | HTMLInputElement {
     if (element instanceof HTMLTextAreaElement) return true
@@ -114,45 +93,7 @@ export function useEditorCaret(options: UseEditorCaretOptions) {
     }
   }
 
-  /** Restores previously captured caret for a path. */
-  function restoreCaret(path: string): boolean {
-    if (!path || !options.holder.value) return false
-    const snapshot = options.caretByPath.value[path]
-    if (!snapshot) return false
-
-    const blocks = Array.from(options.holder.value.querySelectorAll('.ce-block')) as HTMLElement[]
-    const block = blocks[snapshot.blockIndex]
-    if (!block) return false
-
-    if (snapshot.kind === 'text-input') {
-      const input = Array.from(block.querySelectorAll('textarea, input'))
-        .find((element) => isTextEntryElement(element as HTMLElement)) as HTMLTextAreaElement | HTMLInputElement | undefined
-      if (!input) return false
-      const max = input.value.length
-      const offset = Math.max(0, Math.min(snapshot.offset, max))
-      input.focus()
-      input.setSelectionRange(offset, offset)
-      return true
-    }
-
-    const editable = block.querySelector('[contenteditable="true"]') as HTMLElement | null
-    if (!editable) return false
-    const resolved = resolveTextPosition(editable, snapshot.offset)
-    if (!resolved) return false
-
-    editable.focus()
-    const selection = window.getSelection()
-    if (!selection) return false
-    const range = document.createRange()
-    range.setStart(resolved.node, resolved.offset)
-    range.collapse(true)
-    selection.removeAllRanges()
-    selection.addRange(range)
-    return true
-  }
-
   return {
-    captureCaret,
-    restoreCaret
+    captureCaret
   }
 }

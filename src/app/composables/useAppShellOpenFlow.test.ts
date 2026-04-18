@@ -30,7 +30,6 @@ function createHarness() {
   const revealSnippetByPath: Record<string, string> = {}
 
   const focusEditor = vi.fn()
-  const focusFirstContentBlock = vi.fn()
   const revealSnippet = vi.fn(async () => {})
   const revealAnchor = vi.fn(async () => true)
   const resetCosmosView = vi.fn()
@@ -51,7 +50,6 @@ function createHarness() {
 
   const editorRef = ref({
     focusEditor,
-    focusFirstContentBlock,
     revealSnippet,
     revealAnchor,
     resetCosmosView,
@@ -94,12 +92,7 @@ function createHarness() {
   })
   const extractHeadingsFromMarkdown = vi.fn(() => ['Heading'])
 
-  const openTabWithAutosave = vi.fn(async (_path: string, options?: { focusFirstContentBlock?: boolean }) => {
-    if (options?.focusFirstContentBlock) {
-      focusFirstContentBlock()
-    }
-    return true
-  })
+  const openTabWithAutosave = vi.fn(async (_path: string) => true)
   const openDailyNote = vi.fn(async (date: string, openPath: (path: string) => Promise<boolean>) => {
     return await openPath(dailyNotePath(workingFolderPath.value, date))
   })
@@ -176,7 +169,6 @@ function createHarness() {
     closeQuickOpen,
     resetForAnchor,
     focusEditor,
-    focusFirstContentBlock,
     revealSnippet,
     revealAnchor,
     resetCosmosView,
@@ -203,7 +195,6 @@ describe('useAppShellOpenFlow', () => {
       activeFilePath: string
       markdownFiles: string[]
       expectedPath: string
-      expectedOptions?: { focusFirstContentBlock: true }
       virtualDoc?: { content: string; titleLine: string }
     }
 
@@ -213,7 +204,6 @@ describe('useAppShellOpenFlow', () => {
         activeFilePath: '/vault/notes/current.md',
         markdownFiles: [],
         expectedPath: '/vault/notes/creer_formulaire_glpi.md',
-        expectedOptions: { focusFirstContentBlock: true as const },
         virtualDoc: { content: '', titleLine: '' }
       },
       {
@@ -244,15 +234,7 @@ describe('useAppShellOpenFlow', () => {
       harness.pathExists.mockResolvedValue(false)
 
       await expect(harness.api.openWikilinkTarget(scenario.target)).resolves.toBe(true)
-
-      if (scenario.expectedOptions) {
-        expect(harness.openTabWithAutosave).toHaveBeenCalledWith(
-          scenario.expectedPath,
-          scenario.expectedOptions
-        )
-      } else {
-        expect(harness.openTabWithAutosave).toHaveBeenCalledWith(scenario.expectedPath)
-      }
+      expect(harness.openTabWithAutosave).toHaveBeenCalledWith(scenario.expectedPath)
       if (scenario.virtualDoc) {
         expect(harness.virtualDocs.value[scenario.expectedPath]).toEqual(scenario.virtualDoc)
       } else {
@@ -262,7 +244,7 @@ describe('useAppShellOpenFlow', () => {
     }
   })
 
-  it('opens an existing quick-open file and focuses the editor', async () => {
+  it('opens an existing quick-open file without forcing a caret move', async () => {
     const harness = createHarness()
 
     const item: QuickOpenResult = {
@@ -276,7 +258,34 @@ describe('useAppShellOpenFlow', () => {
 
     expect(harness.openTabWithAutosave).toHaveBeenCalledWith('/vault/existing.md')
     expect(harness.closeQuickOpen).toHaveBeenCalledTimes(1)
-    expect(harness.focusEditor).toHaveBeenCalledTimes(1)
+    harness.scope.stop()
+  })
+
+  it('opens a recent quick-open result without forcing a caret move', async () => {
+    const harness = createHarness()
+
+    const item: QuickOpenResult = {
+      kind: 'recent',
+      path: '/vault/recent.md',
+      label: 'Recent note',
+      recencyLabel: '2 hours ago'
+    }
+
+    await harness.api.openQuickResult(item)
+    await flushMicrotasks()
+
+    expect(harness.openTabWithAutosave).toHaveBeenCalledWith('/vault/recent.md')
+    expect(harness.closeQuickOpen).toHaveBeenCalledTimes(1)
+    harness.scope.stop()
+  })
+
+  it('opens an explorer file without forcing a caret move', async () => {
+    const harness = createHarness()
+
+    await harness.api.onExplorerOpen('/vault/existing.md')
+    await flushMicrotasks()
+
+    expect(harness.openTabWithAutosave).toHaveBeenCalledWith('/vault/existing.md')
     harness.scope.stop()
   })
 
@@ -289,8 +298,7 @@ describe('useAppShellOpenFlow', () => {
     await expect(harness.api.openWikilinkTarget('missing.md')).resolves.toBe(true)
 
     expect(harness.pathExists).toHaveBeenCalledWith('/vault/missing.md')
-    expect(harness.openTabWithAutosave).toHaveBeenCalledWith('/vault/missing.md', { focusFirstContentBlock: true })
-    expect(harness.focusFirstContentBlock).toHaveBeenCalledTimes(1)
+    expect(harness.openTabWithAutosave).toHaveBeenCalledWith('/vault/missing.md')
     harness.scope.stop()
   })
 
@@ -307,9 +315,7 @@ describe('useAppShellOpenFlow', () => {
       content: '',
       titleLine: ''
     })
-    expect(harness.openTabWithAutosave).toHaveBeenCalledWith('/vault/notes/creer_formulaire_glpi.md', {
-      focusFirstContentBlock: true
-    })
+    expect(harness.openTabWithAutosave).toHaveBeenCalledWith('/vault/notes/creer_formulaire_glpi.md')
     harness.scope.stop()
   })
 
@@ -418,9 +424,7 @@ describe('useAppShellOpenFlow', () => {
 
     await expect(harness.api.openWikilinkTarget('tools')).resolves.toBe(true)
 
-    expect(harness.openTabWithAutosave).toHaveBeenCalledWith('/vault/notes/tools.md', {
-      focusFirstContentBlock: true
-    })
+    expect(harness.openTabWithAutosave).toHaveBeenCalledWith('/vault/notes/tools.md')
     expect(harness.virtualDocs.value['/vault/notes/tools.md']).toEqual({
       content: '',
       titleLine: ''
@@ -437,6 +441,19 @@ describe('useAppShellOpenFlow', () => {
     expect(harness.openTabWithAutosave).toHaveBeenCalledWith('/vault/existing.md')
     expect(harness.revealAnchor).toHaveBeenCalledWith({ heading: 'Heading' })
     expect(harness.focusEditor).not.toHaveBeenCalled()
+    harness.scope.stop()
+  })
+
+  it('retries the existing wikilink target without forcing a caret move when anchor navigation fails', async () => {
+    const harness = createHarness()
+    harness.resolveExistingWikilinkPath.mockReturnValue('existing.md')
+    harness.revealAnchor.mockResolvedValueOnce(false)
+
+    await expect(harness.api.openWikilinkTarget('existing.md#Heading')).resolves.toBe(true)
+
+    expect(harness.openTabWithAutosave).toHaveBeenNthCalledWith(1, '/vault/existing.md')
+    expect(harness.revealAnchor).toHaveBeenCalledWith({ heading: 'Heading' })
+    expect(harness.openTabWithAutosave).toHaveBeenNthCalledWith(2, '/vault/existing.md')
     harness.scope.stop()
   })
 

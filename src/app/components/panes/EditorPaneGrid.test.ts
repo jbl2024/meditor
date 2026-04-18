@@ -13,25 +13,24 @@ const harnessState = vi.hoisted(() => ({
     showExperience: boolean
     activeTabId: string | null
   }>,
-  surfaceMethods: [] as Array<{
-    paneId: string
-    methods: {
-      saveNow: ReturnType<typeof vi.fn>
-      reloadCurrent: ReturnType<typeof vi.fn>
-      applyWorkspaceFsChanges: ReturnType<typeof vi.fn>
-      focusEditor: ReturnType<typeof vi.fn>
-      focusFirstContentBlock: ReturnType<typeof vi.fn>
-      revealSnippet: ReturnType<typeof vi.fn>
-      revealOutlineHeading: ReturnType<typeof vi.fn>
-      revealAnchor: ReturnType<typeof vi.fn>
-      zoomIn: ReturnType<typeof vi.fn>
-      zoomOut: ReturnType<typeof vi.fn>
-      resetZoom: ReturnType<typeof vi.fn>
-      getZoom: ReturnType<typeof vi.fn>
-      resetCosmosView: ReturnType<typeof vi.fn>
-      focusCosmosNodeById: ReturnType<typeof vi.fn>
-    }
-  }>,
+    surfaceMethods: [] as Array<{
+      paneId: string
+      methods: {
+        saveNow: ReturnType<typeof vi.fn>
+        reloadCurrent: ReturnType<typeof vi.fn>
+        applyWorkspaceFsChanges: ReturnType<typeof vi.fn>
+        focusEditor: ReturnType<typeof vi.fn>
+        revealSnippet: ReturnType<typeof vi.fn>
+        revealOutlineHeading: ReturnType<typeof vi.fn>
+        revealAnchor: ReturnType<typeof vi.fn>
+        zoomIn: ReturnType<typeof vi.fn>
+        zoomOut: ReturnType<typeof vi.fn>
+        resetZoom: ReturnType<typeof vi.fn>
+        getZoom: ReturnType<typeof vi.fn>
+        resetCosmosView: ReturnType<typeof vi.fn>
+        focusCosmosNodeById: ReturnType<typeof vi.fn>
+      }
+    }>,
   emittedStatus: [] as Array<{ path: string; dirty: boolean; saving: boolean; saveError: string }>,
   emittedPaneFocus: [] as Array<{ paneId: string }>
 }))
@@ -88,7 +87,6 @@ vi.mock('./PaneSurfaceHost.vue', () => ({
         reloadCurrent: vi.fn(async () => {}),
         applyWorkspaceFsChanges: vi.fn(async () => {}),
         focusEditor: vi.fn(),
-        focusFirstContentBlock: vi.fn(),
         revealSnippet: vi.fn(async () => {}),
         revealOutlineHeading: vi.fn(async () => {}),
         revealAnchor: vi.fn(async () => true),
@@ -347,7 +345,6 @@ describe('EditorPaneGrid', () => {
 
     await gridRef.value?.reloadCurrent()
     gridRef.value?.focusEditor()
-    gridRef.value?.focusFirstContentBlock()
     await gridRef.value?.revealSnippet('snippet')
     await gridRef.value?.revealOutlineHeading(2)
     expect(await gridRef.value?.revealAnchor({} as never)).toBe(true)
@@ -361,7 +358,6 @@ describe('EditorPaneGrid', () => {
     const activeSurfaceMethods = harnessState.surfaceMethods[0]?.methods
     expect(activeSurfaceMethods?.reloadCurrent).toHaveBeenCalledTimes(1)
     expect(activeSurfaceMethods?.focusEditor).toHaveBeenCalledTimes(1)
-    expect(activeSurfaceMethods?.focusFirstContentBlock).toHaveBeenCalledTimes(1)
     expect(activeSurfaceMethods?.revealSnippet).toHaveBeenCalledWith('snippet')
     expect(activeSurfaceMethods?.revealOutlineHeading).toHaveBeenCalledWith(2)
     expect(activeSurfaceMethods?.revealAnchor).toHaveBeenCalledTimes(1)
@@ -412,6 +408,109 @@ describe('EditorPaneGrid', () => {
     await nextTick()
     expect(grid?.style.gridTemplateRows).toBe('70% 6px 30%')
     window.dispatchEvent(new Event('pointerup'))
+
+    app.unmount()
+  })
+
+  it('drops a pending first-block focus when the active pane changes before readiness', async () => {
+    const layout = ref<MultiPaneLayout>({
+      root: {
+        kind: 'split',
+        axis: 'column',
+        ratio: 0.5,
+        a: { kind: 'pane', paneId: 'pane-1' },
+        b: { kind: 'pane', paneId: 'pane-2' }
+      },
+      panesById: {
+        'pane-1': {
+          id: 'pane-1',
+          activeTabId: 'doc-1',
+          openTabs: [{ id: 'doc-1', type: 'document', path: 'notes/a.md', pinned: false }],
+          activePath: 'notes/a.md'
+        },
+        'pane-2': {
+          id: 'pane-2',
+          activeTabId: 'doc-2',
+          openTabs: [{ id: 'doc-2', type: 'document', path: 'notes/b.md', pinned: false }],
+          activePath: 'notes/b.md'
+        }
+      },
+      activePaneId: 'pane-1'
+    })
+
+    const gridRef = ref<any>(null)
+
+    const app = createApp(defineComponent({
+      setup() {
+        return () =>
+          h(EditorPaneGrid, {
+            ref: gridRef,
+            layout: layout.value,
+            activeDocumentPath: 'notes/a.md',
+            getStatus: () => ({ dirty: false, saving: false, saveError: '' }),
+            renameFileFromTitle: async (path: string, title: string) => ({ path, title }),
+            loadLinkTargets: async () => [],
+            loadLinkHeadings: async () => [],
+            loadPropertyTypeSchema: async () => ({}),
+            savePropertyTypeSchema: async () => {},
+            openLinkTarget: async () => true,
+            cosmos: {
+              graph: { nodes: [], edges: [], generated_at_ms: 0 },
+              loading: false,
+              error: '',
+              selectedNodeId: '',
+              focusMode: false,
+              focusDepth: 1,
+              summary: { nodes: 0, edges: 0 },
+              query: '',
+              matches: [],
+              showSemanticEdges: false,
+              selectedNode: null,
+              selectedLinkCount: 0,
+              preview: '',
+              previewLoading: false,
+              previewError: '',
+              outgoingNodes: [],
+              incomingNodes: []
+            },
+            alters: {
+              workspacePath: '',
+              settings: {
+                default_mode: 'neutral',
+                show_badge_in_chat: true,
+                default_influence_intensity: 'balanced'
+              }
+            },
+            secondBrain: {
+              workspacePath: '/vault',
+              allWorkspaceFiles: ['notes/a.md'],
+              requestedSessionId: '',
+              requestedSessionNonce: 0,
+              requestedPrompt: '',
+              requestedPromptNonce: 0,
+              activeNotePath: '',
+              echoesRefreshToken: 0
+            },
+            launchpad: {
+              workspaceLabel: 'vault',
+              recentWorkspaces: [],
+              recentViewedNotes: [],
+              recentUpdatedNotes: [],
+              showWizardAction: true
+            }
+          })
+      }
+    }))
+
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+    app.mount(root)
+    await nextTick()
+
+    const firstSurfaceMethods = harnessState.surfaceMethods.find((entry) => entry.paneId === 'pane-1')?.methods
+    const secondSurfaceMethods = harnessState.surfaceMethods.find((entry) => entry.paneId === 'pane-2')?.methods
+    expect(firstSurfaceMethods).toBeTruthy()
+    expect(secondSurfaceMethods).toBeTruthy()
 
     app.unmount()
   })

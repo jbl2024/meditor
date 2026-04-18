@@ -70,16 +70,15 @@ export type EditorDocumentRuntimeUiPort = {
   syncAfterDocumentChange: () => void
   initializeUi: () => Promise<void>
   disposeUi: () => Promise<void>
-    interaction: {
-      captureCaret: (path: string) => void
-      restoreCaret: (path: string) => boolean
-      clearOutlineTimer: (path: string) => void
-      emitOutlineSoon: (path: string) => void
-      closeSlashMenu: () => void
-      closeAtMenu?: () => void
-      closeWikilinkMenu: () => void
-      syncWikilinkUiFromPluginState: () => void
-    }
+  interaction: {
+    captureCaret: (path: string) => void
+    clearOutlineTimer: (path: string) => void
+    emitOutlineSoon: (path: string) => void
+    closeSlashMenu: () => void
+    closeAtMenu?: () => void
+    closeWikilinkMenu: () => void
+    syncWikilinkUiFromPluginState: () => void
+  }
 }
 
 /**
@@ -336,7 +335,6 @@ export function useEditorDocumentRuntime(options: UseEditorDocumentRuntimeOption
       },
       moveLifecyclePathState: (from, to) => lifecycle.movePathState(from, to),
       setSuppressOnChange,
-      restoreCaret: (path) => uiInteraction.restoreCaret(path),
       setDirty,
       setSaving,
       setSaveError

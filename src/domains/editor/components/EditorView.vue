@@ -359,7 +359,6 @@ documentRuntime = useEditorDocumentRuntime({
     disposeUi: chromeRuntime.dialogsAndLifecycle.onUnmountCleanup,
     interaction: {
       captureCaret: interactionRuntime.captureCaret,
-      restoreCaret: interactionRuntime.restoreCaret,
       clearOutlineTimer: interactionRuntime.clearOutlineTimer,
       emitOutlineSoon: interactionRuntime.emitOutlineSoon,
       closeSlashMenu: interactionRuntime.closeSlashMenu,
@@ -443,7 +442,6 @@ const {
   ignoreWord: ignoreSpellcheckWord,
   addToWorkspaceDictionary: addSpellcheckWordToWorkspaceDictionary
 } = chromeRuntime.spellcheck
-
 watch(
   () => props.spellcheckEnabled,
   () => {
@@ -464,17 +462,8 @@ watch(
 
 watch([currentPath, isSourceSurface], async ([path, next]) => {
   if (!path) return
-  if (next) {
-    const requestId = sourceRuntime.nextRequestId()
-    sourceRuntime.ensureSession(path)
-    sourceRuntime.setActiveSession(path)
-    await sourceRuntime.loadCurrentFile(path, { forceReload: true, requestId })
-    return
-  }
-  const requestId = documentRuntime.nextRequestId()
-  documentRuntime.ensureSession(path)
-  documentRuntime.setActiveSession(path)
-  await documentRuntime.loadCurrentFile(path, { forceReload: true, requestId })
+  const requestId = next ? sourceRuntime.nextRequestId() : documentRuntime.nextRequestId()
+  await loadVisibleDocument(path, requestId)
 }, { immediate: true })
 
 function onSpellcheckMenuEl(element: HTMLDivElement | null) {
@@ -649,15 +638,6 @@ function getDocumentSession(path: string) {
   return documentRuntime?.getSession(path) ?? null
 }
 
-function focusFirstContentBlock() {
-  if (isSourceSurface.value) {
-    const sourceEditor = holder.value?.querySelector('.tomosona-source-editor .cm-content') as HTMLElement | null
-    sourceEditor?.focus()
-    return
-  }
-  layout.focusFirstEditableBlock()
-}
-
 function focusEditor() {
   if (isSourceSurface.value) {
     const sourceEditor = holder.value?.querySelector('.tomosona-source-editor .cm-content') as HTMLElement | null
@@ -665,6 +645,19 @@ function focusEditor() {
     return
   }
   layout.focusEditor()
+}
+
+async function loadVisibleDocument(path: string, requestId: number) {
+  if (sourceMode.isSourceMode(path)) {
+    sourceRuntime.ensureSession(path)
+    sourceRuntime.setActiveSession(path)
+    await sourceRuntime.loadCurrentFile(path, { forceReload: true, requestId })
+    return
+  }
+
+  documentRuntime.ensureSession(path)
+  documentRuntime.setActiveSession(path)
+  await documentRuntime.loadCurrentFile(path, { forceReload: true, requestId })
 }
 
 const activeSession = computed(() => currentPath.value ? getSession(currentPath.value) : null)
@@ -842,17 +835,8 @@ watch(currentPath, () => {
 
 async function onLoadDiskVersion() {
   if (!currentPath.value) return
-  if (isSourceSurface.value) {
-    const requestId = sourceRuntime.nextRequestId()
-    sourceRuntime.ensureSession(currentPath.value)
-    sourceRuntime.setActiveSession(currentPath.value)
-    await sourceRuntime.loadCurrentFile(currentPath.value, { forceReload: true, requestId })
-    return
-  }
-  const requestId = documentRuntime.nextRequestId()
-  documentRuntime.ensureSession(currentPath.value)
-  documentRuntime.setActiveSession(currentPath.value)
-  await documentRuntime.loadCurrentFile(currentPath.value, { forceReload: true, requestId })
+  const requestId = isSourceSurface.value ? sourceRuntime.nextRequestId() : documentRuntime.nextRequestId()
+  await loadVisibleDocument(currentPath.value, requestId)
 }
 
 async function onOverwriteWithMyVersion() {
@@ -896,17 +880,8 @@ defineExpose({
   },
   reloadCurrent: async () => {
     if (!currentPath.value) return
-    if (isSourceSurface.value) {
-      const requestId = sourceRuntime.nextRequestId()
-      sourceRuntime.ensureSession(currentPath.value)
-      sourceRuntime.setActiveSession(currentPath.value)
-      await sourceRuntime.loadCurrentFile(currentPath.value, { forceReload: true, requestId })
-      return
-    }
-    const requestId = documentRuntime.nextRequestId()
-    documentRuntime.ensureSession(currentPath.value)
-    documentRuntime.setActiveSession(currentPath.value)
-    await documentRuntime.loadCurrentFile(currentPath.value, { forceReload: true, requestId })
+    const requestId = isSourceSurface.value ? sourceRuntime.nextRequestId() : documentRuntime.nextRequestId()
+    await loadVisibleDocument(currentPath.value, requestId)
   },
   applyWorkspaceFsChanges: async (changes: WorkspaceFsChange[]) => {
     applySourceModePathMoves(changes)
@@ -916,7 +891,6 @@ defineExpose({
     ])
   },
   focusEditor,
-  focusFirstContentBlock,
   openNoteHistory: () => openNoteHistory(),
   revealSnippet,
   revealOutlineHeading,
@@ -1000,7 +974,7 @@ defineExpose({
                   @commit="onTitleCommit"
                   @focus="titleEditorFocused = true"
                   @blur="titleEditorFocused = false"
-                  @focus-body-request="void focusFirstContentBlock()"
+                  @focus-body-request="void focusEditor()"
                 />
                 <EditorPropertiesPanel
                   :expanded="propertiesExpanded(path)"

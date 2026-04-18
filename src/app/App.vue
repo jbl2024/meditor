@@ -983,9 +983,6 @@ const navigationEditorPort = {
   focusEditor: () => {
     editorRef.value?.focusEditor()
   },
-  focusFirstContentBlock: () => {
-    editorRef.value?.focusFirstContentBlock()
-  },
   getDocumentStatus: (path: string) => editorState.getStatus(path),
   isMarkdownPath,
   isTextFile: async (path: string) => await isTextFile(path)

@@ -30,7 +30,7 @@ export type AppShellWorkspaceEntriesFsPort = {
   ensureParentFolders: (path: string) => Promise<void>
   readTextFile: (path: string) => Promise<string>
   writeTextFile: (path: string, content: string) => Promise<void>
-  openTabWithAutosave: (path: string, options?: { focusFirstContentBlock?: boolean }) => Promise<boolean>
+  openTabWithAutosave: (path: string, options?: { recordHistory?: boolean; targetPaneId?: string; revealInTargetPane?: boolean }) => Promise<boolean>
   upsertWorkspaceFilePath: (path: string) => void
   openDailyNote: (date: string) => Promise<boolean>
 }
@@ -177,10 +177,7 @@ export function useAppShellWorkspaceEntries(options: UseAppShellWorkspaceEntries
 
       await options.fsPort.ensureParentFolders(fullPath)
       await options.fsPort.writeTextFile(fullPath, templateContent)
-      const opened = await options.fsPort.openTabWithAutosave(
-        fullPath,
-        templateContent.trim() ? undefined : { focusFirstContentBlock: true }
-      )
+      const opened = await options.fsPort.openTabWithAutosave(fullPath)
       if (!opened) return false
       options.fsPort.upsertWorkspaceFilePath(fullPath)
       options.modalPort.closeNewFileModal()

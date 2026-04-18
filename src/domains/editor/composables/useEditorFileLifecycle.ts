@@ -75,7 +75,6 @@ export type EditorFileLifecycleSessionPort = {
   renameSessionPath: (from: string, to: string) => void
   moveLifecyclePathState: (from: string, to: string) => void
   setSuppressOnChange: (value: boolean) => void
-  restoreCaret: (path: string) => boolean
   setDirty: (path: string, dirty: boolean) => void
   setSaving: (path: string, saving: boolean) => void
   setSaveError: (path: string, message: string) => void
@@ -412,7 +411,15 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
         sessionPort.setDirty(path, false)
       }
 
-      await nextTick()
+      if (shouldReloadContent) {
+        // Why/invariant: a fresh Tiptap mount can display the preloaded empty
+        // document for one frame before the new content is painted. Treating
+        // load completion as "ready" only after a paint barrier avoids early
+        // focus requests being overwritten by the later content commit.
+        await flushPaintBarrier()
+      } else {
+        await nextTick()
+      }
       if (typeof loadOptions?.requestId === 'number' && !requestPort.isCurrentRequest(loadOptions.requestId)) {
         return
       }
@@ -424,12 +431,6 @@ export function useEditorFileLifecycle(options: UseEditorFileLifecycleOptions) {
       if (sessionPort.holder.value && typeof remembered === 'number') {
         sessionPort.holder.value.scrollTop = remembered
       }
-      // Invariant: mounted tab switches should keep in-memory selection untouched.
-      // Only reload/reopen flows restore persisted caret snapshots.
-      if (shouldReloadContent) {
-        sessionPort.restoreCaret(path)
-      }
-
       uiPort.emitOutlineSoon(path)
       uiPort.syncWikilinkUiFromPluginState()
       uiPort.updateGutterHitboxStyle()

@@ -80,7 +80,7 @@ describe('useAppShellWorkspaceEntries', () => {
     expect(await api.submitNewFileFromModal()).toBe(true)
     expect(fsPort.ensureParentFolders).toHaveBeenCalledWith('/vault/ideas/today.md')
     expect(fsPort.writeTextFile).toHaveBeenCalledWith('/vault/ideas/today.md', '')
-    expect(fsPort.openTabWithAutosave).toHaveBeenCalledWith('/vault/ideas/today.md', { focusFirstContentBlock: true })
+    expect(fsPort.openTabWithAutosave).toHaveBeenCalledWith('/vault/ideas/today.md')
     expect(modalPort.closeNewFileModal).toHaveBeenCalled()
     scope.stop()
   })
@@ -99,7 +99,7 @@ describe('useAppShellWorkspaceEntries', () => {
     expect(await api.submitNewFileFromModal()).toBe(true)
     expect(fsPort.readTextFile).toHaveBeenCalledWith('/vault/_templates/meetings/regular.md')
     expect(fsPort.writeTextFile).toHaveBeenCalledWith('/vault/meetings/weekly.md', '# Weekly meeting\n')
-    expect(fsPort.openTabWithAutosave).toHaveBeenCalledWith('/vault/meetings/weekly.md', undefined)
+    expect(fsPort.openTabWithAutosave).toHaveBeenCalledWith('/vault/meetings/weekly.md')
     scope.stop()
   })
 

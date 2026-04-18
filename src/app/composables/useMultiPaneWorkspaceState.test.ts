@@ -22,6 +22,7 @@ describe('useMultiPaneWorkspaceState', () => {
     store.openDocumentInPane('/vault/a.md', pane2!)
 
     expect(store.layout.value.activePaneId).toBe('pane-1')
+    expect(store.getActiveDocumentPath()).toBe('/vault/a.md')
     expect(store.layout.value.panesById['pane-2'].openTabs).toEqual([])
   })
 
@@ -123,6 +124,7 @@ describe('useMultiPaneWorkspaceState', () => {
 
     expect(store.findPaneContainingDocument('/vault/a.md')).toBe('pane-2')
     expect(store.layout.value.panesById['pane-1'].openTabs).toEqual([])
+    expect(store.layout.value.activePaneId).toBe('pane-2')
     expect(store.getActiveDocumentPath('pane-2')).toBe('/vault/a.md')
   })
 
@@ -136,6 +138,7 @@ describe('useMultiPaneWorkspaceState', () => {
     store.revealDocumentInPane('/vault/b.md', pane2!)
 
     expect(store.findPaneContainingDocument('/vault/b.md')).toBe('pane-2')
+    expect(store.layout.value.activePaneId).toBe('pane-2')
     expect(store.getActiveDocumentPath('pane-2')).toBe('/vault/b.md')
     expect(store.layout.value.panesById['pane-1'].openTabs).toHaveLength(1)
   })

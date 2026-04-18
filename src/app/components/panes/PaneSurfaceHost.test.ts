@@ -12,8 +12,10 @@ vi.mock('../../../domains/editor/components/EditorView.vue', () => ({
   default: defineComponent({
     name: 'EditorViewStub',
     props: ['path'],
+    emits: ['status'],
     setup(props) {
-      return () => h('div', { class: 'editor-view-stub' }, String(props.path ?? ''))
+      return () =>
+        h('div', { class: 'editor-view-stub' }, String(props.path ?? ''))
     }
   })
 }))
@@ -228,4 +230,5 @@ describe('PaneSurfaceHost', () => {
 
     app.unmount()
   })
+
 })

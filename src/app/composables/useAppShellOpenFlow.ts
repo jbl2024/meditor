@@ -78,7 +78,7 @@ export type AppShellOpenFlowWorkspaceDataPort = {
 }
 
 export type AppShellOpenFlowNavigationPort = {
-  openTabWithAutosave: (path: string, options?: { recordHistory?: boolean; targetPaneId?: string; revealInTargetPane?: boolean; focusFirstContentBlock?: boolean }) => Promise<boolean>
+  openTabWithAutosave: (path: string, options?: { recordHistory?: boolean; targetPaneId?: string; revealInTargetPane?: boolean }) => Promise<boolean>
   openDailyNote: (date: string, openPath: (path: string) => Promise<boolean>) => Promise<boolean>
   recordCosmosHistorySnapshot: () => void
 }
@@ -317,8 +317,6 @@ export function useAppShellOpenFlow(options: AppShellOpenFlowOptions) {
       options.editorPort.virtualDocs.value = nextVirtual
       const opened = await options.navigationPort.openTabWithAutosave(path)
       if (!opened) return false
-      await nextTick()
-      options.editorPort.editorRef.value?.focusEditor()
       return true
     }
 
@@ -332,7 +330,7 @@ export function useAppShellOpenFlow(options: AppShellOpenFlowOptions) {
       }
     }
 
-    const opened = await options.navigationPort.openTabWithAutosave(path, { focusFirstContentBlock: true })
+    const opened = await options.navigationPort.openTabWithAutosave(path)
     if (!opened) return false
     await nextTick()
     return true
@@ -393,7 +391,9 @@ export function useAppShellOpenFlow(options: AppShellOpenFlowOptions) {
       if (!opened) return false
       const revealed = await revealAnchor()
       if (!anchor || !revealed) {
-        options.editorPort.editorRef.value?.focusEditor()
+        await options.navigationPort.openTabWithAutosave(
+          isAbsoluteWorkspacePath(existing) ? existing : `${root}/${existing}`
+        )
       }
       return true
     }
@@ -419,7 +419,6 @@ export function useAppShellOpenFlow(options: AppShellOpenFlowOptions) {
     if (fallback === 'explorer') {
       await showExplorerForActiveFile()
     }
-    options.editorPort.editorRef.value?.focusEditor()
   }
 
   async function loadWikilinkHeadings(target: string): Promise<string[]> {
@@ -447,10 +446,9 @@ export function useAppShellOpenFlow(options: AppShellOpenFlowOptions) {
 
   async function openQuickResult(item: QuickOpenResult) {
     if (item.kind === 'file' || item.kind === 'recent') {
+      options.uiPort.closeQuickOpen()
       const opened = await options.navigationPort.openTabWithAutosave(item.path)
       if (!opened) return
-      options.uiPort.closeQuickOpen()
-      nextTick(() => options.editorPort.editorRef.value?.focusEditor())
       return
     }
     void options.navigationPort.openDailyNote(item.date, options.navigationPort.openTabWithAutosave).then((opened) => {
@@ -470,12 +468,11 @@ export function useAppShellOpenFlow(options: AppShellOpenFlowOptions) {
   async function onBacklinkOpen(path: string) {
     const opened = await options.navigationPort.openTabWithAutosave(path)
     if (!opened) return
-    await nextTick()
-    options.editorPort.editorRef.value?.focusEditor()
   }
 
   async function onExplorerOpen(path: string) {
-    await options.navigationPort.openTabWithAutosave(path)
+    const opened = await options.navigationPort.openTabWithAutosave(path)
+    if (!opened) return
   }
 
   async function runActiveNoteEffects(path: string) {

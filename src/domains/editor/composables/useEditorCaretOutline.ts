@@ -46,18 +46,6 @@ export function useEditorCaretOutline(options: UseEditorCaretOutlineOptions) {
     session.caret = { kind: 'pm-selection', from: snapshot.from, to: snapshot.to }
   }
 
-  function restoreCaret(path: string) {
-    const editor = options.getEditor()
-    if (!editor || !path) return false
-    const snapshot = options.getSession(path)?.caret
-    if (!snapshot) return false
-    const max = Math.max(1, editor.state.doc.content.size)
-    const from = Math.max(1, Math.min(snapshot.from, max))
-    const to = Math.max(1, Math.min(snapshot.to, max))
-    editor.commands.setTextSelection({ from, to })
-    return true
-  }
-
   function clearOutlineTimer(path: string) {
     const session = options.getSession(path)
     if (!session || !session.outlineTimer) return
@@ -80,7 +68,6 @@ export function useEditorCaretOutline(options: UseEditorCaretOutlineOptions) {
 
   return {
     captureCaret,
-    restoreCaret,
     clearOutlineTimer,
     emitOutlineSoon
   }

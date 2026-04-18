@@ -17,7 +17,7 @@ describe('useEditorCaret', () => {
     document.body.innerHTML = ''
   })
 
-  it('captures and restores contenteditable caret offsets', () => {
+  it('captures contenteditable caret offsets', () => {
     const holderEl = document.createElement('div')
     const block = document.createElement('div')
     block.className = 'ce-block'
@@ -30,7 +30,7 @@ describe('useEditorCaret', () => {
     document.body.appendChild(holderEl)
 
     const caretByPath = ref<Record<string, EditorCaretSnapshot>>({})
-    const { captureCaret, restoreCaret } = useEditorCaret({
+    const { captureCaret } = useEditorCaret({
       holder: ref(holderEl),
       caretByPath
     })
@@ -45,16 +45,9 @@ describe('useEditorCaret', () => {
       blockIndex: 0,
       offset: 5
     })
-
-    setCollapsedSelection(textNode, 0)
-    const restored = restoreCaret('notes/a.md')
-
-    expect(restored).toBe(true)
-    const selection = window.getSelection()
-    expect(selection?.focusOffset).toBe(5)
   })
 
-  it('captures and restores textarea caret offsets', () => {
+  it('captures textarea caret offsets', () => {
     const holderEl = document.createElement('div')
     const block = document.createElement('div')
     block.className = 'ce-block'
@@ -65,7 +58,7 @@ describe('useEditorCaret', () => {
     document.body.appendChild(holderEl)
 
     const caretByPath = ref<Record<string, EditorCaretSnapshot>>({})
-    const { captureCaret, restoreCaret } = useEditorCaret({
+    const { captureCaret } = useEditorCaret({
       holder: ref(holderEl),
       caretByPath
     })
@@ -80,27 +73,6 @@ describe('useEditorCaret', () => {
       blockIndex: 0,
       offset: 3
     })
-
-    textarea.setSelectionRange(0, 0)
-    const restored = restoreCaret('notes/a.md')
-
-    expect(restored).toBe(true)
-    expect(textarea.selectionStart).toBe(3)
-    expect(textarea.selectionEnd).toBe(3)
-  })
-
-  it('returns false when snapshot block index does not exist', () => {
-    const holderEl = document.createElement('div')
-    const caretByPath = ref<Record<string, EditorCaretSnapshot>>({
-      'notes/a.md': { kind: 'contenteditable', blockIndex: 4, offset: 1 }
-    })
-
-    const { restoreCaret } = useEditorCaret({
-      holder: ref(holderEl),
-      caretByPath
-    })
-
-    expect(restoreCaret('notes/a.md')).toBe(false)
   })
 
   it('ignores selection outside holder during capture', () => {

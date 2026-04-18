@@ -554,7 +554,6 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     getZoom
   } = useEditorZoom()
   const contentFocus = useEditorContentFocus({
-    holder: host.holder,
     getEditor: () => host.getEditor()
   })
 
@@ -1199,7 +1198,6 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     resetEditorZoom,
     getZoom,
     focusEditor: contentFocus.focusEditor,
-    focusFirstEditableBlock: contentFocus.focusFirstEditableBlock,
     updateGutterHitboxStyle: layoutMetrics.updateGutterHitboxStyle
   }
   const pulseAndDialogs = {
@@ -1321,7 +1319,6 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     zoomEditorBy: layoutAndZoom.zoomEditorBy,
     resetEditorZoom: layoutAndZoom.resetEditorZoom,
     focusEditor: layoutAndZoom.focusEditor,
-    focusFirstEditableBlock: layoutAndZoom.focusFirstEditableBlock,
     gutterHitboxStyle: layoutAndZoom.layoutMetrics.gutterHitboxStyle,
     onHolderScroll: layoutAndZoom.layoutMetrics.onHolderScroll,
     updateGutterHitboxStyle: layoutAndZoom.updateGutterHitboxStyle

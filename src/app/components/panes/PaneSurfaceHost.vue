@@ -95,7 +95,6 @@ type EditorSurfaceExposed = {
   reloadCurrent: () => Promise<void>
   applyWorkspaceFsChanges: (changes: WorkspaceFsChange[]) => Promise<void>
   focusEditor: () => void
-  focusFirstContentBlock: () => void
   openNoteHistory: () => Promise<void>
   openPulseForNote: () => void
   isSourceSurface: () => boolean
@@ -161,7 +160,6 @@ defineExpose<EditorSurfaceExposed>({
   reloadCurrent: async () => await withEditor((editor) => editor.reloadCurrent(), Promise.resolve()),
   applyWorkspaceFsChanges: async (changes: WorkspaceFsChange[]) => await withEditor((editor) => editor.applyWorkspaceFsChanges(changes), Promise.resolve()),
   focusEditor: () => withEditor((editor) => editor.focusEditor(), undefined),
-  focusFirstContentBlock: () => withEditor((editor) => editor.focusFirstContentBlock(), undefined),
   openNoteHistory: async () => await withEditor((editor) => editor.openNoteHistory(), Promise.resolve()),
   openPulseForNote: () => withEditor((editor) => editor.openPulseForNote(), undefined),
   isSourceSurface: () => withEditor((editor) => editor.isSourceSurface(), false),
