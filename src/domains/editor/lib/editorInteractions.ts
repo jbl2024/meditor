@@ -1,7 +1,9 @@
 /**
  * Shared editor interaction helpers used by keyboard/paste handlers.
  */
+import type { NodeType } from '@tiptap/pm/model'
 import type { EditorView } from '@tiptap/pm/view'
+import { liftListItem, sinkListItem } from '@tiptap/pm/schema-list'
 import { clipboardHtmlToMarkdown } from './markdownBlocks'
 
 type ListStyle = 'unordered' | 'ordered' | 'checklist'
@@ -94,6 +96,61 @@ export function isZoomResetShortcut(event: Pick<KeyboardEvent, 'key' | 'code'>):
   return event.key === '0' || event.code === 'Digit0' || event.code === 'Numpad0'
 }
 
+function isTabNavigationKey(event: Pick<KeyboardEvent, 'key' | 'code'>): boolean {
+  return event.key === 'Tab' || event.key === 'ISO_Left_Tab' || event.code === 'Tab'
+}
+
+function isWithinNodeType($from: { depth: number; node: (depth: number) => { type: { name: string } } }, typeName: string): boolean {
+  for (let depth = $from.depth; depth >= 0; depth -= 1) {
+    if ($from.node(depth).type.name === typeName) return true
+  }
+  return false
+}
+
+type ListTabCommands = {
+  sinkListItem: typeof sinkListItem
+  liftListItem: typeof liftListItem
+}
+
+/**
+ * Consumes Tab / Shift+Tab navigation inside list items.
+ *
+ * If the list command cannot apply, the event is still consumed so the browser
+ * does not move focus out of the editor.
+ */
+export function adjustListLevelFromTab(
+  view: EditorView,
+  event: Pick<KeyboardEvent, 'key' | 'code' | 'shiftKey' | 'preventDefault' | 'stopPropagation'>,
+  commands: ListTabCommands = { sinkListItem, liftListItem }
+): boolean {
+  if (!isTabNavigationKey(event)) return false
+
+  const schemaNodes = view.state.schema?.nodes
+  if (!schemaNodes) return false
+
+  const itemTypes = ['taskItem', 'listItem']
+    .map((typeName) => schemaNodes[typeName])
+    .filter((nodeType): nodeType is NodeType => nodeType !== undefined)
+
+  if (!itemTypes.length) return false
+
+  const {$from} = view.state.selection
+  const isInList = itemTypes.some((nodeType) => isWithinNodeType($from, nodeType.name))
+  if (!isInList) return false
+
+  const commandFactory = event.shiftKey ? commands.liftListItem : commands.sinkListItem
+
+  for (const itemType of itemTypes) {
+    if (commandFactory(itemType)(view.state, view.dispatch)) {
+      break
+    }
+  }
+
+  event.preventDefault()
+  event.stopPropagation()
+  return true
+}
+
 /**
  * Adjusts a heading level when Tab is pressed at the start of the block.
  *
@@ -105,7 +162,7 @@ export function adjustHeadingLevelFromTab(
   view: EditorView,
   event: Pick<KeyboardEvent, 'key' | 'code' | 'shiftKey' | 'preventDefault' | 'stopPropagation'>
 ): boolean {
-  if (event.key !== 'Tab' && event.key !== 'ISO_Left_Tab' && event.code !== 'Tab') return false
+  if (!isTabNavigationKey(event)) return false
 
   const { selection } = view.state
   if (!selection.empty) return false

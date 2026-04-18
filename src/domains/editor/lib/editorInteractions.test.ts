@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   applyMarkdownShortcut,
+  adjustListLevelFromTab,
   isEditorZoomModifier,
   isLikelyMarkdownPaste,
   selectSmartPasteMarkdown,
@@ -43,6 +44,78 @@ describe('zoom shortcut helpers', () => {
     expect(isZoomInShortcut({ key: '+', code: '' })).toBe(true)
     expect(isZoomOutShortcut({ key: '-', code: '' })).toBe(true)
     expect(isZoomResetShortcut({ key: '0', code: '' })).toBe(true)
+  })
+})
+
+describe('list tab helpers', () => {
+  function createTabView() {
+    const dispatch = vi.fn()
+    const view = {
+      state: {
+        schema: {
+          nodes: {
+            listItem: { name: 'listItem' },
+            taskItem: { name: 'taskItem' }
+          }
+        },
+        selection: {
+          $from: {
+            depth: 3,
+            node: (depth: number) => [
+              { type: { name: 'doc' } },
+              { type: { name: 'bulletList' } },
+              { type: { name: 'listItem' } },
+              { type: { name: 'paragraph' } }
+            ][depth]
+          }
+        }
+      },
+      dispatch
+    } as any
+
+    return { view, dispatch }
+  }
+
+  it('consumes Tab in a list item even when indentation cannot be applied', () => {
+    const { view, dispatch } = createTabView()
+    const event = {
+      key: 'Tab',
+      code: 'Tab',
+      shiftKey: false,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn()
+    } as unknown as KeyboardEvent
+    const sinkListItem = vi.fn(() => () => false)
+    const liftListItem = vi.fn(() => () => false)
+
+    const handled = adjustListLevelFromTab(view, event, { sinkListItem, liftListItem })
+
+    expect(handled).toBe(true)
+    expect(sinkListItem).toHaveBeenCalled()
+    expect(dispatch).not.toHaveBeenCalled()
+    expect(event.preventDefault).toHaveBeenCalledTimes(1)
+    expect(event.stopPropagation).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps Shift+Tab inside the editor when the first list item cannot lift', () => {
+    const { view, dispatch } = createTabView()
+    const event = {
+      key: 'Tab',
+      code: 'Tab',
+      shiftKey: true,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn()
+    } as unknown as KeyboardEvent
+    const sinkListItem = vi.fn(() => () => false)
+    const liftListItem = vi.fn(() => () => false)
+
+    const handled = adjustListLevelFromTab(view, event, { sinkListItem, liftListItem })
+
+    expect(handled).toBe(true)
+    expect(liftListItem).toHaveBeenCalled()
+    expect(dispatch).not.toHaveBeenCalled()
+    expect(event.preventDefault).toHaveBeenCalledTimes(1)
+    expect(event.stopPropagation).toHaveBeenCalledTimes(1)
   })
 })
 

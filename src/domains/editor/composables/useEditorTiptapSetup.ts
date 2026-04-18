@@ -18,7 +18,7 @@ import { CodeBlockNode } from '../lib/tiptap/extensions/CodeBlockNode'
 import { TableCellAlign } from '../lib/tiptap/extensions/TableCellAlign'
 import { EditorFindExtension } from '../lib/tiptap/extensions/EditorFind'
 import { SpellcheckExtension, refreshSpellcheckDecorations } from '../lib/tiptap/extensions/Spellcheck'
-import { adjustHeadingLevelFromTab } from '../lib/editorInteractions'
+import { adjustHeadingLevelFromTab, adjustListLevelFromTab } from '../lib/editorInteractions'
 import { decodeWorkspacePathSegments, isAbsoluteWorkspacePath, normalizeWorkspacePath } from '../../explorer/lib/workspacePaths'
 import { parseRelativeMarkdownHref } from '../lib/markdownBlocks'
 import type { SpellcheckLanguage } from '../lib/spellcheck'
@@ -430,6 +430,7 @@ export function useEditorTiptapSetup(options: UseEditorTiptapSetupOptions) {
           click: (view: ProseMirrorEditorView, event: MouseEvent) => handleAnchorClick(view, path, -1, event)
         },
         handleKeyDown: (view: ProseMirrorEditorView, event: KeyboardEvent) => {
+          if (adjustListLevelFromTab(view, event)) return true
           if (adjustHeadingLevelFromTab(view, event)) return true
           if (
             event.key === '/' &&
