@@ -435,12 +435,7 @@ pub fn restore_note_history_snapshot(path: String, snapshot_id: String) -> Resul
     }
     write_snapshot(&note_path, &snapshot.content)?;
     let version = version_from_path(&note_path).ok_or(AppError::OperationFailed)?;
-    record_internal_write(
-        &note_path,
-        format!("note-history-restore:{snapshot_id}"),
-        version.clone(),
-        &snapshot.content,
-    );
+    record_internal_write(&note_path, version.clone(), &snapshot.content);
     record_note_history_snapshot(&note_path, &snapshot.content, "restore");
 
     Ok(SaveNoteResult::Success(SaveNoteSuccess {

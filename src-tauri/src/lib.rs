@@ -137,7 +137,6 @@ fn index_log_buffer() -> &'static Mutex<VecDeque<IndexLogEntry>> {
 }
 
 fn log_index(message: &str) {
-    eprintln!("[index] {message}");
     if let Ok(mut logs) = index_log_buffer().lock() {
         if logs.len() >= INDEX_LOG_CAPACITY {
             logs.pop_front();

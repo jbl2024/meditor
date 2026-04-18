@@ -90,6 +90,18 @@ function replaceUnderscores(value: string): string {
   return value.replace(/_/g, ' ')
 }
 
+function isNoisyIndexLog(message: string): boolean {
+  return (
+    message.startsWith('save_note_buffer:') ||
+    message.startsWith('record_internal_write') ||
+    message.startsWith('reindex:') ||
+    message.startsWith('semantic:reindex:') ||
+    message.startsWith('semantic_edges:refresh_start') ||
+    message.startsWith('semantic_edges:refresh_phase') ||
+    message.startsWith('semantic_edges:refresh_done')
+  )
+}
+
 /**
  * Builds recent indexing activity rows for the modal list.
  *
@@ -135,6 +147,7 @@ export function buildIndexActivityRows(
 
   for (const entry of sorted) {
     const message = entry.message.trim()
+    if (isNoisyIndexLog(message)) continue
     const fields = parseIndexLogFields(message)
     const base = withBase(entry, message, fields)
     const runId = fields.run_id ?? ''

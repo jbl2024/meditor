@@ -246,24 +246,21 @@ describe('useAppIndexingController', () => {
     expect(controller.indexRunMessage.value).toBe('Failed to reindex a.md.')
   })
 
-  it('surfaces the live semantic refresh step from backend activity logs', async () => {
+  it('falls back to semantic state while noisy progress logs stay hidden', async () => {
     const { controller, readIndexLogs } = createController()
+    controller.semanticIndexState.value = 'running'
     readIndexLogs.mockResolvedValueOnce([
       {
         ts_ms: 1_000,
         message: 'semantic_edges:refresh_start run_id=3 phase=scan_sources sources=10 top_k=3 threshold=0.62'
-      },
-      {
-        ts_ms: 1_100,
-        message: 'semantic_edges:refresh_phase run_id=3 phase=query_neighbors source_index=4 source_total=10 source_path=/vault/Area/Note.md'
       }
     ])
 
     await controller.refreshIndexModalData()
 
     expect(controller.indexCurrentOperationLabel.value).toBe('Refreshing semantic links')
-    expect(controller.indexCurrentOperationDetail.value).toBe('scan 4/10 · Area/Note.md')
-    expect(controller.indexCurrentOperationPath.value).toBe('Area/Note.md')
+    expect(controller.indexCurrentOperationDetail.value).toBe('Updating note embeddings and semantic links.')
+    expect(controller.indexCurrentOperationPath.value).toBe('')
     expect(controller.filteredIndexActivityRows.value).toEqual([])
   })
 

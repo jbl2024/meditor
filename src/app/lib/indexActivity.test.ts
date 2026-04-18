@@ -32,23 +32,23 @@ describe('indexActivity', () => {
     expect(formatDurationMs(3_600_000)).toBe('1 h')
   })
 
-  it('reconstructs running semantic refresh activity from start and phase logs', () => {
+  it('ignores noisy indexing progress logs in the activity feed', () => {
     const rows = buildIndexActivityRows([
       {
         ts_ms: 1_000,
-        message: 'semantic_edges:refresh_start run_id=9 phase=scan_sources sources=12 top_k=3 threshold=0.62'
+        message: 'reindex:start path=notes/a.md'
       },
       {
         ts_ms: 1_100,
         message: 'semantic_edges:refresh_phase run_id=9 phase=query_neighbors source_index=3 source_total=12 source_path=Notes/Projet.md'
+      },
+      {
+        ts_ms: 1_200,
+        message: 'semantic_edges:refresh_done run_id=9 phase=done sources_with_vector=12 added=4 total_ms=42'
       }
     ], (path) => path)
 
-    expect(rows[0]).toMatchObject({
-      state: 'running',
-      title: 'Refreshing semantic links',
-      detail: 'scan 3/12 · Notes/Projet.md'
-    })
+    expect(rows).toEqual([])
   })
 
   it('renders semantic refresh errors with actionable detail', () => {

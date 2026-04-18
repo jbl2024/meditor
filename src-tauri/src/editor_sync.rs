@@ -20,16 +20,6 @@ use crate::{
 
 const INTERNAL_WRITE_TTL_MS: u64 = 5_000;
 
-fn log_editor_sync(message: &str) {
-    eprintln!("[editor-sync] {message}");
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum InternalWriteSource {
-    EditorSave,
-    WorkspaceMutation,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FileVersion {
@@ -51,6 +41,7 @@ pub struct SaveNoteBufferRequest {
     pub path: String,
     pub content: String,
     pub expected_base_version: Option<FileVersion>,
+    #[allow(dead_code)]
     pub request_id: String,
     pub force: Option<bool>,
 }
@@ -132,19 +123,8 @@ fn prune_expired_writes(writes: &mut HashMap<String, InternalWriteRecord>, now_m
     writes.retain(|_, record| now_ms.saturating_sub(record.timestamp_ms) <= INTERNAL_WRITE_TTL_MS);
 }
 
-pub(crate) fn record_internal_write_with_source(
-    path: &Path,
-    request_id: String,
-    source: InternalWriteSource,
-    version: FileVersion,
-    content: &str,
-) {
+pub(crate) fn record_internal_write(path: &Path, version: FileVersion, content: &str) {
     let normalized = normalize_slashes(path);
-    let log_message = format!(
-        "record_internal_write source={source:?} path={normalized} request_id={request_id} version={} size={}",
-        version.mtime_ms,
-        version.size
-    );
     let mut writes = match internal_write_slot().lock() {
         Ok(guard) => guard,
         Err(_) => return,
@@ -159,36 +139,13 @@ pub(crate) fn record_internal_write_with_source(
             content_hash: blake3::hash(content.as_bytes()).to_hex().to_string(),
         },
     );
-    log_editor_sync(&log_message);
-}
-
-pub(crate) fn record_internal_write(
-    path: &Path,
-    request_id: String,
-    version: FileVersion,
-    content: &str,
-) {
-    record_internal_write_with_source(
-        path,
-        request_id,
-        InternalWriteSource::EditorSave,
-        version,
-        content,
-    );
 }
 
 pub(crate) fn record_workspace_mutation_write(path: &Path, content: &str) {
     let Some(version) = version_from_path(path) else {
         return;
     };
-    let request_id = format!("workspace-mutation:{}", now_ms());
-    record_internal_write_with_source(
-        path,
-        request_id,
-        InternalWriteSource::WorkspaceMutation,
-        version,
-        content,
-    );
+    record_internal_write(path, version, content);
 }
 
 pub(crate) fn record_workspace_mutation_write_from_disk(path: &Path) {
@@ -267,12 +224,6 @@ pub fn save_note_buffer(request: SaveNoteBufferRequest) -> Result<SaveNoteResult
 
     let force = request.force.unwrap_or(false);
     let exists = path.exists();
-    let normalized_path = normalize_slashes(&path);
-
-    log_editor_sync(&format!(
-        "save_note_buffer:start path={normalized_path} request_id={} force={} expected_base_version={:?}",
-        request.request_id, force, request.expected_base_version
-    ));
 
     if exists {
         ensure_within_root(&root, &path)?;
@@ -285,10 +236,6 @@ pub fn save_note_buffer(request: SaveNoteBufferRequest) -> Result<SaveNoteResult
             (Some(current), Some(expected)) if current == expected => {}
             (None, None) => {}
             (None, Some(_)) => {
-                log_editor_sync(&format!(
-                    "save_note_buffer:not_found path={normalized_path} request_id={}",
-                    request.request_id
-                ));
                 return Ok(SaveNoteResult::Error(SaveNoteError {
                     ok: false,
                     reason: "NOT_FOUND",
@@ -298,10 +245,6 @@ pub fn save_note_buffer(request: SaveNoteBufferRequest) -> Result<SaveNoteResult
             _ => {
                 let disk_content = fs::read_to_string(&path).unwrap_or_default();
                 let disk_version = current_version.clone().ok_or(AppError::OperationFailed)?;
-                log_editor_sync(&format!(
-                    "save_note_buffer:conflict path={normalized_path} request_id={} current_version={:?} expected_base_version={:?}",
-                    request.request_id, current_version, request.expected_base_version
-                ));
                 return Ok(SaveNoteResult::Conflict(SaveNoteConflict {
                     ok: false,
                     reason: "CONFLICT",
@@ -319,10 +262,6 @@ pub fn save_note_buffer(request: SaveNoteBufferRequest) -> Result<SaveNoteResult
     match write_atomically(&path, &request.content) {
         Ok(()) => {}
         Err(_) => {
-            log_editor_sync(&format!(
-                "save_note_buffer:io_error path={normalized_path} request_id={}",
-                request.request_id
-            ));
             return Ok(SaveNoteResult::Error(SaveNoteError {
                 ok: false,
                 reason: "IO_ERROR",
@@ -332,12 +271,8 @@ pub fn save_note_buffer(request: SaveNoteBufferRequest) -> Result<SaveNoteResult
     }
 
     let version = version_from_path(&path).ok_or(AppError::OperationFailed)?;
-    record_internal_write(&path, request.request_id, version.clone(), &request.content);
+    record_internal_write(&path, version.clone(), &request.content);
     record_note_history_snapshot(&path, &request.content, "save");
-    log_editor_sync(&format!(
-        "save_note_buffer:success path={normalized_path} version={:?}",
-        version
-    ));
 
     Ok(SaveNoteResult::Success(SaveNoteSuccess {
         ok: true,

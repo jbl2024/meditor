@@ -54,8 +54,6 @@ static INDEX_LOGGER: OnceLock<fn(&str)> = OnceLock::new();
 fn log_index(message: &str) {
     if let Some(logger) = INDEX_LOGGER.get() {
         logger(message);
-    } else {
-        eprintln!("[index] {message}");
     }
 }
 
