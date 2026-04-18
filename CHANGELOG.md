@@ -18,6 +18,14 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.38.1] - 2026-04-18
+
+### Added
+- feat(editor): refine active note menu hierarchy and collapse behavior (03e832f)
+
+### Fixed
+- fix(tauri): silence backend log spam (e30533e)
+
 ## [0.38.0] - 2026-04-17
 
 ### Added
