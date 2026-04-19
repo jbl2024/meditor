@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.38.3] - 2026-04-19
+
+### Fixed
+- fix(editor): restore editor focus flows (#88) (88ed177)
+
 ## [0.38.2] - 2026-04-18
 
 ### Changed
