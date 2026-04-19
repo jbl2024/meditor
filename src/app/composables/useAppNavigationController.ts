@@ -1,4 +1,4 @@
-import { ref, type Ref } from 'vue'
+import { nextTick, ref, type Ref } from 'vue'
 import type { DocumentHistoryEntry } from '../../domains/editor/composables/useDocumentHistory'
 
 /**
@@ -252,6 +252,8 @@ export function useAppNavigationController(options: UseAppNavigationControllerOp
       editorPort.activeFilePath.value === target &&
       !navigation.revealInTargetPane
     ) {
+      await nextTick()
+      editorPort.focusEditor()
       return true
     }
     const canSwitch = await ensureActiveTabSavedBeforeSwitch(target)
@@ -272,6 +274,8 @@ export function useAppNavigationController(options: UseAppNavigationControllerOp
       historyPort.documentHistory.record(target)
     }
     workspacePort.recordRecentNote(target)
+    await nextTick()
+    editorPort.focusEditor()
     return true
   }
 
@@ -289,6 +293,8 @@ export function useAppNavigationController(options: UseAppNavigationControllerOp
       historyPort.documentHistory.record(target)
     }
     workspacePort.recordRecentNote(target)
+    await nextTick()
+    editorPort.focusEditor()
     return true
   }
 

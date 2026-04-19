@@ -146,7 +146,7 @@ describe('useAppNavigationController', () => {
   })
 
   it('saves the dirty active document before opening another tab', async () => {
-    const { controller, dirty, activeFilePath, documentHistory, recordRecentNote } = createController()
+    const { controller, dirty, activeFilePath, documentHistory, recordRecentNote, focusEditor } = createController()
 
     dirty.value = true
     const opened = await controller.openTabWithAutosave('/vault/b.md')
@@ -155,6 +155,7 @@ describe('useAppNavigationController', () => {
     expect(activeFilePath.value).toBe('/vault/b.md')
     expect(documentHistory.currentPath.value).toBe('/vault/b.md')
     expect(recordRecentNote).toHaveBeenCalledWith('/vault/b.md')
+    expect(focusEditor).toHaveBeenCalledTimes(1)
   })
 
   it('opens non-markdown files in inspector tabs and records them as recent files', async () => {
@@ -227,12 +228,13 @@ describe('useAppNavigationController', () => {
   })
 
   it('cycles to the next document tab in the active pane', async () => {
-    const { controller, activeFilePath } = createController()
+    const { controller, activeFilePath, focusEditor } = createController()
 
     const opened = await controller.openNextTabWithAutosave()
 
     expect(opened).toBe(true)
     expect(activeFilePath.value).toBe('/vault/b.md')
+    expect(focusEditor).toHaveBeenCalledTimes(1)
   })
 
   it('surfaces a save error when the active document stays dirty', async () => {
@@ -247,23 +249,25 @@ describe('useAppNavigationController', () => {
   })
 
   it('records recent notes when activating an existing tab', async () => {
-    const { controller, activeFilePath, recordRecentNote } = createController()
+    const { controller, activeFilePath, recordRecentNote, focusEditor } = createController()
 
     const opened = await controller.setActiveTabWithAutosave('/vault/b.md')
 
     expect(opened).toBe(true)
     expect(activeFilePath.value).toBe('/vault/b.md')
     expect(recordRecentNote).toHaveBeenCalledWith('/vault/b.md')
+    expect(focusEditor).toHaveBeenCalledTimes(1)
   })
 
   it('records recent files when activating a non-markdown tab', async () => {
-    const { controller, activeFilePath, recordRecentNote } = createController()
+    const { controller, activeFilePath, recordRecentNote, focusEditor } = createController()
 
     const opened = await controller.setActiveTabWithAutosave('/vault/photo.png')
 
     expect(opened).toBe(true)
     expect(activeFilePath.value).toBe('/vault/photo.png')
     expect(recordRecentNote).toHaveBeenCalledWith('/vault/photo.png')
+    expect(focusEditor).toHaveBeenCalledTimes(1)
   })
 
   it('focuses the editor after reopening a document from history', async () => {
@@ -275,7 +279,7 @@ describe('useAppNavigationController', () => {
     const opened = await controller.goBackInHistory()
 
     expect(opened).toBe(true)
-    expect(focusEditor).not.toHaveBeenCalled()
+    expect(focusEditor).toHaveBeenCalledTimes(1)
   })
 
   it('loads workspace files before opening a second brain history entry', async () => {

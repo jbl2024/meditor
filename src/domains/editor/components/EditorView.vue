@@ -974,7 +974,7 @@ defineExpose({
                   @commit="onTitleCommit"
                   @focus="titleEditorFocused = true"
                   @blur="titleEditorFocused = false"
-                  @focus-body-request="void focusEditor()"
+                  @focus-body-request="void layout.focusFirstEditableBlock()"
                 />
                 <EditorPropertiesPanel
                   :expanded="propertiesExpanded(path)"
