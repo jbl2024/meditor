@@ -6,6 +6,10 @@ describe('resolveEmbeddedNoteMarkdown', () => {
     expect(resolveEmbeddedNoteMarkdown('---\ntitle: Alpha\n---\n# Heading\n\nBody', 'notes/alpha')).toBe('# Heading\n\nBody')
   })
 
+  it('ignores aliases when resolving embedded note targets', () => {
+    expect(resolveEmbeddedNoteMarkdown('---\ntitle: Alpha\n---\n# Heading\n\nBody', 'notes/alpha|Alpha')).toBe('# Heading\n\nBody')
+  })
+
   it('resolves heading anchors to the matching section', () => {
     expect(resolveEmbeddedNoteMarkdown('---\ntitle: Alpha\n---\n# Heading\n\nBody\n\n## Other\nTail', 'notes/alpha#Heading')).toBe('# Heading\n\nBody\n\n## Other\nTail')
   })

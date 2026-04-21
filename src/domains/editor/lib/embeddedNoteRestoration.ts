@@ -69,6 +69,16 @@ function extractBlockIdSectionMarkdown(body: string, blockId: string): string | 
   return blockLines.join('\n').trimEnd()
 }
 
+function stripWikilinkAlias(target: string): string {
+  const value = String(target ?? '').trim()
+  if (!value) return ''
+
+  const aliasIndex = value.indexOf('|')
+  if (aliasIndex < 0) return value
+
+  return value.slice(0, aliasIndex).trim()
+}
+
 /**
  * Resolves the markdown fragment represented by a note embed target.
  *
@@ -80,7 +90,7 @@ function extractBlockIdSectionMarkdown(body: string, blockId: string): string | 
  */
 export function resolveEmbeddedNoteMarkdown(markdown: string, target: string): string | null {
   const body = parseFrontmatterEnvelope(markdown).body
-  const parsed = parseWikilinkTarget(target)
+  const parsed = parseWikilinkTarget(stripWikilinkAlias(target))
 
   if (!parsed.anchor) return body
   if (parsed.anchor.heading) return extractHeadingSectionMarkdown(body, parsed.anchor.heading)
