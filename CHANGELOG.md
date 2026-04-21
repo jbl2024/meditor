@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.38.4] - 2026-04-21
+
+### Fixed
+- fix(editor): resolve embedded wikilink aliases in preview (ccaba2f)
+
 ## [0.38.3] - 2026-04-19
 
 ### Fixed
