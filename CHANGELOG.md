@@ -18,6 +18,24 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.38.5] - 2026-05-09
+
+### Added
+- feat(shortcuts): prefill new note path from active directory (577fd90)
+- feat(shortcuts): open new note modal with mod n (9a1ed69)
+
+### Changed
+- chore(deps): bump @tiptap/starter-kit from 3.20.1 to 3.22.4 (78f60d2)
+- chore(deps): bump marked from 17.0.4 to 18.0.3 (d46db5b)
+- chore(deps): bump mermaid-rs-renderer from v0.2.1 to v0.2.2 in /src-tauri (35f6a63)
+- chore(deps-dev): bump typescript from 5.6.3 to 6.0.3 (177cf0c)
+- chore(deps): bump @tiptap/extension-code-block-lowlight from 3.22.3 to 3.22.4 (65dcc6b)
+- chore(deps-dev): bump autoprefixer from 10.4.27 to 10.5.0 (94a3ff6)
+- chore(deps): bump fastembed from 5.13.2 to 5.13.3 in /src-tauri (06b5721)
+- chore(deps): bump zip from 8.5.1 to 8.6.0 in /src-tauri (416a599)
+- chore(deps): bump blake3 from 1.8.4 to 1.8.5 in /src-tauri (983d665)
+- chore(deps): bump open from 5.3.3 to 5.3.4 in /src-tauri (98b09b4)
+
 ## [0.38.4] - 2026-04-21
 
 ### Fixed
