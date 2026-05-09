@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.38.6] - 2026-05-09
+
+### Changed
+- eat(notes): add today prefix shortcut to new note modal (ea8379d)
+
 ## [0.38.5] - 2026-05-09
 
 ### Added
