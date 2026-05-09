@@ -62,6 +62,18 @@ describe('useAppShellWorkspaceEntries', () => {
     scope.stop()
   })
 
+  it('prefills the active note directory when opening a new file from the keyboard shortcut', async () => {
+    const { api, scope, statePort, modalPort, documentPort } = createEntries()
+    statePort.activeFilePath.value = '/vault/test/foo.md'
+    documentPort.parentPrefixForModal.mockReturnValue('test/')
+
+    expect(await api.createNewFileFromActiveDirectory()).toBe(true)
+
+    expect(documentPort.parentPrefixForModal).toHaveBeenCalledWith('/vault/test', '/vault')
+    expect(modalPort.openNewFileModal).toHaveBeenCalledWith('test/')
+    scope.stop()
+  })
+
   it('opens the correct modal prefill from explorer create requests', () => {
     const { api, scope, modalPort } = createEntries()
 

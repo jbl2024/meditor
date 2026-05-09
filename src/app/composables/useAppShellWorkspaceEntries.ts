@@ -85,6 +85,16 @@ export function useAppShellWorkspaceEntries(options: UseAppShellWorkspaceEntries
     return true
   }
 
+  async function createNewFileFromActiveDirectory() {
+    const root = options.statePort.workingFolderPath.value
+    const activePath = options.statePort.activeFilePath.value
+    const prefill = root && activePath
+      ? options.documentPort.parentPrefixForModal(activePath.replace(/\/[^/]+$/, ''), root)
+      : ''
+    await options.modalPort.openNewFileModal(prefill)
+    return true
+  }
+
   async function openSpecificDateNote() {
     await options.modalPort.openOpenDateModal()
     return true
@@ -246,6 +256,7 @@ export function useAppShellWorkspaceEntries(options: UseAppShellWorkspaceEntries
 
   return {
     createNewFileFromPalette,
+    createNewFileFromActiveDirectory,
     openSpecificDateNote,
     ensureParentDirectoriesForRelativePath,
     onExplorerRequestCreate,

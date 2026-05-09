@@ -46,7 +46,7 @@ function createKeyboard() {
     goBackInHistory: vi.fn(),
     goForwardInHistory: vi.fn(),
     closeActiveTab: vi.fn(),
-    openNewFileModal: vi.fn(),
+    createNewFileFromActiveDirectory: vi.fn(),
     openQuickOpen: vi.fn(),
     openCommandPalette: vi.fn(),
     openTodayNote: vi.fn(),
@@ -169,7 +169,7 @@ describe('useAppShellKeyboard', () => {
     const event = new KeyboardEvent('keydown', { key: 'n', ctrlKey: true, bubbles: true, cancelable: true })
     window.dispatchEvent(event)
 
-    expect(actions.openNewFileModal).toHaveBeenCalledTimes(1)
+    expect(actions.createNewFileFromActiveDirectory).toHaveBeenCalledTimes(1)
     expect(event.defaultPrevented).toBe(true)
     scope.stop()
   })

@@ -953,6 +953,7 @@ const workspaceEntries = useAppShellWorkspaceEntries({
 })
 const {
   createNewFileFromPalette,
+  createNewFileFromActiveDirectory,
   openSpecificDateNote,
   onExplorerRequestCreate,
   submitNewFileFromModal,
@@ -1851,7 +1852,7 @@ useAppShellKeyboard({
     goBackInHistory,
     goForwardInHistory,
     closeActiveTab,
-    openNewFileModal,
+    createNewFileFromActiveDirectory,
     openQuickOpen,
     openCommandPalette,
     openTodayNote,
