@@ -1851,6 +1851,7 @@ useAppShellKeyboard({
     goBackInHistory,
     goForwardInHistory,
     closeActiveTab,
+    openNewFileModal,
     openQuickOpen,
     openCommandPalette,
     openTodayNote,

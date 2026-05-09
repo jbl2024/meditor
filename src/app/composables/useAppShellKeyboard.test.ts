@@ -46,6 +46,7 @@ function createKeyboard() {
     goBackInHistory: vi.fn(),
     goForwardInHistory: vi.fn(),
     closeActiveTab: vi.fn(),
+    openNewFileModal: vi.fn(),
     openQuickOpen: vi.fn(),
     openCommandPalette: vi.fn(),
     openTodayNote: vi.fn(),
@@ -159,6 +160,17 @@ describe('useAppShellKeyboard', () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', altKey: true, bubbles: true, cancelable: true }))
 
     expect(actions.goBackInHistory).toHaveBeenCalledTimes(1)
+    scope.stop()
+  })
+
+  it('opens the new note modal with Mod+N', () => {
+    const { scope, actions } = createKeyboard()
+
+    const event = new KeyboardEvent('keydown', { key: 'n', ctrlKey: true, bubbles: true, cancelable: true })
+    window.dispatchEvent(event)
+
+    expect(actions.openNewFileModal).toHaveBeenCalledTimes(1)
+    expect(event.defaultPrevented).toBe(true)
     scope.stop()
   })
 

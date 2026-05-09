@@ -150,6 +150,7 @@ export function buildShortcutSections(options: BuildShortcutSectionsOptions): Sh
       items: [
         { keys: `${mod}+P`, action: 'Quick open' },
         { keys: options.commandPaletteShortcutLabel, action: 'Command palette' },
+        { keys: `${mod}+N`, action: 'New note' },
         { keys: `${mod}+S`, action: 'Save note' },
         { keys: `${mod}+W`, action: 'Close current tab' },
         { keys: `${mod}+Tab`, action: 'Next tab' },

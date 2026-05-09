@@ -51,6 +51,7 @@ export type AppShellKeyboardActionsPort = {
   goBackInHistory: () => boolean | void | Promise<boolean | void>
   goForwardInHistory: () => boolean | void | Promise<boolean | void>
   closeActiveTab: () => void
+  openNewFileModal: () => boolean | void | Promise<boolean | void>
   openQuickOpen: () => boolean | void | Promise<boolean | void>
   openCommandPalette: () => void
   openTodayNote: () => boolean | void | Promise<boolean | void>
@@ -258,6 +259,11 @@ export function useAppShellKeyboard(options: UseAppShellKeyboardOptions) {
     if (key === 'p' && !event.shiftKey) {
       event.preventDefault()
       void options.actionsPort.openQuickOpen()
+      return
+    }
+    if (key === 'n' && !event.shiftKey) {
+      event.preventDefault()
+      void options.actionsPort.openNewFileModal()
       return
     }
     if (key === 'p' && event.shiftKey) {
