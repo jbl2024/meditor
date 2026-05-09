@@ -40,7 +40,7 @@
     "dictionary-fr": "^3.0.0",
     "force-graph": "^1.51.1",
     "lowlight": "^3.3.0",
-    "marked": "^17.0.4",
+    "marked": "^18.0.3",
     "mermaid": "^11.14.0",
     "nspell": "^2.1.5",
     "vue": "^3.5.32"
