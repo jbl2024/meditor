@@ -1,5 +1,5 @@
 import { createApp, defineComponent, h, nextTick, ref } from 'vue'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import WorkspaceEntryModals from './WorkspaceEntryModals.vue'
 import type { NewNoteTemplateDropdownItem } from '../../lib/newNoteTemplates'
 
@@ -66,6 +66,7 @@ function mountHarness() {
 describe('WorkspaceEntryModals', () => {
   afterEach(() => {
     document.body.innerHTML = ''
+    vi.useRealTimers()
   })
 
   it('emits new file modal interactions', async () => {
@@ -115,6 +116,45 @@ describe('WorkspaceEntryModals', () => {
     expect(document.activeElement).toBe(noteInput)
     expect(noteInput?.selectionStart).toBe(noteInput?.value.length)
     expect(noteInput?.selectionEnd).toBe(noteInput?.value.length)
+
+    mounted.app.unmount()
+  })
+
+  it('prefixes the note path with today from the visible quick action', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 4, 9, 12, 0, 0))
+    const mounted = mountHarness()
+    await nextTick()
+
+    const todayButton = Array.from(mounted.root.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent?.includes('Today')
+    )
+    todayButton?.click()
+    await nextTick()
+
+    expect(mounted.newFilePath.value).toBe('notes/2026-05-09 test')
+    expect(mounted.events).toContain('file:notes/2026-05-09 test')
+    const noteInput = mounted.root.querySelector<HTMLInputElement>('[data-new-file-input="true"]')
+    expect(document.activeElement).toBe(noteInput)
+    expect(noteInput?.selectionStart).toBe(noteInput?.value.length)
+
+    mounted.app.unmount()
+  })
+
+  it('replaces an existing date prefix from the note path shortcut', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 4, 9, 12, 0, 0))
+    const mounted = mountHarness()
+    mounted.newFilePath.value = 'notes/2026-04-12 test'
+    await nextTick()
+
+    const input = mounted.root.querySelector<HTMLInputElement>('[data-new-file-input="true"]')
+    input?.dispatchEvent(new KeyboardEvent('keydown', { key: 'd', metaKey: true, bubbles: true }))
+    await nextTick()
+
+    expect(mounted.newFilePath.value).toBe('notes/2026-05-09 test')
+    expect(mounted.events).toContain('file:notes/2026-05-09 test')
+    expect(mounted.events).not.toContain('keydown-file')
 
     mounted.app.unmount()
   })

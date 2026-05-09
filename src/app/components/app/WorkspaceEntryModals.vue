@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { CalendarDaysIcon } from '@heroicons/vue/24/outline'
+import { computed, nextTick, ref, watch } from 'vue'
 import UiButton from '../../../shared/components/ui/UiButton.vue'
 import UiField from '../../../shared/components/ui/UiField.vue'
 import UiFilterableDropdown, { type FilterableDropdownItem } from '../../../shared/components/ui/UiFilterableDropdown.vue'
 import UiInput from '../../../shared/components/ui/UiInput.vue'
 import UiModalShell from '../../../shared/components/ui/UiModalShell.vue'
+import { formatIsoDate } from '../../lib/appShellPaths'
 import type { NewNoteTemplateDropdownItem } from '../../lib/newNoteTemplates'
 
 /**
@@ -51,11 +53,45 @@ const templateMenuOpen = ref(false)
 const templateMenuQuery = ref('')
 const templateMenuActiveIndex = ref(0)
 const notePathInputRef = ref<{ rootEl: HTMLInputElement | null } | null>(null)
+const datePrefixShortcutLabel = computed(() => {
+  if (typeof navigator === 'undefined') return 'Ctrl+D'
+  return /Mac|iPhone|iPad|iPod/.test(navigator.platform) ? 'Cmd+D' : 'Ctrl+D'
+})
+const todayDatePrefix = computed(() => formatIsoDate(new Date()))
 
 const selectedTemplateLabel = computed(() => {
   if (!props.newFileTemplatePath) return 'Blank note'
   return props.newFileTemplateItems.find((item) => item.path === props.newFileTemplatePath)?.label ?? 'Template unavailable'
 })
+
+function withDatePrefix(path: string, date: string): string {
+  const lastSlash = path.lastIndexOf('/')
+  const directory = lastSlash >= 0 ? path.slice(0, lastSlash + 1) : ''
+  const fileName = lastSlash >= 0 ? path.slice(lastSlash + 1) : path
+  const withoutExistingDate = fileName.replace(/^\d{4}-\d{2}-\d{2}(?:[\s_-]+)?/, '').trimStart()
+  return `${directory}${date}${withoutExistingDate ? ` ${withoutExistingDate}` : ''}`
+}
+
+async function prefixNewFilePathWithToday() {
+  emit('updateNewFilePath', withDatePrefix(props.newFilePathInput, todayDatePrefix.value))
+  await nextTick()
+  const input = notePathInputRef.value?.rootEl
+  if (!input) return
+  input.focus()
+  const length = input.value.length
+  if (typeof input.setSelectionRange === 'function') {
+    input.setSelectionRange(length, length)
+  }
+}
+
+function onNotePathKeydown(event: KeyboardEvent) {
+  if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'd') {
+    event.preventDefault()
+    void prefixNewFilePathWithToday()
+    return
+  }
+  emit('keydownNewFile', event)
+}
 
 function syncTemplateMenuState() {
   templateMenuQuery.value = ''
@@ -159,18 +195,33 @@ watch(
 
     <UiField for-id="new-file-input" label="Note path" :error="newFileError">
       <template #default="{ describedBy, invalid }">
-        <UiInput
-          ref="notePathInputRef"
-          id="new-file-input"
-          :model-value="newFilePathInput"
-          size="sm"
-          data-new-file-input="true"
-          placeholder="untitled"
-          :invalid="invalid"
-          :aria-describedby="describedBy"
-          @update:model-value="emit('updateNewFilePath', $event)"
-          @keydown="emit('keydownNewFile', $event)"
-        />
+        <div class="new-file-path-row">
+          <UiInput
+            ref="notePathInputRef"
+            id="new-file-input"
+            :model-value="newFilePathInput"
+            size="sm"
+            data-new-file-input="true"
+            placeholder="untitled"
+            :invalid="invalid"
+            :aria-describedby="describedBy"
+            @update:model-value="emit('updateNewFilePath', $event)"
+            @keydown="onNotePathKeydown"
+          />
+          <UiButton
+            type="button"
+            size="sm"
+            variant="secondary"
+            class="new-file-date-prefix"
+            :title="`Prefix with ${todayDatePrefix}`"
+            :aria-label="`Prefix note path with ${todayDatePrefix}`"
+            @click="prefixNewFilePathWithToday"
+          >
+            <CalendarDaysIcon aria-hidden="true" />
+            <span>Today</span>
+            <kbd>{{ datePrefixShortcutLabel }}</kbd>
+          </UiButton>
+        </div>
       </template>
     </UiField>
     <template #footer>
@@ -258,5 +309,48 @@ watch(
 .new-file-template-trigger__chevron {
   flex: 0 0 auto;
   margin-left: 0.5rem;
+}
+
+.new-file-path-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.new-file-path-row :deep(.ui-input) {
+  min-width: 0;
+}
+
+.new-file-date-prefix {
+  flex: 0 0 auto;
+  gap: 0.4rem;
+  padding-inline: 0.65rem;
+}
+
+.new-file-date-prefix :deep(svg) {
+  width: 1rem;
+  height: 1rem;
+}
+
+.new-file-date-prefix kbd {
+  border: 1px solid var(--shortcuts-keys-border);
+  border-radius: 0.25rem;
+  background: var(--shortcuts-keys-bg);
+  color: var(--shortcuts-keys-text);
+  font-family: var(--font-code);
+  font-size: 0.65rem;
+  font-weight: 600;
+  line-height: 1;
+  padding: 0.16rem 0.28rem;
+}
+
+@media (max-width: 520px) {
+  .new-file-path-row {
+    flex-direction: column;
+  }
+
+  .new-file-date-prefix {
+    width: 100%;
+    justify-content: center;
+  }
 }
 </style>
