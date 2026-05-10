@@ -77,7 +77,6 @@ const MACRO_IDS = [
   'timestamp',
   'date-fr',
   'date',
-  'deadline',
   'title',
   'path',
   'filename',
@@ -329,16 +328,6 @@ const MACRO_DEFINITIONS: MacroDefinition[] = [
     aliases: ['date', 'date+7', 'date +7'],
     acceptsArgument: true,
     resolve: ({ now }, argument) => text(formatLocalDate(parseDateArgument(argument, now)))
-  },
-  {
-    id: 'deadline',
-    label: 'Deadline',
-    group: 'Time',
-    kind: 'insert_text',
-    description: 'Insert a deadline date',
-    aliases: ['deadline', 'due date', 'echeance'],
-    acceptsArgument: true,
-    resolve: ({ now }, argument) => text(formatLocalDate(parseDateArgument(argument || '+7', now)))
   },
   {
     id: 'title',
@@ -672,7 +661,7 @@ const MACRO_DEFINITIONS: MacroDefinition[] = [
 
 function splitToken(token: string): { id: string; argument: string } {
   const trimmed = token.trim().toLowerCase()
-  const compactOffset = trimmed.match(/^(date|deadline)([+-]\d+(?:d)?)$/)
+  const compactOffset = trimmed.match(/^(date)([+-]\d+(?:d)?)$/)
   if (compactOffset) return { id: compactOffset[1], argument: compactOffset[2] }
 
   const firstSpace = trimmed.search(/\s/)

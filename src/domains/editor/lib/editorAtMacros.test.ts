@@ -50,9 +50,9 @@ describe('editorAtMacros', () => {
   it('parses compact and natural date arguments', () => {
     expect(resolveEditorAtMacro('date+7', context)?.replacement).toBe('2026-04-19')
     expect(resolveEditorAtMacro('date +30', context)?.replacement).toBe('2026-05-12')
-    expect(resolveEditorAtMacro('deadline +7d', context)?.replacement).toBe('2026-04-19')
     expect(resolveEditorAtMacro('due tomorrow', context)?.replacement).toBe('due: 2026-04-13')
     expect(resolveEditorAtMacro('priority high', context)?.replacement).toBe('priority: high')
+    expect(resolveEditorAtMacro('deadline +7d', context)).toBeNull()
   })
 
   it('resolves task macros as markdown checklists', () => {
