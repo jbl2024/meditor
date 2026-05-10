@@ -577,7 +577,7 @@ watch(() => props.visible, async (visible) => {
 </script>
 
 <template>
-  <div v-if="visible" class="modal-overlay">
+  <div v-if="visible" class="modal-overlay settings-modal-overlay">
     <div
       class="modal settings-modal"
       data-modal="settings"
@@ -1047,18 +1047,30 @@ watch(() => props.visible, async (visible) => {
 
 <style scoped>
 .settings-modal {
-  width: min(920px, calc(100vw - 40px));
+  width: min(860px, calc(100vw - 40px));
+  max-height: calc(100dvh - 40px);
   padding: 0;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 
 .settings-shell {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   gap: 0;
+  min-height: 0;
+}
+
+.settings-modal-overlay {
+  align-items: center;
+  padding: 20px;
+  padding-top: 20px;
 }
 
 .settings-shell__eyebrow {
+  flex: 0 0 auto;
   color: var(--text-faint);
   font-size: 0.7rem;
   letter-spacing: 0.32em;
@@ -1079,9 +1091,12 @@ watch(() => props.visible, async (visible) => {
 .settings-panel {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .settings-panel__header {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1131,8 +1146,13 @@ watch(() => props.visible, async (visible) => {
 .settings-panel__body {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   gap: 12px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 20px 24px 14px;
+  scrollbar-gutter: stable;
 }
 
 .settings-fields {
@@ -1263,6 +1283,7 @@ watch(() => props.visible, async (visible) => {
 }
 
 .settings-footer {
+  flex: 0 0 auto;
   display: flex;
   justify-content: flex-end;
   padding: 14px 24px 18px;
@@ -1280,6 +1301,15 @@ watch(() => props.visible, async (visible) => {
 }
 
 @media (max-width: 720px) {
+  .settings-modal-overlay {
+    padding: 12px;
+  }
+
+  .settings-modal {
+    width: calc(100vw - 24px);
+    max-height: calc(100dvh - 24px);
+  }
+
   .settings-panel__header {
     flex-direction: column;
     align-items: stretch;
