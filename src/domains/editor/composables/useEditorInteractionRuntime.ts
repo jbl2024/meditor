@@ -62,6 +62,7 @@ export type EditorInteractionRuntimeChromePort = {
   }
   toolbars: {
     updateFormattingToolbar: () => void
+    syncPulseSelectionFromEditor: () => void
     updateTableToolbar: () => void
     inlineFormatToolbar: {
       updateFormattingToolbar: () => void
@@ -312,7 +313,10 @@ export function useEditorInteractionRuntime(options: UseEditorInteractionRuntime
     syncWikilinkUiFromPluginState: wikilinkOverlay.syncWikilinkUiFromPluginState,
     captureCaret: caretOutline.captureCaret,
     shouldCaptureCaret: shouldCaptureCaretForActiveEditor,
-    updateFormattingToolbar: () => chromePort.toolbars.updateFormattingToolbar(),
+    updateFormattingToolbar: () => {
+      chromePort.toolbars.updateFormattingToolbar()
+      chromePort.toolbars.syncPulseSelectionFromEditor()
+    },
     onEditorDocChanged: (path) => documentPort.onEditorDocChanged(path),
     requestMermaidReplaceConfirm: editorPort.requestMermaidReplaceConfirm,
     openMermaidPreview: editorPort.openMermaidPreview,

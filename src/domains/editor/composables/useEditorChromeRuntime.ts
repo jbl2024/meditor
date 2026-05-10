@@ -1,4 +1,4 @@
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type CSSProperties, type Ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
 import type { Editor } from '@tiptap/vue-3'
 import type { BlockMenuActionItem, BlockMenuTarget, TurnIntoType } from '../lib/tiptap/blockMenu/types'
 import {
@@ -33,6 +33,7 @@ import { useAssetPreviewDialog } from './useAssetPreviewDialog'
 import { useMermaidReplaceDialog } from './useMermaidReplaceDialog'
 import { usePulseTransformation } from '../../pulse/composables/usePulseTransformation'
 import { PULSE_ACTIONS_BY_SOURCE } from '../../pulse/lib/pulse'
+import type { PulseDrawerSourceKind } from '../../pulse/lib/pulseDrawer'
 import type { PulseActionId } from '../../../shared/api/apiTypes'
 import type { DocumentSession } from './useDocumentEditorSessions'
 import type { SpellcheckLanguage } from '../lib/spellcheck'
@@ -152,14 +153,13 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
 
   const pulse = usePulseTransformation()
   const pulseOpen = ref(false)
-  const pulsePanelMeasuredHeight = ref(360)
-  const pulseSourceKind = ref<'editor_selection' | 'editor_note'>('editor_selection')
+  const pulseSourceKind = ref<PulseDrawerSourceKind>('editor_selection')
   const pulseActionId = ref<PulseActionId>('rewrite')
   const pulseInstruction = ref('')
   const pulseInstructionDirty = ref(false)
   const pulseSelectionRange = ref<{ from: number; to: number } | null>(null)
   const pulseSourceText = ref('')
-  const pulseAnchorNonce = ref(0)
+  const pulseContextPaths = ref<string[]>([])
   const blockMenuFloatingEl = ref<HTMLDivElement | null>(null)
   const blockMenuPos = ref({ x: 0, y: 0 })
   const tableToolbarFloatingEl = ref<HTMLDivElement | null>(null)
@@ -583,68 +583,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   function syncLayoutGeometry() {
     layoutMetrics.updateGutterHitboxStyle()
     updateFormattingToolbar()
-    if (pulseOpen.value) {
-      pulseAnchorNonce.value += 1
-      updatePulsePanelMetrics()
-    }
   }
-
-  /**
-   * Re-measures the floating Pulse panel after async content settles.
-   */
-  function updatePulsePanelMetrics() {
-    const nextHeight = host.pulsePanelWrap.value?.offsetHeight ?? 0
-    if (nextHeight > 0) {
-      pulsePanelMeasuredHeight.value = nextHeight
-    }
-  }
-
-  const pulsePanelStyle = computed<CSSProperties>(() => {
-    const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1440
-    const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 900
-    const panelWidth = Math.min(420, Math.max(280, viewportWidth - 32))
-    const panelHeight = Math.max(220, pulsePanelMeasuredHeight.value)
-
-    if (!pulseOpen.value) {
-      return { position: 'fixed', right: '24px', bottom: '24px', width: `${panelWidth}px` }
-    }
-    if (pulseSourceKind.value !== 'editor_selection' || !host.holder.value) {
-      return { position: 'fixed', right: '24px', bottom: '24px', width: `${panelWidth}px` }
-    }
-
-    void pulseAnchorNonce.value
-    const holderRect = host.holder.value.getBoundingClientRect()
-    const anchorTop = holderRect.top + inlineFormatToolbar.formatToolbarTop.value - host.holder.value.scrollTop
-    const rightDockLeft = viewportWidth - panelWidth - 24
-    const preferredBelow = anchorTop + 54
-    const preferredAbove = anchorTop - panelHeight - 20
-    const fitsBelow = preferredBelow + panelHeight <= viewportHeight - 16
-    const fitsAbove = preferredAbove >= 16
-    const targetTop = fitsBelow || !fitsAbove ? preferredBelow : preferredAbove
-    const clampedTop = Math.min(Math.max(16, targetTop), viewportHeight - panelHeight - 16)
-    return {
-      position: 'fixed',
-      left: `${Math.max(16, rightDockLeft)}px`,
-      top: `${clampedTop}px`,
-      width: `${panelWidth}px`
-    }
-  })
-
-  watch(
-    [
-      pulseOpen,
-      host.pulsePanelWrap,
-      () => pulse.previewMarkdown.value,
-      () => pulse.running.value,
-      () => pulse.error.value
-    ],
-    async ([open]) => {
-      if (!open) return
-      await nextTick()
-      updatePulsePanelMetrics()
-    },
-    { flush: 'post' }
-  )
 
   watch(editorZoomStyle, () => {
     void nextTick().then(() => {
@@ -722,6 +661,16 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     pulse.reset()
   }
 
+  function currentEditorSelectionSource(): { range: { from: number; to: number }; text: string } | null {
+    const editor = host.getEditor()
+    if (!editor) return null
+    const { from, to, empty } = editor.state.selection
+    if (empty || from === to) return null
+    const text = editor.state.doc.textBetween(from, to, '\n', '\n').trim()
+    if (!text) return null
+    return { range: { from, to }, text }
+  }
+
   function closePulsePanel() {
     if (pulse.running.value) {
       void pulse.cancel()
@@ -733,27 +682,96 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
    * Opens Pulse only from a real text selection so actions stay anchored to user intent.
    */
   function openPulseForSelection() {
-    const editor = host.getEditor()
-    if (!editor) return
-    const { from, to, empty } = editor.state.selection
-    if (empty || from === to) return
-    const text = editor.state.doc.textBetween(from, to, '\n', '\n').trim()
-    if (!text) return
+    const source = currentEditorSelectionSource()
+    if (!source) return
+    const { range, text } = source
     const sameSelection =
       pulseSourceKind.value === 'editor_selection' &&
-      pulseSelectionRange.value?.from === from &&
-      pulseSelectionRange.value?.to === to &&
+      pulseSelectionRange.value?.from === range.from &&
+      pulseSelectionRange.value?.to === range.to &&
       pulseSourceText.value === text
     pulseSourceKind.value = 'editor_selection'
-    pulseSelectionRange.value = { from, to }
+    pulseContextPaths.value = []
+    pulseSelectionRange.value = range
     pulseSourceText.value = text
     if (!sameSelection) {
       pulseActionId.value = 'rewrite'
       setPulseInstruction(pulseDefaultInstruction('rewrite'), { markDirty: false })
       resetPulseResult()
-      pulseAnchorNonce.value += 1
     }
     pulseOpen.value = true
+  }
+
+  /**
+   * Keeps an open selection-based Pulse session aligned with the live editor selection.
+   */
+  function syncPulseSelectionFromEditor() {
+    if (!pulseOpen.value) return
+    const source = currentEditorSelectionSource()
+    if (source && pulseSourceKind.value !== 'editor_selection') {
+      pulseSourceKind.value = 'editor_selection'
+      pulseContextPaths.value = []
+      pulseSelectionRange.value = source.range
+      pulseSourceText.value = source.text
+      if (!pulse.running.value && pulse.previewMarkdown.value.trim()) {
+        resetPulseResult()
+      }
+      return
+    }
+    if (pulseSourceKind.value !== 'editor_selection') return
+    if (!source) {
+      syncPulseNoteSourceFromEditor()
+      return
+    }
+    const sameSelection =
+      pulseSelectionRange.value?.from === source.range.from &&
+      pulseSelectionRange.value?.to === source.range.to &&
+      pulseSourceText.value === source.text
+    if (sameSelection) return
+    pulseSelectionRange.value = source.range
+    pulseSourceText.value = source.text
+    if (!pulse.running.value && pulse.previewMarkdown.value.trim()) {
+      resetPulseResult()
+    }
+  }
+
+  function syncPulseNoteSourceFromEditor(options: { resetDefaults?: boolean } = {}) {
+    const editor = host.getEditor()
+    if (!editor) return false
+    const text = editor.getText().trim()
+    if (!text) return false
+    const nextPaths = [host.getCurrentPath()].filter(Boolean)
+    const sameNote =
+      pulseSourceKind.value === 'editor_note' &&
+      pulseSourceText.value === text &&
+      pulseContextPaths.value.length === nextPaths.length &&
+      pulseContextPaths.value.every((path, index) => path === nextPaths[index])
+
+    pulseSourceKind.value = 'editor_note'
+    pulseContextPaths.value = nextPaths
+    pulseSelectionRange.value = null
+    pulseSourceText.value = text
+
+    if (!sameNote && options.resetDefaults) {
+      pulseActionId.value = 'synthesize'
+      setPulseInstruction(pulseDefaultInstruction('synthesize'), { markDirty: false })
+      resetPulseResult()
+    } else if (!sameNote && !pulse.running.value && pulse.previewMarkdown.value.trim()) {
+      resetPulseResult()
+    }
+    return true
+  }
+
+  function syncPulseSourceFromActiveSession() {
+    if (!pulseOpen.value) return
+    const source = currentEditorSelectionSource()
+    if (source) {
+      syncPulseSelectionFromEditor()
+      return
+    }
+    if (pulseSourceKind.value === 'editor_selection' || pulseSourceKind.value === 'editor_note') {
+      syncPulseNoteSourceFromEditor()
+    }
   }
 
   /**
@@ -761,21 +779,29 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
    * the full document instead of a selection.
    */
   function openPulseForNote() {
-    const editor = host.getEditor()
-    if (!editor) return
-    const text = editor.getText().trim()
-    if (!text) return
-    const sameNote =
-      pulseSourceKind.value === 'editor_note' &&
-      pulseSourceText.value === text
-    pulseSourceKind.value = 'editor_note'
+    if (!syncPulseNoteSourceFromEditor({ resetDefaults: true })) return
+    pulseOpen.value = true
+  }
+
+  /**
+   * Opens Pulse for the shell's constituted context while applying any result
+   * back through the active editor.
+   */
+  function openPulseForContext(paths: string[]) {
+    const normalizedPaths = paths.map((path) => path.trim()).filter(Boolean)
+    if (!normalizedPaths.length) return
+    const sameContext =
+      pulseSourceKind.value === 'second_brain_context' &&
+      pulseContextPaths.value.length === normalizedPaths.length &&
+      pulseContextPaths.value.every((path, index) => path === normalizedPaths[index])
+    pulseSourceKind.value = 'second_brain_context'
+    pulseContextPaths.value = normalizedPaths
     pulseSelectionRange.value = null
-    pulseSourceText.value = text
-    if (!sameNote) {
+    pulseSourceText.value = host.getEditor()?.getText().trim() ?? ''
+    if (!sameContext) {
       pulseActionId.value = 'synthesize'
       setPulseInstruction(pulseDefaultInstruction('synthesize'), { markDirty: false })
       resetPulseResult()
-      pulseAnchorNonce.value += 1
     }
     pulseOpen.value = true
   }
@@ -796,12 +822,14 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
 
     if (selectedText) {
       pulseSourceKind.value = 'editor_selection'
+      pulseContextPaths.value = []
       pulseSelectionRange.value = { from, to }
       pulseSourceText.value = selectedText
     } else {
       const noteText = editor.getText().trim()
       if (!noteText) return
       pulseSourceKind.value = 'editor_note'
+      pulseContextPaths.value = [host.getCurrentPath()].filter(Boolean)
       pulseSelectionRange.value = null
       pulseSourceText.value = noteText
     }
@@ -809,7 +837,6 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     pulseActionId.value = actionId
     setPulseInstruction(instruction || pulseDefaultInstruction(actionId), { markDirty: Boolean(instruction.trim()) })
     resetPulseResult()
-    pulseAnchorNonce.value += 1
     pulseOpen.value = true
   }
 
@@ -818,7 +845,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
    */
   async function runPulseFromEditor() {
     if (pulse.running.value) return
-    if (!host.getCurrentPath() && pulseSourceKind.value !== 'editor_selection') return
+    if (!host.getCurrentPath() && pulseSourceKind.value !== 'editor_selection' && pulseSourceKind.value !== 'second_brain_context') return
     const sourceText = pulseSourceKind.value === 'editor_selection'
       ? pulseSourceText.value
       : (pulseSourceText.value || (host.getEditor()?.getText().trim() ?? ''))
@@ -826,9 +853,11 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
       source_kind: pulseSourceKind.value,
       action_id: pulseActionId.value,
       instructions: pulseInstruction.value.trim() || undefined,
-      context_paths: pulseSourceKind.value === 'editor_selection' ? [] : [host.getCurrentPath()],
+      context_paths: pulseSourceKind.value === 'editor_selection' ? [] : pulseContextPaths.value,
       source_text: sourceText || undefined,
-      selection_label: pulseSourceKind.value === 'editor_selection' ? 'Editor selection' : 'Current note'
+      selection_label: pulseSourceKind.value === 'editor_selection'
+        ? 'Editor selection'
+        : pulseSourceKind.value === 'second_brain_context' ? 'Current context' : 'Current note'
     })
   }
 
@@ -888,9 +917,9 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   }
 
   function sendPulseContextToSecondBrain() {
-    if (!host.getCurrentPath() && pulseSourceKind.value !== 'editor_selection') return
+    if (!host.getCurrentPath() && pulseSourceKind.value !== 'editor_selection' && pulseSourceKind.value !== 'second_brain_context') return
     output.emitPulseOpenSecondBrain({
-      contextPaths: pulseSourceKind.value === 'editor_selection' ? [] : [host.getCurrentPath()],
+      contextPaths: pulseSourceKind.value === 'editor_selection' ? [] : pulseContextPaths.value,
       prompt: buildSecondBrainPulsePrompt()
     })
     closePulsePanel()
@@ -948,13 +977,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
         tableInteractions.hideTableToolbar()
       }
 
-      if (pulseOpen.value) {
-        if (host.pulsePanelWrap.value?.contains(target)) return
-        if (target instanceof Element && target.closest('.inline-format-toolbar')) return
-        if (target instanceof Element && target.closest('.editor-find-toolbar')) return
-        if (target instanceof Element && target.closest('.ui-filterable-dropdown-menu')) return
-        closePulsePanel()
-      }
+      if (pulseOpen.value && target instanceof Element && target.closest('.ui-filterable-dropdown-menu')) return
     },
 
     onDocumentPointerUp(event: PointerEvent) {
@@ -1183,6 +1206,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     blockGutter.clear()
     blockGutter.syncSelectionTarget()
     findToolbar.syncFromEditor()
+    syncPulseSourceFromActiveSession()
   }
 
   function onDocumentContentChanged() {
@@ -1194,6 +1218,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     inlineFormatToolbar,
     findToolbar,
     updateFormattingToolbar,
+    syncPulseSelectionFromEditor,
     onInlineToolbarCopyAs,
     onActiveSessionChanged,
     onDocumentContentChanged
@@ -1243,6 +1268,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     pulseInstruction,
     pulseSourceText,
     pulseSelectionRange,
+    pulseContextPaths,
     mermaidReplaceDialog,
     mermaidPreviewDialog,
     assetPreviewDialog,
@@ -1253,10 +1279,9 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     closeAssetPreview,
     exportMermaidSvg,
     exportMermaidPng,
-    pulsePanelStyle,
-    updatePulsePanelMetrics,
     openPulseForSelection,
     openPulseForNote,
+    openPulseForContext,
     openPulseFromMacro,
     runPulseFromEditor,
     replaceSelectionWithPulseOutput,
@@ -1368,9 +1393,10 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     pulseInstruction: pulseAndDialogs.pulseInstruction,
     pulseSourceText: pulseAndDialogs.pulseSourceText,
     pulseSelectionRange: pulseAndDialogs.pulseSelectionRange,
-    pulsePanelStyle: pulseAndDialogs.pulsePanelStyle,
+    pulseContextPaths: pulseAndDialogs.pulseContextPaths,
     openPulseForSelection: pulseAndDialogs.openPulseForSelection,
     openPulseForNote: pulseAndDialogs.openPulseForNote,
+    openPulseForContext: pulseAndDialogs.openPulseForContext,
     openPulseFromMacro: pulseAndDialogs.openPulseFromMacro,
     runPulseFromEditor: pulseAndDialogs.runPulseFromEditor,
     replaceSelectionWithPulseOutput: pulseAndDialogs.replaceSelectionWithPulseOutput,
@@ -1405,6 +1431,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
       inlineFormatToolbar: toolbars.inlineFormatToolbar,
       findToolbar: toolbars.findToolbar,
       updateFormattingToolbar: toolbars.updateFormattingToolbar,
+      syncPulseSelectionFromEditor: toolbars.syncPulseSelectionFromEditor,
       onInlineToolbarCopyAs: toolbars.onInlineToolbarCopyAs,
       onActiveSessionChanged: toolbars.onActiveSessionChanged,
       onDocumentContentChanged: toolbars.onDocumentContentChanged

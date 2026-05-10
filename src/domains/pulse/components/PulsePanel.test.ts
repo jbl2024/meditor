@@ -16,6 +16,7 @@ function mountHarness(options?: {
   running?: boolean
   error?: string
   sourceText?: string
+  drawer?: boolean
 }) {
   const root = document.createElement('div')
   document.body.appendChild(root)
@@ -35,6 +36,7 @@ function mountHarness(options?: {
     setup() {
       return () => h(PulsePanel, {
         compact: true,
+        drawer: options?.drawer ?? false,
         actionId: actionId.value,
         actions: PULSE_ACTIONS_BY_SOURCE.editor_selection,
         instruction: instruction.value,
@@ -157,6 +159,35 @@ describe('PulsePanel', () => {
 
     const prompt = harness.root.querySelector('[data-pulse-prompt="true"]') as HTMLTextAreaElement
     prompt.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true }))
+    await flush()
+
+    expect(harness.onApply).toHaveBeenCalledWith('replace_selection')
+
+    harness.app.unmount()
+  })
+
+  it('opens a large drawer preview modal with apply actions', async () => {
+    const harness = mountHarness({
+      drawer: true,
+      previewMarkdown: 'Original selected text with more clarity.',
+      sourceText: 'Original selected text.'
+    })
+    await flush()
+
+    const expand = Array.from(harness.root.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('Large')) as HTMLButtonElement
+    expect(expand).toBeTruthy()
+    expand.click()
+    await flush()
+
+    const modal = harness.root.querySelector('.pulse-preview-modal') as HTMLElement
+    expect(modal).toBeTruthy()
+    expect(modal.textContent).toContain('Pulse Preview')
+    expect(modal.textContent).toContain('Replace selection')
+
+    const replace = Array.from(modal.querySelectorAll('.pulse-apply--modal .pulse-btn'))
+      .find((button) => button.textContent?.includes('Replace selection')) as HTMLButtonElement
+    replace.click()
     await flush()
 
     expect(harness.onApply).toHaveBeenCalledWith('replace_selection')

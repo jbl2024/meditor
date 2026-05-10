@@ -252,6 +252,7 @@ function createRuntimeHarness(input?: {
       },
       toolbars: {
         updateFormattingToolbar: vi.fn(),
+        syncPulseSelectionFromEditor: vi.fn(),
         updateTableToolbar: vi.fn(),
         inlineFormatToolbar: {
           updateFormattingToolbar: vi.fn(),

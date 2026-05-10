@@ -5,7 +5,6 @@ import { Bars3Icon } from '@heroicons/vue/24/outline'
 import { createExtractedNote, openExternalUrl } from '../../../shared/api/workspaceApi'
 import type {
   NoteHistoryEntry,
-  PulseActionId,
   ReadNoteSnapshotResult,
   SaveNoteResult,
   WorkspaceFsChange
@@ -15,7 +14,8 @@ import {
   readNoteHistorySnapshot,
   restoreNoteHistorySnapshot
 } from '../../../shared/api/noteHistoryApi'
-import { PULSE_ACTIONS_BY_SOURCE, type PulseApplyMode } from '../../pulse/lib/pulse'
+import type { PulseApplyMode } from '../../pulse/lib/pulse'
+import type { PulseDrawerState } from '../../pulse/lib/pulseDrawer'
 import type { DocumentSession } from '../composables/useDocumentEditorSessions'
 import { captureHeavyRenderEpoch, hasPendingHeavyRender, waitForHeavyRenderIdle } from '../lib/tiptap/renderStabilizer'
 import { useEditorChromeRuntime } from '../composables/useEditorChromeRuntime'
@@ -41,7 +41,6 @@ import SourceEditorPane from './editor/SourceEditorPane.vue'
 import EditorTableEdgeControls from './editor/EditorTableEdgeControls.vue'
 import EditorTitleField from './editor/EditorTitleField.vue'
 import EditorWikilinkOverlay from './editor/EditorWikilinkOverlay.vue'
-import PulsePanel from '../../pulse/components/PulsePanel.vue'
 import './editor/EditorViewContent.css'
 import { useWorkspaceSpellcheckDictionary } from '../composables/useWorkspaceSpellcheckDictionary'
 import { sourceEditorLanguageLabelForPath } from '../../../app/lib/appShellDocuments'
@@ -94,6 +93,7 @@ const emit = defineEmits([
   'path-renamed',
   'outline',
   'properties',
+  'pulse-state-change',
   'pulse-open-second-brain',
   'external-reload'
 ])
@@ -117,6 +117,10 @@ function emitProperties(payload: { path: string; items: Array<{ key: string; val
 
 function emitPulseOpenSecondBrain(payload: { contextPaths: string[]; prompt?: string }) {
   emit('pulse-open-second-brain', payload)
+}
+
+function emitPulseStateChange(payload: PulseDrawerState) {
+  emit('pulse-state-change', payload)
 }
 
 function emitExternalReload(payload: { path: string }) {
@@ -306,6 +310,7 @@ interactionRuntime = useEditorInteractionRuntime({
     },
     toolbars: {
       updateFormattingToolbar: () => chromeRuntime.toolbars.updateFormattingToolbar(),
+      syncPulseSelectionFromEditor: () => chromeRuntime.toolbars.syncPulseSelectionFromEditor(),
       updateTableToolbar: () => chromeRuntime.blockAndTable.updateTableToolbar(),
       inlineFormatToolbar: {
         updateFormattingToolbar: chromeRuntime.toolbars.inlineFormatToolbar.updateFormattingToolbar,
@@ -594,16 +599,59 @@ const {
   pulseActionId,
   pulseInstruction,
   pulseSourceText,
-  pulsePanelStyle,
-  onPulseActionChange,
-  onPulseInstructionChange,
-  runPulseFromEditor,
-  closePulsePanel,
   openPulseForSelection,
   replaceSelectionWithPulseOutput,
   insertPulseBelow,
   sendPulseContextToSecondBrain
 } = pulse
+
+const pulseApplyModes = computed<PulseApplyMode[]>(() =>
+  pulseSourceKind.value === 'editor_selection'
+    ? ['replace_selection', 'insert_below', 'send_to_second_brain']
+    : ['insert_below', 'send_to_second_brain']
+)
+const pulsePrimaryApplyMode = computed<PulseApplyMode>(() =>
+  pulseSourceKind.value === 'editor_selection' ? 'replace_selection' : 'insert_below'
+)
+const pulseDrawerState = computed<PulseDrawerState>(() => ({
+  open: pulseOpen.value,
+  sourceKind: pulseSourceKind.value,
+  actionId: pulseActionId.value,
+  instruction: pulseInstruction.value,
+  previewMarkdown: pulseState.previewMarkdown.value,
+  provenancePaths: pulseState.provenancePaths.value,
+  running: pulseState.running.value,
+  error: pulseState.error.value,
+  sourceText: pulseSourceText.value,
+  applyModes: pulseApplyModes.value,
+  primaryApplyMode: pulsePrimaryApplyMode.value
+}))
+
+function applyPulseMode(mode: PulseApplyMode) {
+  if (mode === 'replace_selection') replaceSelectionWithPulseOutput()
+  if (mode === 'insert_below') insertPulseBelow()
+  if (mode === 'send_to_second_brain') sendPulseContextToSecondBrain()
+}
+
+function setExposedPulseInstruction(value: string, options?: { markDirty?: boolean }) {
+  if (options) {
+    pulse.setPulseInstruction(value, options)
+    return
+  }
+  pulse.onPulseInstructionChange(value)
+}
+
+watch(
+  pulseDrawerState,
+  (state) => {
+    emitPulseStateChange({
+      ...state,
+      provenancePaths: [...state.provenancePaths],
+      applyModes: [...state.applyModes]
+    })
+  },
+  { immediate: true, deep: true }
+)
 const {
   mermaidReplaceDialog,
   resolveMermaidReplaceDialog,
@@ -925,13 +973,20 @@ defineExpose({
   zoomOut: () => zoomEditorBy(-0.1),
   resetZoom: () => resetEditorZoom(),
   getZoom,
+  getPulseDrawerState: () => pulseDrawerState.value,
   pulseOpen: pulse.pulseOpen,
   pulseSourceKind: pulse.pulseSourceKind,
   pulseActionId: pulse.pulseActionId,
   pulseSourceText: pulse.pulseSourceText,
   pulseSelectionRange: pulse.pulseSelectionRange,
   openPulseForNote: pulse.openPulseForNote,
-  setPulseInstruction: pulse.setPulseInstruction,
+  openPulseForContext: pulse.openPulseForContext,
+  setPulseAction: pulse.onPulseActionChange,
+  setPulseInstruction: setExposedPulseInstruction,
+  runPulseFromEditor: pulse.runPulseFromEditor,
+  cancelPulse: pulse.pulse.cancel,
+  closePulsePanel: pulse.closePulsePanel,
+  applyPulseMode,
   setMarkdownSourceSurfaceEnabled,
   isSourceSurface: () => isSourceSurface.value
 })
@@ -1225,32 +1280,6 @@ defineExpose({
             @close="closeSpellcheckMenu()"
           />
 
-          <div v-if="pulseOpen" ref="pulsePanelWrap" class="editor-pulse-panel-wrap" :style="pulsePanelStyle">
-            <PulsePanel
-              compact
-              :action-id="pulseActionId"
-              :actions="PULSE_ACTIONS_BY_SOURCE[pulseSourceKind]"
-              :instruction="pulseInstruction"
-              :preview-markdown="pulseState.previewMarkdown.value"
-              :provenance-paths="pulseState.provenancePaths.value"
-              :running="pulseState.running.value"
-              :error="pulseState.error.value"
-              :source-text="pulseSourceText"
-              :apply-modes="pulseSourceKind === 'editor_selection' ? ['replace_selection', 'insert_below', 'send_to_second_brain'] : ['insert_below', 'send_to_second_brain']"
-              :primary-apply-mode="pulseSourceKind === 'editor_selection' ? 'replace_selection' : 'insert_below'"
-              @update:action-id="onPulseActionChange($event as PulseActionId)"
-              @update:instruction="onPulseInstructionChange($event)"
-              @run="void runPulseFromEditor()"
-              @cancel="void pulseState.cancel()"
-              @close="closePulsePanel()"
-              @apply="(mode: PulseApplyMode) => {
-                if (mode === 'replace_selection') replaceSelectionWithPulseOutput()
-                if (mode === 'insert_below') insertPulseBelow()
-                if (mode === 'send_to_second_brain') sendPulseContextToSecondBrain()
-              }"
-            />
-          </div>
-
         </div>
 
         <EditorLargeDocOverlay
@@ -1368,8 +1397,4 @@ defineExpose({
   min-height: 100%;
 }
 
-.editor-pulse-panel-wrap {
-  z-index: 36;
-  pointer-events: auto;
-}
 </style>

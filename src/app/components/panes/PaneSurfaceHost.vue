@@ -11,7 +11,7 @@ import type { PaneTab } from '../../composables/useMultiPaneWorkspaceState'
 import type { FileEditorStatus } from './EditorPaneTabs.vue'
 import type { WikilinkAnchor } from '../../../domains/editor/lib/wikilinks'
 import type { DocumentSession } from '../../../domains/editor/composables/useDocumentEditorSessions'
-import type { ReadNoteSnapshotResult, SaveNoteResult, WorkspaceFsChange } from '../../../shared/api/apiTypes'
+import type { PulseActionId, ReadNoteSnapshotResult, SaveNoteResult, WorkspaceFsChange } from '../../../shared/api/apiTypes'
 import type {
   AppShellCosmosViewModel,
   AppShellAltersViewModel,
@@ -19,6 +19,8 @@ import type {
   AppShellSecondBrainViewModel
 } from '../../lib/appShellViewModels'
 import type { AppSettingsAlters } from '../../../shared/api/apiTypes'
+import type { PulseApplyMode } from '../../../domains/pulse/lib/pulse'
+import { createClosedPulseDrawerState, type PulseDrawerState } from '../../../domains/pulse/lib/pulseDrawer'
 
 const props = defineProps<{
   paneId: string
@@ -58,6 +60,7 @@ const emit = defineEmits<{
   'path-renamed': [payload: { from: string; to: string; manual: boolean }]
   outline: [payload: Array<{ level: 1 | 2 | 3; text: string }>]
   properties: [payload: { path: string; items: Array<{ key: string; value: string }>; parseErrorCount: number }]
+  'pulse-state-change': [payload: PulseDrawerState]
   'pulse-open-second-brain': [payload: { contextPaths: string[]; prompt?: string }]
   'external-reload': [payload: { path: string }]
   'cosmos-query-update': [value: string]
@@ -97,6 +100,14 @@ type EditorSurfaceExposed = {
   focusEditor: () => void
   openNoteHistory: () => Promise<void>
   openPulseForNote: () => void
+  openPulseForContext: (paths: string[]) => void
+  getPulseDrawerState: () => PulseDrawerState
+  setPulseAction: (actionId: PulseActionId) => void
+  setPulseInstruction: (value: string, options?: { markDirty?: boolean }) => void
+  runPulseFromEditor: () => Promise<void>
+  cancelPulse: () => Promise<void>
+  closePulsePanel: () => void
+  applyPulseMode: (mode: PulseApplyMode) => void
   isSourceSurface: () => boolean
   setMarkdownSourceSurfaceEnabled: (enabled: boolean) => Promise<void>
   revealSnippet: (snippet: string) => Promise<void>
@@ -162,6 +173,14 @@ defineExpose<EditorSurfaceExposed>({
   focusEditor: () => withEditor((editor) => editor.focusEditor(), undefined),
   openNoteHistory: async () => await withEditor((editor) => editor.openNoteHistory(), Promise.resolve()),
   openPulseForNote: () => withEditor((editor) => editor.openPulseForNote(), undefined),
+  openPulseForContext: (paths: string[]) => withEditor((editor) => editor.openPulseForContext(paths), undefined),
+  getPulseDrawerState: () => withEditor((editor) => editor.getPulseDrawerState(), createClosedPulseDrawerState()),
+  setPulseAction: (actionId: PulseActionId) => withEditor((editor) => editor.setPulseAction(actionId), undefined),
+  setPulseInstruction: (value: string, options?: { markDirty?: boolean }) => withEditor((editor) => editor.setPulseInstruction(value, options), undefined),
+  runPulseFromEditor: async () => await withEditor((editor) => editor.runPulseFromEditor(), Promise.resolve()),
+  cancelPulse: async () => await withEditor((editor) => editor.cancelPulse(), Promise.resolve()),
+  closePulsePanel: () => withEditor((editor) => editor.closePulsePanel(), undefined),
+  applyPulseMode: (mode: PulseApplyMode) => withEditor((editor) => editor.applyPulseMode(mode), undefined),
   isSourceSurface: () => withEditor((editor) => editor.isSourceSurface(), false),
   setMarkdownSourceSurfaceEnabled: async (enabled: boolean) => await withEditor((editor) => editor.setMarkdownSourceSurfaceEnabled(enabled), Promise.resolve()),
   revealSnippet: async (snippet: string) => await withEditor((editor) => editor.revealSnippet(snippet), Promise.resolve()),
@@ -199,6 +218,7 @@ defineExpose<EditorSurfaceExposed>({
     @path-renamed="emit('path-renamed', $event)"
     @outline="emit('outline', $event)"
     @properties="emit('properties', $event)"
+    @pulse-state-change="emit('pulse-state-change', $event)"
     @pulse-open-second-brain="emit('pulse-open-second-brain', $event)"
     @external-reload="emit('external-reload', $event)"
   />

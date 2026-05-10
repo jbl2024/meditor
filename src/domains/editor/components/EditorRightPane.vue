@@ -12,10 +12,14 @@
  *   and cross-surface orchestration.
  */
 import { computed, ref, watch } from 'vue'
-import { BookmarkIcon, ChevronRightIcon, ClockIcon, StarIcon as StarOutlineIcon, XMarkIcon } from '@heroicons/vue/24/outline'
+import { ArrowLeftIcon, BookmarkIcon, ChevronRightIcon, ClockIcon, StarIcon as StarOutlineIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import { StarIcon as StarSolidIcon } from '@heroicons/vue/24/solid'
 import EditorEchoesPanel from './editor/EditorEchoesPanel.vue'
 import UiButton from '../../../shared/components/ui/UiButton.vue'
+import PulsePanel from '../../pulse/components/PulsePanel.vue'
+import { PULSE_ACTIONS_BY_SOURCE, type PulseApplyMode } from '../../pulse/lib/pulse'
+import type { PulseActionId } from '../../../shared/api/apiTypes'
+import { createClosedPulseDrawerState, type PulseDrawerState } from '../../pulse/lib/pulseDrawer'
 import type { ConstitutedContextItem } from '../composables/useConstitutedContext'
 import type { EchoesItem } from '../../echoes/lib/echoes'
 
@@ -57,6 +61,7 @@ const props = defineProps<{
   propertiesPreview: PropertyPreviewRow[]
   propertyParseErrorCount: number
   toRelativePath: (path: string) => string
+  pulseState?: PulseDrawerState
 }>()
 
 const emit = defineEmits<{
@@ -82,6 +87,12 @@ const emit = defineEmits<{
   'context-open-second-brain': []
   'context-open-cosmos': []
   'context-open-pulse': []
+  'pulse-action-change': [actionId: PulseActionId]
+  'pulse-instruction-change': [value: string]
+  'pulse-run': []
+  'pulse-cancel': []
+  'pulse-close': []
+  'pulse-apply': [mode: PulseApplyMode]
 }>()
 
 const outlineExpanded = ref(false)
@@ -93,6 +104,7 @@ const activeNoteExpanded = ref(true)
 const hasEchoesContent = computed(() => props.echoesItems.length > 0 && !props.echoesLoading && !props.echoesError)
 const hasLocalContext = computed(() => props.localContextItems.length > 0)
 const hasPinnedContext = computed(() => props.pinnedContextItems.length > 0)
+const effectivePulseState = computed(() => props.pulseState ?? createClosedPulseDrawerState())
 
 watch(
   hasEchoesContent,
@@ -106,6 +118,42 @@ watch(
 
 <template>
   <aside class="right-pane" :style="{ width: `${props.width}px` }">
+    <section v-if="effectivePulseState.open" class="pulse-drawer-view">
+      <div class="pulse-drawer-header">
+        <button type="button" class="pulse-drawer-back" aria-label="Back to inspector" title="Back to inspector" @click="emit('pulse-close')">
+          <ArrowLeftIcon />
+        </button>
+        <div>
+          <h3 class="section-title pulse-drawer-title">Pulse</h3>
+          <p class="pulse-drawer-subtitle">
+            {{ effectivePulseState.sourceKind === 'editor_selection' ? 'Editor selection' : effectivePulseState.sourceKind === 'second_brain_context' ? 'Current context' : 'Current note' }}
+          </p>
+        </div>
+      </div>
+
+      <PulsePanel
+        compact
+        drawer
+        :action-id="effectivePulseState.actionId"
+        :actions="PULSE_ACTIONS_BY_SOURCE[effectivePulseState.sourceKind]"
+        :instruction="effectivePulseState.instruction"
+        :preview-markdown="effectivePulseState.previewMarkdown"
+        :provenance-paths="effectivePulseState.provenancePaths"
+        :running="effectivePulseState.running"
+        :error="effectivePulseState.error"
+        :source-text="effectivePulseState.sourceText"
+        :apply-modes="effectivePulseState.applyModes"
+        :primary-apply-mode="effectivePulseState.primaryApplyMode"
+        @update:action-id="emit('pulse-action-change', $event as PulseActionId)"
+        @update:instruction="emit('pulse-instruction-change', $event)"
+        @run="emit('pulse-run')"
+        @cancel="emit('pulse-cancel')"
+        @close="emit('pulse-close')"
+        @apply="emit('pulse-apply', $event)"
+      />
+    </section>
+
+    <template v-else>
     <section class="pane-card pane-toolbar">
       <button type="button" class="section-toggle active-note-section-toggle" @click="activeNoteExpanded = !activeNoteExpanded">
         <h3 class="section-title pane-toolbar-title">Active Note</h3>
@@ -428,6 +476,7 @@ watch(
         </div>
       </template>
     </section>
+    </template>
   </aside>
 </template>
 
@@ -452,6 +501,53 @@ watch(
   padding: 10px 8px 8px 10px;
   box-shadow: inset 0 0 0 1px var(--right-pane-card-border);
   transition: box-shadow 160ms ease, background-color 160ms ease;
+}
+
+.pulse-drawer-view {
+  min-height: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pulse-drawer-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 2px 0;
+}
+
+.pulse-drawer-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--right-pane-text-soft);
+}
+
+.pulse-drawer-back:hover {
+  background: var(--right-pane-item-hover);
+  color: var(--right-pane-text);
+}
+
+.pulse-drawer-back svg {
+  width: 16px;
+  height: 16px;
+}
+
+.pulse-drawer-title {
+  margin: 0;
+}
+
+.pulse-drawer-subtitle {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--right-pane-text-soft);
 }
 
 .pane-section {

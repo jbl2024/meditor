@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import EditorPaneTabs, { type FileEditorStatus } from './EditorPaneTabs.vue'
 import PaneSurfaceHost from './PaneSurfaceHost.vue'
 import type { MultiPaneLayout, PaneState, PaneTab } from '../../composables/useMultiPaneWorkspaceState'
 import type { DocumentSession } from '../../../domains/editor/composables/useDocumentEditorSessions'
 import type { WikilinkAnchor } from '../../../domains/editor/lib/wikilinks'
 import type { ReadNoteSnapshotResult, SaveNoteResult, WorkspaceFsChange } from '../../../shared/api/apiTypes'
+import type { PulseActionId } from '../../../shared/api/apiTypes'
+import type { PulseApplyMode } from '../../../domains/pulse/lib/pulse'
+import { createClosedPulseDrawerState, type PulseDrawerState } from '../../../domains/pulse/lib/pulseDrawer'
 import type {
   AppShellCosmosViewModel,
   AppShellAltersViewModel,
@@ -27,6 +30,14 @@ export type EditorPaneGridExposed = {
   focusEditor: () => void
   openNoteHistory: () => Promise<void>
   openPulseForNote: () => void
+  openPulseForContext: (paths: string[]) => void
+  getPulseDrawerState: () => PulseDrawerState
+  setPulseAction: (actionId: PulseActionId) => void
+  setPulseInstruction: (value: string, options?: { markDirty?: boolean }) => void
+  runPulseFromEditor: () => Promise<void>
+  cancelPulse: () => Promise<void>
+  closePulsePanel: () => void
+  applyPulseMode: (mode: PulseApplyMode) => void
   isActiveEditorSourceSurface: () => boolean
   setActiveMarkdownSourceMode: (enabled: boolean) => Promise<void>
   revealSnippet: (snippet: string) => Promise<void>
@@ -47,6 +58,14 @@ type EditorViewExposed = {
   focusEditor: () => void
   openNoteHistory: () => Promise<void>
   openPulseForNote: () => void
+  openPulseForContext: (paths: string[]) => void
+  getPulseDrawerState: () => PulseDrawerState
+  setPulseAction: (actionId: PulseActionId) => void
+  setPulseInstruction: (value: string, options?: { markDirty?: boolean }) => void
+  runPulseFromEditor: () => Promise<void>
+  cancelPulse: () => Promise<void>
+  closePulsePanel: () => void
+  applyPulseMode: (mode: PulseApplyMode) => void
   revealSnippet: (snippet: string) => Promise<void>
   revealOutlineHeading: (index: number) => Promise<void>
   revealAnchor: (anchor: WikilinkAnchor) => Promise<boolean>
@@ -100,6 +119,7 @@ const emit = defineEmits<{
   'path-renamed': [payload: { from: string; to: string; manual: boolean }]
   outline: [payload: Array<{ level: 1 | 2 | 3; text: string }>]
   properties: [payload: { path: string; items: Array<{ key: string; value: string }>; parseErrorCount: number }]
+  'pulse-state-change': [payload: PulseDrawerState]
   'pulse-open-second-brain': [payload: { contextPaths: string[]; prompt?: string }]
   'external-reload': [payload: { path: string }]
   'cosmos-query-update': [value: string]
@@ -273,6 +293,59 @@ function openPulseForNote() {
   ensureCall((editor) => editor.openPulseForNote(), undefined)
 }
 
+function openPulseForContext(paths: string[]) {
+  ensureCall((editor) => editor.openPulseForContext(paths), undefined)
+}
+
+function getPulseDrawerState(): PulseDrawerState {
+  return ensureCall((editor) => editor.getPulseDrawerState?.() ?? createClosedPulseDrawerState(), createClosedPulseDrawerState())
+}
+
+function setPulseAction(actionId: PulseActionId) {
+  ensureCall((editor) => editor.setPulseAction(actionId), undefined)
+}
+
+function setPulseInstruction(value: string, options?: { markDirty?: boolean }) {
+  ensureCall((editor) => editor.setPulseInstruction(value, options), undefined)
+}
+
+async function runPulseFromEditor() {
+  await ensureCall((editor) => editor.runPulseFromEditor(), Promise.resolve())
+}
+
+async function cancelPulse() {
+  await ensureCall((editor) => editor.cancelPulse(), Promise.resolve())
+}
+
+function closePulsePanel() {
+  ensureCall((editor) => editor.closePulsePanel(), undefined)
+}
+
+function applyPulseMode(mode: PulseApplyMode) {
+  ensureCall((editor) => editor.applyPulseMode(mode), undefined)
+}
+
+function onPanePulseStateChange(paneId: string, state: PulseDrawerState) {
+  if (paneId !== props.layout.activePaneId) return
+  emit('pulse-state-change', state)
+}
+
+const activePulseSurfaceSignature = computed(() => {
+  const pane = props.layout.panesById[props.layout.activePaneId]
+  if (!pane) return `${props.layout.activePaneId}:missing`
+  const activeTab = paneActiveTab(pane)
+  const activePath = activeTab && 'path' in activeTab ? activeTab.path : ''
+  return `${props.layout.activePaneId}:${pane.activeTabId}:${activeTab?.type ?? 'none'}:${activePath}`
+})
+
+watch(
+  activePulseSurfaceSignature,
+  async () => {
+    await nextTick()
+    emit('pulse-state-change', getPulseDrawerState())
+  }
+)
+
 function isActiveEditorSourceSurface(): boolean {
   return Boolean(activeEditor()?.isSourceSurface?.())
 }
@@ -324,6 +397,14 @@ defineExpose<EditorPaneGridExposed>({
   focusEditor,
   openNoteHistory,
   openPulseForNote,
+  openPulseForContext,
+  getPulseDrawerState,
+  setPulseAction,
+  setPulseInstruction,
+  runPulseFromEditor,
+  cancelPulse,
+  closePulsePanel,
+  applyPulseMode,
   isActiveEditorSourceSurface,
   setActiveMarkdownSourceMode,
   revealSnippet,
@@ -409,6 +490,7 @@ onBeforeUnmount(() => {
         @path-renamed="emit('path-renamed', $event)"
         @outline="emit('outline', $event)"
         @properties="emit('properties', $event)"
+        @pulse-state-change="onPanePulseStateChange(pane.id, $event)"
         @pulse-open-second-brain="emit('pulse-open-second-brain', $event)"
         @external-reload="emit('external-reload', $event)"
         @cosmos-query-update="emit('cosmos-query-update', $event)"

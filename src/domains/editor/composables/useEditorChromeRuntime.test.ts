@@ -69,14 +69,14 @@ async function flushUi() {
   await nextTick()
 }
 
-function createEditorStub(selection = { from: 1, to: 2, empty: false }) {
+function createEditorStub(selection = { from: 1, to: 2, empty: false }, text = 'Alpha') {
   const insertContentAt = vi.fn(() => ({ run: vi.fn(() => true) }))
   const insertContent = vi.fn(() => ({ run: vi.fn(() => true) }))
   const paragraph = {
     type: { name: 'paragraph' },
     nodeSize: 4,
     attrs: {},
-    textContent: 'Alpha'
+    textContent: text
   }
   const normalizedSelection = {
     ...selection,
@@ -100,7 +100,7 @@ function createEditorStub(selection = { from: 1, to: 2, empty: false }) {
         setMeta: vi.fn(() => ({}))
       },
       doc: {
-        textBetween: vi.fn(() => 'Alpha'),
+        textBetween: vi.fn(() => text),
         nodeAt: vi.fn(() => paragraph),
         forEach: vi.fn((cb: (node: unknown, offset: number) => void) => {
           cb(paragraph, 1)
@@ -119,7 +119,7 @@ function createEditorStub(selection = { from: 1, to: 2, empty: false }) {
       nodeDOM: vi.fn(() => document.createElement('p'))
     },
     isActive: vi.fn(() => false),
-    getText: vi.fn(() => 'Alpha'),
+    getText: vi.fn(() => text),
     chain: vi.fn(() => ({
       focus: vi.fn(() => ({
         setTextSelection: vi.fn(() => ({
@@ -217,6 +217,7 @@ function createRuntimeHarness(input?: {
   return {
     runtime,
     activeEditor,
+    currentPath,
     holder,
     contentShell,
     pulsePanelWrap,
@@ -555,6 +556,58 @@ describe('useEditorChromeRuntime', () => {
     expect(harness.runtime.pulse.pulseSelectionRange.value).toEqual({ from: 1, to: 2 })
   })
 
+  it('syncPulseSelectionFromEditor switches an open note session to the live selection', () => {
+    const harness = createRuntimeHarness()
+    harness.runtime.pulse.openPulseForNote()
+    previewMarkdown.value = 'Existing note preview'
+
+    harness.runtime.toolbars.syncPulseSelectionFromEditor()
+
+    expect(harness.runtime.pulse.pulseSourceKind.value).toBe('editor_selection')
+    expect(harness.runtime.pulse.pulseSelectionRange.value).toEqual({ from: 1, to: 2 })
+    expect(harness.runtime.pulse.pulseSourceText.value).toBe('Alpha')
+    expect(previewMarkdown.value).toBe('')
+  })
+
+  it('refreshes an open note Pulse source when the active session changes', () => {
+    const harness = createRuntimeHarness({
+      activeEditor: ref<Editor | null>(createEditorStub({ from: 1, to: 1, empty: true }, 'Alpha note')) as Ref<Editor | null>
+    })
+    harness.runtime.pulse.openPulseForNote()
+    harness.runtime.pulse.pulseActionId.value = 'format'
+    harness.runtime.pulse.pulseInstruction.value = 'Keep this draft instruction.'
+    previewMarkdown.value = 'Existing note preview'
+
+    harness.activeEditor.value = createEditorStub({ from: 1, to: 1, empty: true }, 'Beta note')
+    harness.currentPath.value = 'b.md'
+    harness.runtime.toolbars.onActiveSessionChanged()
+
+    expect(harness.runtime.pulse.pulseSourceKind.value).toBe('editor_note')
+    expect(harness.runtime.pulse.pulseContextPaths.value).toEqual(['b.md'])
+    expect(harness.runtime.pulse.pulseSourceText.value).toBe('Beta note')
+    expect(harness.runtime.pulse.pulseActionId.value).toBe('format')
+    expect(harness.runtime.pulse.pulseInstruction.value).toBe('Keep this draft instruction.')
+    expect(previewMarkdown.value).toBe('')
+  })
+
+  it('switches an open note Pulse source to the new tab selection on active session change', () => {
+    const harness = createRuntimeHarness({
+      activeEditor: ref<Editor | null>(createEditorStub({ from: 1, to: 1, empty: true }, 'Alpha note')) as Ref<Editor | null>
+    })
+    harness.runtime.pulse.openPulseForNote()
+    previewMarkdown.value = 'Existing note preview'
+
+    harness.activeEditor.value = createEditorStub({ from: 1, to: 5, empty: false }, 'Beta selection')
+    harness.currentPath.value = 'b.md'
+    harness.runtime.toolbars.onActiveSessionChanged()
+
+    expect(harness.runtime.pulse.pulseSourceKind.value).toBe('editor_selection')
+    expect(harness.runtime.pulse.pulseContextPaths.value).toEqual([])
+    expect(harness.runtime.pulse.pulseSelectionRange.value).toEqual({ from: 1, to: 5 })
+    expect(harness.runtime.pulse.pulseSourceText.value).toBe('Beta selection')
+    expect(previewMarkdown.value).toBe('')
+  })
+
   it('refreshes the inline toolbar position when the holder scrolls', () => {
     const harness = createRuntimeHarness()
     harness.runtime.toolbars.inlineFormatToolbar.updateFormattingToolbar()
@@ -577,6 +630,7 @@ describe('useEditorChromeRuntime', () => {
     const valid = createRuntimeHarness()
     valid.runtime.pulse.pulseOpen.value = true
     valid.runtime.pulse.pulseSourceKind.value = 'editor_note'
+    valid.runtime.pulse.openPulseForNote()
     valid.runtime.pulse.pulseSourceText.value = 'Alpha'
     valid.runtime.pulse.sendPulseContextToSecondBrain()
     expect(valid.emitPulseOpenSecondBrain).toHaveBeenCalledWith({

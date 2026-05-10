@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { ChevronDownIcon, XMarkIcon } from '@heroicons/vue/24/outline'
+import { ArrowsPointingOutIcon, ChevronDownIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import UiFilterableDropdown, { type FilterableDropdownItem } from '../../../shared/components/ui/UiFilterableDropdown.vue'
 import { PULSE_APPLY_LABELS, type PulseActionSpec, type PulseApplyMode } from '../lib/pulse'
 import { buildPulseDiff, renderPulseMarkdown } from '../lib/pulsePreview'
@@ -23,6 +23,7 @@ const props = defineProps<{
   applyModes: PulseApplyMode[]
   primaryApplyMode?: PulseApplyMode
   compact?: boolean
+  drawer?: boolean
   sourceText?: string
 }>()
 
@@ -51,6 +52,7 @@ const compactQuery = ref('')
 const compactActiveIndex = ref(0)
 const previewMode = ref<PulsePreviewMode>('preview')
 const copyFeedback = ref(false)
+const previewModalOpen = ref(false)
 let copyResetTimer: number | null = null
 const compactItems = computed<FilterableDropdownItem[]>(() =>
   props.actions.map((action) => ({
@@ -89,6 +91,15 @@ function onCompactSelect(item: FilterableDropdownItem) {
 
 function setPreviewMode(mode: PulsePreviewMode) {
   previewMode.value = mode
+}
+
+function openPreviewModal() {
+  if (panelState.value !== 'result') return
+  previewModalOpen.value = true
+}
+
+function closePreviewModal() {
+  previewModalOpen.value = false
 }
 
 function resetCopyFeedback() {
@@ -142,6 +153,7 @@ watch(
   () => {
     previewMode.value = canShowDiff.value ? 'diff' : 'preview'
     resetCopyFeedback()
+    previewModalOpen.value = false
   },
   { immediate: true }
 )
@@ -152,7 +164,287 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="pulse-panel" :class="{ compact }" data-pulse-panel-state>
+  <section class="pulse-panel" :class="{ compact, drawer }" data-pulse-panel-state>
+    <template v-if="drawer">
+      <div class="pulse-thread">
+        <article class="pulse-message pulse-message-user">
+          <div class="pulse-message-meta">
+            <span>Request</span>
+            <span class="pulse-action-pill">{{ activeAction?.label || 'Action' }}</span>
+          </div>
+          <p class="pulse-message-copy">{{ instruction || activeAction?.description || 'Describe what Pulse should do.' }}</p>
+        </article>
+
+        <article class="pulse-message pulse-message-assistant" :data-state="panelState">
+          <div class="pulse-message-meta pulse-message-meta--result">
+            <span>Pulse</span>
+            <div v-if="panelState === 'result'" class="pulse-preview-controls pulse-preview-controls--drawer">
+              <button
+                type="button"
+                class="pulse-tab-btn pulse-expand-btn"
+                title="Open large preview"
+                aria-label="Open large preview"
+                @click="openPreviewModal"
+              >
+                <ArrowsPointingOutIcon class="h-4 w-4" />
+                <span>Large</span>
+              </button>
+              <button
+                type="button"
+                class="pulse-tab-btn pulse-copy-btn"
+                :disabled="!canCopyPreview"
+                :title="copyFeedback ? 'Copied' : 'Copy preview as markdown'"
+                @click="copyPreviewMarkdown"
+              >
+                {{ copyButtonLabel }}
+              </button>
+              <div class="pulse-preview-tabs">
+                <button
+                  v-if="canShowDiff"
+                  type="button"
+                  class="pulse-tab-btn"
+                  :data-active="effectivePreviewMode === 'diff'"
+                  @click="setPreviewMode('diff')"
+                >
+                  Diff
+                </button>
+                <button
+                  type="button"
+                  class="pulse-tab-btn"
+                  :data-active="effectivePreviewMode === 'preview'"
+                  @click="setPreviewMode('preview')"
+                >
+                  Preview
+                </button>
+                <button
+                  type="button"
+                  class="pulse-tab-btn"
+                  :data-active="effectivePreviewMode === 'markdown'"
+                  @click="setPreviewMode('markdown')"
+                >
+                  Markdown
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="panelState === 'configure'" class="pulse-message-body pulse-preview-empty">
+            Choose an action, refine the prompt, then generate a preview.
+          </div>
+
+          <div v-else-if="panelState === 'running'" class="pulse-message-body pulse-preview-loading">
+            <div class="pulse-skeleton-line"></div>
+            <div class="pulse-skeleton-line pulse-skeleton-line--short"></div>
+            <div class="pulse-skeleton-line"></div>
+            <p>Generating…</p>
+          </div>
+
+          <div v-else-if="panelState === 'error'" class="pulse-message-body pulse-preview-error">
+            {{ error }}
+          </div>
+
+          <div
+            v-else-if="effectivePreviewMode === 'diff' && canShowDiff"
+            class="pulse-message-body pulse-diff"
+            data-pulse-preview-mode="diff"
+          >
+            <span
+              v-for="(segment, index) in diffSegments"
+              :key="`${segment.kind}-${index}`"
+              class="pulse-diff-segment"
+              :class="`pulse-diff-segment--${segment.kind}`"
+            >{{ segment.text }}</span>
+          </div>
+
+          <div
+            v-else-if="effectivePreviewMode === 'preview' && renderedPreviewHtml"
+            class="pulse-message-body pulse-rendered-preview"
+            data-pulse-preview-mode="preview"
+            v-html="renderedPreviewHtml"
+          ></div>
+
+          <pre
+            v-else
+            class="pulse-message-body pulse-raw-preview"
+            data-pulse-preview-mode="markdown"
+          >{{ previewMarkdown }}</pre>
+
+          <div v-if="panelState === 'result'" class="pulse-result-footer">
+            <p v-if="provenancePaths.length" class="pulse-provenance">{{ provenancePaths.length }} source<span v-if="provenancePaths.length > 1">s</span></p>
+            <div v-if="applyModesVisible" class="pulse-apply pulse-apply--drawer">
+              <button
+                v-for="mode in applyModes"
+                :key="mode"
+                type="button"
+                class="pulse-btn"
+                @click="emit('apply', mode)"
+              >
+                {{ PULSE_APPLY_LABELS[mode] }}
+              </button>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <div class="pulse-composer">
+        <UiFilterableDropdown
+          class="pulse-compact-dropdown"
+          :items="compactItems"
+          :model-value="compactMenuOpen"
+          :query="compactQuery"
+          :active-index="compactActiveIndex"
+          :matcher="compactMatcher"
+          :show-filter="true"
+          :disabled="running"
+          :close-on-select="true"
+          :menu-mode="'portal'"
+          :menu-class="'pulse-compact-dropdown-menu'"
+          filter-placeholder="Filter Pulse actions..."
+          @open-change="compactMenuOpen = $event"
+          @query-change="compactQuery = $event"
+          @active-index-change="compactActiveIndex = $event"
+          @select="onCompactSelect($event)"
+        >
+          <template #trigger="{ toggleMenu, activeItem }">
+            <button
+              type="button"
+              class="pulse-composer-action"
+              :disabled="running"
+              :title="activeAction?.description"
+              @click="toggleMenu"
+            >
+              <span>{{ activeItem?.label || activeAction?.label || 'Action' }}</span>
+              <ChevronDownIcon class="h-4 w-4" />
+            </button>
+          </template>
+        </UiFilterableDropdown>
+
+        <div class="pulse-composer-input">
+          <textarea
+            class="pulse-textarea pulse-textarea--composer"
+            data-pulse-prompt="true"
+            :value="instruction"
+            :disabled="running"
+            rows="3"
+            placeholder="Ask Pulse to transform this..."
+            @input="emit('update:instruction', ($event.target as HTMLTextAreaElement).value)"
+            @keydown="onPromptKeydown"
+          ></textarea>
+          <div class="pulse-composer-actions">
+            <button
+              type="button"
+              class="pulse-btn pulse-btn-strong"
+              :disabled="!canRun"
+              @click="emit('run')"
+            >
+              {{ panelState === 'result' ? 'Regenerate' : 'Generate' }}
+            </button>
+            <button v-if="running" type="button" class="pulse-btn" @click="emit('cancel')">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="previewModalOpen" class="pulse-preview-modal-overlay" @click.self="closePreviewModal">
+        <section
+          class="pulse-preview-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="pulse-preview-modal-title"
+          @keydown.esc="closePreviewModal"
+        >
+          <header class="pulse-preview-modal-header">
+            <div>
+              <p class="pulse-preview-modal-kicker">Pulse Preview</p>
+              <h2 id="pulse-preview-modal-title">{{ activeAction?.label || 'Result' }}</h2>
+            </div>
+            <div class="pulse-preview-modal-tools">
+              <button
+                v-if="canShowDiff"
+                type="button"
+                class="pulse-tab-btn"
+                :data-active="effectivePreviewMode === 'diff'"
+                @click="setPreviewMode('diff')"
+              >
+                Diff
+              </button>
+              <button
+                type="button"
+                class="pulse-tab-btn"
+                :data-active="effectivePreviewMode === 'preview'"
+                @click="setPreviewMode('preview')"
+              >
+                Preview
+              </button>
+              <button
+                type="button"
+                class="pulse-tab-btn"
+                :data-active="effectivePreviewMode === 'markdown'"
+                @click="setPreviewMode('markdown')"
+              >
+                Markdown
+              </button>
+              <button
+                type="button"
+                class="pulse-tab-btn pulse-copy-btn"
+                :disabled="!canCopyPreview"
+                :title="copyFeedback ? 'Copied' : 'Copy preview as markdown'"
+                @click="copyPreviewMarkdown"
+              >
+                {{ copyButtonLabel }}
+              </button>
+              <button type="button" class="pulse-close-btn" aria-label="Close large preview" title="Close" @click="closePreviewModal">
+                <XMarkIcon class="h-4 w-4" />
+              </button>
+            </div>
+          </header>
+
+          <div class="pulse-preview-modal-body">
+            <div
+              v-if="effectivePreviewMode === 'diff' && canShowDiff"
+              class="pulse-modal-preview-body pulse-diff"
+              data-pulse-preview-mode="diff"
+            >
+              <span
+                v-for="(segment, index) in diffSegments"
+                :key="`${segment.kind}-${index}`"
+                class="pulse-diff-segment"
+                :class="`pulse-diff-segment--${segment.kind}`"
+              >{{ segment.text }}</span>
+            </div>
+
+            <div
+              v-else-if="effectivePreviewMode === 'preview' && renderedPreviewHtml"
+              class="pulse-modal-preview-body pulse-rendered-preview"
+              data-pulse-preview-mode="preview"
+              v-html="renderedPreviewHtml"
+            ></div>
+
+            <pre
+              v-else
+              class="pulse-modal-preview-body pulse-raw-preview"
+              data-pulse-preview-mode="markdown"
+            >{{ previewMarkdown }}</pre>
+          </div>
+
+          <footer class="pulse-preview-modal-footer">
+            <p v-if="provenancePaths.length" class="pulse-provenance">{{ provenancePaths.length }} source<span v-if="provenancePaths.length > 1">s</span></p>
+            <div v-if="applyModesVisible" class="pulse-apply pulse-apply--modal">
+              <button
+                v-for="mode in applyModes"
+                :key="mode"
+                type="button"
+                class="pulse-btn"
+                @click="emit('apply', mode)"
+              >
+                {{ PULSE_APPLY_LABELS[mode] }}
+              </button>
+            </div>
+          </footer>
+        </section>
+      </div>
+    </template>
+
+    <template v-else>
     <div class="pulse-compact-bar pulse-compact-bar--header">
       <UiFilterableDropdown
         class="pulse-compact-dropdown"
@@ -320,6 +612,7 @@ onBeforeUnmount(() => {
         {{ PULSE_APPLY_LABELS[mode] }}
       </button>
     </div>
+    </template>
   </section>
 </template>
 
@@ -361,6 +654,312 @@ onBeforeUnmount(() => {
   gap: 10px;
   padding: 14px;
   border-color: var(--pulse-border);
+}
+
+.pulse-panel.drawer {
+  --pulse-bg: var(--right-pane-card-bg);
+  --pulse-border: var(--right-pane-card-border);
+  --pulse-panel-bg: var(--right-pane-bg);
+  --pulse-panel-border: var(--right-pane-card-border);
+  --pulse-chip-bg: var(--right-pane-card-bg);
+  --pulse-chip-border: var(--right-pane-card-border);
+  --pulse-muted-btn-bg: var(--right-pane-item-hover);
+  --pulse-muted-btn-hover: var(--right-pane-item-active);
+  --pulse-copy: var(--right-pane-text-soft);
+  min-height: 0;
+  flex: 1;
+  gap: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.pulse-thread {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  padding: 2px 2px 12px;
+}
+
+.pulse-message {
+  border: 1px solid var(--pulse-panel-border);
+  border-radius: 12px;
+  background: var(--pulse-bg);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--pulse-panel-border) 22%, transparent);
+}
+
+.pulse-message-user {
+  margin-left: 22px;
+  background: color-mix(in srgb, var(--button-primary-bg) 18%, var(--pulse-bg));
+}
+
+.pulse-message-assistant {
+  margin-right: 14px;
+}
+
+.pulse-message-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pulse-copy);
+}
+
+.pulse-message-meta--result {
+  align-items: flex-start;
+  flex-wrap: wrap;
+  padding-bottom: 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--pulse-panel-border) 42%, transparent);
+}
+
+.pulse-action-pill {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid var(--pulse-panel-border);
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: var(--pulse-panel-bg);
+  color: var(--text-primary);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.pulse-message-copy {
+  margin: 0;
+  padding: 8px 12px 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+}
+
+.pulse-message-body {
+  margin: 0;
+  max-height: none;
+  overflow: visible;
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.pulse-result-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 12px 12px;
+}
+
+.pulse-apply--drawer {
+  gap: 6px;
+}
+
+.pulse-apply--drawer .pulse-btn {
+  flex: 1 1 auto;
+  min-width: min(132px, 100%);
+  justify-content: center;
+}
+
+.pulse-composer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--pulse-panel-border);
+  border-radius: 12px;
+  background: var(--pulse-bg);
+  padding: 10px;
+  box-shadow:
+    0 -14px 24px color-mix(in srgb, var(--right-pane-bg) 86%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--pulse-panel-border) 18%, transparent);
+}
+
+.pulse-composer-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  border: 1px solid var(--pulse-panel-border);
+  border-radius: 8px;
+  background: var(--pulse-panel-bg);
+  color: var(--text-primary);
+  padding: 6px 9px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.pulse-composer-input {
+  border: 1px solid var(--pulse-panel-border);
+  border-radius: 10px;
+  background: var(--pulse-panel-bg);
+  overflow: hidden;
+}
+
+.pulse-textarea--composer {
+  min-height: 66px;
+  max-height: 130px;
+  resize: vertical;
+  border-radius: 0;
+  padding: 10px;
+}
+
+.pulse-composer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  border-top: 1px solid color-mix(in srgb, var(--pulse-panel-border) 42%, transparent);
+  padding: 8px;
+}
+
+.pulse-preview-controls--drawer {
+  gap: 5px;
+  flex: 1 1 100%;
+  justify-content: flex-start;
+}
+
+.pulse-preview-controls--drawer .pulse-preview-tabs {
+  flex: 1;
+}
+
+.pulse-preview-controls--drawer .pulse-tab-btn {
+  flex: 1 1 auto;
+}
+
+.pulse-preview-controls--drawer .pulse-copy-btn {
+  flex: 0 0 auto;
+}
+
+.pulse-expand-btn {
+  gap: 5px;
+}
+
+.pulse-preview-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  background: color-mix(in srgb, var(--text-main) 42%, transparent);
+}
+
+.pulse-preview-modal {
+  width: min(980px, calc(100vw - 64px));
+  height: min(760px, calc(100vh - 64px));
+  min-height: 420px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--pulse-panel-border);
+  border-radius: 14px;
+  background: var(--pulse-bg);
+  color: var(--text-primary);
+  box-shadow:
+    0 1px 0 var(--pulse-shine-strong) inset,
+    0 30px 90px color-mix(in srgb, var(--text-main) 34%, transparent);
+}
+
+.pulse-preview-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  border-bottom: 1px solid var(--pulse-panel-border);
+  padding: 16px 18px 14px;
+}
+
+.pulse-preview-modal-kicker {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pulse-copy);
+}
+
+.pulse-preview-modal-header h2 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.pulse-preview-modal-tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.pulse-preview-modal-body {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  background: var(--pulse-panel-bg);
+}
+
+.pulse-modal-preview-body {
+  margin: 0;
+  padding: 24px 28px 32px;
+  font-size: 15px;
+  line-height: 1.62;
+}
+
+.pulse-preview-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid var(--pulse-panel-border);
+  padding: 12px 18px;
+  background: var(--pulse-bg);
+}
+
+.pulse-apply--modal {
+  justify-content: flex-end;
+}
+
+@media (max-width: 720px) {
+  .pulse-preview-modal-overlay {
+    padding: 12px;
+  }
+
+  .pulse-preview-modal {
+    width: calc(100vw - 24px);
+    height: calc(100vh - 24px);
+  }
+
+  .pulse-preview-modal-header,
+  .pulse-preview-modal-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .pulse-preview-modal-tools,
+  .pulse-apply--modal {
+    justify-content: flex-start;
+  }
+
+  .pulse-modal-preview-body {
+    padding: 18px;
+    font-size: 14px;
+  }
 }
 
 .pulse-help,

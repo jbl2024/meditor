@@ -286,4 +286,72 @@ describe('EditorRightPane', () => {
     expect(root.textContent).not.toContain('No backlinks')
     app.unmount()
   })
+
+  it('renders Pulse as a dedicated drawer view and hides inspector sections', async () => {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+    const onPulseClose = vi.fn()
+
+    const app = createApp(defineComponent({
+      setup() {
+        return () => h(EditorRightPane, {
+          width: 280,
+          activeNotePath: '/wk/notes/a.md',
+          activeNoteTitle: 'A',
+          activeStateLabel: 'saved',
+          backlinkCount: 0,
+          semanticLinkCount: 0,
+          activeNoteInContext: false,
+          canToggleFavorite: false,
+          isFavorite: false,
+          indexingState: 'indexed',
+          echoesItems: [],
+          echoesLoading: false,
+          echoesError: '',
+          echoesHintVisible: false,
+          localContextItems: [],
+          pinnedContextItems: [],
+          canReasonOnContext: false,
+          isLaunchingContextAction: false,
+          outline: [],
+          semanticLinks: [],
+          semanticLinksLoading: false,
+          semanticLinksError: '',
+          backlinks: [],
+          backlinksLoading: false,
+          backlinksError: '',
+          metadataRows: [],
+          propertiesPreview: [],
+          propertyParseErrorCount: 0,
+          toRelativePath: (path: string) => path,
+          pulseState: {
+            open: true,
+            sourceKind: 'editor_selection',
+            actionId: 'rewrite',
+            instruction: 'Clarify this.',
+            previewMarkdown: '',
+            provenancePaths: [],
+            running: false,
+            error: '',
+            sourceText: 'Draft text',
+            applyModes: ['replace_selection', 'insert_below', 'send_to_second_brain'],
+            primaryApplyMode: 'replace_selection'
+          },
+          onPulseClose
+        })
+      }
+    }))
+
+    app.mount(root)
+    await nextTick()
+    expect(root.textContent).toContain('Pulse')
+    expect(root.textContent).toContain('Editor selection')
+    expect(root.textContent).not.toContain('Active Note')
+    expect(root.textContent).not.toContain('Backlinks')
+
+    ;(root.querySelector('.pulse-drawer-back') as HTMLButtonElement).click()
+    expect(onPulseClose).toHaveBeenCalledTimes(1)
+
+    app.unmount()
+  })
 })

@@ -59,6 +59,7 @@ function mountHarness() {
   const root = document.createElement('div')
   document.body.appendChild(root)
   const onPulseOpenSecondBrain = vi.fn()
+  const onPulseStateChange = vi.fn()
   const editorRef = ref<unknown>(null)
 
   const app = createApp(defineComponent({
@@ -79,13 +80,28 @@ function mountHarness() {
         onOutline: () => {},
         onProperties: () => {},
         onPathRenamed: () => {},
+        onPulseStateChange,
         onPulseOpenSecondBrain
       })
     }
   }))
 
   app.mount(root)
-  return { app, root, onPulseOpenSecondBrain, editorRef }
+  return { app, root, onPulseOpenSecondBrain, onPulseStateChange, editorRef }
+}
+
+function exposedPulseApi(editorRef: ReturnType<typeof ref<unknown>>) {
+  return editorRef.value as {
+    getPulseDrawerState: () => {
+      open: boolean
+      instruction: string
+      applyModes: string[]
+    }
+    runPulseFromEditor: () => Promise<void>
+    setPulseInstruction: (value: string) => void
+    applyPulseMode: (mode: 'replace_selection' | 'insert_below' | 'send_to_second_brain') => void
+    closePulsePanel: () => void
+  }
 }
 
 function openPulseFromEditorHarness(editorRef: ReturnType<typeof ref<unknown>>) {
@@ -140,9 +156,11 @@ describe('EditorView Pulse flow', () => {
     openPulseFromEditorHarness(harness.editorRef)
     await flushUi()
 
-    const prompt = harness.root.querySelector('[data-pulse-prompt="true"]') as HTMLTextAreaElement
-    expect(prompt).toBeTruthy()
-    expect(prompt.value).toContain('Clarify the selected passage')
+    const pulseState = exposedPulseApi(harness.editorRef).getPulseDrawerState()
+    expect(harness.root.querySelector('.editor-pulse-panel-wrap')).toBeNull()
+    expect(pulseState.open).toBe(true)
+    expect(pulseState.instruction).toContain('Clarify the selected passage')
+    expect(harness.onPulseStateChange).toHaveBeenCalled()
     expect(runMock).not.toHaveBeenCalled()
 
     harness.app.unmount()
@@ -170,28 +188,23 @@ describe('EditorView Pulse flow', () => {
     openPulseFromEditorHarness(harness.editorRef)
     await flushUi()
 
-    const prompt = harness.root.querySelector('[data-pulse-prompt="true"]') as HTMLTextAreaElement
-    prompt.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
-    await flushUi()
-    expect(runMock).toHaveBeenCalledTimes(0)
-
-    prompt.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true }))
+    const api = exposedPulseApi(harness.editorRef)
+    await api.runPulseFromEditor()
     await flushUi()
     expect(runMock).toHaveBeenCalledTimes(1)
 
     previewMarkdown.value = 'Alpha beta, clarified.'
     await flushUi()
-    expect(harness.root.textContent).toContain('Replace selection')
+    expect(api.getPulseDrawerState().applyModes).toContain('replace_selection')
 
-    prompt.value = 'Make it shorter.'
-    prompt.dispatchEvent(new Event('input', { bubbles: true }))
+    api.setPulseInstruction('Make it shorter.')
     await flushUi()
     expect(resetMock).toHaveBeenCalled()
-    expect(harness.root.textContent).not.toContain('Replace selection')
+    expect(api.getPulseDrawerState().applyModes).toContain('replace_selection')
 
     previewMarkdown.value = 'Alpha beta, clarified.'
     await flushUi()
-    prompt.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true }))
+    api.applyPulseMode('replace_selection')
     await flushUi()
 
     expect((harness.root.querySelector('.ProseMirror')?.textContent ?? '')).toContain('clarified')
@@ -208,9 +221,8 @@ describe('EditorView Pulse flow', () => {
 
     previewMarkdown.value = 'Alpha beta gamma.'
     await flushUi()
-    const sendButton = Array.from(harness.root.querySelectorAll('.pulse-apply .pulse-btn'))
-      .find((button) => button.textContent?.includes('Second Brain')) as HTMLButtonElement
-    sendButton.click()
+    const api = exposedPulseApi(harness.editorRef)
+    api.applyPulseMode('send_to_second_brain')
     await flushUi()
     expect(harness.onPulseOpenSecondBrain).toHaveBeenCalledTimes(1)
 
@@ -219,12 +231,11 @@ describe('EditorView Pulse flow', () => {
 
     running.value = true
     await flushUi()
-    const prompt = harness.root.querySelector('[data-pulse-prompt="true"]') as HTMLTextAreaElement
-    prompt.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    api.closePulsePanel()
     await flushUi()
 
     expect(cancelMock).toHaveBeenCalled()
-    expect(harness.root.querySelector('[data-pulse-prompt="true"]')).toBeNull()
+    expect(api.getPulseDrawerState().open).toBe(false)
 
     harness.app.unmount()
   })

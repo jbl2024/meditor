@@ -7,6 +7,9 @@ import type { FavoriteEntry } from '../../../shared/api/apiTypes'
 import type { PathMove } from '../../../shared/api/apiTypes'
 import type { ConstitutedContextItem } from '../../../domains/editor/composables/useConstitutedContext'
 import type { EchoesItem } from '../../../domains/echoes/lib/echoes'
+import type { PulseDrawerState } from '../../../domains/pulse/lib/pulseDrawer'
+import type { PulseActionId } from '../../../shared/api/apiTypes'
+import type { PulseApplyMode } from '../../../domains/pulse/lib/pulse'
 
 /**
  * Module: AppShellWorkspaceSurface
@@ -83,6 +86,7 @@ defineProps<{
   metadataRows: MetadataRow[]
   propertiesPreview: PropertyPreviewRow[]
   propertyParseErrorCount: number
+  pulseDrawerState?: PulseDrawerState
 }>()
 
 const emit = defineEmits<{
@@ -113,6 +117,13 @@ const emit = defineEmits<{
   pathRenamed: [payload: { from: string; to: string; manual: boolean }]
   outline: [payload: HeadingNode[]]
   properties: [payload: { path: string; items: Array<{ key: string; value: string }>; parseErrorCount: number }]
+  pulseStateChange: [payload: PulseDrawerState]
+  pulseActionChange: [actionId: PulseActionId]
+  pulseInstructionChange: [value: string]
+  pulseRun: []
+  pulseCancel: []
+  pulseClose: []
+  pulseApply: [mode: PulseApplyMode]
   pulseOpenSecondBrain: [payload: { contextPaths: string[]; prompt?: string }]
   externalReload: [payload: { path: string }]
   secondBrainContextChanged: [paths: string[]]
@@ -269,6 +280,7 @@ defineExpose<AppShellWorkspaceSurfaceExposed>({
           :properties-preview="propertiesPreview"
           :property-parse-error-count="propertyParseErrorCount"
           :to-relative-path="toRelativePath"
+          :pulse-state="pulseDrawerState"
           @toggle-favorite="emit('toggleFavorite')"
           @open-note-history="emit('activeNoteOpenHistory')"
           @active-note-toggle-source-mode="emit('activeNoteToggleSourceMode')"
@@ -291,6 +303,12 @@ defineExpose<AppShellWorkspaceSurfaceExposed>({
           @context-open-second-brain="emit('contextOpenSecondBrain')"
           @context-open-cosmos="emit('contextOpenCosmos')"
           @context-open-pulse="emit('contextOpenPulse')"
+          @pulse-action-change="emit('pulseActionChange', $event)"
+          @pulse-instruction-change="emit('pulseInstructionChange', $event)"
+          @pulse-run="emit('pulseRun')"
+          @pulse-cancel="emit('pulseCancel')"
+          @pulse-close="emit('pulseClose')"
+          @pulse-apply="emit('pulseApply', $event)"
         />
       </div>
     </section>

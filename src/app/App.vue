@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import EditorPaneGrid, { type EditorPaneGridExposed } from './components/panes/EditorPaneGrid.vue'
 import AppShellChromeSurface, { type AppShellChromeSurfaceExposed } from './components/app/AppShellChromeSurface.vue'
 import AppShellWorkspaceSurface, { type AppShellWorkspaceSurfaceExposed } from './components/app/AppShellWorkspaceSurface.vue'
@@ -48,8 +48,10 @@ import {
   updateWikilinksForRename,
   writePropertyTypeSchema
 } from '../shared/api/indexApi'
-import type { PathMove, WorkspaceFsChange } from '../shared/api/apiTypes'
+import type { PathMove, PulseActionId, WorkspaceFsChange } from '../shared/api/apiTypes'
 import type { AppSettingsAlters } from '../shared/api/apiTypes'
+import type { PulseApplyMode } from '../domains/pulse/lib/pulse'
+import { createClosedPulseDrawerState, pulseDrawerStatesEqual, type PulseDrawerState } from '../domains/pulse/lib/pulseDrawer'
 import { parseSearchSnippet } from '../shared/lib/searchSnippets'
 import { type SearchMode } from '../shared/lib/searchMode'
 import { hasActiveTextSelectionInEditor, shouldBlockGlobalShortcutsFromTarget } from '../shared/lib/shortcutTargets'
@@ -232,6 +234,7 @@ const themePickerHasPreview = ref(false)
 const editorRef = ref<EditorViewExposed | null>(null)
 const explorerRef = ref<ExplorerTreeExposed | null>(null)
 const topbarRef = ref<AppShellChromeSurfaceExposed | null>(null)
+const pulseDrawerState = ref<PulseDrawerState>(createClosedPulseDrawerState())
 const propertiesPreview = ref<PropertyPreviewRow[]>([])
 const propertyParseErrorCount = ref(0)
 const virtualDocs = ref<Record<string, VirtualDoc>>({})
@@ -719,10 +722,54 @@ const {
   toggleActiveNoteInConstitutedContext,
   openConstitutedContextInSecondBrain,
   openConstitutedContextInCosmos,
-  openConstitutedContextInPulse,
   openPulseContextInSecondBrain,
   openAlterInSecondBrain
 } = constitutedContextActions
+
+watch(
+  () => pulseDrawerState.value.open,
+  (open) => {
+    if (open) {
+      workspace.rightPaneVisible.value = true
+    }
+  }
+)
+
+function onPulseDrawerStateChange(state: PulseDrawerState) {
+  if (pulseDrawerStatesEqual(pulseDrawerState.value, state)) return
+  pulseDrawerState.value = {
+    ...state,
+    provenancePaths: [...state.provenancePaths],
+    applyModes: [...state.applyModes]
+  }
+}
+
+function openActiveNotePulseInDrawer() {
+  workspace.rightPaneVisible.value = true
+  editorRef.value?.openPulseForNote()
+}
+
+function openConstitutedContextPulseInDrawer() {
+  if (!constitutedContext.paths.value.length) return
+  workspace.rightPaneVisible.value = true
+  editorRef.value?.openPulseForContext(constitutedContext.paths.value)
+}
+
+function onPulseActionChange(actionId: PulseActionId) {
+  editorRef.value?.setPulseAction(actionId)
+}
+
+function onPulseInstructionChange(value: string) {
+  editorRef.value?.setPulseInstruction(value)
+}
+
+function closePulseDrawer() {
+  editorRef.value?.closePulsePanel()
+}
+
+function applyPulseDrawerMode(mode: PulseApplyMode) {
+  editorRef.value?.applyPulseMode(mode)
+}
 
 const search = useAppShellSearch({
   workingFolderPath: filesystem.workingFolderPath,
@@ -1976,6 +2023,7 @@ useAppShellKeyboard({
       :metadata-rows="metadataRows"
       :properties-preview="propertiesPreview"
       :property-parse-error-count="propertyParseErrorCount"
+      :pulse-drawer-state="pulseDrawerState"
       @set-sidebar-mode="setSidebarMode"
       @explorer-open="onExplorerOpen"
       @explorer-path-renamed="onExplorerPathRenamed"
@@ -2012,8 +2060,14 @@ useAppShellKeyboard({
       @context-clear-pinned="constitutedContext.clearPinned()"
       @context-open-second-brain="void openConstitutedContextInSecondBrain()"
       @context-open-cosmos="void openConstitutedContextInCosmos()"
-      @context-open-pulse="void openConstitutedContextInPulse()"
-      @active-note-open-pulse="void editorRef?.openPulseForNote()"
+      @context-open-pulse="openConstitutedContextPulseInDrawer()"
+      @active-note-open-pulse="openActiveNotePulseInDrawer()"
+      @pulse-action-change="onPulseActionChange($event)"
+      @pulse-instruction-change="onPulseInstructionChange($event)"
+      @pulse-run="void editorRef?.runPulseFromEditor()"
+      @pulse-cancel="void editorRef?.cancelPulse()"
+      @pulse-close="closePulseDrawer()"
+      @pulse-apply="applyPulseDrawerMode($event)"
       @active-note-open-history="void openActiveNoteHistory()"
     >
       <template #center>
@@ -2051,6 +2105,7 @@ useAppShellKeyboard({
           @pane-tab-close-all="onPaneTabCloseAll($event)"
           @pane-request-move-tab="multiPane.moveActiveTabToAdjacentPane($event.direction)"
           @open-note="void openNoteFromSecondBrain($event)"
+          @pulse-state-change="onPulseDrawerStateChange($event)"
           @pulse-open-second-brain="void openPulseContextInSecondBrain($event)"
           @external-reload="filesystem.notifyInfo(`Reloaded ${basenameLabel($event.path)} from disk.`)"
           @second-brain-context-changed="onSecondBrainContextChanged"
