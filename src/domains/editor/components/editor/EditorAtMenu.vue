@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import UiFilterableDropdown, { type FilterableDropdownItem } from '../../../../shared/components/ui/UiFilterableDropdown.vue'
+import { editorAtMacroMatchesQuery } from '../../lib/editorAtMacros'
 import type { EditorAtMacroEntry } from '../../lib/editorAtMacros'
 
 /**
@@ -37,6 +38,8 @@ const dropdownItems = computed<Array<FilterableDropdownItem & { item: EditorAtMa
 )
 
 function matcher(item: FilterableDropdownItem, query: string): boolean {
+  const macro = (item as FilterableDropdownItem & { item?: EditorAtMacroEntry }).item
+  if (macro) return editorAtMacroMatchesQuery(macro, query)
   const aliases = Array.isArray(item.aliases) ? item.aliases.map((value) => String(value).toLowerCase()) : []
   return aliases.some((alias) => alias.includes(query))
 }

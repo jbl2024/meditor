@@ -126,4 +126,45 @@ describe('EditorAtMenu', () => {
     app.unmount()
     document.body.innerHTML = ''
   })
+
+  it('keeps relative date argument macros visible after dropdown filtering', () => {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+
+    const items = [
+      {
+        id: 'date',
+        label: 'Date offset',
+        group: 'Time',
+        kind: 'insert_text',
+        description: 'Insert today or a relative date',
+        replacement: '2026-05-22',
+        preview: '2026-05-22',
+        aliases: ['date', 'date+7']
+      }
+    ] satisfies EditorAtMacroEntry[]
+
+    const app = createApp(defineComponent({
+      setup() {
+        return () =>
+          h(EditorAtMenu, {
+            open: true,
+            index: 0,
+            left: 0,
+            top: 0,
+            query: 'date+12',
+            items
+          })
+      }
+    }))
+
+    app.mount(root)
+
+    expect(root.textContent).toContain('Date offset')
+    expect(root.textContent).toContain('2026-05-22')
+    expect(root.textContent).not.toContain('No matches')
+
+    app.unmount()
+    document.body.innerHTML = ''
+  })
 })
