@@ -18,6 +18,26 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.38.7] - 2026-05-10
+
+### Added
+- feat(settings): add global LLM system prompt (8d293dc)
+- feat(pulse): replace modal with dedicated right panel (ec3525d)
+- feat(editor): source at templates from workspace templates (2b9c90d)
+- feat(editor): expand contextual at macros (2c15ab9)
+
+### Changed
+- style(pulse): render markdown tables with editor table styling (4b090cf)
+- style(pulse): compact preview controls with icons (0541579)
+
+### Fixed
+- fix(settings): constrain modal height with scrollable body (b11b041)
+- fix(editor): remove placeholder context macros (586ae79)
+- fix(editor): keep at menu open for empty results (77fa512)
+- fix(editor): remove redundant deadline macro (c6334b0)
+- fix(editor): keep argument macros visible in menu (145db0f)
+- fix(editor): insert task macros as checklists (34a80ba)
+
 ## [0.38.6] - 2026-05-09
 
 ### Changed
