@@ -243,6 +243,32 @@ describe('useEditorAtMenu', () => {
     })
   })
 
+  it('stays open when a valid @ query has no matching macro', () => {
+    const { editor } = createEditor('Draft @zzzz')
+    const menu = useEditorAtMenu({
+      getEditor: () => editor,
+      currentTextSelectionContext: () => ({
+        text: 'Draft @zzzz',
+        nodeType: 'paragraph',
+        from: 1,
+        to: 12,
+        offset: 11,
+        marks: []
+      }),
+      closeCompetingMenus: vi.fn(),
+      getDocumentMetadata: () => ({ title: 'Planning note', path: 'notes/planning.md' })
+    })
+
+    menu.markAtActivatedByUser()
+    menu.syncAtMenuFromSelection()
+    expect(menu.atOpen.value).toBe(true)
+    expect(menu.visibleAtMacros.value).toEqual([])
+
+    menu.setAtQuery('still-no-match')
+    expect(menu.atOpen.value).toBe(true)
+    expect(menu.visibleAtMacros.value).toEqual([])
+  })
+
   it('closes when activation is lost or the trigger disappears', () => {
     const menu = useEditorAtMenu({
       getEditor: () => null,

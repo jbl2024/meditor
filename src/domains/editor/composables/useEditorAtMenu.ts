@@ -149,7 +149,7 @@ export function useEditorAtMenu(options: UseEditorAtMenuOptions) {
   function setAtQuery(query: string) {
     atQuery.value = query
     atIndex.value = 0
-    atOpen.value = visibleAtMacros.value.length > 0
+    atOpen.value = true
   }
 
   function openAtSelection(query = '', opts?: { preserveIndex?: boolean }) {
@@ -179,9 +179,9 @@ export function useEditorAtMenu(options: UseEditorAtMenuOptions) {
 
     const canPreserve = Boolean(opts?.preserveIndex) && previousQuery === query
     atIndex.value = canPreserve ? previousIndex : 0
-    atOpen.value = visibleAtMacros.value.length > 0
+    atOpen.value = true
 
-    if (atOpen.value && canPreserve) {
+    if (visibleAtMacros.value.length && canPreserve) {
       atIndex.value = Math.max(0, Math.min(atIndex.value, visibleAtMacros.value.length - 1))
     }
   }
