@@ -1,73 +1,102 @@
 import { describe, expect, it } from 'vitest'
-import { buildEditorAtMacroEntries, listEditorAtMacroIds, resolveEditorAtMacro } from './editorAtMacros'
+import {
+  buildEditorAtMacroEntries,
+  canContinueEditorAtMacroArgument,
+  editorAtMacroMatchesQuery,
+  listEditorAtMacroIds,
+  resolveEditorAtMacro
+} from './editorAtMacros'
+
+const context = {
+  title: 'Planning note',
+  path: 'notes/planning.md',
+  now: new Date(2026, 3, 12, 14, 32, 5),
+  bodyText: 'Alpha beta gamma',
+  tags: ['work', 'planning'],
+  backlinks: ['notes/back.md'],
+  updatedAt: new Date(2026, 3, 11, 9, 0, 0)
+}
 
 describe('editorAtMacros', () => {
   it('builds deterministic entries from document metadata and local time', () => {
-    const entries = buildEditorAtMacroEntries({
-      title: 'Planning note',
-      path: 'notes/planning.md',
-      now: new Date(2026, 3, 12, 14, 32, 0)
-    })
+    const entries = buildEditorAtMacroEntries(context)
 
-    expect(entries).toEqual([
-      {
-        id: 'today',
-        label: 'Today',
-        group: 'Time',
-        description: 'Insert the current local date',
-        replacement: '2026-04-12',
-        aliases: ['today', 'date']
-      },
-      {
-        id: 'now',
-        label: 'Now',
-        group: 'Time',
-        description: 'Insert the current local date and time',
-        replacement: '2026-04-12 14:32',
-        aliases: ['now', 'datetime', 'date time']
-      },
-      {
-        id: 'title',
-        label: 'Title',
-        group: 'Document',
-        description: 'Insert the current note title',
-        replacement: 'Planning note',
-        aliases: ['title', 'note title', 'document title']
-      },
-      {
-        id: 'path',
-        label: 'Path',
-        group: 'Document',
-        description: 'Insert the current note path',
-        replacement: 'notes/planning.md',
-        aliases: ['path', 'file path', 'note path']
-      }
-    ])
+    expect(entries.find((entry) => entry.id === 'today')).toMatchObject({
+      label: 'Today',
+      group: 'Time',
+      kind: 'insert_text',
+      replacement: '2026-04-12',
+      preview: '2026-04-12'
+    })
+    expect(entries.find((entry) => entry.id === 'now')?.replacement).toBe('2026-04-12 14:32')
+    expect(entries.find((entry) => entry.id === 'timestamp')?.replacement).toBe('2026-04-12T14:32:05')
+    expect(entries.find((entry) => entry.id === 'title')?.replacement).toBe('Planning note')
+    expect(entries.find((entry) => entry.id === 'path')?.replacement).toBe('notes/planning.md')
+    expect(entries.find((entry) => entry.id === 'filename')?.replacement).toBe('planning.md')
+    expect(entries.find((entry) => entry.id === 'folder')?.replacement).toBe('notes')
+    expect(entries.find((entry) => entry.id === 'word_count')?.replacement).toBe('3')
+    expect(entries.find((entry) => entry.id === 'tags')?.replacement).toBe('work, planning')
+    expect(entries.find((entry) => entry.id === 'updated_at')?.replacement).toBe('2026-04-11')
+  })
+
+  it('formats relative time macros and ISO week/month values', () => {
+    expect(resolveEditorAtMacro('yesterday', context)?.replacement).toBe('2026-04-11')
+    expect(resolveEditorAtMacro('tomorrow', context)?.replacement).toBe('2026-04-13')
+    expect(resolveEditorAtMacro('week', context)?.replacement).toBe('2026-W15')
+    expect(resolveEditorAtMacro('month', context)?.replacement).toBe('2026-04')
+    expect(resolveEditorAtMacro('date-fr', context)?.replacement).toBe('12 avril 2026')
+  })
+
+  it('parses compact and natural date arguments', () => {
+    expect(resolveEditorAtMacro('date+7', context)?.replacement).toBe('2026-04-19')
+    expect(resolveEditorAtMacro('date +30', context)?.replacement).toBe('2026-05-12')
+    expect(resolveEditorAtMacro('deadline +7d', context)?.replacement).toBe('2026-04-19')
+    expect(resolveEditorAtMacro('due tomorrow', context)?.replacement).toBe('due: 2026-04-13')
+    expect(resolveEditorAtMacro('priority high', context)?.replacement).toBe('priority: high')
   })
 
   it('falls back to the file name when the note title is empty', () => {
-    const entries = buildEditorAtMacroEntries({
+    const title = resolveEditorAtMacro('title', {
       title: '',
       path: '/vault/notes/planning.md',
       now: new Date(2026, 3, 12, 8, 5, 0)
     })
 
-    expect(entries.find((entry) => entry.id === 'title')?.replacement).toBe('planning')
+    expect(title?.replacement).toBe('planning')
   })
 
-  it('resolves exact macro ids only', () => {
-    const context = {
-      title: 'Planning note',
-      path: 'notes/planning.md',
-      now: new Date(2026, 3, 12, 14, 32, 0)
-    }
+  it('resolves markdown structures and AI actions', () => {
+    const decision = resolveEditorAtMacro('decision', context)
+    expect(decision).toMatchObject({
+      kind: 'insert_markdown',
+      group: 'Structures',
+      preview: 'Decision block'
+    })
+    expect(decision?.replacement).toContain('### Decision')
 
-    expect(resolveEditorAtMacro('today', context)).toBe('2026-04-12')
-    expect(resolveEditorAtMacro('title', context)).toBe('Planning note')
-    expect(resolveEditorAtMacro('unknown', context)).toBeNull()
+    const summarize = resolveEditorAtMacro('summarize', context)
+    expect(summarize).toMatchObject({
+      kind: 'open_pulse',
+      group: 'AI',
+      preview: 'Open Pulse',
+      pulse: { actionId: 'synthesize' }
+    })
   })
 
-  it('exposes the stable v1 macro ids', () => {
-    expect(listEditorAtMacroIds()).toEqual(['today', 'now', 'title', 'path'])
+  it('matches aliases and exposes argument-capable query detection', () => {
+    const meeting = resolveEditorAtMacro('meeting', context)!
+    expect(editorAtMacroMatchesQuery(meeting, 'cr')).toBe(true)
+    expect(editorAtMacroMatchesQuery(resolveEditorAtMacro('retex', context)!, 'retour')).toBe(true)
+    expect(editorAtMacroMatchesQuery(resolveEditorAtMacro('task', context)!, 'todo')).toBe(true)
+    expect(canContinueEditorAtMacroArgument('date ')).toBe(true)
+    expect(canContinueEditorAtMacroArgument('priority ')).toBe(true)
+    expect(canContinueEditorAtMacroArgument('meeting ')).toBe(false)
+  })
+
+  it('exposes stable macro ids', () => {
+    expect(listEditorAtMacroIds()).toContain('today')
+    expect(listEditorAtMacroIds()).toContain('meeting')
+    expect(listEditorAtMacroIds()).toContain('extract.tasks')
+    expect(listEditorAtMacroIds()).toContain('tags.auto')
   })
 })

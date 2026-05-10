@@ -2,6 +2,18 @@ import { ref } from 'vue'
 import { describe, expect, it, vi } from 'vitest'
 import type { Editor } from '@tiptap/vue-3'
 import { useEditorInputHandlers } from './useEditorInputHandlers'
+import type { EditorAtMacroEntry } from '../lib/editorAtMacros'
+
+const todayMacro: EditorAtMacroEntry = {
+  id: 'today',
+  label: 'Today',
+  group: 'Time',
+  kind: 'insert_text',
+  description: '',
+  replacement: '2026-04-12',
+  preview: '2026-04-12',
+  aliases: []
+}
 
 function createHandlers(overrides: any = {}) {
   const insertContent = vi.fn()
@@ -26,7 +38,7 @@ function createHandlers(overrides: any = {}) {
     },
     menusPort: {
       visibleSlashCommands: ref([{ id: 'quote', label: 'Quote', type: 'quote', data: {} }]),
-      visibleAtMacros: ref([{ id: 'today', label: 'Today', group: 'Time', description: '', replacement: '2026-04-12', aliases: [] }]),
+      visibleAtMacros: ref([todayMacro]),
       slashOpen: ref(true),
       slashIndex: ref(0),
       atOpen: ref(false),
@@ -519,9 +531,7 @@ describe('useEditorInputHandlers', () => {
       menusPort: {
         atOpen: ref(true),
         atIndex: ref(0),
-        visibleAtMacros: ref([
-          { id: 'today', label: 'Today', group: 'Time', description: '', replacement: '2026-04-12', aliases: [] }
-        ]),
+        visibleAtMacros: ref([todayMacro]),
         visibleSlashCommands: ref([]),
         slashOpen: ref(false),
         slashIndex: ref(0),
@@ -550,8 +560,10 @@ describe('useEditorInputHandlers', () => {
       id: 'today',
       label: 'Today',
       group: 'Time',
+      kind: 'insert_text',
       description: '',
       replacement: '2026-04-12',
+      preview: '2026-04-12',
       aliases: []
     })
   })

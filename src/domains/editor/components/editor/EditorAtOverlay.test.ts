@@ -13,7 +13,16 @@ vi.mock('./EditorAtMenu.vue', () => ({
             onClick: () => {
               emit('update:index', 2)
               emit('update:query', 'tod')
-              emit('select', { id: 'today', label: 'Today', group: 'Time', description: '', replacement: '2026-04-12', aliases: ['today'] })
+              emit('select', {
+                id: 'today',
+                label: 'Today',
+                group: 'Time',
+                kind: 'insert_text',
+                description: '',
+                replacement: '2026-04-12',
+                preview: '2026-04-12',
+                aliases: ['today']
+              })
               emit('close')
             }
           },

@@ -20,6 +20,7 @@ import type { WikilinkCandidate } from '../lib/tiptap/plugins/wikilinkState'
 import type { MermaidPreviewPayload } from './useMermaidPreviewDialog'
 import type { AssetPreviewPayload } from './useAssetPreviewDialog'
 import type { AssetBrowserDropdownItem } from '../lib/tiptap/assetBrowser'
+import type { FrontmatterEnvelope } from '../lib/frontmatter'
 
 /**
  * Owns interactive editor behavior that depends on the active Tiptap instance:
@@ -37,6 +38,7 @@ export type EditorInteractionRuntimeDocumentPort = {
   holder: Ref<HTMLDivElement | null>
   activeEditor: Ref<Editor | null>
   getSession: (path: string) => DocumentSession | null
+  getFrontmatter: (path: string) => FrontmatterEnvelope | null
   getSpellcheckLanguage: (path: string) => import('../lib/spellcheck').SpellcheckLanguage
   spellcheckEnabled: Ref<boolean>
   isSpellcheckWordIgnored: (path: string, word: string) => boolean
@@ -68,6 +70,9 @@ export type EditorInteractionRuntimeChromePort = {
   zoom: {
     zoomEditorBy: (delta: number) => number
     resetEditorZoom: () => number
+  }
+  pulse: {
+    openPulseFromMacro: (payload: { actionId: import('../../../shared/api/apiTypes').PulseActionId; instruction: string }) => void
   }
 }
 
@@ -102,6 +107,21 @@ export type UseEditorInteractionRuntimeOptions = {
   interactionIoPort: EditorInteractionRuntimeIoPort
 }
 
+function readFrontmatterTags(frontmatter: FrontmatterEnvelope | null): string[] {
+  const field = frontmatter?.fields.find((item) => item.key.toLowerCase() === 'tags')
+  if (!field) return []
+  if (Array.isArray(field.value)) return field.value
+  return String(field.value)
+    .split(',')
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+}
+
+function readSessionUpdatedAt(session: DocumentSession | null): Date | null {
+  const mtimeMs = session?.currentDiskVersion?.mtimeMs ?? session?.baseVersion?.mtimeMs
+  return typeof mtimeMs === 'number' && Number.isFinite(mtimeMs) ? new Date(mtimeMs) : null
+}
+
 /**
  * Coordinates selection-driven editor behavior while keeping the shell free from Tiptap plumbing.
  */
@@ -130,8 +150,12 @@ export function useEditorInteractionRuntime(options: UseEditorInteractionRuntime
     },
     getDocumentMetadata: () => ({
       title: documentPort.currentTitle.value,
-      path: documentPort.currentPath.value
-    })
+      path: documentPort.currentPath.value,
+      bodyText: documentPort.activeEditor.value?.getText() ?? '',
+      tags: readFrontmatterTags(documentPort.getFrontmatter(documentPort.currentPath.value)),
+      updatedAt: readSessionUpdatedAt(documentPort.getSession(documentPort.currentPath.value))
+    }),
+    openPulseMacro: (action) => chromePort.pulse.openPulseFromMacro(action)
   })
 
   const navigation = useEditorNavigation({

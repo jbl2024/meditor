@@ -259,6 +259,7 @@ interactionRuntime = useEditorInteractionRuntime({
     holder,
     activeEditor,
     getSession: (path) => getDocumentSession(path),
+    getFrontmatter: (path) => documentRuntime?.frontmatterByPath.value[path] ?? null,
     getSpellcheckLanguage: (path) => documentRuntime?.getSpellcheckLanguage(path) ?? 'en',
     spellcheckEnabled: spellcheckEnabledRef,
     isSpellcheckWordIgnored: (_path, word) => workspaceSpellcheck.isIgnoredWord(word) || chromeRuntime.spellcheck.isSessionIgnoredWord(word),
@@ -294,6 +295,9 @@ interactionRuntime = useEditorInteractionRuntime({
     zoom: {
       zoomEditorBy: (delta) => chromeRuntime.layout.zoomEditorBy(delta),
       resetEditorZoom: () => chromeRuntime.layout.resetEditorZoom()
+    },
+    pulse: {
+      openPulseFromMacro: ({ actionId, instruction }) => chromeRuntime.pulse.openPulseFromMacro(actionId, instruction)
     }
   },
   interactionIoPort: {

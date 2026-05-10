@@ -1,6 +1,14 @@
 import { computed, ref } from 'vue'
 import type { Editor } from '@tiptap/vue-3'
-import { buildEditorAtMacroEntries, type EditorAtMacroEntry } from '../lib/editorAtMacros'
+import {
+  buildEditorAtMacroEntries,
+  canContinueEditorAtMacroArgument,
+  editorAtMacroMatchesQuery,
+  type EditorAtMacroEntry,
+  type EditorAtPulseAction
+} from '../lib/editorAtMacros'
+import { markdownToEditorData, type EditorBlock } from '../lib/markdownBlocks'
+import { toTiptapDoc } from '../lib/tiptap/editorBlocksToTiptapDoc'
 
 /**
  * `@` macro trigger and suggestion state for the editor surface.
@@ -27,7 +35,17 @@ export type UseEditorAtMenuOptions = {
   getEditor: () => Editor | null
   currentTextSelectionContext: () => TextSelectionContext | null
   closeCompetingMenus: () => void
-  getDocumentMetadata: () => { title: string; path: string }
+  getDocumentMetadata: () => {
+    title: string
+    path: string
+    bodyText?: string
+    tags?: string[]
+    backlinks?: string[]
+    createdAt?: Date | null
+    updatedAt?: Date | null
+    userName?: string
+  }
+  openPulseMacro?: (action: EditorAtPulseAction) => void
   now?: () => Date
 }
 
@@ -43,8 +61,8 @@ function extractAtTrigger(text: string, caret: number, marks?: string[]): AtMenu
   if (marks?.includes('code')) return null
 
   const query = beforeCaret.slice(atIndex + 1)
-  if (/\s/.test(query)) return null
-  if (!query || /^[a-zA-Z0-9_-]*$/.test(query)) {
+  if (/\s/.test(query) && !canContinueEditorAtMacroArgument(query)) return null
+  if (!query || /^[a-zA-Z0-9_.+-]*(?:\s+[a-zA-Z0-9_.+-]+)?$/.test(query)) {
     return {
       start: atIndex,
       end: caret,
@@ -62,13 +80,6 @@ function toDocumentTrigger(context: TextSelectionContext, trigger: AtMenuTrigger
   }
 }
 
-function queryMatchesMacro(entry: EditorAtMacroEntry, query: string): boolean {
-  const needle = query.trim().toLowerCase()
-  if (!needle) return true
-  const aliases = [entry.id, entry.label, entry.group, entry.description, ...entry.aliases]
-  return aliases.some((value) => value.toLowerCase().includes(needle))
-}
-
 /**
  * Owns `@` macro menu state for the active editor selection.
  */
@@ -84,12 +95,12 @@ export function useEditorAtMenu(options: UseEditorAtMenuOptions) {
     buildEditorAtMacroEntries({
       ...options.getDocumentMetadata(),
       now: options.now?.() ?? new Date()
-    })
+    }, atQuery.value)
   )
 
   const visibleAtMacros = computed(() => {
     const query = atQuery.value.trim()
-    return atEntries.value.filter((entry) => queryMatchesMacro(entry, query))
+    return atEntries.value.filter((entry) => editorAtMacroMatchesQuery(entry, query))
   })
 
   function closeAtMenu() {
@@ -187,9 +198,23 @@ export function useEditorAtMenu(options: UseEditorAtMenuOptions) {
     const editor = options.getEditor()
     const trigger = readAtContext()
     if (!editor || !trigger) return false
-    const replacement = entry.replacement
+    if (entry.kind === 'open_pulse' && entry.pulse) {
+      editor.chain().focus().deleteRange({ from: trigger.start, to: trigger.end }).run()
+      options.openPulseMacro?.(entry.pulse)
+      closeAtMenu()
+      return true
+    }
 
-    editor.chain().focus().deleteRange({ from: trigger.start, to: trigger.end }).insertContent(replacement).run()
+    if (entry.kind === 'insert_markdown' || entry.kind === 'dynamic_pick') {
+      const parsed = markdownToEditorData(entry.replacement)
+      const doc = toTiptapDoc(parsed.blocks as EditorBlock[])
+      const content = Array.isArray(doc.content) && doc.content.length ? doc.content : entry.replacement
+      editor.chain().focus().deleteRange({ from: trigger.start, to: trigger.end }).insertContent(content).run()
+      closeAtMenu()
+      return true
+    }
+
+    editor.chain().focus().deleteRange({ from: trigger.start, to: trigger.end }).insertContent(entry.replacement).run()
     closeAtMenu()
     return true
   }

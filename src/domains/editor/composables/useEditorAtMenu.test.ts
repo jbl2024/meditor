@@ -52,7 +52,7 @@ describe('useEditorAtMenu', () => {
     })
 
     const entries = menu.atEntries.value
-    expect(entries).toHaveLength(4)
+    expect(entries.length).toBeGreaterThan(20)
     expect(entries[0]?.replacement).toBe('2026-04-12')
 
     const withEditor = useEditorAtMenu({
@@ -109,6 +109,67 @@ describe('useEditorAtMenu', () => {
     expect(chain.insertContent).toHaveBeenCalledWith('2026-04-12')
     expect(chain.run).toHaveBeenCalled()
     expect(menu.atOpen.value).toBe(false)
+  })
+
+  it('allows arguments only for macros that support them', () => {
+    const dueMenu = useEditorAtMenu({
+      getEditor: () => null,
+      currentTextSelectionContext: () => ({
+        text: 'Do @due tomorrow',
+        nodeType: 'paragraph',
+        from: 1,
+        to: 17,
+        offset: 16,
+        marks: []
+      }),
+      closeCompetingMenus: vi.fn(),
+      getDocumentMetadata: () => ({ title: 'Note', path: 'notes/note.md' }),
+      now: () => new Date(2026, 3, 12, 14, 32)
+    })
+    expect(dueMenu.readAtContext()).toEqual({ start: 4, end: 17, query: 'due tomorrow' })
+
+    const meetingMenu = useEditorAtMenu({
+      getEditor: () => null,
+      currentTextSelectionContext: () => ({
+        text: 'Do @meeting note',
+        nodeType: 'paragraph',
+        from: 1,
+        to: 17,
+        offset: 16,
+        marks: []
+      }),
+      closeCompetingMenus: vi.fn(),
+      getDocumentMetadata: () => ({ title: 'Note', path: 'notes/note.md' })
+    })
+    expect(meetingMenu.readAtContext()).toBeNull()
+  })
+
+  it('opens Pulse for AI macros after removing the trigger token', () => {
+    const { editor, chain } = createEditor('Draft @summarize')
+    const openPulseMacro = vi.fn()
+    const menu = useEditorAtMenu({
+      getEditor: () => editor,
+      currentTextSelectionContext: () => ({
+        text: 'Draft @summarize',
+        nodeType: 'paragraph',
+        from: 1,
+        to: 17,
+        offset: 16,
+        marks: []
+      }),
+      closeCompetingMenus: vi.fn(),
+      getDocumentMetadata: () => ({ title: 'Planning note', path: 'notes/planning.md' }),
+      openPulseMacro
+    })
+
+    const applied = menu.insertAtMacro(menu.atEntries.value.find((entry) => entry.id === 'summarize')!)
+    expect(applied).toBe(true)
+    expect(chain.deleteRange).toHaveBeenCalledWith({ from: 7, to: 17 })
+    expect(chain.insertContent).not.toHaveBeenCalled()
+    expect(openPulseMacro).toHaveBeenCalledWith({
+      actionId: 'synthesize',
+      instruction: 'Summarize the provided material into a concise, useful synthesis.'
+    })
   })
 
   it('closes when activation is lost or the trigger disappears', () => {

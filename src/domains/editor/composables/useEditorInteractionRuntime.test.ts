@@ -225,6 +225,7 @@ function createRuntimeHarness(input?: {
       holder,
       activeEditor,
       getSession: () => (input?.session ?? null) as any,
+      getFrontmatter: () => null,
       getSpellcheckLanguage: () => 'en',
       spellcheckEnabled,
       isSpellcheckWordIgnored: () => false,
@@ -260,6 +261,9 @@ function createRuntimeHarness(input?: {
       zoom: {
         zoomEditorBy: vi.fn(() => 1),
         resetEditorZoom: vi.fn(() => 1)
+      },
+      pulse: {
+        openPulseFromMacro: vi.fn()
       }
     },
     interactionIoPort: {

@@ -781,6 +781,39 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
   }
 
   /**
+   * Opens Pulse from an `@` macro without running the model immediately.
+   *
+   * Selection text is preferred when available; otherwise the action targets the
+   * current note. The macro-supplied instruction is kept editable in Pulse.
+   */
+  function openPulseFromMacro(actionId: PulseActionId, instruction: string) {
+    const editor = host.getEditor()
+    if (!editor) return
+    const { from, to, empty } = editor.state.selection
+    const selectedText = empty || from === to
+      ? ''
+      : editor.state.doc.textBetween(from, to, '\n', '\n').trim()
+
+    if (selectedText) {
+      pulseSourceKind.value = 'editor_selection'
+      pulseSelectionRange.value = { from, to }
+      pulseSourceText.value = selectedText
+    } else {
+      const noteText = editor.getText().trim()
+      if (!noteText) return
+      pulseSourceKind.value = 'editor_note'
+      pulseSelectionRange.value = null
+      pulseSourceText.value = noteText
+    }
+
+    pulseActionId.value = actionId
+    setPulseInstruction(instruction || pulseDefaultInstruction(actionId), { markDirty: Boolean(instruction.trim()) })
+    resetPulseResult()
+    pulseAnchorNonce.value += 1
+    pulseOpen.value = true
+  }
+
+  /**
    * Runs the current Pulse request from the active note or explicit text selection.
    */
   async function runPulseFromEditor() {
@@ -1224,6 +1257,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     updatePulsePanelMetrics,
     openPulseForSelection,
     openPulseForNote,
+    openPulseFromMacro,
     runPulseFromEditor,
     replaceSelectionWithPulseOutput,
     insertPulseBelow,
@@ -1337,6 +1371,7 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     pulsePanelStyle: pulseAndDialogs.pulsePanelStyle,
     openPulseForSelection: pulseAndDialogs.openPulseForSelection,
     openPulseForNote: pulseAndDialogs.openPulseForNote,
+    openPulseFromMacro: pulseAndDialogs.openPulseFromMacro,
     runPulseFromEditor: pulseAndDialogs.runPulseFromEditor,
     replaceSelectionWithPulseOutput: pulseAndDialogs.replaceSelectionWithPulseOutput,
     insertPulseBelow: pulseAndDialogs.insertPulseBelow,

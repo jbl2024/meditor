@@ -32,7 +32,7 @@ const dropdownItems = computed<Array<FilterableDropdownItem & { item: EditorAtMa
     label: item.label,
     group: item.group,
     item,
-    aliases: [item.id, item.label, item.group, ...item.aliases]
+    aliases: [item.id, item.label, item.group, item.kind, item.description, ...item.aliases]
   }))
 )
 
@@ -56,7 +56,15 @@ function labelForItem(item: unknown): string {
 }
 
 function detailForItem(item: unknown): string {
-  return ((item as { item?: EditorAtMacroEntry })?.item?.replacement ?? '') as string
+  return ((item as { item?: EditorAtMacroEntry })?.item?.preview ?? '') as string
+}
+
+function kindForItem(item: unknown): string {
+  const kind = (item as { item?: EditorAtMacroEntry })?.item?.kind ?? 'insert_text'
+  if (kind === 'insert_markdown') return 'MD'
+  if (kind === 'open_pulse') return 'AI'
+  if (kind === 'dynamic_pick') return 'CTX'
+  return 'TXT'
 }
 </script>
 
@@ -83,6 +91,7 @@ function detailForItem(item: unknown): string {
       <template #item="{ item, active }">
         <span class="editor-at-item" :class="{ 'editor-at-item--active': active }">
           <span class="editor-at-item__main">
+            <span class="editor-at-item__kind">{{ kindForItem(item) }}</span>
             <span class="editor-at-item__label">{{ labelForItem(item) }}</span>
           </span>
           <span class="editor-at-item__replacement" :title="detailForItem(item)">{{ detailForItem(item) }}</span>
@@ -147,6 +156,17 @@ function detailForItem(item: unknown): string {
 
 .editor-at-item__label {
   font-weight: 500;
+}
+
+.editor-at-item__kind {
+  border: 1px solid var(--editor-menu-border);
+  border-radius: 0.25rem;
+  color: var(--editor-menu-muted);
+  flex: 0 0 auto;
+  font-size: 0.625rem;
+  font-weight: 600;
+  line-height: 1;
+  padding: 0.125rem 0.1875rem;
 }
 
 .editor-at-item__replacement {
