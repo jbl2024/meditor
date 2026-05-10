@@ -44,8 +44,10 @@ export type UseEditorAtMenuOptions = {
     createdAt?: Date | null
     updatedAt?: Date | null
     userName?: string
+    templates?: Array<{ path: string; label: string; relativePath: string; group: string }>
   }
   openPulseMacro?: (action: EditorAtPulseAction) => void
+  readTemplateContent?: (path: string) => Promise<string>
   now?: () => Date
 }
 
@@ -194,10 +196,27 @@ export function useEditorAtMenu(options: UseEditorAtMenuOptions) {
     if (!at) atActivatedByUser.value = false
   }
 
-  function insertAtMacro(entry: EditorAtMacroEntry): boolean {
+  async function insertAtMacro(entry: EditorAtMacroEntry): Promise<boolean> {
     const editor = options.getEditor()
     const trigger = readAtContext()
     if (!editor || !trigger) return false
+
+    if (entry.templatePath) {
+      let templateContent = ''
+      try {
+        templateContent = await options.readTemplateContent?.(entry.templatePath) ?? ''
+      } catch {
+        return false
+      }
+      if (!templateContent) return false
+      const parsed = markdownToEditorData(templateContent)
+      const doc = toTiptapDoc(parsed.blocks as EditorBlock[])
+      const content = Array.isArray(doc.content) && doc.content.length ? doc.content : templateContent
+      editor.chain().focus().deleteRange({ from: trigger.start, to: trigger.end }).insertContent(content).run()
+      closeAtMenu()
+      return true
+    }
+
     if (entry.kind === 'open_pulse' && entry.pulse) {
       editor.chain().focus().deleteRange({ from: trigger.start, to: trigger.end }).run()
       options.openPulseMacro?.(entry.pulse)

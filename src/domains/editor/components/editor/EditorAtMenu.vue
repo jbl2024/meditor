@@ -60,7 +60,9 @@ function detailForItem(item: unknown): string {
 }
 
 function kindForItem(item: unknown): string {
-  const kind = (item as { item?: EditorAtMacroEntry })?.item?.kind ?? 'insert_text'
+  const macro = (item as { item?: EditorAtMacroEntry })?.item
+  if (macro?.templatePath) return 'TPL'
+  const kind = macro?.kind ?? 'insert_text'
   if (kind === 'insert_markdown') return 'MD'
   if (kind === 'open_pulse') return 'AI'
   if (kind === 'dynamic_pick') return 'CTX'
@@ -110,7 +112,7 @@ function kindForItem(item: unknown): string {
   position: absolute;
   left: 0;
   top: 0;
-  width: 16rem;
+  width: min(24rem, calc(100vw - 1.5rem));
   z-index: 20;
 }
 
@@ -137,9 +139,9 @@ function kindForItem(item: unknown): string {
 
 .editor-at-item {
   align-items: center;
-  display: flex;
-  gap: 0.75rem;
-  justify-content: space-between;
+  display: grid;
+  gap: 0.875rem;
+  grid-template-columns: minmax(0, 1fr) minmax(5.5rem, max-content);
   min-width: 0;
   overflow: hidden;
   width: 100%;
@@ -155,7 +157,12 @@ function kindForItem(item: unknown): string {
 }
 
 .editor-at-item__label {
+  display: block;
   font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .editor-at-item__kind {
@@ -170,18 +177,17 @@ function kindForItem(item: unknown): string {
 }
 
 .editor-at-item__replacement {
+  align-self: center;
   color: var(--editor-menu-muted);
-  font-size: 0.75rem;
-  white-space: nowrap;
-}
-
-.editor-at-item__replacement {
   display: block;
-  flex: 0 1 10rem;
+  font-size: 0.75rem;
+  justify-self: end;
+  max-width: 11rem;
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
   text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .editor-at-dropdown :deep(.ui-filterable-dropdown-option:hover),

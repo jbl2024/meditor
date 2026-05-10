@@ -50,7 +50,7 @@ export type UseEditorInputHandlersOptions = {
     closeSlashMenu: () => void
     closeAtMenu: () => void
     dismissAtMenu: () => void
-    insertAtMacro: (item: EditorAtMacroEntry) => boolean
+    insertAtMacro: (item: EditorAtMacroEntry) => boolean | Promise<boolean>
     blockMenuOpen: Ref<boolean>
     closeBlockMenu: () => void
     tableToolbarOpen: Ref<boolean>
@@ -177,7 +177,7 @@ export function useEditorInputHandlers(options: UseEditorInputHandlersOptions) {
         const macro = options.menusPort.visibleAtMacros.value[options.menusPort.atIndex.value]
         if (!macro) return
         options.menusPort.dismissAtMenu()
-        options.menusPort.insertAtMacro(macro)
+        void options.menusPort.insertAtMacro(macro)
         return
       }
       if (event.key === 'Escape') {

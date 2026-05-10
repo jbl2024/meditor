@@ -9,7 +9,14 @@ import type { PulseActionId } from '../../../shared/api/apiTypes'
 
 export type EditorAtMacroKind = 'insert_text' | 'insert_markdown' | 'open_pulse' | 'dynamic_pick'
 
-export type EditorAtMacroGroup = 'Time' | 'Document' | 'Structures' | 'Tasks' | 'Context' | 'AI'
+export type EditorAtMacroGroup = 'Time' | 'Document' | 'Templates' | 'Tasks' | 'Context' | 'AI'
+
+export type EditorAtTemplateMacro = {
+  path: string
+  label: string
+  relativePath: string
+  group: string
+}
 
 export type EditorAtMacroContext = {
   title: string
@@ -21,6 +28,7 @@ export type EditorAtMacroContext = {
   createdAt?: Date | null
   updatedAt?: Date | null
   userName?: string
+  templates?: EditorAtTemplateMacro[]
 }
 
 export type EditorAtPulseAction = {
@@ -37,6 +45,7 @@ export type EditorAtMacroEntry = {
   replacement: string
   preview: string
   aliases: string[]
+  templatePath?: string
   pulse?: EditorAtPulseAction
 }
 
@@ -85,11 +94,6 @@ const MACRO_IDS = [
   'priority',
   'blocked',
   'waiting',
-  'meeting',
-  'decision',
-  'retex',
-  'adr',
-  'ticket',
   'link',
   'mention',
   'project',
@@ -200,7 +204,8 @@ function normalizeContext(context: EditorAtMacroContext): NormalizedMacroContext
     backlinks: context.backlinks ?? [],
     createdAt: context.createdAt ?? null,
     updatedAt: context.updatedAt ?? null,
-    userName: context.userName?.trim() || 'me'
+    userName: context.userName?.trim() || 'me',
+    templates: context.templates ?? []
   }
 }
 
@@ -482,91 +487,6 @@ const MACRO_DEFINITIONS: MacroDefinition[] = [
     resolve: () => text('status: waiting')
   },
   {
-    id: 'meeting',
-    label: 'Meeting note',
-    group: 'Structures',
-    kind: 'insert_markdown',
-    description: 'Insert a meeting note template',
-    aliases: ['meeting', 'cr', 'compte rendu', 'reunion'],
-    resolve: ({ now }) => markdown(`### Meeting - ${formatLocalDate(now)}
-
-**Participants:**
-**Objectif:**
-
-### Notes
-
-### Decisions
-
-### Actions
-
-- [ ] `, 'Meeting note template')
-  },
-  {
-    id: 'decision',
-    label: 'Decision',
-    group: 'Structures',
-    kind: 'insert_markdown',
-    description: 'Insert a decision block',
-    aliases: ['decision', 'decide', 'arbitrage'],
-    resolve: () => markdown(`### Decision
-
-**Contexte:**
-**Decision prise:**
-**Motif:**
-**Impacts:**
-**Prochaine etape:**`, 'Decision block')
-  },
-  {
-    id: 'retex',
-    label: 'RETEX',
-    group: 'Structures',
-    kind: 'insert_markdown',
-    description: 'Insert a feedback/RETEX template',
-    aliases: ['retex', 'retx', 'retour', 'postmortem'],
-    resolve: () => markdown(`### RETEX
-
-**Contexte:**
-**Ce qui a bien fonctionne:**
-**Ce qui a bloque:**
-**Enseignements:**
-**Actions:**`, 'RETEX template')
-  },
-  {
-    id: 'adr',
-    label: 'ADR',
-    group: 'Structures',
-    kind: 'insert_markdown',
-    description: 'Insert an Architecture Decision Record template',
-    aliases: ['adr', 'architecture decision record'],
-    resolve: ({ now }) => markdown(`### ADR: 
-
-**Date:** ${formatLocalDate(now)}
-**Statut:** Propose
-
-### Contexte
-
-### Decision
-
-### Consequences`, 'ADR template')
-  },
-  {
-    id: 'ticket',
-    label: 'Ticket',
-    group: 'Structures',
-    kind: 'insert_markdown',
-    description: 'Insert a ticket template',
-    aliases: ['ticket', 'issue', 'bug', 'feature'],
-    resolve: () => markdown(`### Ticket
-
-**Objectif:**
-**Contexte:**
-**Criteres d'acceptation:**
-
-- [ ] 
-
-**Notes:**`, 'Ticket template')
-  },
-  {
     id: 'link',
     label: 'Link',
     group: 'Context',
@@ -781,6 +701,29 @@ function resolveDefinition(definition: MacroDefinition, context: NormalizedMacro
   }
 }
 
+function templateMacroId(template: EditorAtTemplateMacro): string {
+  return `template:${template.relativePath.toLowerCase()}`
+}
+
+function buildTemplateMacroEntries(context: NormalizedMacroContext): EditorAtMacroEntry[] {
+  return context.templates.map((template) => ({
+    id: templateMacroId(template),
+    label: template.label,
+    group: 'Templates',
+    kind: 'insert_markdown',
+    description: `Insert template ${template.relativePath}`,
+    replacement: '',
+    preview: template.relativePath,
+    aliases: [
+      'template',
+      template.label,
+      template.relativePath,
+      template.group
+    ],
+    templatePath: template.path
+  }))
+}
+
 /**
  * Builds the current set of editor `@` macros.
  */
@@ -791,7 +734,10 @@ export function buildEditorAtMacroEntries(context: EditorAtMacroContext, token =
   if (exactArgumentDefinition && argument) {
     return [resolveDefinition(exactArgumentDefinition, normalizedContext, argument)]
   }
-  return MACRO_DEFINITIONS.map((definition) => resolveDefinition(definition, normalizedContext))
+  return [
+    ...MACRO_DEFINITIONS.map((definition) => resolveDefinition(definition, normalizedContext)),
+    ...buildTemplateMacroEntries(normalizedContext)
+  ]
 }
 
 /**

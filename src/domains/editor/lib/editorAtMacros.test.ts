@@ -65,15 +65,32 @@ describe('editorAtMacros', () => {
     expect(title?.replacement).toBe('planning')
   })
 
-  it('resolves markdown structures and AI actions', () => {
-    const decision = resolveEditorAtMacro('decision', context)
-    expect(decision).toMatchObject({
-      kind: 'insert_markdown',
-      group: 'Structures',
-      preview: 'Decision block'
+  it('adds workspace templates as markdown macro entries', () => {
+    const entries = buildEditorAtMacroEntries({
+      ...context,
+      templates: [
+        {
+          path: '/vault/_templates/meetings/weekly.md',
+          label: 'weekly.md',
+          relativePath: 'meetings/weekly.md',
+          group: 'meetings'
+        }
+      ]
     })
-    expect(decision?.replacement).toContain('### Decision')
+    const template = entries.find((entry) => entry.id === 'template:meetings/weekly.md')
 
+    expect(template).toMatchObject({
+      label: 'weekly.md',
+      group: 'Templates',
+      kind: 'insert_markdown',
+      preview: 'meetings/weekly.md',
+      templatePath: '/vault/_templates/meetings/weekly.md'
+    })
+    expect(editorAtMacroMatchesQuery(template!, 'weekly')).toBe(true)
+    expect(editorAtMacroMatchesQuery(template!, 'template')).toBe(true)
+  })
+
+  it('resolves AI actions', () => {
     const summarize = resolveEditorAtMacro('summarize', context)
     expect(summarize).toMatchObject({
       kind: 'open_pulse',
@@ -84,9 +101,6 @@ describe('editorAtMacros', () => {
   })
 
   it('matches aliases and exposes argument-capable query detection', () => {
-    const meeting = resolveEditorAtMacro('meeting', context)!
-    expect(editorAtMacroMatchesQuery(meeting, 'cr')).toBe(true)
-    expect(editorAtMacroMatchesQuery(resolveEditorAtMacro('retex', context)!, 'retour')).toBe(true)
     expect(editorAtMacroMatchesQuery(resolveEditorAtMacro('task', context)!, 'todo')).toBe(true)
     expect(canContinueEditorAtMacroArgument('date ')).toBe(true)
     expect(canContinueEditorAtMacroArgument('priority ')).toBe(true)
@@ -95,7 +109,6 @@ describe('editorAtMacros', () => {
 
   it('exposes stable macro ids', () => {
     expect(listEditorAtMacroIds()).toContain('today')
-    expect(listEditorAtMacroIds()).toContain('meeting')
     expect(listEditorAtMacroIds()).toContain('extract.tasks')
     expect(listEditorAtMacroIds()).toContain('tags.auto')
   })

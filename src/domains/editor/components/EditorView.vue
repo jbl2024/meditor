@@ -46,6 +46,7 @@ import './editor/EditorViewContent.css'
 import { useWorkspaceSpellcheckDictionary } from '../composables/useWorkspaceSpellcheckDictionary'
 import { sourceEditorLanguageLabelForPath } from '../../../app/lib/appShellDocuments'
 import { isMarkdownPath } from '../../../app/lib/appShellPaths'
+import { buildNewNoteTemplateItems } from '../../../app/lib/newNoteTemplates'
 import { useEditorSourceMode } from '../composables/useEditorSourceMode'
 import { useSourceEditorRuntime } from '../composables/useSourceEditorRuntime'
 
@@ -183,6 +184,19 @@ const assetBrowserItems = computed(() =>
     allWorkspaceFiles: allWorkspaceFilesRef.value
   })
 )
+const atTemplateItems = computed(() =>
+  buildNewNoteTemplateItems({
+    workspaceRoot: workspacePathRef.value,
+    allWorkspaceFiles: allWorkspaceFilesRef.value
+  })
+    .filter((item) => item.kind === 'template')
+    .map((item) => ({
+      path: item.path,
+      label: item.label,
+      relativePath: String(item.id).replace(/^template:/, ''),
+      group: String(item.group ?? '')
+    }))
+)
 const workspaceSpellcheck = useWorkspaceSpellcheckDictionary({ workspacePath: workspacePathRef })
 
 let chromeRuntime!: ReturnType<typeof useEditorChromeRuntime>
@@ -260,6 +274,14 @@ interactionRuntime = useEditorInteractionRuntime({
     activeEditor,
     getSession: (path) => getDocumentSession(path),
     getFrontmatter: (path) => documentRuntime?.frontmatterByPath.value[path] ?? null,
+    getTemplateMacros: () => atTemplateItems.value,
+    readTemplateContent: async (templatePath) => {
+      if (props.readNoteSnapshot) {
+        return (await props.readNoteSnapshot(templatePath)).content
+      }
+      if (!props.openFile) return ''
+      return await props.openFile!(templatePath)
+    },
     getSpellcheckLanguage: (path) => documentRuntime?.getSpellcheckLanguage(path) ?? 'en',
     spellcheckEnabled: spellcheckEnabledRef,
     isSpellcheckWordIgnored: (_path, word) => workspaceSpellcheck.isIgnoredWord(word) || chromeRuntime.spellcheck.isSessionIgnoredWord(word),

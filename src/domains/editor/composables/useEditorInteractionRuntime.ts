@@ -21,6 +21,7 @@ import type { MermaidPreviewPayload } from './useMermaidPreviewDialog'
 import type { AssetPreviewPayload } from './useAssetPreviewDialog'
 import type { AssetBrowserDropdownItem } from '../lib/tiptap/assetBrowser'
 import type { FrontmatterEnvelope } from '../lib/frontmatter'
+import type { EditorAtTemplateMacro } from '../lib/editorAtMacros'
 
 /**
  * Owns interactive editor behavior that depends on the active Tiptap instance:
@@ -39,6 +40,8 @@ export type EditorInteractionRuntimeDocumentPort = {
   activeEditor: Ref<Editor | null>
   getSession: (path: string) => DocumentSession | null
   getFrontmatter: (path: string) => FrontmatterEnvelope | null
+  getTemplateMacros: () => EditorAtTemplateMacro[]
+  readTemplateContent: (path: string) => Promise<string>
   getSpellcheckLanguage: (path: string) => import('../lib/spellcheck').SpellcheckLanguage
   spellcheckEnabled: Ref<boolean>
   isSpellcheckWordIgnored: (path: string, word: string) => boolean
@@ -153,9 +156,11 @@ export function useEditorInteractionRuntime(options: UseEditorInteractionRuntime
       path: documentPort.currentPath.value,
       bodyText: documentPort.activeEditor.value?.getText() ?? '',
       tags: readFrontmatterTags(documentPort.getFrontmatter(documentPort.currentPath.value)),
-      updatedAt: readSessionUpdatedAt(documentPort.getSession(documentPort.currentPath.value))
+      updatedAt: readSessionUpdatedAt(documentPort.getSession(documentPort.currentPath.value)),
+      templates: documentPort.getTemplateMacros()
     }),
-    openPulseMacro: (action) => chromePort.pulse.openPulseFromMacro(action)
+    openPulseMacro: (action) => chromePort.pulse.openPulseFromMacro(action),
+    readTemplateContent: documentPort.readTemplateContent
   })
 
   const navigation = useEditorNavigation({

@@ -80,7 +80,7 @@ describe('useEditorAtMenu', () => {
     expect(codeBlock.readAtContext()).toBeNull()
   })
 
-  it('keeps the trigger open for valid paragraph text and inserts the selected macro', () => {
+  it('keeps the trigger open for valid paragraph text and inserts the selected macro', async () => {
     const { editor, chain } = createEditor('Draft @today')
     const menu = useEditorAtMenu({
       getEditor: () => editor,
@@ -102,7 +102,7 @@ describe('useEditorAtMenu', () => {
     expect(menu.atOpen.value).toBe(true)
     expect(menu.visibleAtMacros.value.map((entry) => entry.id)).toContain('today')
 
-    const applied = menu.insertAtMacro(menu.visibleAtMacros.value.find((entry) => entry.id === 'today')!)
+    const applied = await menu.insertAtMacro(menu.visibleAtMacros.value.find((entry) => entry.id === 'today')!)
     expect(applied).toBe(true)
     expect(chain.focus).toHaveBeenCalled()
     expect(chain.deleteRange).toHaveBeenCalledWith({ from: 7, to: 13 })
@@ -144,7 +144,46 @@ describe('useEditorAtMenu', () => {
     expect(meetingMenu.readAtContext()).toBeNull()
   })
 
-  it('opens Pulse for AI macros after removing the trigger token', () => {
+  it('inserts selected workspace template markdown', async () => {
+    const { editor, chain } = createEditor('Draft @weekly')
+    const menu = useEditorAtMenu({
+      getEditor: () => editor,
+      currentTextSelectionContext: () => ({
+        text: 'Draft @weekly',
+        nodeType: 'paragraph',
+        from: 1,
+        to: 14,
+        offset: 13,
+        marks: []
+      }),
+      closeCompetingMenus: vi.fn(),
+      getDocumentMetadata: () => ({
+        title: 'Planning note',
+        path: 'notes/planning.md',
+        templates: [
+          {
+            path: '/vault/_templates/weekly.md',
+            label: 'weekly.md',
+            relativePath: 'weekly.md',
+            group: 'Workspace root'
+          }
+        ]
+      }),
+      readTemplateContent: vi.fn(async () => '### Weekly\n\n- [ ] Follow up')
+    })
+
+    const template = menu.visibleAtMacros.value.find((entry) => entry.templatePath)
+    expect(template?.label).toBe('weekly.md')
+
+    const applied = await menu.insertAtMacro(template!)
+    expect(applied).toBe(true)
+    expect(chain.deleteRange).toHaveBeenCalledWith({ from: 7, to: 14 })
+    expect(chain.insertContent).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ type: 'heading' })
+    ]))
+  })
+
+  it('opens Pulse for AI macros after removing the trigger token', async () => {
     const { editor, chain } = createEditor('Draft @summarize')
     const openPulseMacro = vi.fn()
     const menu = useEditorAtMenu({
@@ -162,7 +201,7 @@ describe('useEditorAtMenu', () => {
       openPulseMacro
     })
 
-    const applied = menu.insertAtMacro(menu.atEntries.value.find((entry) => entry.id === 'summarize')!)
+    const applied = await menu.insertAtMacro(menu.atEntries.value.find((entry) => entry.id === 'summarize')!)
     expect(applied).toBe(true)
     expect(chain.deleteRange).toHaveBeenCalledWith({ from: 7, to: 17 })
     expect(chain.insertContent).not.toHaveBeenCalled()

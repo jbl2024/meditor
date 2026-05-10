@@ -226,6 +226,8 @@ function createRuntimeHarness(input?: {
       activeEditor,
       getSession: () => (input?.session ?? null) as any,
       getFrontmatter: () => null,
+      getTemplateMacros: () => [],
+      readTemplateContent: vi.fn(async () => ''),
       getSpellcheckLanguage: () => 'en',
       spellcheckEnabled,
       isSpellcheckWordIgnored: () => false,
