@@ -234,6 +234,21 @@ describe('PulsePanel', () => {
     harness.app.unmount()
   })
 
+  it('renders generated markdown tables in preview mode', async () => {
+    const harness = mountHarness({
+      previewMarkdown: '| A | B |\n| - | - |\n| 1 | 2 |',
+      sourceText: ''
+    })
+    await flush()
+
+    const table = harness.root.querySelector('.pulse-rendered-preview table') as HTMLTableElement
+    expect(table).toBeTruthy()
+    expect(table.querySelector('th')?.textContent).toBe('A')
+    expect(table.querySelector('td')?.textContent).toBe('1')
+
+    harness.app.unmount()
+  })
+
   it('shows error state and keeps custom prompt intact', async () => {
     const harness = mountHarness({
       instruction: 'Make it funny.',

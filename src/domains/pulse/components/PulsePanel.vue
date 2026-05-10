@@ -1251,6 +1251,7 @@ onBeforeUnmount(() => {
 .pulse-rendered-preview :deep(p),
 .pulse-rendered-preview :deep(blockquote),
 .pulse-rendered-preview :deep(pre),
+.pulse-rendered-preview :deep(table),
 .pulse-rendered-preview :deep(ul),
 .pulse-rendered-preview :deep(ol) {
   margin: 0 0 8px;
@@ -1276,6 +1277,44 @@ onBeforeUnmount(() => {
   background: var(--modal-group-bg, var(--surface-muted));
   padding: 8px 10px;
   white-space: pre-wrap;
+}
+
+.pulse-rendered-preview :deep(table) {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--editor-table-border);
+  border-collapse: collapse;
+  border-radius: 8px;
+  background: var(--editor-table-bg);
+}
+
+.pulse-rendered-preview :deep(thead) {
+  background: var(--editor-table-header-bg, var(--editor-table-hover));
+  color: var(--editor-table-header-text, var(--text-primary));
+}
+
+.pulse-rendered-preview :deep(th),
+.pulse-rendered-preview :deep(td) {
+  min-width: 96px;
+  border: 1px solid var(--editor-table-cell-border);
+  padding: 7px 9px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.pulse-rendered-preview :deep(th) {
+  font-weight: 700;
+}
+
+.pulse-rendered-preview :deep(tr:nth-child(even) td) {
+  background: color-mix(in srgb, var(--editor-table-hover) 72%, transparent);
+}
+
+.pulse-rendered-preview :deep(th > :last-child),
+.pulse-rendered-preview :deep(td > :last-child) {
+  margin-bottom: 0;
 }
 
 .pulse-raw-preview {
