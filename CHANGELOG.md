@@ -18,6 +18,11 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.38.8] - 2026-05-10
+
+### Fixed
+- fix(pulse): allow opening note pulse for empty notes (28a5d16)
+
 ## [0.38.7] - 2026-05-10
 
 ### Added
