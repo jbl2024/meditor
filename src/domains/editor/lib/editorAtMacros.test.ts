@@ -55,6 +55,17 @@ describe('editorAtMacros', () => {
     expect(resolveEditorAtMacro('priority high', context)?.replacement).toBe('priority: high')
   })
 
+  it('resolves task macros as markdown checklists', () => {
+    expect(resolveEditorAtMacro('task', context)).toMatchObject({
+      kind: 'insert_markdown',
+      replacement: '- [ ] '
+    })
+    expect(resolveEditorAtMacro('task.today', context)).toMatchObject({
+      kind: 'insert_markdown',
+      replacement: '- [ ]  -- due: 2026-04-12'
+    })
+  })
+
   it('falls back to the file name when the note title is empty', () => {
     const title = resolveEditorAtMacro('title', {
       title: '',

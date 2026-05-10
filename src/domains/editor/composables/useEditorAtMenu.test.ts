@@ -183,6 +183,38 @@ describe('useEditorAtMenu', () => {
     ]))
   })
 
+  it('inserts @task as a Tiptap task list instead of plain markdown text', async () => {
+    const { editor, chain } = createEditor('Draft @task')
+    const menu = useEditorAtMenu({
+      getEditor: () => editor,
+      currentTextSelectionContext: () => ({
+        text: 'Draft @task',
+        nodeType: 'paragraph',
+        from: 1,
+        to: 12,
+        offset: 11,
+        marks: []
+      }),
+      closeCompetingMenus: vi.fn(),
+      getDocumentMetadata: () => ({ title: 'Planning note', path: 'notes/planning.md' })
+    })
+
+    const applied = await menu.insertAtMacro(menu.atEntries.value.find((entry) => entry.id === 'task')!)
+    expect(applied).toBe(true)
+    expect(chain.deleteRange).toHaveBeenCalledWith({ from: 7, to: 12 })
+    expect(chain.insertContent).toHaveBeenCalledWith([
+      expect.objectContaining({
+        type: 'taskList',
+        content: [
+          expect.objectContaining({
+            type: 'taskItem',
+            attrs: { checked: false }
+          })
+        ]
+      })
+    ])
+  })
+
   it('opens Pulse for AI macros after removing the trigger token', async () => {
     const { editor, chain } = createEditor('Draft @summarize')
     const openPulseMacro = vi.fn()

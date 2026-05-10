@@ -425,28 +425,28 @@ const MACRO_DEFINITIONS: MacroDefinition[] = [
     id: 'task',
     label: 'Task',
     group: 'Tasks',
-    kind: 'insert_text',
+    kind: 'insert_markdown',
     description: 'Insert a checklist task',
     aliases: ['task', 'todo', 'checklist'],
-    resolve: () => text(TASK_TEMPLATE)
+    resolve: () => markdown(TASK_TEMPLATE, TASK_TEMPLATE)
   },
   {
     id: 'task.today',
     label: 'Task due today',
     group: 'Tasks',
-    kind: 'insert_text',
+    kind: 'insert_markdown',
     description: 'Insert a checklist task due today',
     aliases: ['task.today', 'todo today', 'task due today'],
-    resolve: ({ now }) => text(`- [ ]  -- due: ${formatLocalDate(now)}`)
+    resolve: ({ now }) => markdown(`- [ ]  -- due: ${formatLocalDate(now)}`)
   },
   {
     id: 'task.me',
     label: 'Task assigned to me',
     group: 'Tasks',
-    kind: 'insert_text',
+    kind: 'insert_markdown',
     description: 'Insert a checklist task assigned to the current user',
     aliases: ['task.me', 'todo me', 'assigned'],
-    resolve: ({ userName }) => text(`- [ ]  -- assignee: ${userName}`)
+    resolve: ({ userName }) => markdown(`- [ ]  -- assignee: ${userName}`)
   },
   {
     id: 'due',
