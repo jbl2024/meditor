@@ -100,8 +100,6 @@ const MACRO_IDS = [
   'quote',
   'context',
   'related',
-  'last',
-  'recent',
   'summarize',
   'summary',
   'rewrite',
@@ -539,24 +537,6 @@ const MACRO_DEFINITIONS: MacroDefinition[] = [
     description: 'Insert a related notes section',
     aliases: ['related', 'notes liees'],
     resolve: ({ backlinks }) => markdown(['### Related', ...backlinks.slice(0, 5).map((path) => `- [[${path}]]`)].join('\n'), 'Related notes')
-  },
-  {
-    id: 'last',
-    label: 'Last note',
-    group: 'Context',
-    kind: 'dynamic_pick',
-    description: 'Insert a last-note placeholder',
-    aliases: ['last', 'recent last'],
-    resolve: () => text('[[ ]]')
-  },
-  {
-    id: 'recent',
-    label: 'Recent notes',
-    group: 'Context',
-    kind: 'dynamic_pick',
-    description: 'Insert a recent-notes section',
-    aliases: ['recent', 'recent notes'],
-    resolve: () => markdown('### Recent notes\n\n- [[ ]]', 'Recent notes')
   },
   {
     id: 'summarize',
