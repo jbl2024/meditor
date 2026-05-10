@@ -569,6 +569,20 @@ describe('useEditorChromeRuntime', () => {
     expect(previewMarkdown.value).toBe('')
   })
 
+  it('opens Pulse for an empty note when the note has a path', () => {
+    const harness = createRuntimeHarness({
+      activeEditor: ref<Editor | null>(createEditorStub({ from: 1, to: 1, empty: true }, '')) as Ref<Editor | null>
+    })
+
+    harness.runtime.pulse.openPulseForNote()
+
+    expect(harness.runtime.pulse.pulseOpen.value).toBe(true)
+    expect(harness.runtime.pulse.pulseSourceKind.value).toBe('editor_note')
+    expect(harness.runtime.pulse.pulseContextPaths.value).toEqual(['a.md'])
+    expect(harness.runtime.pulse.pulseSourceText.value).toBe('')
+    expect(harness.runtime.pulse.pulseActionId.value).toBe('synthesize')
+  })
+
   it('refreshes an open note Pulse source when the active session changes', () => {
     const harness = createRuntimeHarness({
       activeEditor: ref<Editor | null>(createEditorStub({ from: 1, to: 1, empty: true }, 'Alpha note')) as Ref<Editor | null>

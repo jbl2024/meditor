@@ -105,6 +105,14 @@ const hasEchoesContent = computed(() => props.echoesItems.length > 0 && !props.e
 const hasLocalContext = computed(() => props.localContextItems.length > 0)
 const hasPinnedContext = computed(() => props.pinnedContextItems.length > 0)
 const effectivePulseState = computed(() => props.pulseState ?? createClosedPulseDrawerState())
+const pulseSourceLabel = computed(() => {
+  if (effectivePulseState.value.sourceKind === 'editor_selection') return 'Editor selection'
+  if (effectivePulseState.value.sourceKind === 'second_brain_context') return 'Current context'
+  const noteTitle = props.activeNoteTitle.trim()
+  return noteTitle && noteTitle !== 'No active note'
+    ? `Current note (${noteTitle})`
+    : 'Current note'
+})
 
 watch(
   hasEchoesContent,
@@ -125,9 +133,7 @@ watch(
         </button>
         <div>
           <h3 class="section-title pulse-drawer-title">Pulse</h3>
-          <p class="pulse-drawer-subtitle">
-            {{ effectivePulseState.sourceKind === 'editor_selection' ? 'Editor selection' : effectivePulseState.sourceKind === 'second_brain_context' ? 'Current context' : 'Current note' }}
-          </p>
+          <p class="pulse-drawer-subtitle">{{ pulseSourceLabel }}</p>
         </div>
       </div>
 
@@ -548,6 +554,9 @@ watch(
   margin: 2px 0 0;
   font-size: 12px;
   color: var(--right-pane-text-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pane-section {

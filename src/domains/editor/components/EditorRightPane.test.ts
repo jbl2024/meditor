@@ -354,4 +354,64 @@ describe('EditorRightPane', () => {
 
     app.unmount()
   })
+
+  it('shows the active note title in the Pulse note source label', async () => {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+
+    const app = createApp(defineComponent({
+      setup() {
+        return () => h(EditorRightPane, {
+          width: 280,
+          activeNotePath: '/wk/notes/research.md',
+          activeNoteTitle: 'Research',
+          activeStateLabel: 'saved',
+          backlinkCount: 0,
+          semanticLinkCount: 0,
+          activeNoteInContext: false,
+          canToggleFavorite: false,
+          isFavorite: false,
+          indexingState: 'indexed',
+          echoesItems: [],
+          echoesLoading: false,
+          echoesError: '',
+          echoesHintVisible: false,
+          localContextItems: [],
+          pinnedContextItems: [],
+          canReasonOnContext: false,
+          isLaunchingContextAction: false,
+          outline: [],
+          semanticLinks: [],
+          semanticLinksLoading: false,
+          semanticLinksError: '',
+          backlinks: [],
+          backlinksLoading: false,
+          backlinksError: '',
+          metadataRows: [],
+          propertiesPreview: [],
+          propertyParseErrorCount: 0,
+          toRelativePath: (path: string) => path,
+          pulseState: {
+            open: true,
+            sourceKind: 'editor_note',
+            actionId: 'synthesize',
+            instruction: 'Summarize this note.',
+            previewMarkdown: '',
+            provenancePaths: [],
+            running: false,
+            error: '',
+            sourceText: 'Note body',
+            applyModes: ['insert_below', 'send_to_second_brain'],
+            primaryApplyMode: 'insert_below'
+          }
+        })
+      }
+    }))
+
+    app.mount(root)
+    await nextTick()
+    expect(root.querySelector('.pulse-drawer-subtitle')?.textContent?.trim()).toBe('Current note (Research)')
+
+    app.unmount()
+  })
 })

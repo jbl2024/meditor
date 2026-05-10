@@ -739,8 +739,8 @@ export function useEditorChromeRuntime(options: UseEditorChromeRuntimeOptions) {
     const editor = host.getEditor()
     if (!editor) return false
     const text = editor.getText().trim()
-    if (!text) return false
     const nextPaths = [host.getCurrentPath()].filter(Boolean)
+    if (!text && !nextPaths.length) return false
     const sameNote =
       pulseSourceKind.value === 'editor_note' &&
       pulseSourceText.value === text &&
