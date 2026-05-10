@@ -174,8 +174,7 @@ describe('PulsePanel', () => {
     })
     await flush()
 
-    const expand = Array.from(harness.root.querySelectorAll('button'))
-      .find((button) => button.textContent?.includes('Large')) as HTMLButtonElement
+    const expand = harness.root.querySelector('button[aria-label="Open large preview"]') as HTMLButtonElement
     expect(expand).toBeTruthy()
     expand.click()
     await flush()

@@ -1,6 +1,15 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { ArrowsPointingOutIcon, ChevronDownIcon, XMarkIcon } from '@heroicons/vue/24/outline'
+import {
+  ArrowsPointingOutIcon,
+  ArrowsRightLeftIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  ClipboardDocumentIcon,
+  CodeBracketSquareIcon,
+  EyeIcon,
+  XMarkIcon
+} from '@heroicons/vue/24/outline'
 import UiFilterableDropdown, { type FilterableDropdownItem } from '../../../shared/components/ui/UiFilterableDropdown.vue'
 import { PULSE_APPLY_LABELS, type PulseActionSpec, type PulseApplyMode } from '../lib/pulse'
 import { buildPulseDiff, renderPulseMarkdown } from '../lib/pulsePreview'
@@ -181,48 +190,55 @@ onBeforeUnmount(() => {
             <div v-if="panelState === 'result'" class="pulse-preview-controls pulse-preview-controls--drawer">
               <button
                 type="button"
-                class="pulse-tab-btn pulse-expand-btn"
+                class="pulse-tab-btn pulse-icon-btn pulse-expand-btn"
                 title="Open large preview"
                 aria-label="Open large preview"
                 @click="openPreviewModal"
               >
                 <ArrowsPointingOutIcon class="h-4 w-4" />
-                <span>Large</span>
               </button>
               <button
                 type="button"
-                class="pulse-tab-btn pulse-copy-btn"
+                class="pulse-tab-btn pulse-icon-btn pulse-copy-btn"
                 :disabled="!canCopyPreview"
+                :aria-label="copyFeedback ? 'Copied' : 'Copy preview as markdown'"
                 :title="copyFeedback ? 'Copied' : 'Copy preview as markdown'"
                 @click="copyPreviewMarkdown"
               >
-                {{ copyButtonLabel }}
+                <CheckIcon v-if="copyFeedback" class="h-4 w-4" />
+                <ClipboardDocumentIcon v-else class="h-4 w-4" />
               </button>
               <div class="pulse-preview-tabs">
                 <button
                   v-if="canShowDiff"
                   type="button"
-                  class="pulse-tab-btn"
+                  class="pulse-tab-btn pulse-icon-btn"
                   :data-active="effectivePreviewMode === 'diff'"
+                  title="Show diff"
+                  aria-label="Show diff"
                   @click="setPreviewMode('diff')"
                 >
-                  Diff
+                  <ArrowsRightLeftIcon class="h-4 w-4" />
                 </button>
                 <button
                   type="button"
-                  class="pulse-tab-btn"
+                  class="pulse-tab-btn pulse-icon-btn"
                   :data-active="effectivePreviewMode === 'preview'"
+                  title="Show preview"
+                  aria-label="Show preview"
                   @click="setPreviewMode('preview')"
                 >
-                  Preview
+                  <EyeIcon class="h-4 w-4" />
                 </button>
                 <button
                   type="button"
-                  class="pulse-tab-btn"
+                  class="pulse-tab-btn pulse-icon-btn"
                   :data-active="effectivePreviewMode === 'markdown'"
+                  title="Show markdown"
+                  aria-label="Show markdown"
                   @click="setPreviewMode('markdown')"
                 >
-                  Markdown
+                  <CodeBracketSquareIcon class="h-4 w-4" />
                 </button>
               </div>
             </div>
@@ -717,10 +733,14 @@ onBeforeUnmount(() => {
 }
 
 .pulse-message-meta--result {
-  align-items: flex-start;
-  flex-wrap: wrap;
+  align-items: center;
+  flex-wrap: nowrap;
   padding-bottom: 8px;
   border-bottom: 1px solid color-mix(in srgb, var(--pulse-panel-border) 42%, transparent);
+}
+
+.pulse-message-meta--result > span {
+  flex: 0 0 auto;
 }
 
 .pulse-action-pill {
@@ -827,25 +847,33 @@ onBeforeUnmount(() => {
 }
 
 .pulse-preview-controls--drawer {
-  gap: 5px;
-  flex: 1 1 100%;
-  justify-content: flex-start;
+  gap: 4px;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  margin-left: auto;
 }
 
 .pulse-preview-controls--drawer .pulse-preview-tabs {
-  flex: 1;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  gap: 4px;
 }
 
 .pulse-preview-controls--drawer .pulse-tab-btn {
-  flex: 1 1 auto;
-}
-
-.pulse-preview-controls--drawer .pulse-copy-btn {
   flex: 0 0 auto;
 }
 
-.pulse-expand-btn {
-  gap: 5px;
+.pulse-preview-controls--drawer .pulse-icon-btn {
+  width: 32px;
+  min-width: 32px;
+  min-height: 30px;
+  padding: 0;
+}
+
+.pulse-icon-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 .pulse-preview-modal-overlay {
