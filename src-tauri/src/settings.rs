@@ -85,6 +85,7 @@ pub struct LlmProfileView {
     pub model: String,
     pub api_key: String,
     pub default_temperature: f64,
+    pub system_prompt: String,
     pub base_url: Option<String>,
     pub default_mode: Option<String>,
     pub capabilities: ProfileCapabilities,
@@ -129,6 +130,8 @@ pub struct SaveLlmProfileInput {
     pub model: String,
     pub api_key: Option<String>,
     pub default_temperature: f64,
+    #[serde(default)]
+    pub system_prompt: String,
     #[serde(default)]
     pub preserve_existing_api_key: bool,
     #[serde(default)]
@@ -365,6 +368,7 @@ fn view_llm(config: &SecondBrainConfig) -> LlmConfigView {
                 model: profile.model.clone(),
                 api_key: profile.api_key.clone(),
                 default_temperature: profile.default_temperature,
+                system_prompt: profile.system_prompt.clone(),
                 base_url: profile.base_url.clone(),
                 default_mode: profile.default_mode.clone(),
                 capabilities: profile.capabilities.clone(),
@@ -457,6 +461,7 @@ fn apply_save_payload(
                 model: profile.model.trim().to_string(),
                 api_key,
                 default_temperature: profile.default_temperature,
+                system_prompt: profile.system_prompt.trim().to_string(),
                 base_url: if provider == "openai-codex" {
                     None
                 } else {
@@ -694,6 +699,7 @@ mod tests {
             model: "gpt-4.1".to_string(),
             api_key: Some("secret".to_string()),
             default_temperature: 0.15,
+            system_prompt: String::new(),
             preserve_existing_api_key: false,
             base_url: None,
             default_mode: Some("freestyle".to_string()),
@@ -713,6 +719,7 @@ mod tests {
                 model: "gpt-4.1".to_string(),
                 api_key: "k".to_string(),
                 default_temperature: 0.15,
+                system_prompt: String::new(),
                 base_url: None,
                 default_mode: Some("freestyle".to_string()),
                 capabilities: ProfileCapabilities::default(),
@@ -797,6 +804,7 @@ mod tests {
                     model: "gpt-5.2-codex".to_string(),
                     api_key: None,
                     default_temperature: 0.15,
+                    system_prompt: String::new(),
                     preserve_existing_api_key: false,
                     base_url: Some("https://ignored.example".to_string()),
                     default_mode: Some("freestyle".to_string()),

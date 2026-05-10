@@ -171,6 +171,7 @@ export type AppSettingsLlmProfile = {
   model: string
   api_key: string
   default_temperature: number
+  system_prompt: string
   base_url: string | null
   default_mode: string | null
   capabilities: {
@@ -227,6 +228,7 @@ export type SaveAppSettingsPayload = {
       model: string
       api_key?: string
       default_temperature: number
+      system_prompt: string
       preserve_existing_api_key: boolean
       base_url?: string | null
       default_mode?: string | null

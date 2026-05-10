@@ -28,6 +28,8 @@ pub struct ProviderProfile {
     #[serde(default = "default_temperature")]
     pub default_temperature: f64,
     #[serde(default)]
+    pub system_prompt: String,
+    #[serde(default)]
     pub base_url: Option<String>,
     #[serde(default)]
     pub default_mode: Option<String>,
@@ -148,6 +150,7 @@ mod tests {
                 model: "gpt-oss".to_string(),
                 api_key: "abc".to_string(),
                 default_temperature: 0.15,
+                system_prompt: String::new(),
                 base_url: Some("http://localhost:11434/v1".to_string()),
                 default_mode: Some("freestyle".to_string()),
                 capabilities: ProfileCapabilities::default(),
@@ -186,6 +189,7 @@ mod tests {
                 model: "gpt-5.2-codex".to_string(),
                 api_key: "".to_string(),
                 default_temperature: 0.15,
+                system_prompt: String::new(),
                 base_url: None,
                 default_mode: Some("freestyle".to_string()),
                 capabilities: ProfileCapabilities::default(),

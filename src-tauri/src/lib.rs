@@ -567,6 +567,7 @@ mod tests {
                     model: "gpt-5.2-codex".to_string(),
                     api_key: None,
                     default_temperature: 0.15,
+                    system_prompt: String::new(),
                     preserve_existing_api_key: false,
                     base_url: None,
                     default_mode: Some("freestyle".to_string()),

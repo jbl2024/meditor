@@ -7,6 +7,7 @@ import UiFilterableDropdown, { type FilterableDropdownItem } from '../../../shar
 import UiField from '../../../shared/components/ui/UiField.vue'
 import UiInput from '../../../shared/components/ui/UiInput.vue'
 import UiSelect from '../../../shared/components/ui/UiSelect.vue'
+import UiTextarea from '../../../shared/components/ui/UiTextarea.vue'
 import {
   readAppSettings,
   discoverLlmModels as discoverLlmModelsApi,
@@ -39,6 +40,7 @@ const settingsLlmApiKey = ref('')
 const settingsLlmApiKeyVisible = ref(false)
 const settingsLlmModel = ref('gpt-4.1')
 const settingsLlmTemperature = ref('0.15')
+const settingsLlmSystemPrompt = ref('')
 const settingsLlmBaseUrl = ref('')
 const settingsLlmCustomProvider = ref('')
 const settingsLlmLabel = ref('OpenAI Remote')
@@ -230,6 +232,7 @@ function applySettingsDefaults() {
   settingsConfigPath.value = '~/.tomosona/conf.json'
   settingsLlmApiKey.value = ''
   settingsLlmApiKeyVisible.value = false
+  settingsLlmSystemPrompt.value = ''
   settingsLlmCodexModels.value = []
   settingsLlmCodexModelsLoading.value = false
   settingsLlmAvailableModels.value = []
@@ -411,6 +414,7 @@ function hydrateSettingsFromConfig(view: AppSettingsView) {
     settingsLlmLabel.value = active.label
     settingsLlmModel.value = active.model
     settingsLlmTemperature.value = String(active.default_temperature ?? 0.15)
+    settingsLlmSystemPrompt.value = active.system_prompt ?? ''
     settingsLlmBaseUrl.value = active.base_url ?? ''
     settingsLlmApiKey.value = active.api_key
   }
@@ -466,6 +470,7 @@ function buildSaveSettingsPayload(): SaveAppSettingsPayload {
     provider: llmProvider,
     model: settingsLlmModel.value.trim(),
     default_temperature: Number.parseFloat(settingsLlmTemperature.value),
+    system_prompt: settingsLlmSystemPrompt.value.trim(),
     preserve_existing_api_key: false,
     capabilities,
     default_mode: 'freestyle',
@@ -555,6 +560,10 @@ function onSettingsInputKeydown(event: KeyboardEvent) {
     event.preventDefault()
     event.stopPropagation()
     emit('cancel')
+    return
+  }
+
+  if (event.key === 'Enter' && event.target instanceof HTMLTextAreaElement) {
     return
   }
 
@@ -773,6 +782,24 @@ watch(() => props.visible, async (visible) => {
                     inputmode="decimal"
                     size="sm"
                     placeholder="0.15"
+                    :aria-describedby="describedBy"
+                    :invalid="invalid"
+                    @keydown="onSettingsInputKeydown"
+                  />
+                </template>
+              </UiField>
+
+              <UiField
+                for-id="settings-llm-system-prompt"
+                label="System prompt"
+                help="Prepended to every LLM system prompt."
+              >
+                <template #default="{ describedBy, invalid }">
+                  <UiTextarea
+                    id="settings-llm-system-prompt"
+                    v-model="settingsLlmSystemPrompt"
+                    :rows="5"
+                    placeholder="Global instruction added before every LLM system prompt."
                     :aria-describedby="describedBy"
                     :invalid="invalid"
                     @keydown="onSettingsInputKeydown"

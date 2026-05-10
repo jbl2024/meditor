@@ -27,6 +27,7 @@ const hoisted = vi.hoisted(() => ({
           provider: 'openai',
           model: 'gpt-4.1',
           default_temperature: 0.15,
+          system_prompt: 'Always answer tersely.',
           api_key: 'openai-secret',
           base_url: null,
           default_mode: 'freestyle',
@@ -439,6 +440,7 @@ describe('App settings modal', () => {
           provider: string
           model: string
           default_temperature: number
+          system_prompt: string
           base_url?: string | null
         }>
       }
@@ -446,6 +448,7 @@ describe('App settings modal', () => {
     expect(payload.llm.profiles[0]?.provider).toBe('custom')
     expect(payload.llm.profiles[0]?.model).toBe('openweight-medium')
     expect(payload.llm.profiles[0]?.default_temperature).toBe(0.15)
+    expect(payload.llm.profiles[0]?.system_prompt).toBe('Always answer tersely.')
     expect(payload.llm.profiles[0]?.base_url).toBe('https://albert.api.etalab.gouv.fr/v1/')
     mounted.app.unmount()
   })
@@ -536,6 +539,7 @@ describe('App settings modal', () => {
             provider: 'openai',
             model: 'gpt-4.1',
             default_temperature: 0.15,
+            system_prompt: '',
             api_key: 'openai-secret',
             base_url: null,
             default_mode: 'freestyle',

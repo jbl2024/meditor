@@ -115,6 +115,18 @@ fn chat_options_for_temperature(temperature: f64, capture_content: bool) -> Chat
     options
 }
 
+fn apply_profile_system_prompt(profile: &ProviderProfile, system_prompt: &str) -> String {
+    let global = profile.system_prompt.trim();
+    if global.is_empty() {
+        return system_prompt.to_string();
+    }
+    let local = system_prompt.trim();
+    if local.is_empty() {
+        return global.to_string();
+    }
+    format!("{global}\n\n{local}")
+}
+
 /// Runs a single Second Brain LLM request.
 ///
 /// Callers pass an optional temperature so alter-scoped tuning can be applied
@@ -126,10 +138,11 @@ pub async fn run_llm(
 	temperature: Option<f64>,
 ) -> Result<String, String> {
 	let effective_temperature = temperature.unwrap_or(profile.default_temperature);
+    let effective_system_prompt = apply_profile_system_prompt(profile, system_prompt);
 	if is_openai_codex(profile) {
 		return run_codex(
 			&profile.model,
-			system_prompt,
+            &effective_system_prompt,
 			user_prompt,
 			Some(effective_temperature),
 		)
@@ -140,7 +153,7 @@ pub async fn run_llm(
 	let client = build_client(profile);
 
 	let messages = vec![
-		ChatMessage::system(MessageContent::from(system_prompt)),
+        ChatMessage::system(MessageContent::from(effective_system_prompt)),
 		ChatMessage::user(MessageContent::from(user_prompt)),
     ];
 
@@ -185,10 +198,11 @@ where
 	F: FnMut(&str) -> Result<(), String>,
 {
 	let effective_temperature = temperature.unwrap_or(profile.default_temperature);
+    let effective_system_prompt = apply_profile_system_prompt(profile, system_prompt);
 	if is_openai_codex(profile) {
 		return run_codex_stream(
 			&profile.model,
-			system_prompt,
+            &effective_system_prompt,
 			user_prompt,
 			Some(effective_temperature),
 			on_chunk,
@@ -200,7 +214,7 @@ where
 	let client = build_client(profile);
 
     let messages = vec![
-        ChatMessage::system(MessageContent::from(system_prompt)),
+        ChatMessage::system(MessageContent::from(effective_system_prompt)),
         ChatMessage::user(MessageContent::from(user_prompt)),
     ];
 
@@ -260,6 +274,7 @@ mod tests {
             model: "gpt-oss".to_string(),
             api_key: "x".to_string(),
             default_temperature: 0.15,
+            system_prompt: String::new(),
             base_url: Some("http://localhost:11434/v1".to_string()),
             default_mode: None,
             capabilities: Default::default(),
@@ -276,6 +291,7 @@ mod tests {
 			model: "openweight-medium".to_string(),
 			api_key: "x".to_string(),
 			default_temperature: 0.15,
+            system_prompt: String::new(),
 			base_url: Some("https://albert.api.etalab.gouv.fr/v1/".to_string()),
 			default_mode: None,
 			capabilities: Default::default(),
@@ -292,6 +308,7 @@ mod tests {
             model: "gpt-5.2-codex".to_string(),
             api_key: String::new(),
             default_temperature: 0.15,
+            system_prompt: String::new(),
             base_url: None,
             default_mode: None,
             capabilities: Default::default(),
@@ -308,6 +325,7 @@ mod tests {
             model: "gpt-4.1".to_string(),
             api_key: "x".to_string(),
             default_temperature: 0.15,
+            system_prompt: String::new(),
             base_url: None,
             default_mode: None,
             capabilities: Default::default(),
@@ -324,6 +342,7 @@ mod tests {
 			model: "openweight-medium".to_string(),
 			api_key: "secret".to_string(),
 			default_temperature: 0.15,
+            system_prompt: String::new(),
 			base_url: Some("https://albert.api.etalab.gouv.fr/v1/".to_string()),
 			default_mode: None,
 			capabilities: Default::default(),
@@ -344,4 +363,25 @@ mod tests {
 		let options = chat_options_for_temperature(0.42, true);
 		assert_eq!(options.temperature, Some(0.42));
 	}
+
+    #[test]
+    fn prepends_profile_system_prompt_to_local_system_prompt() {
+        let profile = ProviderProfile {
+            id: "p1".to_string(),
+            label: "OpenAI".to_string(),
+            provider: "openai".to_string(),
+            model: "gpt-4.1".to_string(),
+            api_key: "x".to_string(),
+            default_temperature: 0.15,
+            system_prompt: "Global instruction.".to_string(),
+            base_url: None,
+            default_mode: None,
+            capabilities: Default::default(),
+        };
+
+        assert_eq!(
+            apply_profile_system_prompt(&profile, "Local instruction."),
+            "Global instruction.\n\nLocal instruction."
+        );
+    }
 }
