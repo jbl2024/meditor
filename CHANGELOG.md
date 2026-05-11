@@ -18,6 +18,16 @@ The format follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`.
 
 ### Security
 
+## [0.39.0] - 2026-05-11
+
+### Changed
+- chore(deps): bump tauri from 2.10.3 to 2.11.1 in /src-tauri (#105) (58ca749)
+- chore(deps): bump @tauri-apps/plugin-opener from 2.5.3 to 2.5.4 (#106) (cc377a4)
+- chore(deps): bump fastembed from 5.13.3 to 5.13.4 in /src-tauri (#107) (476b9a4)
+- chore(deps): bump tauri-plugin-opener from 2.5.3 to 2.5.4 in /src-tauri (#102) (c3e39e9)
+- chore(deps): bump tauri-build from 2.5.6 to 2.6.1 in /src-tauri (#100) (d958064)
+- chore: bump tiptap version to 3.23.1 (c9b6aeb)
+
 ## [0.38.8] - 2026-05-10
 
 ### Fixed
